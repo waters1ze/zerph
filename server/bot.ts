@@ -14,7 +14,7 @@ import path from 'path'
 import { config } from 'dotenv'
 config({ path: path.resolve(process.cwd(), '.env.local') })
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const GROQ_KEY = process.env.GROQ_API_KEY || ''
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 const MINIAPP_URL = `${APP_URL}/tg`

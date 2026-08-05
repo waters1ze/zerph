@@ -1,405 +1,217 @@
 /**
- * Zerf Backend — Database Layer (Prisma + Neon PostgreSQL)
- * Replaces the old JSON file DB with real persistent cloud storage.
+ * Zerf Backend — Database & Persistence Store
+ * Local file-backed JSON DB — zero cost, offline, instant.
  */
 
-import { prisma } from './prisma'
-import { ParsedItem, stringSimilarity, generateReminderContext } from './groq'
+import fs from 'fs'
+import path from 'path'
+import { ParsedItem, stringSimilarity } from './groq'
 
-// ── Type helpers ──────────────────────────────────────────────────────────────
-
-export type DbTask = {
+export interface DbTask {
   id: string
   title: string
-  description: string | null
-  priority: string
-  status: string
-  dueDate: string | null
-  dueTime: string | null
-  reminderSent: boolean
+  description?: string
+  priority: 'urgent' | 'high' | 'medium' | 'low'
+  status: 'todo' | 'inprogress' | 'done' | 'overdue'
+  dueDate?: string
+  dueTime?: string          // HH:MM for timed reminders
+  reminderSent?: boolean
+  projectId?: string
+  goalId?: string
   tags: string[]
   assignees: string[]
   isShared: boolean
-  projectId: string | null
-  goalId: string | null
-  createdAt: Date
-  updatedAt: Date
-  completedAt: Date | null
-  rawText: string | null
-  aiGenerated: boolean
-  source: string | null
-  subtasks: unknown
-  ownerChatId: bigint | null  // Telegram chatId of task owner
-}
-
-// ── Tasks ─────────────────────────────────────────────────────────────────────
-
-// ── Tasks ─────────────────────────────────────────────────────────────────────
-
-export async function getAllTasks(ownerChatId?: number | bigint | string | null) {
-  try {
-    if (ownerChatId) {
-      const cid = BigInt(ownerChatId)
-      return await prisma.task.findMany({
-        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
-        orderBy: { createdAt: 'desc' },
-      })
-    }
-    return await prisma.task.findMany({ orderBy: { createdAt: 'desc' } })
-  } catch {
-    return []
-  }
-}
-
-export async function getAllGoals(ownerChatId?: number | bigint | string | null) {
-  try {
-    if (ownerChatId) {
-      const cid = BigInt(ownerChatId)
-      return await prisma.goal.findMany({
-        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
-        orderBy: { createdAt: 'desc' },
-      })
-    }
-    return await prisma.goal.findMany({ orderBy: { createdAt: 'desc' } })
-  } catch {
-    return []
-  }
-}
-
-export async function getAllNotes(ownerChatId?: number | bigint | string | null) {
-  try {
-    if (ownerChatId) {
-      const cid = BigInt(ownerChatId)
-      return await prisma.note.findMany({
-        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
-        orderBy: { createdAt: 'desc' },
-      })
-    }
-    return await prisma.note.findMany({ orderBy: { createdAt: 'desc' } })
-  } catch {
-    return []
-  }
-}
-
-export async function createTask(data: {
-  title: string
-  description?: string
-  priority?: string
-  status?: string
-  dueDate?: string
-  dueTime?: string
-  tags?: string[]
-  subtasks?: object[]
+  createdAt: string
+  updatedAt: string
+  completedAt?: string
+  subtasks?: Array<{ id: string; title: string; done: boolean }>
   rawText?: string
   aiGenerated?: boolean
-  source?: string
-  ownerChatId?: number | bigint | string | null   // Telegram chatId of the creator
-}) {
-  return prisma.task.create({
-    data: {
-      title: data.title,
-      description: data.description || '',
-      priority: data.priority || 'medium',
-      status: data.status || 'todo',
-      dueDate: data.dueDate || new Date().toISOString().slice(0, 10),
-      dueTime: data.dueTime || null,
-      tags: data.tags || [],
-      assignees: [],
-      subtasks: data.subtasks || [],
-      rawText: data.rawText || null,
-      aiGenerated: data.aiGenerated || false,
-      source: data.source || null,
-      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
-    },
-  })
 }
 
-export async function updateTask(id: string, data: Partial<{
-  status: string
-  priority: string
-  dueDate: string
-  dueTime: string
-  reminderSent: boolean
-  completedAt: Date
-}>) {
-  return prisma.task.update({ where: { id }, data })
+export interface DbNote {
+  id: string
+  title: string
+  content: string         // AI-structured Markdown
+  originalText?: string   // raw voice transcript
+  type: 'note' | 'journal' | 'meeting'
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+  aiGenerated?: boolean
+  pinned?: boolean
 }
 
-export async function deleteTask(id: string) {
+export interface DbGoal {
+  id: string
+  title: string
+  description?: string
+  motivation?: string
+  status: 'on_track' | 'at_risk' | 'delayed' | 'completed'
+  deadline?: string
+  progress: number
+  color?: string
+  milestones: Array<{ id: string; title: string; done: boolean; dueDate?: string }>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DbSchema {
+  tasks: DbTask[]
+  goals: DbGoal[]
+  notes: DbNote[]
+  chatIds: number[]     // Telegram chat IDs for reminders
+}
+
+const DB_FILE = path.join(process.cwd(), 'zerf-db.json')
+
+export function getDb(): DbSchema {
   try {
-    return await prisma.task.deleteMany({ where: { id } })
+    if (!fs.existsSync(DB_FILE)) {
+      const initial: DbSchema = { tasks: [], goals: [], notes: [], chatIds: [] }
+      fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8')
+      return initial
+    }
+    const data = fs.readFileSync(DB_FILE, 'utf-8')
+    const parsed = JSON.parse(data)
+    // Ensure chatIds field exists
+    if (!parsed.chatIds) parsed.chatIds = []
+    return parsed
   } catch {
-    return { count: 0 }
+    return { tasks: [], goals: [], notes: [], chatIds: [] }
+  }
+}
+
+export function saveDb(db: DbSchema): void {
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8')
+}
+
+/**
+ * Register a Telegram chat ID for reminder notifications
+ */
+export function registerChatId(chatId: number): void {
+  const db = getDb()
+  if (!db.chatIds.includes(chatId)) {
+    db.chatIds.push(chatId)
+    saveDb(db)
   }
 }
 
 /**
- * Find the best matching non-done task by title similarity
+ * Find the best matching task by fuzzy title similarity
+ * Returns { task, index, score } or null if no good match
  */
-export async function completeTaskByTitle(targetTitle: string, ownerChatId?: number | bigint | string | null): Promise<DbTask | null> {
-  const whereClause: Record<string, unknown> = { status: { not: 'done' } }
-  if (ownerChatId) {
-    whereClause.OR = [{ ownerChatId: BigInt(ownerChatId) }, { ownerChatId: null }]
-  }
+export function findSimilarTask(
+  targetTitle: string,
+  db: DbSchema
+): { task: DbTask; index: number; score: number } | null {
+  let best: { task: DbTask; index: number; score: number } | null = null
 
-  const tasks = await prisma.task.findMany({
-    where: whereClause,
-    orderBy: { createdAt: 'desc' },
-  })
-
-  let best: { task: DbTask; score: number } | null = null
-  for (const task of tasks) {
+  db.tasks.forEach((task, index) => {
+    if (task.status === 'done') return  // skip already done
     const score = stringSimilarity(targetTitle, task.title)
     if (score > 0.3 && (!best || score > best.score)) {
-      best = { task: task as DbTask, score }
+      best = { task, index, score }
     }
+  })
+
+  return best
+}
+
+/**
+ * Mark a task as completed by fuzzy matching the title.
+ * Returns the matched task or null.
+ */
+export function completeTaskByTitle(targetTitle: string): DbTask | null {
+  const db = getDb()
+  const match = findSimilarTask(targetTitle, db)
+  if (!match) return null
+
+  const now = new Date().toISOString()
+  db.tasks[match.index] = {
+    ...db.tasks[match.index],
+    status: 'done',
+    completedAt: now,
+    updatedAt: now,
   }
-
-  if (!best) return null
-
-  const updated = await prisma.task.update({
-    where: { id: best.task.id },
-    data: { status: 'done', completedAt: new Date() },
-  })
-  return updated as DbTask
+  saveDb(db)
+  return db.tasks[match.index]
 }
 
-// ── Goals ─────────────────────────────────────────────────────────────────────
+/**
+ * Save a ParsedItem from Groq AI into the database
+ */
+export function saveParsedItemToDb(item: ParsedItem): { item: ParsedItem; completedTask?: DbTask | null } {
+  const db = getDb()
+  const now = new Date().toISOString()
+  const id = 'z_' + Math.random().toString(36).substring(2, 9)
 
-export async function createGoal(data: {
-  title: string
-  description?: string
-  motivation?: string
-  deadline?: string
-  milestones?: object[]
-  color?: string
-  ownerChatId?: number | bigint | string | null
-}) {
-  return prisma.goal.create({
-    data: {
-      title: data.title,
-      description: data.description || '',
-      motivation: data.motivation || null,
-      status: 'on_track',
-      deadline: data.deadline || null,
-      progress: 0,
-      color: data.color || '#2d7a4f',
-      milestones: data.milestones || [],
-      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
-    },
-  })
-}
-
-export async function updateGoal(id: string, data: object) {
-  return prisma.goal.update({ where: { id }, data: data as never })
-}
-
-export async function deleteGoal(id: string) {
-  try {
-    return await prisma.goal.deleteMany({ where: { id } })
-  } catch {
-    return { count: 0 }
-  }
-}
-
-// ── Notes ─────────────────────────────────────────────────────────────────────
-
-export async function createNote(data: {
-  title: string
-  content: string
-  originalText?: string
-  type?: string
-  tags?: string[]
-  dueDate?: string | null
-  dueTime?: string | null
-  aiGenerated?: boolean
-  ownerChatId?: number | bigint | string | null
-}) {
-  return prisma.note.create({
-    data: {
-      title: data.title,
-      content: data.content,
-      originalText: data.originalText || null,
-      type: data.type || 'note',
-      tags: data.tags || [],
-      dueDate: data.dueDate || null,
-      dueTime: data.dueTime || null,
-      aiGenerated: data.aiGenerated || false,
-      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
-    },
-  })
-}
-
-export async function updateNote(id: string, data: Partial<{
-  title: string
-  content: string
-  type: string
-  tags: string[]
-  dueDate: string | null
-  dueTime: string | null
-  pinned: boolean
-}>) {
-  return prisma.note.update({ where: { id }, data })
-}
-
-export async function deleteNote(id: string) {
-  try {
-    return await prisma.note.deleteMany({ where: { id } })
-  } catch {
-    return { count: 0 }
-  }
-}
-
-// ── Telegram Chat IDs ─────────────────────────────────────────────────────────
-
-export async function registerChatId(chatId: number, firstName?: string) {
-  await prisma.telegramChat.upsert({
-    where: { chatId: BigInt(chatId) },
-    update: {},
-    create: { chatId: BigInt(chatId), firstName: firstName || null },
-  })
-}
-
-export async function getAllChatIds(): Promise<number[]> {
-  const chats = await prisma.telegramChat.findMany()
-  return chats.map((c: { chatId: bigint }) => Number(c.chatId))
-}
-
-// ── High-level: save ParsedItem from Groq AI ──────────────────────────────────
-
-export async function saveParsedItemToDb(
-  item: ParsedItem,
-  ownerChatId?: number | bigint | string | null
-): Promise<{
-  item: ParsedItem
-  completedTask?: DbTask | null
-}> {
-  // Completion intent — mark existing task done
+  // Handle completion intent — mark existing task done
   if (item.type === 'completion' && item.targetTitle) {
-    const completed = await completeTaskByTitle(item.targetTitle, ownerChatId)
+    const completed = completeTaskByTitle(item.targetTitle)
     return { item, completedTask: completed }
   }
 
   if (item.type === 'goal') {
-    await createGoal({
+    db.goals.unshift({
+      id,
       title: item.title,
       description: item.summary,
-      motivation: item.motivation,
+      motivation: item.motivation || undefined,
+      status: 'on_track',
       deadline: item.dueDate || undefined,
+      progress: 0,
+      color: '#2d7a4f',
       milestones: (item.milestones || []).map((m, i) => ({
-        id: `m_${i}_${Date.now()}`,
+        id: `m_${id}_${i}`,
         title: m,
         done: false,
       })),
-      ownerChatId,
+      createdAt: now,
+      updatedAt: now,
     })
   } else if (item.type === 'note') {
+    // AI generates the structured content, store original separately
     const mdContent = item.summary.includes('#')
       ? item.summary
       : `# ${item.title}\n\n${item.summary}`
 
-    await createNote({
+    db.notes.unshift({
+      id,
       title: item.title,
       content: mdContent,
       originalText: item.rawText,
       type: 'note',
       tags: item.tags || [],
+      createdAt: now,
+      updatedAt: now,
       aiGenerated: true,
-      ownerChatId,
     })
-
-    // ── Auto-reminder: if note content contains a time, create a companion task ──
-    const noteText = `${item.title} ${item.summary} ${item.rawText || ''}`
-    const timeMatch = noteText.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/)
-    const naturalMatch = noteText.match(/в\s+([01]?\d|2[0-3]):([0-5]\d)/i)
-    const extractedTime = (naturalMatch || timeMatch)
-      ? `${((naturalMatch || timeMatch)![1]).padStart(2, '0')}:${(naturalMatch || timeMatch)![2]}`
-      : null
-
-    if (extractedTime) {
-      const today = new Date().toISOString().slice(0, 10)
-      // Generate a warm AI context message
-      const context = await generateReminderContext(
-        item.title,
-        item.summary.slice(0, 500),
-        extractedTime
-      ).catch(() => `Напоминание: «${item.title}» в ${extractedTime}. Готовься! 🎯`)
-
-      await createTask({
-        title: `⏰ ${item.title}`,
-        description: context,
-        priority: item.priority || 'medium',
-        dueDate: item.dueDate || today,
-        dueTime: extractedTime,
-        tags: ['заметка', 'авто-напоминание', ...(item.tags || [])],
-        aiGenerated: true,
-        source: item.rawText,
-        ownerChatId: ownerChatId || null,
-      })
-    }
   } else {
-    // Task, reminder, or default
-    const desc = item.recipientName
-      ? `📩 Отправить ${item.recipientName}: ${item.summary}`
-      : item.summary
-
-    await createTask({
+    // task / reminder
+    db.tasks.unshift({
+      id,
       title: item.title,
-      description: desc,
+      description: item.summary,
       priority: item.priority || 'medium',
+      status: 'todo',
       dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
       dueTime: item.dueTime || undefined,
-      tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
+      tags: item.tags || [],
+      assignees: [],
+      isShared: false,
+      createdAt: now,
+      updatedAt: now,
+      rawText: item.rawText,
       aiGenerated: true,
-      source: item.rawText,
-      ownerChatId: ownerChatId || null,   // Store the owner's chatId
       subtasks: (item.subtasks || []).map((st, i) => ({
-        id: `st_${i}_${Date.now()}`,
+        id: `st_${id}_${i}`,
         title: st,
         done: false,
       })),
     })
   }
 
+  saveDb(db)
   return { item }
-}
-
-// ── Reminders — find tasks due right now ──────────────────────────────────────
-
-export function getMskDateTime() {
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Moscow',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-  const parts = formatter.formatToParts(now)
-  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
-
-  const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
-  const mskTime = `${getPart('hour')}:${getPart('minute')}`
-
-  return { mskDate, mskTime }
-}
-
-export async function getTasksDueNow(): Promise<DbTask[]> {
-  const { mskDate, mskTime } = getMskDateTime()
-
-  const tasks = await prisma.task.findMany({
-    where: {
-      dueTime: mskTime,
-      dueDate: mskDate,
-      status: { not: 'done' },
-      reminderSent: false,
-    },
-  })
-  return tasks as DbTask[]
-}
-
-export async function markReminderSent(id: string) {
-  return prisma.task.update({ where: { id }, data: { reminderSent: true } })
 }

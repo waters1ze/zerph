@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const parsedItem = await parseIntentWithGroq(transcript, apiKey)
 
     // Save to DB (handles completion internally)
-    const { item, completedTask } = await saveParsedItemToDb(parsedItem)
+    const { item, completedTask } = saveParsedItemToDb(parsedItem)
 
     return NextResponse.json({
       success: true,

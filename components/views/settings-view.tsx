@@ -156,35 +156,17 @@ export function SettingsView() {
           <input
             value={settings.name}
             onChange={e => update({ name: e.target.value })}
-            placeholder="Ваше имя"
             className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44"
           />
         </Row>
 
-        <Row label="Telegram account" description={settings.integrations.telegram ? "Telegram profile connected" : "Link your Telegram account for reminders & sync"}>
-          {settings.integrations.telegram ? (
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-full bg-[var(--status-done)]/10 text-[var(--status-done)] text-[12px] font-medium border border-[var(--status-done)]/20">
-                ✓ Connected
-              </span>
-              <button
-                onClick={() => update({ integrations: { ...settings.integrations, telegram: false } })}
-                className="text-[11px] text-muted-foreground hover:text-red-400 underline ml-1"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                update({ integrations: { ...settings.integrations, telegram: true } })
-                window.open('https://t.me/zerph_bot?start=login', '_blank')
-              }}
-              className="flex items-center gap-2 h-8 px-3.5 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-colors shadow-sm"
-            >
-              <span>✈️</span> Connect Telegram (/login)
-            </button>
-          )}
+        <Row label="Email address" description="Used for notifications and account recovery">
+          <input
+            value={settings.email}
+            onChange={e => update({ email: e.target.value })}
+            type="email"
+            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44"
+          />
         </Row>
 
         <Row label="Focus mode" description="Hides distractions and shows only today's tasks">
@@ -198,6 +180,12 @@ export function SettingsView() {
           <Toggle
             checked={settings.notifications.desktop}
             onChange={v => update({ notifications: { ...settings.notifications, desktop: v } })}
+          />
+        </Row>
+        <Row label="Email digest" description="Daily summary email at 8:00 AM">
+          <Toggle
+            checked={settings.notifications.email}
+            onChange={v => update({ notifications: { ...settings.notifications, email: v } })}
           />
         </Row>
         <Row label="Due date reminders" description="Notifications when tasks are approaching deadline">
@@ -226,12 +214,54 @@ export function SettingsView() {
           </select>
         </Row>
 
+        <Row label="API key" description="Your OpenAI or Anthropic API key for the backend">
+          <input
+            value={settings.integrations.aiApiKey ?? ''}
+            onChange={e => update({ integrations: { ...settings.integrations, aiApiKey: e.target.value } })}
+            type="password"
+            placeholder="sk-…"
+            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44 font-mono"
+          />
+        </Row>
+
+        <Row label="Groq API key" description="Free at console.groq.com — used for voice AI and chat">
+          <input
+            value={settings.integrations.groqApiKey ?? ''}
+            onChange={e => update({ integrations: { ...settings.integrations, groqApiKey: e.target.value } })}
+            type="password"
+            placeholder="gsk_…"
+            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44 font-mono"
+          />
+        </Row>
+
         <Row label="Telegram bot" description="Receive task reminders via Telegram">
           <Toggle
             checked={settings.integrations.telegram}
             onChange={v => update({ integrations: { ...settings.integrations, telegram: v } })}
           />
         </Row>
+
+        {settings.integrations.telegram && (
+          <>
+            <Row label="Telegram Chat ID" description="From @userinfobot on Telegram">
+              <input
+                value={settings.integrations.telegramChatId ?? ''}
+                onChange={e => update({ integrations: { ...settings.integrations, telegramChatId: e.target.value } })}
+                placeholder="123456789"
+                className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-36 font-mono"
+              />
+            </Row>
+            <Row label="Telegram Bot Token" description="From @BotFather — your bot's API token">
+              <input
+                value={settings.integrations.telegramBotToken ?? ''}
+                onChange={e => update({ integrations: { ...settings.integrations, telegramBotToken: e.target.value } })}
+                type="password"
+                placeholder="123456:ABC…"
+                className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44 font-mono"
+              />
+            </Row>
+          </>
+        )}
       </Section>
 
       {/* Data & Privacy */}
