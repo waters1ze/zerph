@@ -12,17 +12,17 @@ interface NavItem {
   label: string
   icon: string
   badge?: number
-  section?: string
+  section: string
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'today',    label: 'Сегодня',     icon: '🗙️', section: 'workspace' },
-  { id: 'inbox',    label: 'Входящие',    icon: '🕯️' },
-  { id: 'tasks',    label: 'Задачи',      icon: '🕊️' },
+  { id: 'inbox',    label: 'Входящие',    icon: '🕯️', section: 'workspace' },
+  { id: 'tasks',    label: 'Задачи',      icon: '🕊️', section: 'workspace' },
+  { id: 'notes',    label: 'Заметки',     icon: '📜', section: 'workspace' },
   { id: 'calendar', label: 'Календарь',   icon: '📆', section: 'planning' },
-  { id: 'goals',    label: 'Цели',        icon: '⚔️' },
-  { id: 'projects', label: 'Проекты',     icon: '👑' },
-  { id: 'notes',    label: 'Заметки',     icon: '📜' },
+  { id: 'goals',    label: 'Цели',        icon: '⚔️', section: 'planning' },
+  { id: 'projects', label: 'Проекты',     icon: '👑', section: 'planning' },
   { id: 'stats',    label: 'Аналитика',   icon: '💎', section: 'аналитика' },
   { id: 'friends',  label: 'Команда',     icon: '🥂', section: 'совместная работа' },
   { id: 'settings', label: 'Настройки',   icon: '⏳', section: 'аккаунт' },
@@ -38,7 +38,7 @@ const SECTIONS = [
 
 export function Sidebar() {
   const { state, dispatch } = useApp()
-  const { currentView, tasks, settings } = state
+  const { currentView, tasks, notes, settings } = state
 
   const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
 
@@ -68,6 +68,7 @@ export function Sidebar() {
   }).length
 
   const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done').length
+  const notesCount = notes.length
 
   const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null)
   const isConnected = settings.integrations.telegram || !!tgUser || !!displayName
@@ -115,10 +116,7 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
         {SECTIONS.map(section => {
-          const items = NAV_ITEMS.filter(i =>
-            i.section === section.id ||
-            (!i.section && section.id === 'workspace' && ['inbox', 'tasks'].includes(i.id))
-          )
+          const items = NAV_ITEMS.filter(i => i.section === section.id)
           if (!items.length) return null
           return (
             <div key={section.id} className="mb-2">
@@ -128,7 +126,11 @@ export function Sidebar() {
               <div className="space-y-0.5 mt-1">
                 {items.map(item => {
                   const isActive = currentView === item.id
-                  const badge = item.id === 'today' ? (todayCount || undefined) : item.id === 'inbox' ? (inboxCount || undefined) : item.badge
+                  const badge =
+                    item.id === 'today' ? (todayCount || undefined) :
+                    item.id === 'inbox' ? (inboxCount || undefined) :
+                    item.id === 'notes' ? (notesCount || undefined) :
+                    item.badge
 
                   return (
                     <motion.button
