@@ -34,7 +34,27 @@ export type DbTask = {
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 export async function getAllTasks() {
-  return prisma.task.findMany({ orderBy: { createdAt: 'desc' } })
+  try {
+    return await prisma.task.findMany({ orderBy: { createdAt: 'desc' } })
+  } catch {
+    return []
+  }
+}
+
+export async function getAllGoals() {
+  try {
+    return await prisma.goal.findMany({ orderBy: { createdAt: 'desc' } })
+  } catch {
+    return []
+  }
+}
+
+export async function getAllNotes() {
+  try {
+    return await prisma.note.findMany({ orderBy: { createdAt: 'desc' } })
+  } catch {
+    return []
+  }
 }
 
 export async function createTask(data: {
@@ -111,10 +131,6 @@ export async function completeTaskByTitle(targetTitle: string): Promise<DbTask |
 
 // ── Goals ─────────────────────────────────────────────────────────────────────
 
-export async function getAllGoals() {
-  return prisma.goal.findMany({ orderBy: { createdAt: 'desc' } })
-}
-
 export async function createGoal(data: {
   title: string
   description?: string
@@ -142,10 +158,6 @@ export async function updateGoal(id: string, data: object) {
 }
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
-
-export async function getAllNotes() {
-  return prisma.note.findMany({ orderBy: { createdAt: 'desc' } })
-}
 
 export async function createNote(data: {
   title: string
