@@ -15,7 +15,6 @@ import { TodayView }    from '@/components/views/today-view'
 import { InboxView }    from '@/components/views/inbox-view'
 import { TasksView }    from '@/components/views/tasks-view'
 import { GoalsView }    from '@/components/views/goals-view'
-import { ProjectsView } from '@/components/views/projects-view'
 import { NotesView }    from '@/components/views/notes-view'
 import { CalendarView } from '@/components/views/calendar-view'
 import { StatsView }    from '@/components/views/stats-view'
@@ -44,7 +43,6 @@ function AppShell() {
     inbox:    <InboxView />,
     tasks:    <TasksView />,
     goals:    <GoalsView />,
-    projects: <ProjectsView />,
     notes:    <NotesView />,
     calendar: <CalendarView />,
     stats:    <StatsView />,
