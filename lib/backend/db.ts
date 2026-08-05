@@ -183,7 +183,7 @@ export async function registerChatId(chatId: number, firstName?: string) {
 
 export async function getAllChatIds(): Promise<number[]> {
   const chats = await prisma.telegramChat.findMany()
-  return chats.map(c => Number(c.chatId))
+  return chats.map((c: { chatId: bigint }) => Number(c.chatId))
 }
 
 // ── High-level: save ParsedItem from Groq AI ──────────────────────────────────

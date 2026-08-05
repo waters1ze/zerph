@@ -80,17 +80,17 @@ async function handleToday(chatId: number) {
   const now = new Date()
   const dayName = now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
 
-  const pending = tasks.filter(t =>
+  const pending = tasks.filter((t: { status: string; dueDate?: string | null }) =>
     t.status !== 'done' && (t.dueDate === today || !t.dueDate)
   )
-  const done = tasks.filter(t => t.status === 'done').length
+  const done = tasks.filter((t: { status: string }) => t.status === 'done').length
 
   let msg = `📅 *${escMd(dayName)}*\n\n`
   if (pending.length === 0) {
     msg += '✅ Всё выполнено! Отличный день 🎉'
   } else {
     msg += `*${pending.length} задач осталось:*\n`
-    pending.slice(0, 12).forEach(t => {
+    pending.slice(0, 12).forEach((t: { priority: string; title: string; dueTime?: string | null }) => {
       const time = t.dueTime ? ` _(${t.dueTime})_` : ''
       msg += `${P_EMOJI[t.priority] || '⚪'} ${escMd(t.title)}${time}\n`
     })
@@ -107,7 +107,7 @@ async function handleGoals(chatId: number) {
   if (goals.length === 0) {
     msg += 'Нет целей. Отправь голосовое — создам!'
   } else {
-    goals.slice(0, 8).forEach(g => {
+    goals.slice(0, 8).forEach((g: { status: string; title: string; progress: number; deadline?: string | null }) => {
       const dl = g.deadline ? ` · _${g.deadline}_` : ''
       msg += `${G_STATUS[g.status] || '📌'} *${escMd(g.title)}* — ${g.progress}%${dl}\n`
     })
@@ -122,7 +122,7 @@ async function handleNotes(chatId: number) {
   if (notes.length === 0) {
     msg += 'Нет заметок.'
   } else {
-    notes.slice(0, 6).forEach(n => {
+    notes.slice(0, 6).forEach((n: { type: string; title: string; createdAt: Date | string }) => {
       const date = new Date(n.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
       msg += `${ICON[n.type] || '📌'} *${escMd(n.title)}* _${date}_\n`
     })

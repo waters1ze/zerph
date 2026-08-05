@@ -119,7 +119,7 @@ export async function handleTelegramUpdate(
     const parsedItem = await parseIntentWithGroq(rawText, groqApiKey)
 
     // 4. Save parsed item to local database
-    const saved = saveParsedItemToDb(parsedItem)
+    const { item: saved } = await saveParsedItemToDb(parsedItem)
 
     // 5. Send formatted Telegram response card
     const emojiMap: Record<string, string> = {
