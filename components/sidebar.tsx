@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
@@ -34,6 +35,19 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar() {
   const { state, dispatch } = useApp()
   const { currentView, tasks, settings } = state
+
+  const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; username?: string; photo_url?: string } } } } }).Telegram?.WebApp?.initDataUnsafe?.user) {
+      const u = (window as unknown as { Telegram: { WebApp: { initDataUnsafe: { user: { first_name?: string; username?: string; photo_url?: string } } } } }).Telegram.WebApp.initDataUnsafe.user
+      setTgUser({
+        name: u.first_name || 'Пользователь',
+        username: u.username ? `@${u.username}` : 'Telegram',
+        photoUrl: u.photo_url,
+      })
+    }
+  }, [])
 
   const todayCount = tasks.filter(t => {
     const d = t.dueDate
@@ -73,14 +87,18 @@ export function Sidebar() {
 
       {/* User */}
       <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-sidebar-accent/50 flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-          <span className="text-[11px] font-semibold text-primary">
-            👤
-          </span>
+        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+          {tgUser?.photoUrl ? (
+            <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-[11px] font-semibold text-primary">
+              {tgUser?.name ? tgUser.name[0] : '👤'}
+            </span>
+          )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-medium text-sidebar-foreground truncate">Мой профиль</p>
-          <p className="text-[10px] text-muted-foreground truncate">Telegram Connected</p>
+          <p className="text-[12px] font-medium text-sidebar-foreground truncate">{tgUser?.name || 'Мой профиль'}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{tgUser?.username || 'Telegram Connected'}</p>
         </div>
         <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)] shrink-0" title="Online" />
       </div>
