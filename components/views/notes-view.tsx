@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -10,19 +10,18 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   FileText, Plus, Folder, Pin, Tag, Edit3, Save,
-  Sparkles, Trash2, Link2, Search, Calendar as CalendarIcon,
-  Clock, Share2, CheckSquare, ChevronLeft, Lock, Star
+  Trash2, Search, Calendar as CalendarIcon,
+  ChevronLeft, BookOpen, Users, Clock, AlignLeft
 } from 'lucide-react'
 import type { Note, NoteType } from '@/lib/types'
-import { extractWikiLinks } from '@/lib/backend/note-linker'
 
 const CATEGORIES = [
-  { id: 'all', label: 'Все заметки', icon: '📁' },
-  { id: 'dated', label: 'С датой 📅', icon: '📆' },
-  { id: 'pinned', label: 'Закрепленные', icon: '📌' },
-  { id: 'note', label: 'Заметки', icon: '📝' },
-  { id: 'journal', label: 'Дневник', icon: '📓' },
-  { id: 'meeting', label: 'Встречи', icon: '🤝' },
+  { id: 'all', label: 'Все заметки', icon: Folder },
+  { id: 'dated', label: 'С датой', icon: CalendarIcon },
+  { id: 'pinned', label: 'Закрепленные', icon: Pin },
+  { id: 'note', label: 'Заметки', icon: FileText },
+  { id: 'journal', label: 'Дневник', icon: BookOpen },
+  { id: 'meeting', label: 'Встречи', icon: Users },
 ]
 
 export function NotesView() {
@@ -149,14 +148,15 @@ export function NotesView() {
   }
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden rounded-2xl border border-border shadow-2xl">
-      {/* ── 1. iOS Folder Sidebar ── */}
+    <div className="flex h-full w-full bg-background overflow-hidden rounded-2xl border border-border shadow-2xl font-sans">
+      {/* ── 1. Clean Vector Folder Sidebar ── */}
       <div className="hidden lg:flex flex-col w-52 bg-muted/30 border-r border-border p-3 select-none shrink-0">
-        <p className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">
-          Папки iOS
+        <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+          Папки
         </p>
         <div className="space-y-1 mt-1">
           {CATEGORIES.map(cat => {
+            const Icon = cat.icon
             const count = notes.filter(n => {
               if (cat.id === 'all') return true
               if (cat.id === 'pinned') return n.pinned
@@ -172,12 +172,12 @@ export function NotesView() {
                 className={cn(
                   'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all',
                   isActive
-                    ? 'bg-primary/15 text-primary font-semibold border border-primary/20 shadow-xs'
+                    ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
                     : 'text-foreground/80 hover:bg-muted/60'
                 )}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-base leading-none">{cat.icon}</span>
+                <div className="flex items-center gap-2.5">
+                  <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
                   <span>{cat.label}</span>
                 </div>
                 <span className="text-[11px] font-bold text-muted-foreground/60">{count}</span>
@@ -187,7 +187,7 @@ export function NotesView() {
         </div>
       </div>
 
-      {/* ── 2. iOS Notes List Panel ── */}
+      {/* ── 2. Clean Notes List Panel ── */}
       <div
         className={cn(
           'w-full md:w-80 lg:w-72 border-r border-border bg-card flex flex-col shrink-0',
@@ -197,7 +197,7 @@ export function NotesView() {
         {/* Top Header */}
         <div className="p-4 border-b border-border/60 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight gold-shimmer font-serif italic">
+            <h2 className="text-xl font-bold tracking-tight text-foreground font-sans">
               Заметки
             </h2>
             <button
@@ -249,13 +249,13 @@ export function NotesView() {
                   )}
                 >
                   <div className="flex items-center justify-between gap-1 mb-1">
-                    <h3 className="text-[13px] font-bold text-foreground line-clamp-1 flex-1">
+                    <h3 className="text-[13px] font-bold text-foreground line-clamp-1 flex-1 font-sans">
                       {n.title || 'Без названия'}
                     </h3>
                     {n.pinned && <Pin className="w-3 h-3 text-primary shrink-0" />}
                   </div>
 
-                  <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed mb-2">
+                  <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed mb-2 font-sans">
                     {preview}
                   </p>
 
@@ -275,7 +275,7 @@ export function NotesView() {
         </div>
       </div>
 
-      {/* ── 3. iOS Editor / Viewing Panel ── */}
+      {/* ── 3. Editor / Viewing Panel ── */}
       <div
         className={cn(
           'flex-1 flex flex-col h-full bg-background overflow-hidden',
@@ -314,7 +314,7 @@ export function NotesView() {
                 {isEditing ? (
                   <button
                     onClick={handleSave}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold shadow-md hover:opacity-90 transition-opacity"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold shadow-md hover:opacity-90 transition-opacity"
                   >
                     <Save className="w-3.5 h-3.5" />
                     Сохранить
@@ -348,10 +348,10 @@ export function NotesView() {
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   placeholder="Заголовок заметки…"
-                  className="w-full text-2xl font-bold text-foreground bg-transparent outline-none border-b border-border/40 pb-2 font-serif"
+                  className="w-full text-2xl font-bold text-foreground bg-transparent outline-none border-b border-border/40 pb-2 font-sans tracking-tight"
                 />
               ) : (
-                <h1 className="text-2xl font-bold text-foreground font-serif tracking-tight leading-snug">
+                <h1 className="text-2xl font-bold text-foreground font-sans tracking-tight leading-snug">
                   {activeNote.title}
                 </h1>
               )}
@@ -384,12 +384,12 @@ export function NotesView() {
                 <textarea
                   value={editContent}
                   onChange={e => setEditContent(e.target.value)}
-                  placeholder="Начните писать здесь… поддерживается Markdown и [[Ссылки на заметки]]"
+                  placeholder="Начните писать здесь…"
                   rows={14}
-                  className="w-full text-[14px] leading-relaxed text-foreground bg-transparent outline-none resize-y placeholder:text-muted-foreground/40 font-mono"
+                  className="w-full text-[14px] leading-relaxed text-foreground bg-transparent outline-none resize-y placeholder:text-muted-foreground/40 font-sans"
                 />
               ) : (
-                <div className="prose-task text-[14px] leading-relaxed text-foreground/90 py-2">
+                <div className="prose-task text-[14px] leading-relaxed text-foreground/90 py-2 font-sans">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {activeNote.content || '_Пустая заметка. Нажмите «Править», чтобы добавить текст._'}
                   </ReactMarkdown>
@@ -440,8 +440,8 @@ export function NotesView() {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
             <FileText className="w-12 h-12 stroke-[1.2] text-muted-foreground/40 mb-3" />
-            <p className="text-base font-semibold text-foreground">Заметок пока нет</p>
-            <p className="text-[13px] text-muted-foreground mt-1">Нажмите «+», чтобы создать первую заметку в стиле iOS</p>
+            <p className="text-base font-semibold text-foreground font-sans">Заметок пока нет</p>
+            <p className="text-[13px] text-muted-foreground mt-1 font-sans">Нажмите «+», чтобы создать первую заметку</p>
           </div>
         )}
       </div>
