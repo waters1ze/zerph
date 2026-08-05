@@ -206,12 +206,12 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
       {open && (
         <>
           <motion.div key="vr-bg" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => { reset(); onClose() }} />
+            className="fixed inset-0 bg-black/70 backdrop-blur-md z-[90]" onClick={() => { reset(); onClose() }} />
 
-          <motion.div key="vr-modal" initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-            <div className="pointer-events-auto w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl shadow-black/30 overflow-hidden">
+          <motion.div key="vr-modal" initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none my-auto">
+            <div className="pointer-events-auto w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden my-auto max-h-[85vh] overflow-y-auto">
 
               {/* Header */}
               <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/50">
