@@ -107,7 +107,7 @@ function DayCell({
 
 // ── Day Detail View ───────────────────────────────────────────────────────────
 function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void }) {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const date = new Date(dateStr + 'T12:00:00')
   const dayOfWeek = RU_DAYS_FULL[date.getDay()]
   const dayNum = date.getDate()
@@ -115,6 +115,7 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   const year = date.getFullYear()
 
   const dayTasks = state.tasks.filter(t => t.dueDate === dateStr)
+  const dayNotes = state.notes.filter(n => n.dueDate === dateStr)
   const activeTasks = dayTasks.filter(t => t.status !== 'done')
   const doneTasks = dayTasks.filter(t => t.status === 'done')
   const todayStr = toYMD(new Date())
@@ -153,9 +154,36 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
 
       {/* Stats strip */}
       <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{activeTasks.length} активных</span>
+        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{activeTasks.length} задач</span>
+        <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{dayNotes.length} заметок</span>
         <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{doneTasks.length} выполнено</span>
       </div>
+
+      {/* Linked Notes Section */}
+      {dayNotes.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] uppercase tracking-widest font-bold text-primary mb-0.5 flex items-center gap-1.5">
+            📜 Привязанные заметки
+          </p>
+          <div className="space-y-1.5">
+            {dayNotes.map(n => (
+              <div
+                key={n.id}
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'notes' })}
+                className="p-3 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/15 cursor-pointer transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[13px] font-bold text-foreground">{n.title}</h4>
+                  <span className="text-[10px] text-primary font-medium">Открыть →</span>
+                </div>
+                <p className="text-[12px] text-muted-foreground line-clamp-2 mt-1">
+                  {n.content.replace(/#{1,6}\s/g, '').slice(0, 100)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active tasks */}
       {activeTasks.length > 0 ? (
@@ -169,14 +197,16 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
           </div>
         </div>
       ) : (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-10 text-center"
-        >
-          <Calendar className="w-10 h-10 text-muted-foreground/20 mb-2" />
-          <p className="text-sm text-muted-foreground">Задач на этот день нет</p>
-        </motion.div>
+        dayNotes.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center justify-center py-10 text-center"
+          >
+            <Calendar className="w-10 h-10 text-muted-foreground/20 mb-2" />
+            <p className="text-sm text-muted-foreground">Задач и заметок на этот день нет</p>
+          </motion.div>
+        )
       )}
 
       {/* Done tasks */}

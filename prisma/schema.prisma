@@ -54,6 +54,8 @@ model Note {
   originalText String?  @db.Text
   type         String   @default("note")
   tags         String[]
+  dueDate      String?  // Optional linked date (YYYY-MM-DD)
+  dueTime      String?  // Optional linked time (HH:MM)
   projectId    String?
   goalId       String?
   createdAt    DateTime @default(now())

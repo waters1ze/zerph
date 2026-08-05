@@ -210,6 +210,8 @@ export async function createNote(data: {
   originalText?: string
   type?: string
   tags?: string[]
+  dueDate?: string | null
+  dueTime?: string | null
   aiGenerated?: boolean
   ownerChatId?: number | bigint | string | null
 }) {
@@ -220,10 +222,24 @@ export async function createNote(data: {
       originalText: data.originalText || null,
       type: data.type || 'note',
       tags: data.tags || [],
+      dueDate: data.dueDate || null,
+      dueTime: data.dueTime || null,
       aiGenerated: data.aiGenerated || false,
       ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
+}
+
+export async function updateNote(id: string, data: Partial<{
+  title: string
+  content: string
+  type: string
+  tags: string[]
+  dueDate: string | null
+  dueTime: string | null
+  pinned: boolean
+}>) {
+  return prisma.note.update({ where: { id }, data })
 }
 
 export async function deleteNote(id: string) {
