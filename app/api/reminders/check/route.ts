@@ -51,8 +51,8 @@ export async function GET() {
     for (const task of pendingTasks) {
       if (!task.dueTime) continue
 
-      // Check if time matches or is past within 5 minutes
-      if (task.dueTime <= currentTimeStr) {
+      // Trigger ONLY when dueTime matches exact current minute and not yet sent
+      if (task.dueTime === currentTimeStr && !task.reminderSent) {
         for (const chatId of chatIds) {
           const isRecipientMsg = task.description?.includes('📩 Отправить') || task.title?.toLowerCase().includes('отправь') || task.title?.toLowerCase().includes('напиши')
           
@@ -72,8 +72,13 @@ export async function GET() {
           sentCount++
         }
 
-        // Clear dueTime so it won't trigger twice
-        await updateTask(task.id, { dueTime: undefined })
+        // Mark task as completed and reminderSent to prevent duplicate/delayed spam
+        await updateTask(task.id, {
+          status: 'done',
+          reminderSent: true,
+          dueTime: undefined,
+          completedAt: new Date(),
+        })
       }
     }
 

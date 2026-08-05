@@ -45,8 +45,8 @@ export async function runReminderCheck() {
     for (const task of pendingTasks) {
       if (!task.dueTime) continue
 
-      // Trigger if dueTime matches or is past
-      if (task.dueTime <= currentTimeStr) {
+      // Trigger ONLY when dueTime matches exact current minute and not yet sent
+      if (task.dueTime === currentTimeStr && !task.reminderSent) {
         for (const chatId of chatIds) {
           const isRecipientMsg = task.description?.includes('📩 Отправить') || task.title?.toLowerCase().includes('отправь') || task.title?.toLowerCase().includes('напиши')
 
@@ -65,8 +65,13 @@ export async function runReminderCheck() {
           await sendTelegramMessage(chatId, text)
         }
 
-        // Clear dueTime to avoid duplicate notifications
-        await updateTask(task.id, { dueTime: undefined })
+        // Mark task as completed and reminderSent to prevent duplicate/delayed spam
+        await updateTask(task.id, {
+          status: 'done',
+          reminderSent: true,
+          dueTime: undefined,
+          completedAt: new Date(),
+        })
       }
     }
   } catch (err) {
