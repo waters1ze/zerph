@@ -77,8 +77,8 @@ export function Sidebar() {
     <aside className="flex flex-col h-full bg-sidebar border-r border-sidebar-border select-none">
       {/* Brand */}
       <div className="px-4 pt-5 pb-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-primary/10 border border-amber-500/30 shadow-lg shadow-black/40">
-          <span className="text-xl leading-none select-none">📓</span>
+        <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-br from-muted/30 to-card border border-border/80 shadow-lg shadow-black/40">
+          <span className="text-xl leading-none select-none mono-emoji">📓</span>
         </div>
         <div className="flex flex-col">
           <p className="text-[15px] font-bold leading-none tracking-tight gold-shimmer">Zerph</p>
@@ -147,7 +147,7 @@ export function Sidebar() {
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                     )}
                   >
-                    <span className="text-base leading-none shrink-0">{item.icon}</span>
+                    <span className="text-base leading-none shrink-0 mono-emoji">{item.icon}</span>
                     <span className="flex-1 text-left">{item.label}</span>
                     {badge !== undefined && badge > 0 && (
                       <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
