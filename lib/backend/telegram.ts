@@ -118,32 +118,46 @@ export async function handleTelegramUpdate(
     // 3. Parse intent with Groq LLM (Llama-3.3-70b)
     const parsedItem = await parseIntentWithGroq(rawText, groqApiKey)
 
-    // 4. Save parsed item to local database
-    const { item: saved } = await saveParsedItemToDb(parsedItem)
+    // 4. Save parsed item to local database (isolated by chatId)
+    const { item: saved } = await saveParsedItemToDb(parsedItem, chatId)
 
-    // 5. Send formatted Telegram response card
-    const emojiMap: Record<string, string> = {
-      task: '✅',
-      goal: '🎯',
-      note: '📌',
-      project: '📁',
-      reminder: '⏰',
+    // 5. Send formatted Telegram response card in Russian
+    const typeLabel: Record<string, string> = {
+      task:       '✅ Задача',
+      goal:       '🎯 Цель',
+      note:       '📌 Заметка',
+      project:    '📁 Проект',
+      reminder:   '⏰ Напоминание',
+      completion: '✔️ Выполнено',
     }
 
-    const emoji = emojiMap[parsedItem.type] || '⚡'
+    const priorityLabel: Record<string, string> = {
+      urgent: '🔴 Срочно',
+      high:   '🟠 Высокий',
+      medium: '🟢 Средний',
+      low:    '🔵 Низкий',
+    }
 
-    let replyText = `${emoji} *Zerf AI Captured New ${parsedItem.type.toUpperCase()}*\n\n`
-    replyText += `*Title:* ${parsedItem.title}\n`
-    replyText += `*Summary:* ${parsedItem.summary}\n`
-    replyText += `*Priority:* ${parsedItem.priority.toUpperCase()}\n`
-    if (parsedItem.dueDate) replyText += `*Due Date:* ${parsedItem.dueDate}\n`
-    if (parsedItem.tags.length) replyText += `*Tags:* #${parsedItem.tags.join(' #')}\n`
+    const label = typeLabel[parsedItem.type] || '⚡ Запись'
+    let replyText = `${label} *сохранена в твой Zerf!*\n\n`
+    replyText += `*Название:* ${parsedItem.title}\n`
+    if (parsedItem.summary && parsedItem.summary !== parsedItem.title) {
+      replyText += `*Описание:* ${parsedItem.summary.slice(0, 200)}\n`
+    }
+    replyText += `*Приоритет:* ${priorityLabel[parsedItem.priority] || parsedItem.priority}\n`
+    if (parsedItem.dueDate) replyText += `*Срок:* ${parsedItem.dueDate}`
+    if (parsedItem.dueTime) replyText += ` в ${parsedItem.dueTime}`
+    if (parsedItem.dueDate || parsedItem.dueTime) replyText += '\n'
+    if (parsedItem.tags?.length) replyText += `*Теги:* #${parsedItem.tags.join(' #')}\n`
 
     if (parsedItem.type === 'goal' && parsedItem.milestones?.length) {
-      replyText += `\n🚩 *Milestones:* \n` + parsedItem.milestones.map(m => ` • ${m}`).join('\n')
+      replyText += `\n🚩 *Ключевые этапы:*\n` + parsedItem.milestones.map(m => ` • ${m}`).join('\n') + '\n'
+    }
+    if (parsedItem.type === 'task' && parsedItem.subtasks?.length) {
+      replyText += `\n📋 *Подзадачи:*\n` + parsedItem.subtasks.map(s => ` • ${s}`).join('\n') + '\n'
     }
 
-    replyText += `\n\n✨ *Added to your Zerf Command Center!*`
+    replyText += `\n✨ *Синхронизировано с твоим приложением!*`
 
     await sendTelegramMessage(botToken, chatId, replyText)
 

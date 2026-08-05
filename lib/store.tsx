@@ -71,6 +71,7 @@ type Action =
   | { type: 'DELETE_NOTE'; id: string }
   | { type: 'ADD_GOAL'; goal: Goal }
   | { type: 'UPDATE_GOAL'; id: string; updates: Partial<Goal> }
+  | { type: 'DELETE_GOAL'; id: string }
   | { type: 'ADD_PROJECT'; project: Project }
   | { type: 'UPDATE_PROJECT'; id: string; updates: Partial<Project> }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
@@ -132,6 +133,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, goals: [action.goal, ...state.goals] }
     case 'UPDATE_GOAL':
       return { ...state, goals: state.goals.map(g => g.id === action.id ? { ...g, ...action.updates, updatedAt: new Date().toISOString() } : g) }
+    case 'DELETE_GOAL':
+      return { ...state, goals: state.goals.filter(g => g.id !== action.id), selectedGoalId: null }
     case 'ADD_PROJECT':
       return { ...state, projects: [action.project, ...state.projects] }
     case 'UPDATE_PROJECT':
@@ -215,6 +218,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetch(`/api/tasks?id=${action.id}&type=task`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'DELETE_NOTE') {
       fetch(`/api/tasks?id=${action.id}&type=note`, { method: 'DELETE', headers }).catch(() => {})
+    } else if (action.type === 'DELETE_GOAL') {
+      fetch(`/api/tasks?id=${action.id}&type=goal`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'TOGGLE_TASK') {
       const target = state.tasks.find(t => t.id === action.id)
       const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
@@ -240,6 +245,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ id: action.id, itemType: 'note', ...action.updates }),
+      }).catch(() => {})
+    } else if (action.type === 'ADD_GOAL') {
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ itemType: 'goal', ...action.goal }),
+      }).catch(() => {})
+    } else if (action.type === 'UPDATE_GOAL') {
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
       }).catch(() => {})
     }
   }, [state.tasks])
