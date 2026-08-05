@@ -25,20 +25,23 @@ async function sendTelegramMessage(chatId: number, text: string) {
 
 export async function GET() {
   try {
-    // Current time in Moscow / MSK (UTC+3)
+    // Bulletproof MSK time extraction (Europe/Moscow)
     const now = new Date()
-    const mskOffset = 3 * 60 * 60 * 1000
-    const mskDate = new Date(now.getTime() + mskOffset)
-    
-    const todayStr = mskDate.toISOString().slice(0, 10)
-    const hours = String(mskDate.getUTCHours()).padStart(2, '0')
-    const minutes = String(mskDate.getUTCMinutes()).padStart(2, '0')
-    const currentTimeStr = `${hours}:${minutes}`
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-    // Fetch pending tasks with dueTime matching current time or slightly past
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+    const currentTimeStr = `${getPart('hour')}:${getPart('minute')}`
+
+    // Fetch pending tasks with dueTime matching current time or past due
     const tasks = await getAllTasks()
-    const pendingTasks = tasks.filter((t: { status: string; dueDate?: string | null; dueTime?: string | null }) =>
-      t.status !== 'done' && t.dueDate === todayStr && !!t.dueTime
+    const pendingTasks = tasks.filter((t: { status: string; dueTime?: string | null }) =>
+      t.status !== 'done' && !!t.dueTime
     )
 
     const chatIds = await getAllChatIds()
