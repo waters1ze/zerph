@@ -1,5 +1,5 @@
 /**
- * GET  /api/tasks  — all tasks + goals + notes
+ * GET  /api/tasks  — tasks + goals + notes for current user
  * POST /api/tasks  — create task
  * PATCH /api/tasks — update/complete task
  * DELETE /api/tasks?id=&type= — delete
@@ -10,11 +10,10 @@ import {
   getAllTasks, getAllGoals, getAllNotes,
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
-  deleteNote, updateGoal,
+  deleteNote, deleteGoal,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 
-// Start background interval for Telegram reminders
 startReminderScheduler()
 
 function serialize(obj: unknown): unknown {
@@ -30,12 +29,18 @@ function serialize(obj: unknown): unknown {
   return obj
 }
 
-export async function GET() {
+function getOwnerChatId(req: NextRequest): string | null {
+  const { searchParams } = new URL(req.url)
+  return req.headers.get('x-chat-id') || searchParams.get('chatId') || null
+}
+
+export async function GET(req: NextRequest) {
   try {
+    const ownerChatId = getOwnerChatId(req)
     const [tasks, goals, notes] = await Promise.all([
-      getAllTasks(),
-      getAllGoals(),
-      getAllNotes(),
+      getAllTasks(ownerChatId),
+      getAllGoals(ownerChatId),
+      getAllNotes(ownerChatId),
     ])
     return NextResponse.json(serialize({ tasks, goals, notes }))
   } catch (err: unknown) {
@@ -46,6 +51,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const ownerChatId = body.ownerChatId || getOwnerChatId(req)
     const task = await createTask({
       title: body.title || 'Untitled Task',
       description: body.description,
@@ -55,6 +61,7 @@ export async function POST(req: NextRequest) {
       dueTime: body.dueTime,
       tags: body.tags || [],
       subtasks: body.subtasks || [],
+      ownerChatId: ownerChatId,
     })
     return NextResponse.json(serialize({ success: true, task }))
   } catch (err: unknown) {
@@ -65,10 +72,11 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
+    const ownerChatId = body.ownerChatId || getOwnerChatId(req)
 
     // Fuzzy completion by title
     if (body.action === 'complete' && body.targetTitle) {
-      const completed = await completeTaskByTitle(body.targetTitle)
+      const completed = await completeTaskByTitle(body.targetTitle, ownerChatId)
       if (!completed) {
         return NextResponse.json({ error: 'No matching task found', notFound: true }, { status: 404 })
       }
@@ -83,7 +91,8 @@ export async function PATCH(req: NextRequest) {
 
     // Update by ID
     if (body.id) {
-      const task = await updateTask(body.id, body)
+      const { id, ...updates } = body
+      const task = await updateTask(id, updates)
       return NextResponse.json(serialize({ success: true, task }))
     }
 
@@ -101,7 +110,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
     if (type === 'note') await deleteNote(id)
-    else if (type === 'goal') await updateGoal(id, { status: 'completed' })
+    else if (type === 'goal') await deleteGoal(id)
     else await deleteTask(id)
 
     return NextResponse.json({ success: true })

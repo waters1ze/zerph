@@ -34,24 +34,47 @@ export type DbTask = {
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
-export async function getAllTasks() {
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+export async function getAllTasks(ownerChatId?: number | bigint | string | null) {
   try {
+    if (ownerChatId) {
+      const cid = BigInt(ownerChatId)
+      return await prisma.task.findMany({
+        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
     return await prisma.task.findMany({ orderBy: { createdAt: 'desc' } })
   } catch {
     return []
   }
 }
 
-export async function getAllGoals() {
+export async function getAllGoals(ownerChatId?: number | bigint | string | null) {
   try {
+    if (ownerChatId) {
+      const cid = BigInt(ownerChatId)
+      return await prisma.goal.findMany({
+        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
     return await prisma.goal.findMany({ orderBy: { createdAt: 'desc' } })
   } catch {
     return []
   }
 }
 
-export async function getAllNotes() {
+export async function getAllNotes(ownerChatId?: number | bigint | string | null) {
   try {
+    if (ownerChatId) {
+      const cid = BigInt(ownerChatId)
+      return await prisma.note.findMany({
+        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
     return await prisma.note.findMany({ orderBy: { createdAt: 'desc' } })
   } catch {
     return []
@@ -70,7 +93,7 @@ export async function createTask(data: {
   rawText?: string
   aiGenerated?: boolean
   source?: string
-  ownerChatId?: number | null   // Telegram chatId of the creator
+  ownerChatId?: number | bigint | string | null   // Telegram chatId of the creator
 }) {
   return prisma.task.create({
     data: {
@@ -109,9 +132,14 @@ export async function deleteTask(id: string) {
 /**
  * Find the best matching non-done task by title similarity
  */
-export async function completeTaskByTitle(targetTitle: string): Promise<DbTask | null> {
+export async function completeTaskByTitle(targetTitle: string, ownerChatId?: number | bigint | string | null): Promise<DbTask | null> {
+  const whereClause: Record<string, unknown> = { status: { not: 'done' } }
+  if (ownerChatId) {
+    whereClause.OR = [{ ownerChatId: BigInt(ownerChatId) }, { ownerChatId: null }]
+  }
+
   const tasks = await prisma.task.findMany({
-    where: { status: { not: 'done' } },
+    where: whereClause,
     orderBy: { createdAt: 'desc' },
   })
 
@@ -141,6 +169,7 @@ export async function createGoal(data: {
   deadline?: string
   milestones?: object[]
   color?: string
+  ownerChatId?: number | bigint | string | null
 }) {
   return prisma.goal.create({
     data: {
@@ -152,12 +181,17 @@ export async function createGoal(data: {
       progress: 0,
       color: data.color || '#2d7a4f',
       milestones: data.milestones || [],
+      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
 }
 
 export async function updateGoal(id: string, data: object) {
   return prisma.goal.update({ where: { id }, data: data as never })
+}
+
+export async function deleteGoal(id: string) {
+  return prisma.goal.delete({ where: { id } })
 }
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
@@ -169,6 +203,7 @@ export async function createNote(data: {
   type?: string
   tags?: string[]
   aiGenerated?: boolean
+  ownerChatId?: number | bigint | string | null
 }) {
   return prisma.note.create({
     data: {
@@ -178,6 +213,7 @@ export async function createNote(data: {
       type: data.type || 'note',
       tags: data.tags || [],
       aiGenerated: data.aiGenerated || false,
+      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
 }
@@ -205,14 +241,14 @@ export async function getAllChatIds(): Promise<number[]> {
 
 export async function saveParsedItemToDb(
   item: ParsedItem,
-  ownerChatId?: number | null
+  ownerChatId?: number | bigint | string | null
 ): Promise<{
   item: ParsedItem
   completedTask?: DbTask | null
 }> {
   // Completion intent — mark existing task done
   if (item.type === 'completion' && item.targetTitle) {
-    const completed = await completeTaskByTitle(item.targetTitle)
+    const completed = await completeTaskByTitle(item.targetTitle, ownerChatId)
     return { item, completedTask: completed }
   }
 
@@ -227,6 +263,7 @@ export async function saveParsedItemToDb(
         title: m,
         done: false,
       })),
+      ownerChatId,
     })
   } else if (item.type === 'note') {
     const mdContent = item.summary.includes('#')
@@ -240,6 +277,7 @@ export async function saveParsedItemToDb(
       type: 'note',
       tags: item.tags || [],
       aiGenerated: true,
+      ownerChatId,
     })
 
     // ── Auto-reminder: if note content contains a time, create a companion task ──

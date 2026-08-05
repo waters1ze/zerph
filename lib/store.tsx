@@ -8,7 +8,6 @@ import type {
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10)
-const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
 
 const SEED_TASKS: Task[] = []
 const SEED_GOALS: Goal[] = []
@@ -19,7 +18,7 @@ const SEED_FRIENDS: Friend[] = []
 const SEED_CHAT: ChatMessage[] = [
   {
     id: 'c1', role: 'assistant',
-    content: 'Hello! I\'m your Nexus AI assistant. I can help you manage tasks, summarize notes, create plans, and answer questions about your projects. What would you like to do today?',
+    content: 'Hello! I\'m your Zerf AI assistant. I can help you manage tasks, summarize notes, create plans, and answer questions about your projects. What would you like to do today?',
     createdAt: today + 'T08:00:00Z',
   },
 ]
@@ -178,6 +177,51 @@ const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Act
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
 
+  // Get current telegram chatId if available in WebApp
+  const getTgChatId = (): string | null => {
+    if (typeof window !== 'undefined') {
+      const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
+      if (u?.id) return String(u.id)
+    }
+    return null
+  }
+
+  const enhancedDispatch: React.Dispatch<Action> = useCallback((action: Action) => {
+    // Perform state change locally immediately
+    dispatch(action)
+
+    // Sync deletion / updates to cloud DB via API
+    const chatId = getTgChatId()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (chatId) headers['x-chat-id'] = chatId
+
+    if (action.type === 'DELETE_TASK') {
+      fetch(`/api/tasks?id=${action.id}&type=task`, { method: 'DELETE', headers }).catch(() => {})
+    } else if (action.type === 'DELETE_NOTE') {
+      fetch(`/api/tasks?id=${action.id}&type=note`, { method: 'DELETE', headers }).catch(() => {})
+    } else if (action.type === 'TOGGLE_TASK') {
+      const target = state.tasks.find(t => t.id === action.id)
+      const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, status: nextStatus }),
+      }).catch(() => {})
+    } else if (action.type === 'ADD_TASK') {
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(action.task),
+      }).catch(() => {})
+    } else if (action.type === 'UPDATE_TASK') {
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, ...action.updates }),
+      }).catch(() => {})
+    }
+  }, [state.tasks])
+
   // Apply theme class
   useEffect(() => {
     const theme = state.settings.theme
@@ -211,9 +255,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [])
 
-  // Sync from backend DB on mount
+  // Sync from backend DB on mount (with user isolation)
   useEffect(() => {
-    fetch('/api/tasks')
+    const chatId = getTgChatId()
+    const headers: Record<string, string> = {}
+    if (chatId) headers['x-chat-id'] = chatId
+
+    fetch('/api/tasks', { headers })
       .then(r => r.json())
       .then(data => {
         if (data.tasks || data.goals || data.notes) {
@@ -253,7 +301,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval)
   }, [])
 
-  return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
+  return <AppContext.Provider value={{ state, dispatch: enhancedDispatch }}>{children}</AppContext.Provider>
 }
 
 export function useApp() {
