@@ -50,11 +50,12 @@ async function send(chatId: number, text: string, extra?: object) {
   })
 }
 
-function miniAppKeyboard() {
+function miniAppKeyboard(chatId?: number) {
+  const query = chatId ? `?chatId=${chatId}` : ''
   return {
     inline_keyboard: [
-      [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
-      [{ text: '🌐 Open Full Web Site', url: APP_URL }],
+      [{ text: '📱 Open Zerf App', web_app: { url: `${MINIAPP_URL}${query}` } }],
+      [{ text: '🌐 Open Full Web Site', url: `${APP_URL}${query}` }],
     ],
   }
 }
@@ -72,7 +73,7 @@ async function handleStart(chatId: number, firstName: string) {
     `3️⃣ *Авто-уведомления* ⏰ — напиши «Напомни завтра в 10:00».\n` +
     `4️⃣ *Единый профиль* 🌐 — все данные автоматически видны и в боте, и на веб-сайте!\n\n` +
     `Жми кнопки ниже, чтобы открыть Mini App или перейти на полный сайт:`,
-    { reply_markup: miniAppKeyboard() }
+    { reply_markup: miniAppKeyboard(chatId) }
   )
 }
 
@@ -219,7 +220,7 @@ async function processText(chatId: number, text: string) {
     if (item.dueTime) msg += `\n⏰ *${item.dueTime}* — пришлю напоминание!`
     msg += `\n\n_Сохранено в Zerf_`
 
-    await send(chatId, msg, { reply_markup: miniAppKeyboard() })
+    await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
   } catch (err: unknown) {
     await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
   }
