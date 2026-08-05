@@ -29,6 +29,7 @@ model Task {
   aiGenerated  Boolean   @default(false)
   source       String?
   subtasks     Json?
+  ownerChatId  BigInt?   // Telegram chatId of the user who created this task
 }
 
 model Goal {

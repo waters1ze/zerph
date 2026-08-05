@@ -29,6 +29,7 @@ export type DbTask = {
   aiGenerated: boolean
   source: string | null
   subtasks: unknown
+  ownerChatId: bigint | null  // Telegram chatId of task owner
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ export async function createTask(data: {
   rawText?: string
   aiGenerated?: boolean
   source?: string
+  ownerChatId?: number | null   // Telegram chatId of the creator
 }) {
   return prisma.task.create({
     data: {
@@ -84,6 +86,7 @@ export async function createTask(data: {
       rawText: data.rawText || null,
       aiGenerated: data.aiGenerated || false,
       source: data.source || null,
+      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
 }
@@ -200,7 +203,10 @@ export async function getAllChatIds(): Promise<number[]> {
 
 // ── High-level: save ParsedItem from Groq AI ──────────────────────────────────
 
-export async function saveParsedItemToDb(item: ParsedItem): Promise<{
+export async function saveParsedItemToDb(
+  item: ParsedItem,
+  ownerChatId?: number | null
+): Promise<{
   item: ParsedItem
   completedTask?: DbTask | null
 }> {
@@ -250,6 +256,7 @@ export async function saveParsedItemToDb(item: ParsedItem): Promise<{
       tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
       aiGenerated: true,
       source: item.rawText,
+      ownerChatId: ownerChatId || null,   // Store the owner's chatId
       subtasks: (item.subtasks || []).map((st, i) => ({
         id: `st_${i}_${Date.now()}`,
         title: st,
