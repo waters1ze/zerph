@@ -243,6 +243,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {})
+
+    // Auto-check Telegram reminders every 15 seconds
+    const interval = setInterval(() => {
+      fetch('/api/reminders/check').catch(() => {})
+    }, 15000)
+    fetch('/api/reminders/check').catch(() => {})
+
+    return () => clearInterval(interval)
   }, [])
 
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
