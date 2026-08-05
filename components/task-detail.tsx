@@ -151,14 +151,36 @@ export function TaskDetail() {
             />
           </div>
 
-          {/* Created */}
+          {/* Due Time */}
           <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Created</p>
-            <span className="text-[12px] text-muted-foreground">
-              {format(parseISO(task.createdAt), 'MMM d, yyyy')}
-            </span>
+            <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
+              ⏰ Reminder Time
+            </p>
+            <input
+              type="time"
+              value={task.dueTime ?? ''}
+              onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
+              className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-pointer"
+            />
           </div>
         </div>
+
+        {/* Live Notification Countdown */}
+        {task.dueTime && !isDone && (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wide">
+                🔔 Telegram Напоминание
+              </p>
+              <p className="text-xs text-foreground/80 mt-0.5">
+                Прийдёт в Telegram ровно в <strong className="text-amber-400 font-mono">{task.dueTime}</strong>
+              </p>
+            </div>
+            <div className="px-2.5 py-1 rounded-lg bg-black/40 border border-amber-500/30 text-amber-400 font-mono text-xs font-bold">
+              ⏰ {task.dueTime}
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div>

@@ -45,7 +45,7 @@ In this case set:
 Long-term aspiration, 1-6 month target, strategic objective. Extract milestones & motivation.
 
 ### type = "task"
-Immediate actionable item. Check for time mentions like "at 12:00", "в 15:30", "tomorrow at 9am", "в полдень" → extract to dueTime field in HH:MM 24h format.
+Immediate actionable item. Check for time mentions like "at 12:00", "в 15:30", "tomorrow at 9am", "в полдень", OR relative offsets like "10 minutes before 12:00" → calculate and extract to "dueTime" field in HH:MM 24h format (e.g., 10 mins before 12:00 becomes "11:50").
 
 ### type = "note"
 Meeting recap, general thought, brain dump, ideas, observations.
