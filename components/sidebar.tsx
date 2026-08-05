@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import type { View } from '@/lib/types'
-import { ChevronRight, Circle } from 'lucide-react'
+import { ChevronRight, Circle, User } from 'lucide-react'
 
 interface NavItem {
   id: View
@@ -43,21 +43,25 @@ export function Sidebar() {
   const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; username?: string; photo_url?: string } } } } }).Telegram?.WebApp?.initDataUnsafe?.user) {
-      const u = (window as unknown as { Telegram: { WebApp: { initDataUnsafe: { user: { first_name?: string; username?: string; photo_url?: string } } } } }).Telegram.WebApp.initDataUnsafe.user
-      setTgUser({
-        name: u.first_name || 'Пользователь',
-        username: u.username ? `@${u.username}` : 'Telegram',
-        photoUrl: u.photo_url,
-      })
-      dispatch({
-        type: 'UPDATE_SETTINGS',
-        updates: {
-          name: u.first_name || '',
-          avatar: u.photo_url || '',
-          integrations: { ...settings.integrations, telegram: true },
-        },
-      })
+    if (typeof window !== 'undefined') {
+      const tgWindow = window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; last_name?: string; username?: string; photo_url?: string } } } } }
+      const u = tgWindow.Telegram?.WebApp?.initDataUnsafe?.user
+      if (u) {
+        const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.first_name || 'Пользователь'
+        setTgUser({
+          name: fullName,
+          username: u.username ? `@${u.username}` : 'Telegram',
+          photoUrl: u.photo_url,
+        })
+        dispatch({
+          type: 'UPDATE_SETTINGS',
+          updates: {
+            name: fullName,
+            avatar: u.photo_url || '',
+            integrations: { ...settings.integrations, telegram: true },
+          },
+        })
+      }
     }
   }, [dispatch])
 
@@ -70,28 +74,29 @@ export function Sidebar() {
   const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done').length
   const notesCount = notes.length
 
-  const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null)
-  const isConnected = settings.integrations.telegram || !!tgUser || !!displayName
+  const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null) || 'Мой профиль'
+  const isConnected = settings.integrations.telegram || !!tgUser || (!!settings.name && settings.name !== 'Kirill Perekatnov')
+  const userSubtext = tgUser?.username || (isConnected ? 'Telegram Подключён' : 'Telegram Не подключён')
 
   return (
     <aside className="flex flex-col h-full bg-card text-card-foreground border-r border-border select-none w-full font-sans">
-      {/* Top Profile / Telegram Status Block */}
+      {/* Dynamic User Profile Card */}
       <div className="mx-3 mt-4 mb-3 px-3.5 py-3 rounded-xl bg-muted/50 border border-border/60 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary">
           {tgUser?.photoUrl ? (
             <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+          ) : displayName !== 'Мой профиль' ? (
+            <span className="text-[12px] font-bold uppercase">{displayName[0]}</span>
           ) : (
-            <span className="text-[12px] font-bold text-primary font-sans">
-              {displayName ? displayName[0] : '👤'}
-            </span>
+            <User className="w-4 h-4" />
           )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13px] font-bold text-foreground truncate font-sans">
-            {displayName || 'w-size'}
+            {displayName}
           </p>
           <p className="text-[11px] text-muted-foreground truncate font-sans">
-            {isConnected ? 'Telegram Подключён' : 'Telegram Не подключён'}
+            {userSubtext}
           </p>
         </div>
         <div
