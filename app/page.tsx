@@ -9,6 +9,7 @@ import { TaskDetail } from '@/components/task-detail'
 import { NewTaskModal } from '@/components/new-task-modal'
 import { AiChatPanel } from '@/components/ai-chat-panel'
 import { VoiceRecorder } from '@/components/voice-recorder'
+import { Menu } from 'lucide-react'
 
 import { TodayView }    from '@/components/views/today-view'
 import { InboxView }    from '@/components/views/inbox-view'
@@ -54,7 +55,26 @@ function AppShell() {
   const isFullHeight = state.currentView === 'notes'
 
   return (
-    <div className="app-shell flex h-screen bg-background overflow-hidden">
+    <div className="app-shell flex h-screen bg-background overflow-hidden relative">
+
+      {/* ── Mobile edge tab for sidebar (Floating menu tab) ── */}
+      <AnimatePresence>
+        {!mobileSidebarOpen && (
+          <motion.button
+            key="mobile-nav-trigger-tab"
+            initial={{ x: -16, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -16, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Открыть меню навигации"
+            title="Разделы приложения"
+            className="fixed left-0 top-1/2 -translate-y-1/2 z-30 sm:hidden flex items-center justify-center h-14 w-7 bg-primary text-primary-foreground rounded-r-xl shadow-lg shadow-primary/20 hover:w-8 transition-all border-t border-b border-r border-primary/60"
+          >
+            <Menu className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* ── Mobile sidebar overlay ── */}
       <AnimatePresence>
@@ -68,7 +88,7 @@ function AppShell() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setMobileSidebarOpen(false)}
-              className="fixed inset-0 bg-black/60 z-40 sm:hidden"
+              className="fixed inset-0 bg-black/70 z-50 sm:hidden backdrop-blur-xs"
             />
             {/* Slide-in panel */}
             <motion.div
@@ -77,7 +97,7 @@ function AppShell() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed top-0 left-0 h-full w-64 z-50 sm:hidden overflow-y-auto bg-background border-r border-border shadow-2xl"
+              className="fixed top-0 left-0 h-full w-[280px] max-w-[85vw] z-50 sm:hidden overflow-y-auto bg-card border-r border-border shadow-2xl flex flex-col"
             >
               <Sidebar />
             </motion.div>
