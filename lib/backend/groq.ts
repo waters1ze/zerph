@@ -28,6 +28,8 @@ const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '
 
 const SYSTEM_PROMPT = `You are Zerf AI, an expert personal productivity assistant. Analyze the user's natural language input (voice transcript or text) and convert it to a structured JSON object.
 
+CRITICAL LANGUAGE RULE: If the user input is in Russian (or contains Russian words), ALWAYS generate the "title", "summary", and "tags" values strictly in RUSSIAN. Do NOT translate Russian input into English.
+
 Today is ${today}, current time is ${time}.
 
 ## Intent Detection

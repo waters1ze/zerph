@@ -131,6 +131,22 @@ async function handleNotes(chatId: number) {
   await send(chatId, msg)
 }
 
+async function handleLanguage(chatId: number) {
+  await send(chatId,
+    `🌐 *Выбор языка / Language Selection*\n\n` +
+    `Твой язык по умолчанию установлен на *Русский (RU)* 🇷🇺.\n\n` +
+    `Все голосовые сообщения, задачи и уведомления от Zerf AI приходят на выбранном языке.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🇷🇺 Русский (Выбран)', callback_data: 'lang_ru' }],
+          [{ text: '🇬🇧 English', callback_data: 'lang_en' }],
+        ],
+      },
+    }
+  )
+}
+
 // ── AI processing ─────────────────────────────────────────────────────────────
 
 const TYPE_RU: Record<string, string> = {
@@ -266,6 +282,8 @@ export async function POST(req: NextRequest) {
         await handleStart(chatId, firstName)
       } else if (cmd === '/start' || cmd === '/help') {
         await handleStart(chatId, firstName)
+      } else if (cmd === '/language' || cmd === '/lang') {
+        await handleLanguage(chatId)
       } else if (cmd === '/today') {
         await handleToday(chatId)
       } else if (cmd === '/goals') {
@@ -273,7 +291,7 @@ export async function POST(req: NextRequest) {
       } else if (cmd === '/notes') {
         await handleNotes(chatId)
       } else {
-        await send(chatId, 'Попробуй /help')
+        await send(chatId, 'Попробуй /help или /language')
       }
     } else if (voice) {
       await processVoice(chatId, voice.file_id)
