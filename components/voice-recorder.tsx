@@ -151,7 +151,6 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
     const id = 'v_' + Math.random().toString(36).substring(2, 9)
 
     if (result.type === 'completion') {
-      // Find and mark task done in local state too
       const targetTitle = result.targetTitle || result.title
       const found = state.tasks.find(t =>
         t.status !== 'done' &&
@@ -159,7 +158,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
          targetTitle.toLowerCase().includes(t.title.toLowerCase()))
       )
       if (found) {
-        dispatch({ type: 'UPDATE_TASK', task: { ...found, status: 'done', completedAt: now } })
+        dispatch({ type: 'UPDATE_TASK', id: found.id, updates: { status: 'done', completedAt: new Date().toISOString() } })
       }
       onClose()
       return
