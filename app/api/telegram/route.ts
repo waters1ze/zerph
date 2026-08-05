@@ -85,20 +85,28 @@ async function handleToday(chatId: number) {
   const pending = tasks.filter((t: { status: string; dueDate?: string | null }) =>
     t.status !== 'done' && (t.dueDate === today || !t.dueDate)
   )
-  const done = tasks.filter((t: { status: string }) => t.status === 'done').length
+  const doneTasks = tasks.filter((t: { status: string }) => t.status === 'done')
 
   let msg = `📅 *${escMd(dayName)}*\n\n`
-  if (pending.length === 0) {
+  if (pending.length === 0 && doneTasks.length === 0) {
     msg += '✅ Всё выполнено! Отличный день 🎉'
   } else {
-    msg += `*${pending.length} задач осталось:*\n`
-    pending.slice(0, 12).forEach((t: { priority: string; title: string; dueTime?: string | null }) => {
-      const time = t.dueTime ? ` _(${t.dueTime})_` : ''
-      msg += `${P_EMOJI[t.priority] || '⚪'} ${escMd(t.title)}${time}\n`
-    })
-    if (pending.length > 12) msg += `_...и ещё ${pending.length - 12}_\n`
+    if (pending.length > 0) {
+      msg += `*${pending.length} задач осталось:*\n`
+      pending.slice(0, 12).forEach((t: { priority: string; title: string; dueTime?: string | null }) => {
+        const time = t.dueTime ? ` _(${t.dueTime})_` : ''
+        msg += `${P_EMOJI[t.priority] || '⚪'} ${escMd(t.title)}${time}\n`
+      })
+      if (pending.length > 12) msg += `_...и ещё ${pending.length - 12}_\n`
+    }
+
+    if (doneTasks.length > 0) {
+      msg += `\n✔️ *Завершено сегодня (${doneTasks.length}):*\n`
+      doneTasks.slice(0, 8).forEach((t: { title: string }) => {
+        msg += `  ~${escMd(t.title)}~\n`
+      })
+    }
   }
-  if (done > 0) msg += `\n✔️ *Выполнено сегодня: ${done}*`
 
   await send(chatId, msg, { reply_markup: miniAppKeyboard() })
 }
@@ -179,6 +187,28 @@ async function processText(chatId: number, text: string) {
           { reply_markup: miniAppKeyboard() }
         )
       }
+      return
+    }
+
+    // Check past time validation
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+    const currentTimeStr = `${getPart('hour')}:${getPart('minute')}`
+
+    if (item.dueTime && (item.dueDate === todayStr || !item.dueDate) && item.dueTime < currentTimeStr) {
+      await send(chatId,
+        `⚠️ *Время «${item.dueTime}» уже прошло на сегодня!*\n\n` +
+        `Текущее время в MSK: *${currentTimeStr}*\n` +
+        `Пожалуйста, укажи время в будущем (например, «в ${currentTimeStr}» или позже).`,
+        { reply_markup: miniAppKeyboard() }
+      )
       return
     }
 
