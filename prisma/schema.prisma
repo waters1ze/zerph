@@ -44,6 +44,7 @@ model Goal {
   milestones  Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  ownerChatId BigInt?  // Telegram chatId of the user
 }
 
 model Note {
@@ -59,6 +60,7 @@ model Note {
   updatedAt    DateTime @updatedAt
   aiGenerated  Boolean  @default(false)
   pinned       Boolean  @default(false)
+  ownerChatId  BigInt?  // Telegram chatId of the user
 }
 
 model TelegramChat {

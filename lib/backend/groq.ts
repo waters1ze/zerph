@@ -141,13 +141,16 @@ export async function parseIntentWithGroq(
   const key = apiKey || DEFAULT_KEY
   if (!key) throw new Error('Groq API Key missing.')
 
+  const nowMsk = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'full', timeStyle: 'medium' })
+  const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\nТОЧНАЯ ТЕКУЩАЯ ДАТА И ВРЕМЯ (Москва, MSK): ${nowMsk}.`
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: model || GROQ_CHAT_MODEL,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: dynamicSystemPrompt },
         { role: 'user', content: text },
       ],
       temperature: 0.2,

@@ -87,10 +87,22 @@ export default function TelegramApp() {
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light')
   }
 
+  const getTgChatId = () => {
+    if (typeof window !== 'undefined') {
+      const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
+      if (u?.id) return String(u.id)
+    }
+    return null
+  }
+
   const loadData = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/tasks')
+      const chatId = getTgChatId()
+      const headers: Record<string, string> = {}
+      if (chatId) headers['x-chat-id'] = chatId
+
+      const res = await fetch('/api/tasks', { headers })
       const data = await res.json()
       setTasks(data.tasks || [])
       setGoals(data.goals || [])
@@ -99,21 +111,42 @@ export default function TelegramApp() {
     finally { setLoading(false) }
   }
 
-  const toggleTask = (taskId: string) => {
-    setTasks(prev => prev.map(tk =>
-      tk.id === taskId ? { ...tk, status: tk.status === 'done' ? 'todo' : 'done' } : tk
-    ))
+  const toggleTask = async (taskId: string) => {
+    let nextStatus = 'done'
+    setTasks(prev => prev.map(tk => {
+      if (tk.id === taskId) {
+        nextStatus = tk.status === 'done' ? 'todo' : 'done'
+        return { ...tk, status: nextStatus }
+      }
+      return tk
+    }))
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light')
+
+    try {
+      const chatId = getTgChatId()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (chatId) headers['x-chat-id'] = chatId
+
+      await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: taskId, status: nextStatus }),
+      })
+    } catch {}
   }
 
   const addTask = async () => {
     if (!newTaskTitle.trim() || adding) return
     setAdding(true)
     try {
+      const chatId = getTgChatId()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (chatId) headers['x-chat-id'] = chatId
+
       const res = await fetch('/api/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTaskTitle, priority: 'medium', dueDate: today }),
+        headers,
+        body: JSON.stringify({ title: newTaskTitle, priority: 'medium', dueDate: today, ownerChatId: chatId }),
       })
       const data = await res.json()
       if (data.task) setTasks(prev => [data.task, ...prev])
