@@ -25,12 +25,18 @@ function AppShell() {
   const { state } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   useEffect(() => {
     const handleVoice = () => setVoiceOpen(true)
     window.addEventListener('zerf:open-voice', handleVoice)
     return () => window.removeEventListener('zerf:open-voice', handleVoice)
   }, [])
+
+  // Close mobile sidebar when view changes
+  useEffect(() => {
+    setMobileSidebarOpen(false)
+  }, [state.currentView])
 
   const VIEW_MAP: Record<string, React.ReactNode> = {
     today:    <TodayView />,
@@ -49,22 +55,55 @@ function AppShell() {
 
   return (
     <div className="app-shell flex h-screen bg-background overflow-hidden">
-      {/* Desktop Sidebar */}
-      <div className="desktop-sidebar w-56 shrink-0 h-full overflow-y-auto">
+
+      {/* ── Mobile sidebar overlay ── */}
+      <AnimatePresence>
+        {mobileSidebarOpen && (
+          <>
+            {/* Dim backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileSidebarOpen(false)}
+              className="fixed inset-0 bg-black/60 z-40 sm:hidden"
+            />
+            {/* Slide-in panel */}
+            <motion.div
+              key="mobile-sidebar"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed top-0 left-0 h-full w-64 z-50 sm:hidden overflow-y-auto bg-background border-r border-border shadow-2xl"
+            >
+              <Sidebar />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Desktop Sidebar ── */}
+      <div className="desktop-sidebar w-56 shrink-0 h-full overflow-y-auto hidden sm:block">
         <Sidebar />
       </div>
 
-      {/* Main content area */}
+      {/* ── Main content area ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopBar onNewTask={() => setNewTaskOpen(true)} />
+        <TopBar
+          onNewTask={() => setNewTaskOpen(true)}
+          onMenuOpen={() => setMobileSidebarOpen(true)}
+        />
 
         <div className="flex flex-1 overflow-hidden">
           {/* View */}
           <main
             className={
               isFullHeight
-                ? 'app-main flex-1 min-w-0 overflow-hidden px-6 py-5 flex flex-col'
-                : 'app-main flex-1 min-w-0 overflow-y-auto px-6 py-5'
+                ? 'app-main flex-1 min-w-0 overflow-hidden px-4 sm:px-6 py-4 sm:py-5 flex flex-col'
+                : 'app-main flex-1 min-w-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5'
             }
           >
             <AnimatePresence mode="wait">
@@ -81,7 +120,7 @@ function AppShell() {
             </AnimatePresence>
           </main>
 
-          {/* Task detail drawer — slides in from right inside main area */}
+          {/* Task detail drawer */}
           <AnimatePresence>
             {state.isDetailOpen && state.selectedTaskId && (
               <motion.div
@@ -99,13 +138,13 @@ function AppShell() {
         </div>
       </div>
 
-      {/* AI Chat panel — slides in from right edge of screen */}
+      {/* AI Chat panel */}
       <AiChatPanel />
 
       {/* New task modal */}
       <NewTaskModal open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
 
-      {/* Voice recorder modal */}
+      {/* Voice recorder */}
       <VoiceRecorder open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   )
