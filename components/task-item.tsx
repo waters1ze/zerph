@@ -6,7 +6,7 @@ import { TaskCheckbox } from './task-checkbox'
 import { PriorityBadge } from './priority-badge'
 import { useApp } from '@/lib/store'
 import type { Task } from '@/lib/types'
-import { CalendarDays, Users, Sparkles, ChevronRight, Trash2 } from 'lucide-react'
+import { CalendarDays, Users, Sparkles, ChevronRight, Trash2, Clock } from 'lucide-react'
 import { format, isToday, isPast, parseISO } from 'date-fns'
 
 interface Props {
@@ -88,6 +88,13 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
               )}>
                 <CalendarDays className="w-3 h-3" />
                 {dueDateLabel}
+              </span>
+            )}
+
+            {task.dueTime && !isDone && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] font-medium text-amber-400">
+                <Clock className="w-3 h-3" />
+                Уведомление в {task.dueTime}
               </span>
             )}
 
