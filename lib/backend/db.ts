@@ -126,7 +126,11 @@ export async function updateTask(id: string, data: Partial<{
 }
 
 export async function deleteTask(id: string) {
-  return prisma.task.delete({ where: { id } })
+  try {
+    return await prisma.task.deleteMany({ where: { id } })
+  } catch {
+    return { count: 0 }
+  }
 }
 
 /**
@@ -191,7 +195,11 @@ export async function updateGoal(id: string, data: object) {
 }
 
 export async function deleteGoal(id: string) {
-  return prisma.goal.delete({ where: { id } })
+  try {
+    return await prisma.goal.deleteMany({ where: { id } })
+  } catch {
+    return { count: 0 }
+  }
 }
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
@@ -219,7 +227,11 @@ export async function createNote(data: {
 }
 
 export async function deleteNote(id: string) {
-  return prisma.note.delete({ where: { id } })
+  try {
+    return await prisma.note.deleteMany({ where: { id } })
+  } catch {
+    return { count: 0 }
+  }
 }
 
 // ── Telegram Chat IDs ─────────────────────────────────────────────────────────
