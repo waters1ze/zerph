@@ -310,13 +310,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetch('/api/tasks')
       .then(r => r.json())
       .then(data => {
-        if (data.tasks?.length || data.goals?.length || data.notes?.length) {
+        if (data.tasks || data.goals || data.notes) {
           dispatch({
             type: 'LOAD_STATE',
             state: {
-              tasks: [...(data.tasks || []), ...SEED_TASKS],
-              goals: [...(data.goals || []), ...SEED_GOALS],
-              notes: [...(data.notes || []), ...SEED_NOTES],
+              tasks: data.tasks || [],
+              goals: data.goals || [],
+              notes: data.notes || [],
             },
           })
         }
