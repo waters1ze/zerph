@@ -173,7 +173,7 @@ async function processText(chatId: number, text: string) {
   try {
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
     const item = await parseIntentWithGroq(text, key)
-    const { completedTask } = await saveParsedItemToDb(item)
+    const { completedTask } = await saveParsedItemToDb(item, chatId)
 
     if (item.type === 'completion') {
       if (completedTask) {
@@ -257,7 +257,7 @@ async function processVoice(chatId: number, fileId: string) {
 
     // Parse & save
     const item = await parseIntentWithGroq(transcript, key)
-    const { completedTask } = await saveParsedItemToDb(item)
+    const { completedTask } = await saveParsedItemToDb(item, chatId)
 
     if (item.type === 'completion') {
       if (completedTask) {

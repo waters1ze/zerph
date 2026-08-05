@@ -1,9 +1,11 @@
 /**
  * GET /api/reminders/check — Checks and pushes due Telegram notifications (MSK / Europe/Moscow timezone)
+ *
+ * FIXED: Sends only to ownerChatId of each task, not to all registered chats.
  */
 
 import { NextResponse } from 'next/server'
-import { getAllTasks, updateTask, getAllChatIds } from '@/lib/backend/db'
+import { getAllTasks, updateTask } from '@/lib/backend/db'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
 
@@ -25,7 +27,6 @@ async function sendTelegramMessage(chatId: number, text: string) {
 
 export async function GET() {
   try {
-    // Bulletproof MSK time extraction (Europe/Moscow)
     const now = new Date()
     const formatter = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Europe/Moscow',
@@ -38,48 +39,48 @@ export async function GET() {
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
     const currentTimeStr = `${getPart('hour')}:${getPart('minute')}`
 
-    // Fetch pending tasks with dueTime matching current time or past due
     const tasks = await getAllTasks()
-    const pendingTasks = tasks.filter((t: { status: string; dueTime?: string | null }) =>
-      t.status !== 'done' && !!t.dueTime
-    )
-
-    const chatIds = await getAllChatIds()
 
     let sentCount = 0
 
-    for (const task of pendingTasks) {
+    for (const task of tasks) {
       if (!task.dueTime) continue
+      if (task.status === 'done') continue
+      if (task.reminderSent) continue
+      if (task.dueTime !== currentTimeStr) continue
+      if (task.dueDate && task.dueDate !== todayStr) continue
 
-      // Trigger ONLY when dueTime matches exact current minute and not yet sent
-      if (task.dueTime === currentTimeStr && !task.reminderSent) {
-        for (const chatId of chatIds) {
-          const isRecipientMsg = task.description?.includes('📩 Отправить') || task.title?.toLowerCase().includes('отправь') || task.title?.toLowerCase().includes('напиши')
-          
-          const text = isRecipientMsg
-            ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
-              `📌 *Сообщение:* ${task.title}\n` +
-              (task.description ? `_«${task.description}»_\n\n` : '\n') +
-              `⏰ *Время отправки:* ${task.dueTime}\n` +
-              `✨ _Отправлено автоматически через Zerf AI_`
-            : `⏰ *НАПОМИНАНИЕ!*\n\n` +
-              `📌 *${task.title}*\n` +
-              (task.description ? `_«${task.description}»_\n\n` : '\n') +
-              `📍 *Время:* ${task.dueTime}\n` +
-              `✨ _Отправлено из Zerf AI_`
+      // ── CRITICAL FIX: send ONLY to the task owner, not to everyone ──
+      const ownerChatId = task.ownerChatId ? Number(task.ownerChatId) : null
 
-          await sendTelegramMessage(chatId, text)
-          sentCount++
-        }
+      if (ownerChatId) {
+        const isRecipientMsg =
+          task.description?.includes('📩 Отправить') ||
+          task.title?.toLowerCase().includes('отправь') ||
+          task.title?.toLowerCase().includes('напиши')
 
-        // Mark task as completed and reminderSent to prevent duplicate/delayed spam
-        await updateTask(task.id, {
-          status: 'done',
-          reminderSent: true,
-          dueTime: undefined,
-          completedAt: new Date(),
-        })
+        const text = isRecipientMsg
+          ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
+            `📌 *Сообщение:* ${task.title}\n` +
+            (task.description ? `_«${task.description}»_\n\n` : '\n') +
+            `⏰ *Время отправки:* ${task.dueTime}\n` +
+            `✨ _Отправлено автоматически через Zerf AI_`
+          : `⏰ *НАПОМИНАНИЕ!*\n\n` +
+            `📌 *${task.title}*\n` +
+            (task.description ? `_«${task.description}»_\n\n` : '\n') +
+            `📍 *Время:* ${task.dueTime}\n` +
+            `✨ _Отправлено из Zerf AI_`
+
+        await sendTelegramMessage(ownerChatId, text)
+        sentCount++
       }
+
+      // Always mark as done + reminderSent to prevent future triggers
+      await updateTask(task.id, {
+        status: 'done',
+        reminderSent: true,
+        completedAt: new Date(),
+      })
     }
 
     return NextResponse.json({
