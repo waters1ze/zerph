@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma db push && next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "bot": "npx tsx server/bot.ts",
     "lint": "eslint ."
   },
