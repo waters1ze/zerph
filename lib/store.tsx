@@ -26,8 +26,8 @@ const SEED_CHAT: ChatMessage[] = [
 
 const DEFAULT_SETTINGS: UserSettings = {
   theme: 'dark',
-  name: 'Kirill Perekatnov',
-  email: 'kirill@corp.io',
+  name: '',
+  email: '',
   avatar: '',
   accentColor: '#2d7a4f',
   notifications: { desktop: true, email: false, dueReminders: true, teamUpdates: true },
