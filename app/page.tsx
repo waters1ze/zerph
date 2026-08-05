@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AppProvider, useApp } from '@/lib/store'
 import { Sidebar } from '@/components/sidebar'
@@ -8,6 +8,7 @@ import { TopBar } from '@/components/topbar'
 import { TaskDetail } from '@/components/task-detail'
 import { NewTaskModal } from '@/components/new-task-modal'
 import { AiChatPanel } from '@/components/ai-chat-panel'
+import { VoiceRecorder } from '@/components/voice-recorder'
 
 import { TodayView }    from '@/components/views/today-view'
 import { InboxView }    from '@/components/views/inbox-view'
@@ -22,6 +23,13 @@ import { SettingsView } from '@/components/views/settings-view'
 function AppShell() {
   const { state } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
+  const [voiceOpen, setVoiceOpen] = useState(false)
+
+  useEffect(() => {
+    const handleVoice = () => setVoiceOpen(true)
+    window.addEventListener('zerf:open-voice', handleVoice)
+    return () => window.removeEventListener('zerf:open-voice', handleVoice)
+  }, [])
 
   const VIEW_MAP: Record<string, React.ReactNode> = {
     today:    <TodayView />,
@@ -94,6 +102,9 @@ function AppShell() {
 
       {/* New task modal */}
       <NewTaskModal open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
+
+      {/* Voice recorder modal */}
+      <VoiceRecorder open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   )
 }
