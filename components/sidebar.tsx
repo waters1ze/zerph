@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -7,7 +7,7 @@ import type { View } from '@/lib/types'
 import {
   LayoutDashboard, Inbox, CheckSquare, Target, FolderKanban,
   FileText, BarChart3, Users, Settings,
-  ChevronRight, Circle, User
+  ChevronRight, Circle
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -20,15 +20,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',   icon: LayoutDashboard, section: 'workspace' },
-  { id: 'inbox',    label: 'Входящие',  icon: Inbox,           badge: 3 },
-  { id: 'tasks',    label: 'Задачи',    icon: CheckSquare },
-  { id: 'goals',    label: 'Цели',      icon: Target,          section: 'planning' },
-  { id: 'projects', label: 'Проекты',   icon: FolderKanban },
-  { id: 'notes',    label: 'Заметки',   icon: FileText },
-  { id: 'stats',    label: 'Аналитика', icon: BarChart3,       section: 'analytics' },
-  { id: 'friends',  label: 'Команда',   icon: Users,           section: 'collaboration' },
-  { id: 'settings', label: 'Настройки', icon: Settings,        section: 'account' },
+  { id: 'today',    label: 'Today',    icon: LayoutDashboard, section: 'workspace' },
+  { id: 'inbox',    label: 'Inbox',    icon: Inbox,           badge: 3 },
+  { id: 'tasks',    label: 'Tasks',    icon: CheckSquare },
+  { id: 'goals',    label: 'Goals',    icon: Target,          section: 'planning' },
+  { id: 'projects', label: 'Projects', icon: FolderKanban },
+  { id: 'notes',    label: 'Notes',    icon: FileText },
+  { id: 'stats',    label: 'Analytics',icon: BarChart3,       section: 'intelligence' },
+  { id: 'friends',  label: 'Team',     icon: Users,           section: 'collaboration' },
+  { id: 'settings', label: 'Settings', icon: Settings,        section: 'account' },
 ]
 
 export function Sidebar() {
@@ -42,17 +42,12 @@ export function Sidebar() {
   }).length
 
   const sections: { id: string; label: string }[] = [
-    { id: 'workspace',     label: 'Рабочее пространство' },
-    { id: 'planning',      label: 'Планирование' },
-    { id: 'analytics',     label: 'Аналитика' },
-    { id: 'collaboration', label: 'Совместная работа' },
-    { id: 'account',       label: 'Аккаунт' },
+    { id: 'workspace', label: 'Workspace' },
+    { id: 'planning', label: 'Planning' },
+    { id: 'intelligence', label: 'Analytics' },
+    { id: 'collaboration', label: 'Collaboration' },
+    { id: 'account', label: 'Account' },
   ]
-
-  // Display name: show initials or icon if not yet loaded
-  const displayName = settings.name || 'Пользователь'
-  const displayEmail = settings.email || ''
-  const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <aside className="flex flex-col h-full bg-sidebar border-r border-sidebar-border select-none">
@@ -61,7 +56,7 @@ export function Sidebar() {
         <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-md shadow-black/30 ring-1 ring-white/5">
           <Image
             src="/zerph-logo.png"
-            alt="Zerf logo"
+            alt="Zerph logo"
             width={36}
             height={36}
             className="w-full h-full object-cover"
@@ -69,25 +64,21 @@ export function Sidebar() {
           />
         </div>
         <div className="flex flex-col">
-          <p className="text-[15px] font-bold leading-none tracking-tight gold-shimmer">Zerf</p>
-          <p className="text-[10px] text-primary/70 mt-1 leading-none tracking-wide uppercase font-medium">AI Планировщик</p>
+          <p className="text-[15px] font-bold leading-none tracking-tight gold-shimmer">Zerph</p>
+          <p className="text-[10px] text-muted-foreground mt-1 leading-none tracking-wide uppercase">Task Intelligence</p>
         </div>
       </div>
 
-      {/* User profile */}
+      {/* User */}
       <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-sidebar-accent/50 flex items-center gap-2.5">
         <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-          {initials ? (
-            <span className="text-[11px] font-semibold text-primary">{initials}</span>
-          ) : (
-            <User className="w-3.5 h-3.5 text-primary" />
-          )}
+          <span className="text-[11px] font-semibold text-primary">
+            {settings.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+          </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-medium text-sidebar-foreground truncate">{displayName}</p>
-          {displayEmail && (
-            <p className="text-[10px] text-muted-foreground truncate">{displayEmail}</p>
-          )}
+          <p className="text-[12px] font-medium text-sidebar-foreground truncate">{settings.name}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{settings.email}</p>
         </div>
         <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)] shrink-0" />
       </div>
@@ -138,10 +129,10 @@ export function Sidebar() {
       {/* Status bar */}
       <div className="px-4 pb-4 pt-2 border-t border-sidebar-border">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">{todayCount} задач на сегодня</span>
+          <span className="text-[11px] text-muted-foreground">{todayCount} tasks remaining</span>
           <div className="flex items-center gap-1">
             <Circle className="w-2 h-2 fill-[var(--status-done)] text-[var(--status-done)]" />
-            <span className="text-[11px] text-muted-foreground">Онлайн</span>
+            <span className="text-[11px] text-muted-foreground">Online</span>
           </div>
         </div>
       </div>
