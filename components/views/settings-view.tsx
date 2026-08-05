@@ -178,11 +178,11 @@ export function SettingsView() {
             <button
               onClick={() => {
                 update({ integrations: { ...settings.integrations, telegram: true } })
-                window.open('https://t.me/zerph_bot?start=connect', '_blank')
+                window.open('https://t.me/zerph_bot?start=login', '_blank')
               }}
               className="flex items-center gap-2 h-8 px-3.5 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-colors shadow-sm"
             >
-              <span>✈️</span> Connect Telegram
+              <span>✈️</span> Connect Telegram (/login)
             </button>
           )}
         </Row>

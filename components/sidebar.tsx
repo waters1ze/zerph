@@ -77,8 +77,8 @@ export function Sidebar() {
     <aside className="flex flex-col h-full bg-sidebar border-r border-sidebar-border select-none">
       {/* Brand */}
       <div className="px-4 pt-5 pb-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-br from-muted/30 to-card border border-border/80 shadow-lg shadow-black/40">
-          <span className="text-xl leading-none select-none mono-emoji">📓</span>
+        <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-br from-amber-500/15 via-muted/40 to-black border border-amber-500/40 shadow-xl shadow-amber-500/5 ring-1 ring-amber-500/20">
+          <span className="text-xl leading-none select-none drop-shadow-md">📓</span>
         </div>
         <div className="flex flex-col">
           <p className="text-[15px] font-bold leading-none tracking-tight gold-shimmer">Zerph</p>
