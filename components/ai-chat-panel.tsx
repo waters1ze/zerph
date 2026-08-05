@@ -51,22 +51,6 @@ export function AiChatPanel() {
     dispatch({ type: 'ADD_CHAT_MESSAGE', message: userMsg })
     setIsTyping(true)
 
-    const groqApiKey = state.settings.integrations.groqApiKey
-
-    if (!groqApiKey) {
-      setTimeout(() => {
-        const botMsg: ChatMessage = {
-          id: `m-${Date.now()}-bot`,
-          role: 'assistant',
-          content: '⚠️ No Groq API key found. Please go to **Settings → AI & Integrations** and add your free Groq API key from [console.groq.com](https://console.groq.com).',
-          createdAt: new Date().toISOString(),
-        }
-        dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
-        setIsTyping(false)
-      }, 400)
-      return
-    }
-
     try {
       // Build context from current state
       const context = {
@@ -82,7 +66,7 @@ export function AiChatPanel() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, apiKey: groqApiKey, context }),
+        body: JSON.stringify({ messages, apiKey: state.settings.integrations.groqApiKey || '', context }),
       })
 
       const data = await res.json()
