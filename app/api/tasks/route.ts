@@ -1,33 +1,28 @@
-﻿/**
- * /api/tasks — Per-user tasks/goals/notes, isolated by chatId
- * chatId comes from: ?chatId=xxx OR x-chat-id header
+/**
+ * Next.js API Route — Tasks, Goals, Notes
+ * GET    /api/tasks              — fetch all
+ * POST   /api/tasks              — create task
+ * PATCH  /api/tasks              — update or complete by fuzzy match
+ * DELETE /api/tasks?id=xxx       — delete
  */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, saveDb, completeTaskByTitle } from '@/lib/backend/db'
 
-function getChatId(req: NextRequest): string | null {
-  return req.nextUrl.searchParams.get('chatId')
-    || req.nextUrl.searchParams.get('chat_id')
-    || req.headers.get('x-chat-id')
-    || null
-}
-
-export async function GET(req: NextRequest) {
-  const chatId = getChatId(req)
-  const db = getDb(chatId)
+export async function GET() {
+  const db = getDb()
   return NextResponse.json({ tasks: db.tasks, goals: db.goals, notes: db.notes })
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const chatId = getChatId(req)
     const body = await req.json()
-    const db = getDb(chatId)
+    const db = getDb()
     const now = new Date().toISOString()
 
     const newTask = {
       id: 't_' + Math.random().toString(36).substring(2, 9),
-      title: body.title || 'Новая задача',
+      title: body.title || 'Untitled Task',
       description: body.description || '',
       priority: body.priority || 'medium',
       status: body.status || 'todo',
@@ -46,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     db.tasks.unshift(newTask)
-    saveDb(db, chatId)
+    saveDb(db)
     return NextResponse.json({ success: true, task: newTask })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
@@ -55,26 +50,46 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const chatId = getChatId(req)
     const body = await req.json()
-    const db = getDb(chatId)
+    const db = getDb()
     const now = new Date().toISOString()
 
-    if (body.action === 'complete' && body.title) {
-      const completed = completeTaskByTitle(body.title, chatId)
-      return NextResponse.json({ success: !!completed, task: completed })
+    // Action: complete by fuzzy title match
+    if (body.action === 'complete' && body.targetTitle) {
+      const completed = completeTaskByTitle(body.targetTitle)
+      if (!completed) {
+        return NextResponse.json({ error: 'No matching task found', notFound: true }, { status: 404 })
+      }
+      return NextResponse.json({ success: true, task: completed, action: 'completed' })
     }
 
+    // Action: update task by ID
     if (body.id) {
       const idx = db.tasks.findIndex(t => t.id === body.id)
-      if (idx >= 0) {
-        db.tasks[idx] = { ...db.tasks[idx], ...body.updates, updatedAt: now }
-        saveDb(db, chatId)
-        return NextResponse.json({ success: true, task: db.tasks[idx] })
+      if (idx === -1) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+
+      db.tasks[idx] = {
+        ...db.tasks[idx],
+        ...body,
+        updatedAt: now,
+        ...(body.status === 'done' ? { completedAt: now } : {}),
       }
+      saveDb(db)
+      return NextResponse.json({ success: true, task: db.tasks[idx] })
     }
 
-    return NextResponse.json({ success: false, error: 'Task not found' })
+    // Action: mark reminder as sent
+    if (body.reminderId) {
+      const idx = db.tasks.findIndex(t => t.id === body.reminderId)
+      if (idx !== -1) {
+        db.tasks[idx].reminderSent = true
+        db.tasks[idx].updatedAt = now
+        saveDb(db)
+      }
+      return NextResponse.json({ success: true })
+    }
+
+    return NextResponse.json({ error: 'Invalid PATCH body' }, { status: 400 })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
@@ -82,11 +97,17 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const chatId = getChatId(req)
-    const id = req.nextUrl.searchParams.get('id')
-    const db = getDb(chatId)
-    db.tasks = db.tasks.filter(t => t.id !== id)
-    saveDb(db, chatId)
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    const type = searchParams.get('type') || 'task'
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+
+    const db = getDb()
+    if (type === 'goal') db.goals = db.goals.filter(g => g.id !== id)
+    else if (type === 'note') db.notes = db.notes.filter(n => n.id !== id)
+    else db.tasks = db.tasks.filter(t => t.id !== id)
+
+    saveDb(db)
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })

@@ -1,7 +1,6 @@
-﻿/**
- * Zerf Backend — Per-User Database (isolated by Telegram chatId)
- * Each user gets their own zerf-db-{chatId}.json file
- * Users without chatId share a "guest" db
+/**
+ * Zerf Backend — Database & Persistence Store
+ * Local file-backed JSON DB — zero cost, offline, instant.
  */
 
 import fs from 'fs'
@@ -15,7 +14,7 @@ export interface DbTask {
   priority: 'urgent' | 'high' | 'medium' | 'low'
   status: 'todo' | 'inprogress' | 'done' | 'overdue'
   dueDate?: string
-  dueTime?: string
+  dueTime?: string          // HH:MM for timed reminders
   reminderSent?: boolean
   projectId?: string
   goalId?: string
@@ -33,8 +32,8 @@ export interface DbTask {
 export interface DbNote {
   id: string
   title: string
-  content: string
-  originalText?: string
+  content: string         // AI-structured Markdown
+  originalText?: string   // raw voice transcript
   type: 'note' | 'journal' | 'meeting'
   tags: string[]
   createdAt: string
@@ -57,182 +56,162 @@ export interface DbGoal {
   updatedAt: string
 }
 
-export interface DbUser {
-  chatId: number
-  name: string
-  username?: string
-  firstName?: string
-  registeredAt: string
-}
-
 export interface DbSchema {
   tasks: DbTask[]
   goals: DbGoal[]
   notes: DbNote[]
-  chatIds: number[]
-  users: DbUser[]
+  chatIds: number[]     // Telegram chat IDs for reminders
 }
 
-// Registry: maps chatId -> file path
-const DATA_DIR = path.join(process.cwd(), 'zerf-data')
-const REGISTRY_FILE = path.join(DATA_DIR, 'registry.json')
+const DB_FILE = path.join(process.cwd(), 'zerf-db.json')
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-}
-
-function getDbFile(chatId?: number | string | null): string {
-  ensureDataDir()
-  if (chatId) return path.join(DATA_DIR, `db-${chatId}.json`)
-  // Legacy fallback — guest db
-  return path.join(process.cwd(), 'zerf-db.json')
-}
-
-export function getDb(chatId?: number | string | null): DbSchema {
-  const file = getDbFile(chatId)
+export function getDb(): DbSchema {
   try {
-    if (!fs.existsSync(file)) {
-      const initial: DbSchema = { tasks: [], goals: [], notes: [], chatIds: chatId ? [Number(chatId)] : [], users: [] }
-      fs.writeFileSync(file, JSON.stringify(initial, null, 2), 'utf-8')
+    if (!fs.existsSync(DB_FILE)) {
+      const initial: DbSchema = { tasks: [], goals: [], notes: [], chatIds: [] }
+      fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8')
       return initial
     }
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'))
+    const data = fs.readFileSync(DB_FILE, 'utf-8')
+    const parsed = JSON.parse(data)
+    // Ensure chatIds field exists
     if (!parsed.chatIds) parsed.chatIds = []
-    if (!parsed.users) parsed.users = []
     return parsed
   } catch {
-    return { tasks: [], goals: [], notes: [], chatIds: [], users: [] }
+    return { tasks: [], goals: [], notes: [], chatIds: [] }
   }
 }
 
-export function saveDb(db: DbSchema, chatId?: number | string | null): void {
-  const file = getDbFile(chatId)
-  ensureDataDir()
-  fs.writeFileSync(file, JSON.stringify(db, null, 2), 'utf-8')
+export function saveDb(db: DbSchema): void {
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8')
 }
 
 /**
- * Register / update a Telegram user profile
+ * Register a Telegram chat ID for reminder notifications
  */
-export function registerChatId(chatId: number, firstName?: string, username?: string): void {
-  ensureDataDir()
-  const db = getDb(chatId)
-  const now = new Date().toISOString()
-
-  // Update user profile in their own db
-  const existing = db.users.find(u => u.chatId === chatId)
-  if (existing) {
-    existing.name = firstName || existing.name
-    existing.username = username || existing.username
-  } else {
-    db.users.push({
-      chatId,
-      name: firstName || `User_${chatId}`,
-      username,
-      firstName,
-      registeredAt: now,
-    })
+export function registerChatId(chatId: number): void {
+  const db = getDb()
+  if (!db.chatIds.includes(chatId)) {
+    db.chatIds.push(chatId)
+    saveDb(db)
   }
-  if (!db.chatIds.includes(chatId)) db.chatIds.push(chatId)
-  saveDb(db, chatId)
-
-  // Also update global registry
-  try {
-    let registry: { chatId: number; name: string; username?: string; registeredAt: string }[] = []
-    if (fs.existsSync(REGISTRY_FILE)) {
-      registry = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8'))
-    }
-    const idx = registry.findIndex(r => r.chatId === chatId)
-    const entry = { chatId, name: firstName || `User_${chatId}`, username, registeredAt: now }
-    if (idx >= 0) registry[idx] = entry
-    else registry.push(entry)
-    fs.writeFileSync(REGISTRY_FILE, JSON.stringify(registry, null, 2), 'utf-8')
-  } catch {}
 }
 
 /**
- * Get user profile by chatId (from registry)
+ * Find the best matching task by fuzzy title similarity
+ * Returns { task, index, score } or null if no good match
  */
-export function getUserProfile(chatId: number): DbUser | null {
-  try {
-    if (!fs.existsSync(REGISTRY_FILE)) return null
-    const registry: { chatId: number; name: string; username?: string; registeredAt: string }[] = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8'))
-    const user = registry.find(r => r.chatId === chatId)
-    if (!user) return null
-    return { chatId: user.chatId, name: user.name, username: user.username, registeredAt: user.registeredAt }
-  } catch { return null }
-}
-
-/**
- * Get all registered chatIds (for reminders)
- */
-export function getAllChatIds(): number[] {
-  try {
-    if (!fs.existsSync(REGISTRY_FILE)) return []
-    const registry = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8'))
-    return registry.map((r: { chatId: number }) => r.chatId)
-  } catch { return [] }
-}
-
 export function findSimilarTask(
   targetTitle: string,
   db: DbSchema
 ): { task: DbTask; index: number; score: number } | null {
   let best: { task: DbTask; index: number; score: number } | null = null
+
   db.tasks.forEach((task, index) => {
-    if (task.status === 'done') return
+    if (task.status === 'done') return  // skip already done
     const score = stringSimilarity(targetTitle, task.title)
     if (score > 0.3 && (!best || score > best.score)) {
       best = { task, index, score }
     }
   })
+
   return best
 }
 
-export function completeTaskByTitle(targetTitle: string, chatId?: number | string | null): DbTask | null {
-  const db = getDb(chatId)
+/**
+ * Mark a task as completed by fuzzy matching the title.
+ * Returns the matched task or null.
+ */
+export function completeTaskByTitle(targetTitle: string): DbTask | null {
+  const db = getDb()
   const match = findSimilarTask(targetTitle, db)
   if (!match) return null
+
   const now = new Date().toISOString()
-  db.tasks[match.index] = { ...db.tasks[match.index], status: 'done', completedAt: now, updatedAt: now }
-  saveDb(db, chatId)
+  db.tasks[match.index] = {
+    ...db.tasks[match.index],
+    status: 'done',
+    completedAt: now,
+    updatedAt: now,
+  }
+  saveDb(db)
   return db.tasks[match.index]
 }
 
-export function saveParsedItemToDb(item: ParsedItem, chatId?: number | string | null): { item: ParsedItem; completedTask?: DbTask | null } {
-  const db = getDb(chatId)
+/**
+ * Save a ParsedItem from Groq AI into the database
+ */
+export function saveParsedItemToDb(item: ParsedItem): { item: ParsedItem; completedTask?: DbTask | null } {
+  const db = getDb()
   const now = new Date().toISOString()
   const id = 'z_' + Math.random().toString(36).substring(2, 9)
 
+  // Handle completion intent — mark existing task done
   if (item.type === 'completion' && item.targetTitle) {
-    const completed = completeTaskByTitle(item.targetTitle, chatId)
+    const completed = completeTaskByTitle(item.targetTitle)
     return { item, completedTask: completed }
   }
 
   if (item.type === 'goal') {
     db.goals.unshift({
-      id, title: item.title, description: item.summary, motivation: item.motivation || undefined,
-      status: 'on_track', deadline: item.dueDate || undefined, progress: 0, color: '#2d7a4f',
-      milestones: (item.milestones || []).map((m, i) => ({ id: `m_${id}_${i}`, title: m, done: false })),
-      createdAt: now, updatedAt: now,
+      id,
+      title: item.title,
+      description: item.summary,
+      motivation: item.motivation || undefined,
+      status: 'on_track',
+      deadline: item.dueDate || undefined,
+      progress: 0,
+      color: '#2d7a4f',
+      milestones: (item.milestones || []).map((m, i) => ({
+        id: `m_${id}_${i}`,
+        title: m,
+        done: false,
+      })),
+      createdAt: now,
+      updatedAt: now,
     })
   } else if (item.type === 'note') {
-    const mdContent = item.summary.includes('#') ? item.summary : `# ${item.title}\n\n${item.summary}`
+    // AI generates the structured content, store original separately
+    const mdContent = item.summary.includes('#')
+      ? item.summary
+      : `# ${item.title}\n\n${item.summary}`
+
     db.notes.unshift({
-      id, title: item.title, content: mdContent, originalText: item.rawText,
-      type: 'note', tags: item.tags || [], createdAt: now, updatedAt: now, aiGenerated: true,
+      id,
+      title: item.title,
+      content: mdContent,
+      originalText: item.rawText,
+      type: 'note',
+      tags: item.tags || [],
+      createdAt: now,
+      updatedAt: now,
+      aiGenerated: true,
     })
   } else {
+    // task / reminder
     db.tasks.unshift({
-      id, title: item.title, description: item.summary, priority: item.priority || 'medium',
-      status: 'todo', dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
-      dueTime: item.dueTime || undefined, tags: item.tags || [],
-      assignees: [], isShared: false, createdAt: now, updatedAt: now,
-      rawText: item.rawText, aiGenerated: true,
-      subtasks: (item.subtasks || []).map((st, i) => ({ id: `st_${id}_${i}`, title: st, done: false })),
+      id,
+      title: item.title,
+      description: item.summary,
+      priority: item.priority || 'medium',
+      status: 'todo',
+      dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+      dueTime: item.dueTime || undefined,
+      tags: item.tags || [],
+      assignees: [],
+      isShared: false,
+      createdAt: now,
+      updatedAt: now,
+      rawText: item.rawText,
+      aiGenerated: true,
+      subtasks: (item.subtasks || []).map((st, i) => ({
+        id: `st_${id}_${i}`,
+        title: st,
+        done: false,
+      })),
     })
   }
 
-  saveDb(db, chatId)
+  saveDb(db)
   return { item }
 }

@@ -1,25 +1,24 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
-import { Search, Plus, MessageSquare, X, Command, Mic } from 'lucide-react'
+import { Search, Plus, MessageSquare, Bell, X, Command, Mic } from 'lucide-react'
 import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
-import { NotificationsPanel } from './notifications-panel'
 
 const VIEW_LABELS: Record<string, string> = {
-  today: 'Сегодня',
-  inbox: 'Входящие',
-  tasks: 'Задачи',
-  goals: 'Цели',
-  projects: 'Проекты',
-  notes: 'Заметки',
-  chat: 'AI Чат',
-  stats: 'Аналитика',
-  friends: 'Команда',
-  settings: 'Настройки',
+  today: 'Today',
+  inbox: 'Inbox',
+  tasks: 'Tasks',
+  goals: 'Goals',
+  projects: 'Projects',
+  notes: 'Notes',
+  chat: 'AI Chat',
+  stats: 'Analytics',
+  friends: 'Team',
+  settings: 'Settings',
 }
 
 interface Props {
@@ -33,19 +32,21 @@ export function TopBar({ onNewTask }: Props) {
 
   return (
     <header className="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-20">
+      {/* Title */}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <h1 className="text-base font-semibold text-foreground">
-            {VIEW_LABELS[state.currentView] ?? 'Zerf'}
+            {VIEW_LABELS[state.currentView] ?? 'Nexus'}
           </h1>
           {state.currentView === 'today' && (
             <span className="text-[12px] text-muted-foreground">
-              {format(new Date(), 'EEEE, d MMMM')}
+              {format(new Date(), 'EEEE, MMMM d')}
             </span>
           )}
         </div>
       </div>
 
+      {/* Search */}
       <motion.div
         animate={{ width: isSearchFocused ? 240 : 180 }}
         transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -54,7 +55,7 @@ export function TopBar({ onNewTask }: Props) {
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
         <input
           type="text"
-          placeholder="Поиск…"
+          placeholder="Search…"
           value={state.searchQuery}
           onChange={e => dispatch({ type: 'SET_SEARCH', query: e.target.value })}
           onFocus={() => setIsSearchFocused(true)}
@@ -77,7 +78,9 @@ export function TopBar({ onNewTask }: Props) {
         </div>
       </motion.div>
 
+      {/* Actions */}
       <div className="flex items-center gap-1.5">
+        {/* New Task */}
         {['today', 'inbox', 'tasks'].includes(state.currentView) && (
           <motion.button
             whileTap={{ scale: 0.94 }}
@@ -85,26 +88,32 @@ export function TopBar({ onNewTask }: Props) {
             className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Новая</span>
+            <span>New task</span>
           </motion.button>
         )}
 
+        {/* Voice Command */}
         <motion.button
           whileTap={{ scale: 0.93 }}
           onClick={() => setVoiceOpen(true)}
-          title="Голосовая команда (Groq Whisper AI)"
+          title="Voice command (Groq Whisper AI)"
           className="w-8 h-8 flex items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-          aria-label="Голосовая команда"
+          aria-label="Voice command"
         >
           <Mic className="w-4 h-4" />
         </motion.button>
 
-        <NotificationsPanel />
+        {/* Notifications */}
+        <button className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/60 transition-colors">
+          <Bell className="w-4 h-4 text-muted-foreground" />
+          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary" />
+        </button>
 
+        {/* AI Chat toggle — opens the sliding right panel */}
         <motion.button
           whileTap={{ scale: 0.94 }}
           onClick={() => dispatch({ type: 'TOGGLE_CHAT' })}
-          title="AI Ассистент"
+          title="AI Assistant (panel)"
           className={cn(
             'flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium transition-all',
             state.isChatOpen
