@@ -1,0 +1,123 @@
+'use client'
+
+import { motion } from 'framer-motion'
+import { cn } from '@/lib/utils'
+import { TaskCheckbox } from './task-checkbox'
+import { PriorityBadge } from './priority-badge'
+import { useApp } from '@/lib/store'
+import type { Task } from '@/lib/types'
+import { CalendarDays, Users, Sparkles, ChevronRight } from 'lucide-react'
+import { format, isToday, isPast, parseISO } from 'date-fns'
+
+interface Props {
+  task: Task
+  index?: number
+  compact?: boolean
+}
+
+export function TaskItem({ task, index = 0, compact = false }: Props) {
+  const { state, dispatch } = useApp()
+  const isDone = task.status === 'done'
+  const isOverdue = task.status === 'overdue' || (task.dueDate && isPast(parseISO(task.dueDate)) && task.status !== 'done')
+  const project = task.projectId ? state.projects.find(p => p.id === task.projectId) : null
+
+  const dueDateLabel = task.dueDate
+    ? isToday(parseISO(task.dueDate))
+      ? 'Today'
+      : format(parseISO(task.dueDate), 'MMM d')
+    : null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      onClick={() => dispatch({ type: 'SELECT_TASK', id: task.id })}
+      className={cn(
+        'group flex items-start gap-3 rounded-xl px-3.5 py-3 cursor-pointer',
+        'border border-transparent hover:border-border/50',
+        'hover:bg-accent/40 transition-all duration-150',
+        isDone && 'opacity-45 hover:opacity-60',
+        state.selectedTaskId === task.id && 'bg-accent/60 border-border/50',
+        compact ? 'py-2.5' : 'py-3'
+      )}
+    >
+      {/* checkbox */}
+      <div className="mt-0.5">
+        <TaskCheckbox
+          checked={isDone}
+          onChange={() => dispatch({ type: 'TOGGLE_TASK', id: task.id })}
+          priority={task.priority}
+          size={compact ? 16 : 18}
+        />
+      </div>
+
+      {/* content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <span className={cn(
+            'text-sm font-medium leading-snug text-foreground',
+            isDone && 'line-through text-muted-foreground',
+            compact ? 'text-[13px]' : ''
+          )}>
+            {task.title}
+          </span>
+          <ChevronRight className="shrink-0 w-3.5 h-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 mt-0.5 transition-opacity" />
+        </div>
+
+        {!compact && (
+          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5">
+            <PriorityBadge priority={task.priority} />
+
+            {dueDateLabel && (
+              <span className={cn('inline-flex items-center gap-1 text-[11px]',
+                isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+              )}>
+                <CalendarDays className="w-3 h-3" />
+                {dueDateLabel}
+              </span>
+            )}
+
+            {project && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: project.color }} />
+                {project.title}
+              </span>
+            )}
+
+            {task.isShared && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Users className="w-3 h-3" />
+                Shared
+              </span>
+            )}
+
+            {task.aiGenerated && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-primary/70">
+                <Sparkles className="w-3 h-3" />
+                AI
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* progress bar for tasks with subtasks */}
+        {!compact && task.subtasks && task.subtasks.length > 0 && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-1 rounded-full bg-border overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-primary"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100)}%` }}
+                transition={{ duration: 0.5, delay: index * 0.04 + 0.1 }}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              {task.subtasks.filter(s => s.done).length}/{task.subtasks.length}
+            </span>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
