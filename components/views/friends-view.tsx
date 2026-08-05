@@ -1,27 +1,26 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { format, parseISO } from 'date-fns'
 import {
   Users, UserPlus, Trash2, CheckSquare, Circle,
-  Clock, X, Mail, Send, Plus
+  X, Mail, Send, Copy, Check, Share2
 } from 'lucide-react'
 import type { Friend } from '@/lib/types'
 
 const STATUS_CONFIG = {
-  online: { label: 'Online', dot: 'bg-[var(--status-done)]' },
-  away:   { label: 'Away',   dot: 'bg-[var(--priority-medium)]' },
-  offline:{ label: 'Offline',dot: 'bg-muted-foreground/40' },
+  online:  { label: 'В сети',  dot: 'bg-[var(--status-done)]' },
+  away:    { label: 'Отошёл',  dot: 'bg-[var(--priority-medium)]' },
+  offline: { label: 'Не в сети', dot: 'bg-muted-foreground/40' },
 }
 
 function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void }) {
   const { state } = useApp()
   const sharedTasks = state.tasks.filter(t => t.assignees.includes(friend.id))
   const doneTasks = sharedTasks.filter(t => t.status === 'done')
-  const sc = STATUS_CONFIG[friend.status]
+  const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
 
   return (
     <motion.div
@@ -32,9 +31,9 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <div className="relative shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
-            <span className="text-sm font-semibold text-primary">
-              {friend.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center border border-primary/20">
+            <span className="text-sm font-bold text-primary">
+              {friend.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
             </span>
           </div>
           <span className={cn('absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card', sc.dot)} />
@@ -44,7 +43,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[13px] font-semibold text-foreground">{friend.name}</p>
+              <p className="text-[13px] font-bold text-foreground">{friend.name}</p>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Mail className="w-3 h-3" />
                 {friend.email}
@@ -52,6 +51,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
             </div>
             <button
               onClick={onRemove}
+              title="Удалить из команды"
               className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -66,13 +66,13 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
             </span>
             <span className="text-muted-foreground text-[10px]">·</span>
             <span className="text-[11px] text-muted-foreground">
-              {sharedTasks.length} shared task{sharedTasks.length !== 1 ? 's' : ''}
+              Общих задач: {sharedTasks.length}
             </span>
             {sharedTasks.length > 0 && (
               <>
                 <span className="text-muted-foreground text-[10px]">·</span>
                 <span className="text-[11px] text-muted-foreground">
-                  {doneTasks.length}/{sharedTasks.length} done
+                  Выполнено {doneTasks.length} из {sharedTasks.length}
                 </span>
               </>
             )}
@@ -93,7 +93,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
                 </div>
               ))}
               {sharedTasks.length > 3 && (
-                <p className="text-[11px] text-muted-foreground pl-5">+{sharedTasks.length - 3} more</p>
+                <p className="text-[11px] text-muted-foreground pl-5">+ ещё {sharedTasks.length - 3}</p>
               )}
             </div>
           )}
@@ -108,6 +108,17 @@ export function FriendsView() {
   const [showInvite, setShowInvite] = useState(false)
   const [inviteName, setInviteName] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const inviteLink = typeof window !== 'undefined'
+    ? `${window.location.origin}?invitedBy=${encodeURIComponent(state.settings.name || 'user')}`
+    : 'https://zerph.up.railway.app'
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const addFriend = () => {
     if (!inviteName.trim() || !inviteEmail.trim()) return
@@ -116,8 +127,8 @@ export function FriendsView() {
       friend: {
         id: `f-${Date.now()}`,
         name: inviteName.trim(),
-        email: inviteEmail.trim(),
-        status: 'offline',
+        email: inviteEmail.trim().startsWith('@') ? inviteEmail.trim() : `@${inviteEmail.trim()}`,
+        status: 'online',
         addedAt: new Date().toISOString(),
       },
     })
@@ -129,8 +140,9 @@ export function FriendsView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">
-            Invite colleagues and collaborate on shared tasks
+          <h2 className="text-base font-bold text-foreground">Команда и совместная работа</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Приглашайте коллег и друзей для совместного выполнения задач
           </p>
         </div>
         <button
@@ -138,11 +150,29 @@ export function FriendsView() {
           className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:opacity-90 transition-opacity"
         >
           <UserPlus className="w-3.5 h-3.5" />
-          Invite
+          + Добавить в команду
         </button>
       </div>
 
-      {/* Invite form */}
+      {/* Quick Invite Link Banner */}
+      <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Share2 className="w-4 h-4 text-primary shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[12px] font-bold text-foreground truncate">Инвайт-ссылка вашей команды</p>
+            <p className="text-[11px] text-muted-foreground truncate">{inviteLink}</p>
+          </div>
+        </div>
+        <button
+          onClick={copyInviteLink}
+          className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium shrink-0 hover:opacity-90 transition-opacity"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Скопировано!' : 'Копировать'}</span>
+        </button>
+      </div>
+
+      {/* Invite form modal/card */}
       <AnimatePresence>
         {showInvite && (
           <motion.div
@@ -151,9 +181,9 @@ export function FriendsView() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+            <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-lg">
               <div className="flex items-center justify-between">
-                <p className="text-[13px] font-semibold text-foreground">Invite a colleague</p>
+                <p className="text-[13px] font-bold text-foreground">Пригласить участника в команду</p>
                 <button onClick={() => setShowInvite(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                   <X className="w-4 h-4" />
                 </button>
@@ -162,7 +192,7 @@ export function FriendsView() {
                 <input
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
-                  placeholder="Имя коллеги / друга"
+                  placeholder="Имя друга или коллеги"
                   className="h-9 px-3 rounded-lg bg-muted/50 border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 transition-colors"
                 />
                 <input
@@ -172,7 +202,7 @@ export function FriendsView() {
                   className="h-9 px-3 rounded-lg bg-muted/50 border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 transition-colors"
                 />
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   onClick={() => setShowInvite(false)}
                   className="h-8 px-3 rounded-lg border border-border text-[12px] text-muted-foreground hover:text-foreground transition-colors"
@@ -212,10 +242,17 @@ export function FriendsView() {
 
       {/* Friends list */}
       {state.friends.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-20 text-center">
-          <Users className="w-12 h-12 text-muted-foreground/20" />
-          <p className="text-sm font-medium text-muted-foreground">No teammates yet</p>
-          <p className="text-xs text-muted-foreground/60">Invite colleagues to collaborate on tasks</p>
+        <div className="flex flex-col items-center gap-3 py-16 text-center bg-card/40 rounded-2xl border border-border/50">
+          <Users className="w-10 h-10 text-muted-foreground/30" />
+          <p className="text-sm font-medium text-foreground">В вашей команде пока нет участников</p>
+          <p className="text-xs text-muted-foreground">Нажмите кнопку выше, чтобы добавить коллегу по Telegram @username</p>
+          <button
+            onClick={() => setShowInvite(true)}
+            className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Пригласить первого участника
+          </button>
         </div>
       ) : (
         <div className="space-y-3">

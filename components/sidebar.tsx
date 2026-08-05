@@ -16,13 +16,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',     icon: '🗙️', section: 'workspace' },
+  { id: 'today',    label: 'Сегодня',     icon: '📌', section: 'workspace' },
   { id: 'inbox',    label: 'Входящие',    icon: '🕯️', section: 'workspace' },
-  { id: 'tasks',    label: 'Задачи',      icon: '🕊️', section: 'workspace' },
+  { id: 'tasks',    label: 'Задачи',      icon: '📰', section: 'workspace' },
   { id: 'notes',    label: 'Заметки',     icon: '📜', section: 'workspace' },
-  { id: 'calendar', label: 'Календарь',   icon: '📆', section: 'planning' },
+  { id: 'calendar', label: 'Календарь',   icon: '📅', section: 'planning' },
   { id: 'goals',    label: 'Цели',        icon: '⚔️', section: 'planning' },
-  { id: 'projects', label: 'Проекты',     icon: '👑', section: 'planning' },
   { id: 'stats',    label: 'Аналитика',   icon: '💎', section: 'аналитика' },
   { id: 'friends',  label: 'Команда',     icon: '🥂', section: 'совместная работа' },
   { id: 'settings', label: 'Настройки',   icon: '⏳', section: 'аккаунт' },
