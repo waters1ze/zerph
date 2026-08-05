@@ -1,6 +1,7 @@
 /**
- * GET /api/setup — Utility endpoint to set up Telegram Webhook
- * Visit this endpoint once after deploying to Railway to connect Telegram Bot.
+ * GET /api/setup — One-click setup endpoint
+ * 1. Sets Telegram Webhook to Railway app URL
+ * 2. Registers Telegram Bot Command Menu (/today, /goals, /notes, /help)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
+    // 1. Set Webhook
+    const webhookRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -28,13 +30,28 @@ export async function GET(req: NextRequest) {
         allowed_updates: ['message'],
       }),
     })
+    const webhookData = await webhookRes.json()
 
-    const data = await res.json()
+    // 2. Set Bot Commands Menu
+    const commandsRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commands: [
+          { command: 'today', description: '📅 Задачи на сегодня' },
+          { command: 'goals', description: '🎯 Активные цели' },
+          { command: 'notes', description: '📌 Последние заметки' },
+          { command: 'help',  description: '❓ Инструкция и возможности' },
+        ],
+      }),
+    })
+    const commandsData = await commandsRes.json()
 
     return NextResponse.json({
-      success: data.ok,
+      success: webhookData.ok && commandsData.ok,
       webhookUrl,
-      telegramResponse: data,
+      webhookResult: webhookData,
+      commandsResult: commandsData,
     })
   } catch (err: unknown) {
     return NextResponse.json(
