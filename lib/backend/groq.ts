@@ -12,6 +12,7 @@ export interface ParsedItem {
   priority: 'urgent' | 'high' | 'medium' | 'low'
   dueDate?: string | null
   dueTime?: string | null       // HH:MM — extracted from "at 12:00", "в 15:30" etc.
+  recipientName?: string | null // Extracted name if sending a message to a contact e.g. "Артем", "Мама"
   targetTitle?: string          // for 'completion' type — the task being marked done
   projectId?: string | null
   goalId?: string | null
@@ -23,87 +24,88 @@ export interface ParsedItem {
   originalText?: string         // same as rawText, for notes
 }
 
-const today = new Date().toISOString().slice(0, 10)
-const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+export function getDynamicSystemPrompt(): string {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-const SYSTEM_PROMPT = `You are Zerf AI, an expert personal productivity assistant. Analyze the user's natural language input (voice transcript or text) and convert it to a structured JSON object.
+  const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+  const mskTime = `${getPart('hour')}:${getPart('minute')}`
 
-Today is ${today}, current time is ${time}.
+  return `You are Zerf AI — an expert personal productivity assistant with a focus on Russian-speaking users.
+
+══════════════════════════════════════════
+🇷🇺 СТРОГОЕ ПРАВИЛО ЯЗЫКА (HIGHEST PRIORITY)
+══════════════════════════════════════════
+ЕСЛИ входной текст содержит ХОТЯ БЫ ОДНО русское слово — ВСЕ поля "title", "summary", "tags" ОБЯЗАНЫ быть ТОЛЬКО на русском языке.
+НИКОГДА не переключайся на английский, если ввод был на русском.
+НИКОГДА не смешивай языки в одном поле.
+Примеры тегов на русском: ["встреча", "работа", "здоровье", "идеи", "проект"]
+══════════════════════════════════════════
+
+📍 EXACT CURRENT REAL TIME IN MOSCOW (MSK / UTC+3):
+Today's Date: ${mskDate} (YYYY-MM-DD)
+Current Time Right Now: ${mskTime} (24-hour HH:MM format, Europe/Moscow timezone)
+
+CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
+- All relative time phrases (e.g., "через минуту", "напиши мне через 1 минуту", "через 10 минут", "в 15:00", "завтра в 9 утра") MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
+- Example: If current Moscow time is "${mskTime}" and user says "через минуту" or "через 1 минуту", dueTime MUST be calculated as current minute + 1 minute (e.g. if current is 22:57, dueTime is 22:58). DO NOT SHIFT TIME OR ADD EXTRA HOURS!
+- Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.
 
 ## Intent Detection
 
 ### type = "completion"
-Triggers when user indicates something is DONE or FINISHED.
-Keywords (any language): done, finished, completed, accomplished, готово, выполнил, сделал, закончил, завершил, выполнено, сделано, готов, закончил
-In this case set:
-  - "type": "completion"
-  - "targetTitle": the task name/description they're saying is done (extract it carefully)
-  - "title": same as targetTitle
-  - "summary": "Marked as completed"
+Triggers when user indicates something is DONE.
+Keywords: done, finished, готово, выполнил, сделал, закончил, завершил, сделано, готов
+Set "targetTitle" = the task name they completed, "title" = same.
 
 ### type = "goal"
-Long-term aspiration, 1-6 month target, strategic objective. Extract milestones & motivation.
+Long-term aspiration (1-6 months). Extract milestones & motivation.
 
 ### type = "task"
-Immediate actionable item. Check for time mentions like "at 12:00", "в 15:30", "tomorrow at 9am", "в полдень" → extract to dueTime field in HH:MM 24h format.
+Immediate actionable item. Extract "dueTime" in HH:MM 24h format from natural language.
 
 ### type = "note"
-Meeting recap, general thought, brain dump, ideas, observations.
-For notes, generate a BEAUTIFUL structured Markdown document in the "summary" field:
-- Use # and ## headers
-- Use bullet points, bold, italic
-- Organize information logically
-- Add an "## 📋 Key Points" section
-- Add an "## 🎯 Action Items" section if relevant
-- Add an "## 💡 Context" section if useful
-- Make it feel like a premium knowledge base document
+Meeting recap, idea, observation, brain dump.
 
 ### type = "reminder"
-Specific time-based reminder without a detailed task.
+Specific time-based notification without full task details.
 
-## Response Schema
-Always respond with ONLY valid JSON, no markdown code blocks:
+## Dynamic Priority Rules
+- "urgent": срочно, прямо сейчас, как можно скорее, ASAP, немедленно, критично, дедлайн сегодня
+- "high":   очень важно, важно, проект, клиенту, начальнику, отчет, экзамен, обязательно
+- "low":    когда будет время, потом, если получится, не к спеху, хобби, почитать
+- "medium": standard routine without explicit urgency
+
+Always respond with ONLY valid JSON (no markdown fences):
 {
   "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
-  "title": "Short descriptive title (max 60 chars)",
-  "summary": "For tasks/goals: 1-2 sentence summary. For notes: full structured Markdown document.",
+  "title": "Краткое описание (максимум 60 символов)",
+  "summary": "1-2 предложения для задач/целей. Полный Markdown-документ для заметок.",
   "priority": "urgent" | "high" | "medium" | "low",
   "dueDate": "YYYY-MM-DD" | null,
   "dueTime": "HH:MM" | null,
-  "targetTitle": "for completion type: the task being completed" | null,
+  "targetTitle": "для типа completion: название выполненной задачи" | null,
   "projectId": null,
   "goalId": null,
-  "tags": ["tag1", "tag2"],
-  "subtasks": ["subtask 1", "subtask 2"],
-  "milestones": ["milestone 1", "milestone 2"],
-  "motivation": "for goals only" | null,
-  "rawText": "original user input verbatim"
+  "tags": ["тег1", "тег2"],
+  "subtasks": ["подзадача 1", "подзадача 2"],
+  "milestones": ["этап 1", "этап 2"],
+  "motivation": "только для целей" | null,
+  "rawText": "исходный текст пользователя"
 }
 
-## Time parsing examples:
-- "at 12:00" → dueTime: "12:00"
-- "в 15:30" → dueTime: "15:30"
-- "at 3pm" → dueTime: "15:00"
-- "в полдень" → dueTime: "12:00"
-- "в 9 утра" → dueTime: "09:00"
-- "at half past two" → dueTime: "14:30"
-
-## Note Markdown example:
-# Meeting Notes: Q3 Planning
-
-## 📋 Key Points
-- Discussed roadmap for Q3
-- Budget approved for new hire
-- Design sprint scheduled for next week
-
-## 🎯 Action Items
-- [ ] John to finalize mockups by Friday
-- [ ] Setup Jira board for sprint
-
-## 💡 Context
-Regular Monday sync with product team...
-
 Default priority is "medium". Output ONLY pure JSON.`
+}
 
 /**
  * Transcribe audio using Groq Whisper (whisper-large-v3)
@@ -146,13 +148,15 @@ export async function parseIntentWithGroq(
   const key = apiKey || DEFAULT_KEY
   if (!key) throw new Error('Groq API Key missing.')
 
+  const dynamicSystemPrompt = getDynamicSystemPrompt()
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: model || GROQ_CHAT_MODEL,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: dynamicSystemPrompt },
         { role: 'user', content: text },
       ],
       temperature: 0.2,
@@ -212,3 +216,134 @@ export function stringSimilarity(a: string, b: string): number {
   const union = new Set([...aWords, ...bWords]).size
   return intersection / union
 }
+
+/**
+ * Generate a short 2-3 sentence motivational reminder context for a note/task.
+ * Returns a ready-to-send Russian string.
+ */
+export async function generateReminderContext(
+  noteTitle: string,
+  noteContent: string,
+  dueTime: string,
+  apiKey?: string
+): Promise<string> {
+  const key = apiKey || DEFAULT_KEY
+  if (!key) return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — дружелюбный AI-ассистент. Напиши 2-3 предложения на РУССКОМ языке:
+1. Приятное пожелание или напоминание о предстоящем событии
+2. 1 практическую рекомендацию или совет
+Стиль: тёплый, поддерживающий, конкретный. Без шаблонных фраз. Без упоминания «Zerf».
+Ответь ТОЛЬКО этими 2-3 предложениями, без лишнего текста.`,
+          },
+          {
+            role: 'user',
+            content: `Событие/тема: «${noteTitle}»\nВремя: ${dueTime}\nКонтекст: ${noteContent.slice(0, 400)}`,
+          },
+        ],
+        temperature: 0.75,
+        max_tokens: 200,
+      }),
+    })
+    if (!res.ok) return `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content?.trim() || `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
+  } catch {
+    return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
+  }
+}
+
+/**
+ * Generate a personalized morning greeting based on user's recent tasks and notes.
+ * Returns a ready-to-send Russian Telegram message (with Markdown).
+ */
+export async function generateMorningGreeting(
+  firstName: string,
+  recentTaskTitles: string[],
+  recentNoteTitles: string[],
+  pendingTasks: string[],
+  apiKey?: string
+): Promise<string> {
+  const key = apiKey || DEFAULT_KEY
+
+  const now = new Date()
+  const dayName = now.toLocaleDateString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
+
+  if (!key) {
+    return (
+      `☀️ *Доброе утро, ${firstName}!*\n\n` +
+      `Сегодня ${dayName}.\n\n` +
+      (pendingTasks.length
+        ? `📋 У тебя ${pendingTasks.length} задач на сегодня:\n${pendingTasks.slice(0, 3).map(t => `• ${t}`).join('\n')}\n\n`
+        : ``) +
+      `_Продуктивного дня! 🚀_`
+    )
+  }
+
+  try {
+    const contextLines: string[] = []
+    if (recentTaskTitles.length) contextLines.push(`Недавние задачи: ${recentTaskTitles.slice(0, 5).join(', ')}`)
+    if (recentNoteTitles.length) contextLines.push(`Недавние заметки: ${recentNoteTitles.slice(0, 3).join(', ')}`)
+    if (pendingTasks.length) contextLines.push(`Активные задачи сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — персональный AI-ассистент пользователя в Telegram. Каждое утро ты пишешь ему тёплое, персонализированное сообщение.
+Формат ответа — Markdown для Telegram. Пиши ТОЛЬКО на русском языке.
+Структура (строго):
+1. Приветствие с именем (1 строка)
+2. Упоминание дня/даты
+3. Персонализированный комментарий, основанный на известных задачах/заметках пользователя (2-3 предложения, как будто ты знаешь его жизнь — тепло и конкретно)
+4. 2 практические рекомендации на основе его активностей
+5. Мотивирующая фраза
+
+Максимум 200 слов. Без шаблонных «Желаю тебе». Конкретно и по-дружески.`,
+          },
+          {
+            role: 'user',
+            content: `Имя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
+          },
+        ],
+        temperature: 0.8,
+        max_tokens: 350,
+      }),
+    })
+
+    if (!res.ok) throw new Error('Groq error')
+    const data = await res.json()
+    const aiText = data.choices?.[0]?.message?.content?.trim() || ''
+    return aiText || buildFallbackGreeting(firstName, dayName, pendingTasks)
+  } catch {
+    return buildFallbackGreeting(firstName, dayName, pendingTasks)
+  }
+}
+
+function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[]): string {
+  return (
+    `☀️ *Доброе утро, ${firstName}!*\n\n` +
+    `Сегодня ${dayName}.\n\n` +
+    (pendingTasks.length
+      ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `• ${t}`).join('\n')}\n\n`
+      : `✅ На сегодня задач нет — можно планировать что-то новое!\n\n`) +
+    `_Продуктивного дня! 🚀_`
+  )
+}
+

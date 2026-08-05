@@ -158,18 +158,17 @@ export function FriendsView() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-2.5">
                 <input
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
-                  placeholder="Full name"
+                  placeholder="Имя коллеги / друга"
                   className="h-9 px-3 rounded-lg bg-muted/50 border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 transition-colors"
                 />
                 <input
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
-                  placeholder="Work email"
-                  type="email"
+                  placeholder="Telegram @username или Email"
                   className="h-9 px-3 rounded-lg bg-muted/50 border border-border/60 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 transition-colors"
                 />
               </div>
@@ -178,7 +177,7 @@ export function FriendsView() {
                   onClick={() => setShowInvite(false)}
                   className="h-8 px-3 rounded-lg border border-border text-[12px] text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Cancel
+                  Отмена
                 </button>
                 <button
                   onClick={addFriend}
@@ -186,7 +185,7 @@ export function FriendsView() {
                   className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  Send invite
+                  Добавить в команду
                 </button>
               </div>
             </div>

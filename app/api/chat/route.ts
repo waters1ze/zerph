@@ -22,10 +22,7 @@ When enhancing voice input, add structure, formatting, and relevant details whil
 export async function POST(req: NextRequest) {
   try {
     const { messages, apiKey, context, mode } = await req.json()
-    const groqApiKey =
-      apiKey ||
-      req.headers.get('x-groq-api-key') ||
-      process.env.GROQ_API_KEY ||
+    const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY ||
       GROQ_API_KEY
 
     if (!groqApiKey) {
@@ -35,15 +32,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const nowMsk = new Date().toLocaleString('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      dateStyle: 'full',
+      timeStyle: 'medium',
+    })
+
     // Build system message with context
     let systemContent =
       SYSTEM_PROMPT +
-      `\n\nCurrent date: ${new Date().toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })}`
+      `\n\nТОЧНОЕ ТЕКУЩЕЕ ВРЕМЯ И ДАТА ПОЛЬЗОВАТЕЛЯ (Москва, MSK): ${nowMsk}.\nПри ответах, составлении расписания и планировании ориентируйся строго на это текущее время!`
 
     if (context) {
       systemContent += `\n\n## User's Current Workspace Context:\n${JSON.stringify(context, null, 2)}`

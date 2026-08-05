@@ -6,7 +6,7 @@ import { TaskCheckbox } from './task-checkbox'
 import { PriorityBadge } from './priority-badge'
 import { useApp } from '@/lib/store'
 import type { Task } from '@/lib/types'
-import { CalendarDays, Users, Sparkles, ChevronRight } from 'lucide-react'
+import { CalendarDays, Users, Sparkles, ChevronRight, Trash2, Clock } from 'lucide-react'
 import { format, isToday, isPast, parseISO } from 'date-fns'
 
 interface Props {
@@ -62,7 +62,20 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
           )}>
             {task.title}
           </span>
-          <ChevronRight className="shrink-0 w-3.5 h-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 mt-0.5 transition-opacity" />
+          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                dispatch({ type: 'DELETE_TASK', id: task.id })
+                fetch(`/api/tasks?id=${task.id}`, { method: 'DELETE' })
+              }}
+              className="p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+              title="Delete task"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 mt-0.5" />
+          </div>
         </div>
 
         {!compact && (
@@ -75,6 +88,13 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
               )}>
                 <CalendarDays className="w-3 h-3" />
                 {dueDateLabel}
+              </span>
+            )}
+
+            {task.dueTime && !isDone && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] font-medium text-amber-400">
+                <Clock className="w-3 h-3" />
+                Уведомление в {task.dueTime}
               </span>
             )}
 
