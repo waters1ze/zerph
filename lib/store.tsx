@@ -177,11 +177,27 @@ const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Act
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
 
-  // Get current telegram chatId if available in WebApp
+  // Get current telegram chatId from URL, WebApp, or localStorage
   const getTgChatId = (): string | null => {
     if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
+      if (qChatId) {
+        try { localStorage.setItem('zerf_chat_id', qChatId) } catch {}
+        return qChatId
+      }
+
       const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
-      if (u?.id) return String(u.id)
+      if (u?.id) {
+        const tgId = String(u.id)
+        try { localStorage.setItem('zerf_chat_id', tgId) } catch {}
+        return tgId
+      }
+
+      try {
+        const savedChatId = localStorage.getItem('zerf_chat_id')
+        if (savedChatId) return savedChatId
+      } catch {}
     }
     return null
   }
@@ -283,8 +299,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {})
 
-    // Check connected Telegram profile from Neon DB
-    fetch('/api/telegram/user')
+    // Check connected Telegram profile from Neon DB for active user
+    const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
+    fetch(userUrl, { headers })
       .then(r => r.json())
       .then(user => {
         if (user.connected && user.name) {
