@@ -258,12 +258,23 @@ export async function POST(req: NextRequest) {
     await registerChatId(chatId, firstName).catch(() => {})
 
     if (text.startsWith('/')) {
-      const cmd = text.split(' ')[0].toLowerCase()
-      if (cmd === '/start' || cmd === '/help') await handleStart(chatId, firstName)
-      else if (cmd === '/today') await handleToday(chatId)
-      else if (cmd === '/goals') await handleGoals(chatId)
-      else if (cmd === '/notes') await handleNotes(chatId)
-      else await send(chatId, 'Попробуй /help')
+      const parts = text.split(' ')
+      const cmd = parts[0].toLowerCase()
+      const param = parts[1]?.toLowerCase()
+
+      if (cmd === '/login' || (cmd === '/start' && param === 'login')) {
+        await handleStart(chatId, firstName)
+      } else if (cmd === '/start' || cmd === '/help') {
+        await handleStart(chatId, firstName)
+      } else if (cmd === '/today') {
+        await handleToday(chatId)
+      } else if (cmd === '/goals') {
+        await handleGoals(chatId)
+      } else if (cmd === '/notes') {
+        await handleNotes(chatId)
+      } else {
+        await send(chatId, 'Попробуй /help')
+      }
     } else if (voice) {
       await processVoice(chatId, voice.file_id)
     } else if (text.trim()) {
