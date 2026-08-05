@@ -14,6 +14,7 @@ import {
   getAllTasks, getAllGoals, getAllNotes,
   registerChatId,
 } from '@/lib/backend/db'
+import { runReminderCheck } from '@/lib/backend/cron-runner'
 import { GROQ_API_KEY } from '@/lib/config'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
@@ -298,6 +299,9 @@ export async function POST(req: NextRequest) {
     } else if (text.trim()) {
       await processText(chatId, text)
     }
+
+    // Trigger instant check for due reminders
+    runReminderCheck().catch(() => {})
 
     return NextResponse.json({ ok: true })
   } catch (err) {
