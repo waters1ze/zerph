@@ -21,7 +21,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'today',    label: 'Today',    icon: LayoutDashboard, section: 'workspace' },
-  { id: 'inbox',    label: 'Inbox',    icon: Inbox,           badge: 3 },
+  { id: 'inbox',    label: 'Inbox',    icon: Inbox },
   { id: 'tasks',    label: 'Tasks',    icon: CheckSquare },
   { id: 'goals',    label: 'Goals',    icon: Target,          section: 'planning' },
   { id: 'projects', label: 'Projects', icon: FolderKanban },
@@ -40,6 +40,8 @@ export function Sidebar() {
     const today = new Date().toISOString().slice(0, 10)
     return d === today && t.status !== 'done'
   }).length
+
+  const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done').length
 
   const sections: { id: string; label: string }[] = [
     { id: 'workspace', label: 'Workspace' },
@@ -96,7 +98,7 @@ export function Sidebar() {
               {items.map(item => {
                 const Icon = item.icon
                 const isActive = currentView === item.id
-                const badge = item.id === 'today' ? todayCount || undefined : item.badge
+                const badge = item.id === 'today' ? (todayCount || undefined) : item.id === 'inbox' ? (inboxCount || undefined) : item.badge
 
                 return (
                   <motion.button

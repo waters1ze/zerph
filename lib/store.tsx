@@ -10,105 +10,11 @@ import type {
 const today = new Date().toISOString().slice(0, 10)
 const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
 
-const SEED_TASKS: Task[] = [
-  {
-    id: 't1', title: 'Review Q3 product roadmap', description: 'Go through the roadmap document and leave comments for the team.', priority: 'urgent', status: 'todo',
-    dueDate: today, projectId: 'p1', goalId: 'g1', tags: ['product', 'q3'], assignees: [], isShared: false,
-    createdAt: today + 'T08:00:00Z', updatedAt: today + 'T08:00:00Z', progress: 0,
-    subtasks: [{ id: 'st1', title: 'Read roadmap doc', done: true }, { id: 'st2', title: 'Leave comments', done: false }],
-  },
-  {
-    id: 't2', title: 'Prepare board presentation slides', priority: 'high', status: 'inprogress',
-    dueDate: today, projectId: 'p1', tags: ['presentation'], assignees: ['f1'], isShared: true,
-    createdAt: today + 'T09:00:00Z', updatedAt: today + 'T10:30:00Z', progress: 40,
-    subtasks: [{ id: 'st3', title: 'Gather metrics', done: true }, { id: 'st4', title: 'Design slides', done: false }, { id: 'st5', title: 'Review with manager', done: false }],
-  },
-  {
-    id: 't3', title: 'Sync with engineering on API changes', priority: 'medium', status: 'todo',
-    dueDate: today, tags: ['sync', 'api'], assignees: [], isShared: false,
-    createdAt: today + 'T07:30:00Z', updatedAt: today + 'T07:30:00Z',
-  },
-  {
-    id: 't4', title: 'Update stakeholder newsletter', priority: 'low', status: 'done',
-    dueDate: yesterday, tags: ['comms'], assignees: [], isShared: false,
-    createdAt: yesterday + 'T09:00:00Z', updatedAt: yesterday + 'T14:00:00Z', completedAt: yesterday + 'T14:00:00Z',
-  },
-  {
-    id: 't5', title: 'Onboarding documentation for new hires', priority: 'high', status: 'todo',
-    dueDate: today, projectId: 'p2', tags: ['hr', 'docs'], assignees: [], isShared: false,
-    createdAt: today + 'T06:00:00Z', updatedAt: today + 'T06:00:00Z',
-  },
-  {
-    id: 't6', title: 'Define KPIs for customer success team', priority: 'high', status: 'overdue',
-    dueDate: yesterday, goalId: 'g2', tags: ['kpi', 'cs'], assignees: ['f1', 'f2'], isShared: true,
-    createdAt: yesterday + 'T08:00:00Z', updatedAt: yesterday + 'T08:00:00Z',
-  },
-  {
-    id: 't7', title: 'Research competitor pricing models', priority: 'medium', status: 'todo',
-    dueDate: today, tags: ['research', 'pricing'], assignees: [], isShared: false,
-    createdAt: today + 'T07:00:00Z', updatedAt: today + 'T07:00:00Z',
-    aiGenerated: true, source: 'AI suggested from roadmap discussion',
-  },
-]
-
-const SEED_GOALS: Goal[] = [
-  {
-    id: 'g1', title: 'Launch v2 Product in Q4', description: 'Complete product v2 launch including all core features, QA, and rollout plan.',
-    motivation: 'Drive 40% revenue growth by EOY', metric: 'Launch date + 100 enterprise signups',
-    status: 'on_track', deadline: '2026-12-31', progress: 38,
-    milestones: [
-      { id: 'm1', title: 'Feature freeze', done: true, dueDate: '2026-09-01' },
-      { id: 'm2', title: 'Beta launch', done: false, dueDate: '2026-10-15' },
-      { id: 'm3', title: 'GA launch', done: false, dueDate: '2026-12-01' },
-    ],
-    projectIds: ['p1'], noteIds: ['n1'], createdAt: '2026-01-15T00:00:00Z', updatedAt: today + 'T00:00:00Z', color: '#6366f1',
-  },
-  {
-    id: 'g2', title: 'Build high-performance CS team', description: 'Hire, train and establish metrics-driven customer success organisation.',
-    motivation: 'Reduce churn below 3% annually', metric: 'NPS > 50, churn < 3%',
-    status: 'at_risk', deadline: '2026-09-30', progress: 22,
-    milestones: [
-      { id: 'm4', title: 'Hire 3 CS leads', done: true },
-      { id: 'm5', title: 'Define KPIs', done: false, dueDate: '2026-08-10' },
-      { id: 'm6', title: 'First QBR', done: false, dueDate: '2026-09-01' },
-    ],
-    projectIds: ['p2'], noteIds: [], createdAt: '2026-03-01T00:00:00Z', updatedAt: today + 'T00:00:00Z', color: '#f59e0b',
-  },
-]
-
-const SEED_PROJECTS: Project[] = [
-  {
-    id: 'p1', title: 'Product v2 Launch', description: 'All tasks related to the Q4 product launch.', goalId: 'g1',
-    color: '#6366f1', icon: 'rocket', taskIds: ['t1', 't2'], noteIds: ['n1'],
-    createdAt: '2026-01-15T00:00:00Z', updatedAt: today + 'T00:00:00Z', archived: false,
-  },
-  {
-    id: 'p2', title: 'HR & Onboarding', description: 'New hire onboarding and HR process improvement.', goalId: 'g2',
-    color: '#10b981', icon: 'users', taskIds: ['t5'], noteIds: [],
-    createdAt: '2026-02-01T00:00:00Z', updatedAt: today + 'T00:00:00Z', archived: false,
-  },
-]
-
-const SEED_NOTES: Note[] = [
-  {
-    id: 'n1', title: 'Product v2 Strategy Brief', type: 'note',
-    content: `# Product v2 Strategy Brief\n\n## Overview\nThis document outlines the core strategy for the Q4 product launch.\n\n## Key Themes\n- **Performance**: Sub-200ms API response across all endpoints\n- **Collaboration**: Real-time multi-user editing\n- **AI Integration**: Embedded AI assistant for power users\n\n## Competitive Positioning\nWe differentiate from competitors by focusing on enterprise-grade reliability while maintaining a consumer-grade UX.\n\n## Risks\n- Engineering capacity in September\n- Third-party API dependencies\n\n## Action Items\n- [ ] Review with CTO by Aug 15\n- [ ] Legal sign-off on new data terms\n- [ ] Marketing brief due Aug 20\n\n## Sources\nBased on customer interviews (n=42) and market analysis report Q2-2026.`,
-    tags: ['product', 'strategy', 'q4'], projectId: 'p1', goalId: 'g1', taskIds: ['t1'],
-    createdAt: '2026-07-20T10:00:00Z', updatedAt: today + 'T09:00:00Z', pinned: true,
-  },
-  {
-    id: 'n2', title: 'Weekly Standup Notes — Aug 4', type: 'meeting',
-    content: `# Weekly Standup — August 4, 2026\n\n**Attendees:** Alex, Maria, Dmitri, Sam\n\n## Updates\n\n### Engineering\n- API migration 70% complete\n- Blocked on payment provider integration\n\n### Product\n- Wireframes approved\n- User testing scheduled for Aug 10\n\n### Marketing\n- Campaign briefs in review\n\n## Decisions\n1. Delay beta by 1 week to ensure quality\n2. Add extra QA sprint in September\n\n## Next Steps\n- [ ] Alex: unblock payment integration by Friday\n- [ ] Maria: schedule user testing\n- [ ] Dmitri: update roadmap with new dates`,
-    tags: ['standup', 'meeting', 'weekly'], taskIds: [],
-    createdAt: today + 'T09:30:00Z', updatedAt: today + 'T10:00:00Z',
-  },
-]
-
-const SEED_FRIENDS: Friend[] = [
-  { id: 'f1', name: 'Maria Ivanova', email: 'maria@corp.io', status: 'online', addedAt: '2026-03-01T00:00:00Z' },
-  { id: 'f2', name: 'Alex Petrov', email: 'alex@corp.io', status: 'away', addedAt: '2026-04-01T00:00:00Z' },
-  { id: 'f3', name: 'Sam Lee', email: 'sam@corp.io', status: 'offline', addedAt: '2026-05-10T00:00:00Z' },
-]
+const SEED_TASKS: Task[] = []
+const SEED_GOALS: Goal[] = []
+const SEED_PROJECTS: Project[] = []
+const SEED_NOTES: Note[] = []
+const SEED_FRIENDS: Friend[] = []
 
 const SEED_CHAT: ChatMessage[] = [
   {
