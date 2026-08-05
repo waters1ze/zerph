@@ -160,15 +160,6 @@ export function SettingsView() {
           />
         </Row>
 
-        <Row label="Email address" description="Used for notifications and account recovery">
-          <input
-            value={settings.email}
-            onChange={e => update({ email: e.target.value })}
-            type="email"
-            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44"
-          />
-        </Row>
-
         <Row label="Focus mode" description="Hides distractions and shows only today's tasks">
           <Toggle checked={settings.focusModeEnabled} onChange={v => update({ focusModeEnabled: v })} />
         </Row>
@@ -180,12 +171,6 @@ export function SettingsView() {
           <Toggle
             checked={settings.notifications.desktop}
             onChange={v => update({ notifications: { ...settings.notifications, desktop: v } })}
-          />
-        </Row>
-        <Row label="Email digest" description="Daily summary email at 8:00 AM">
-          <Toggle
-            checked={settings.notifications.email}
-            onChange={v => update({ notifications: { ...settings.notifications, email: v } })}
           />
         </Row>
         <Row label="Due date reminders" description="Notifications when tasks are approaching deadline">
@@ -214,54 +199,12 @@ export function SettingsView() {
           </select>
         </Row>
 
-        <Row label="API key" description="Your OpenAI or Anthropic API key for the backend">
-          <input
-            value={settings.integrations.aiApiKey ?? ''}
-            onChange={e => update({ integrations: { ...settings.integrations, aiApiKey: e.target.value } })}
-            type="password"
-            placeholder="sk-…"
-            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44 font-mono"
-          />
-        </Row>
-
-        <Row label="Groq API key" description="Free at console.groq.com — used for voice AI and chat">
-          <input
-            value={settings.integrations.groqApiKey ?? ''}
-            onChange={e => update({ integrations: { ...settings.integrations, groqApiKey: e.target.value } })}
-            type="password"
-            placeholder="gsk_…"
-            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44 font-mono"
-          />
-        </Row>
-
         <Row label="Telegram bot" description="Receive task reminders via Telegram">
           <Toggle
             checked={settings.integrations.telegram}
             onChange={v => update({ integrations: { ...settings.integrations, telegram: v } })}
           />
         </Row>
-
-        {settings.integrations.telegram && (
-          <>
-            <Row label="Telegram Chat ID" description="From @userinfobot on Telegram">
-              <input
-                value={settings.integrations.telegramChatId ?? ''}
-                onChange={e => update({ integrations: { ...settings.integrations, telegramChatId: e.target.value } })}
-                placeholder="123456789"
-                className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-36 font-mono"
-              />
-            </Row>
-            <Row label="Telegram Bot Token" description="From @BotFather — your bot's API token">
-              <input
-                value={settings.integrations.telegramBotToken ?? ''}
-                onChange={e => update({ integrations: { ...settings.integrations, telegramBotToken: e.target.value } })}
-                type="password"
-                placeholder="123456:ABC…"
-                className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44 font-mono"
-              />
-            </Row>
-          </>
-        )}
       </Section>
 
       {/* Data & Privacy */}
