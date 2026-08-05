@@ -127,38 +127,38 @@
 .dark {
   color-scheme: dark;
 
-  /* Base — deep warm charcoal, NOT blue-black */
-  --background:  oklch(0.115 0.007 60);
-  --foreground:  oklch(0.93 0.006 75);
+  /* Base — OLED Luxury Obsidian */
+  --background:  oklch(0.09 0.005 60);
+  --foreground:  oklch(0.95 0.008 75);
 
-  --card:        oklch(0.145 0.008 60);
-  --card-foreground: oklch(0.93 0.006 75);
+  --card:        oklch(0.125 0.006 60);
+  --card-foreground: oklch(0.95 0.008 75);
 
-  --popover:     oklch(0.150 0.009 60);
-  --popover-foreground: oklch(0.93 0.006 75);
+  --popover:     oklch(0.13 0.007 60);
+  --popover-foreground: oklch(0.95 0.008 75);
 
-  /* Primary — Forest Green (slightly brightened for dark bg) */
-  --primary:         oklch(0.55 0.16 152);
-  --primary-foreground: oklch(0.99 0 0);
+  /* Primary — Luxury Emerald Gold Accent */
+  --primary:     oklch(0.78 0.15 78);
+  --primary-foreground: oklch(0.12 0.01 60);
 
-  --secondary:       oklch(0.195 0.010 60);
-  --secondary-foreground: oklch(0.84 0.007 75);
+  --secondary:   oklch(0.18 0.008 60);
+  --secondary-foreground: oklch(0.85 0.01 75);
 
-  --muted:           oklch(0.185 0.009 60);
-  --muted-foreground: oklch(0.56 0.010 70);
+  --muted:       oklch(0.16 0.008 60);
+  --muted-foreground: oklch(0.58 0.01 60);
 
-  --accent:          oklch(0.22 0.016 152);
-  --accent-foreground: oklch(0.65 0.15 152);
+  --accent:      oklch(0.18 0.015 78);
+  --accent-foreground: oklch(0.85 0.12 78);
 
-  --destructive:     oklch(0.65 0.22 25);
-  --border:          oklch(1 0 0 / 7%);
-  --input:           oklch(1 0 0 / 9%);
-  --ring:            oklch(0.55 0.16 152 / 45%);
+  --destructive: oklch(0.52 0.22 25);
+  --border:      oklch(0.20 0.008 60);
+  --input:       oklch(0.18 0.008 60);
+  --ring:        oklch(0.78 0.15 78 / 35%);
 
   /* Brand — Champagne Gold */
-  --brand:           oklch(0.78 0.14 78);
-  --brand-subtle:    oklch(0.22 0.06 78);
-  --brand-foreground: oklch(0.18 0.06 60);
+  --brand:       oklch(0.78 0.15 78);
+  --brand-subtle: oklch(0.18 0.03 78);
+  --brand-foreground: oklch(0.98 0 0);
 
   /* Charts */
   --chart-1:  oklch(0.55 0.16 152);
@@ -167,14 +167,14 @@
   --chart-4:  oklch(0.60 0.12 260);
   --chart-5:  oklch(0.68 0.18 30);
 
-  --sidebar:          oklch(0.125 0.008 60);
-  --sidebar-foreground: oklch(0.88 0.007 75);
-  --sidebar-primary:  oklch(0.55 0.16 152);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent:   oklch(0.22 0.016 152);
-  --sidebar-accent-foreground: oklch(0.65 0.15 152);
-  --sidebar-border:   oklch(1 0 0 / 7%);
-  --sidebar-ring:     oklch(0.55 0.16 152 / 45%);
+  --sidebar:          oklch(0.10 0.005 60);
+  --sidebar-foreground: oklch(0.90 0.008 75);
+  --sidebar-primary:  oklch(0.78 0.15 78);
+  --sidebar-primary-foreground: oklch(0.10 0.01 60);
+  --sidebar-accent:   oklch(0.16 0.01 78);
+  --sidebar-accent-foreground: oklch(0.95 0.008 75);
+  --sidebar-border:   oklch(0.18 0.006 60);
+  --sidebar-ring:     oklch(0.78 0.15 78 / 35%);
 
   --priority-urgent:  oklch(0.68 0.22 25);
   --priority-high:    oklch(0.74 0.16 50);
