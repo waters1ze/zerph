@@ -11,6 +11,7 @@ import {
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
+  createGoal, updateGoal,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 
@@ -53,6 +54,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const ownerChatId = body.ownerChatId || getOwnerChatId(req)
 
+    if (body.itemType === 'goal' || body.type === 'goal') {
+      const goal = await createGoal({
+        title: body.title || 'Новая цель',
+        description: body.description,
+        motivation: body.motivation,
+        deadline: body.deadline,
+        milestones: body.milestones || [],
+        color: body.color || '#2d7a4f',
+        ownerChatId: ownerChatId,
+      })
+      return NextResponse.json(serialize({ success: true, goal }))
+    }
+
     if (body.itemType === 'note' || body.type === 'note') {
       const note = await createNote({
         title: body.title || 'Новая заметка',
@@ -87,6 +101,13 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
     const ownerChatId = body.ownerChatId || getOwnerChatId(req)
+
+    // Update goal by ID
+    if (body.id && (body.itemType === 'goal' || body.type === 'goal')) {
+      const { id, itemType, type, ...updates } = body
+      const goal = await updateGoal(id, updates)
+      return NextResponse.json(serialize({ success: true, goal }))
+    }
 
     // Update note by ID
     if (body.id && (body.itemType === 'note' || body.type === 'note')) {
