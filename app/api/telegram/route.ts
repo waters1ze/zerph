@@ -51,9 +51,10 @@ async function send(chatId: number, text: string, extra?: object) {
 
 function miniAppKeyboard() {
   return {
-    inline_keyboard: [[
-      { text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } },
-    ]],
+    inline_keyboard: [
+      [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
+      [{ text: '🌐 Open Full Web Site', url: APP_URL }],
+    ],
   }
 }
 
