@@ -9,6 +9,7 @@ export type View =
   | 'goals'
   | 'projects'
   | 'notes'
+  | 'calendar'
   | 'chat'
   | 'stats'
   | 'friends'
@@ -23,6 +24,8 @@ export interface Task {
   dueDate?: string
   dueTime?: string             // HH:MM — for timed reminders e.g. "12:00"
   reminderSent?: boolean       // true after TG notification sent
+  targetContact?: string       // Telegram username or ChatID of the contact to message (e.g. "@artem")
+  recipientName?: string       // Name of the recipient (e.g. "Артем")
   projectId?: string
   goalId?: string
   tags: string[]
@@ -88,9 +91,11 @@ export interface Note {
   originalText?: string        // Raw voice transcript or user input
   type: NoteType
   tags: string[]
+  dueDate?: string             // Optional linked date (YYYY-MM-DD)
+  dueTime?: string             // Optional linked time (HH:MM)
   projectId?: string
   goalId?: string
-  taskIds: string[]
+  taskIds?: string[]
   createdAt: string
   updatedAt: string
   aiGenerated?: boolean

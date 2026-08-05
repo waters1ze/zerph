@@ -16,21 +16,21 @@ import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
 import { DatePicker } from '@/components/ui/date-picker'
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: 'To Do', inprogress: 'In Progress', done: 'Done', overdue: 'Overdue'
+  todo: 'К исполнению', inprogress: 'В процессе', done: 'Завершено', overdue: 'Просрочено'
 }
 
 const PRIORITY_OPTIONS: SelectOption[] = [
-  { value: 'urgent', label: 'Urgent', color: 'var(--priority-urgent)' },
-  { value: 'high',   label: 'High',   color: 'var(--priority-high)' },
-  { value: 'medium', label: 'Medium', color: 'var(--priority-medium)' },
-  { value: 'low',    label: 'Low',    color: 'var(--priority-low)' },
+  { value: 'urgent', label: 'Срочный',  color: 'var(--priority-urgent)' },
+  { value: 'high',   label: 'Высокий',  color: 'var(--priority-high)' },
+  { value: 'medium', label: 'Средний',  color: 'var(--priority-medium)' },
+  { value: 'low',    label: 'Низкий',   color: 'var(--priority-low)' },
 ]
 
 const STATUS_OPTIONS: SelectOption[] = [
-  { value: 'todo',       label: 'To Do' },
-  { value: 'inprogress', label: 'In Progress' },
-  { value: 'done',       label: 'Done' },
-  { value: 'overdue',    label: 'Overdue' },
+  { value: 'todo',       label: 'К исполнению' },
+  { value: 'inprogress', label: 'В процессе' },
+  { value: 'done',       label: 'Завершено' },
+  { value: 'overdue',    label: 'Просрочено' },
 ]
 
 export function TaskDetail() {
@@ -124,7 +124,7 @@ export function TaskDetail() {
         <div className="grid grid-cols-2 gap-2.5">
           {/* Priority */}
           <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Priority</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ПРИОРИТЕТ</p>
             <CustomSelect
               value={task.priority}
               onChange={v => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { priority: v as Priority } })}
@@ -134,7 +134,7 @@ export function TaskDetail() {
 
           {/* Status */}
           <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Status</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">СТАТУС</p>
             <CustomSelect
               value={task.status}
               onChange={v => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { status: v as TaskStatus } })}
@@ -144,29 +144,51 @@ export function TaskDetail() {
 
           {/* Due date */}
           <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Due date</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ДАТА</p>
             <DatePicker
               value={task.dueDate}
               onChange={v => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueDate: v } })}
             />
           </div>
 
-          {/* Created */}
+          {/* Due Time */}
           <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Created</p>
-            <span className="text-[12px] text-muted-foreground">
-              {format(parseISO(task.createdAt), 'MMM d, yyyy')}
-            </span>
+            <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
+              ⏰ ВРЕМЯ НАПОМИНАНИЯ
+            </p>
+            <input
+              type="time"
+              value={task.dueTime ?? ''}
+              onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
+              className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-pointer"
+            />
           </div>
         </div>
 
+        {/* Live Notification Countdown */}
+        {task.dueTime && !isDone && (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wide">
+                🔔 Telegram Напоминание
+              </p>
+              <p className="text-xs text-foreground/80 mt-0.5">
+                Прийдёт в Telegram ровно в <strong className="text-amber-400 font-mono">{task.dueTime}</strong>
+              </p>
+            </div>
+            <div className="px-2.5 py-1 rounded-lg bg-black/40 border border-amber-500/30 text-amber-400 font-mono text-xs font-bold">
+              ⏰ {task.dueTime}
+            </div>
+          </div>
+        )}
+
         {/* Description */}
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Description</p>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">ОПИСАНИЕ</p>
           <textarea
             defaultValue={task.description ?? ''}
             onBlur={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { description: e.target.value } })}
-            placeholder="Add a description…"
+            placeholder="Добавить описание…"
             rows={3}
             className="w-full text-[13px] text-foreground/80 bg-muted/40 rounded-lg px-3 py-2.5 border border-border/50 outline-none resize-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
           />
@@ -225,7 +247,7 @@ export function TaskDetail() {
         {/* Tags */}
         {task.tags.length > 0 && (
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Tags</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">ТЕГИ</p>
             <div className="flex flex-wrap gap-1.5">
               {task.tags.map(tag => (
                 <span key={tag} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent text-accent-foreground border border-border/50">
@@ -240,7 +262,7 @@ export function TaskDetail() {
         {/* Collaborators */}
         {task.assignees.length > 0 && (
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Team</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">КОМАНДА</p>
             <div className="flex gap-2">
               {task.assignees.map(aid => {
                 const friend = state.friends.find(f => f.id === aid)
@@ -268,7 +290,7 @@ export function TaskDetail() {
               className="flex items-center gap-1.5 text-[11px] text-primary/80 hover:text-primary transition-colors"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              AI source
+              AI источник
               <ChevronDown className={cn('w-3 h-3 transition-transform', showSource && 'rotate-180')} />
             </button>
             <AnimatePresence>
@@ -296,7 +318,7 @@ export function TaskDetail() {
           className="flex items-center gap-1.5 text-[12px] text-destructive/70 hover:text-destructive transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
-          Delete task
+          Удалить задачу
         </button>
         <div className="flex items-center gap-2">
           <PriorityBadge priority={task.priority} size="md" />

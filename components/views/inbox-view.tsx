@@ -53,34 +53,6 @@ export function InboxView() {
         )}
       </div>
 
-      {/* Notifications placeholder */}
-      <div>
-        <div className="flex items-center gap-2 mb-2.5">
-          <Bell className="w-3.5 h-3.5 text-muted-foreground" />
-          <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Notifications</h2>
-        </div>
-        <div className="space-y-2">
-          {[
-            { text: 'Maria Ivanova completed "Gather metrics" subtask', time: '2h ago' },
-            { text: 'Alex Petrov assigned you to "Define KPIs" task', time: '5h ago' },
-            { text: 'Reminder: Board presentation is due today', time: '8h ago' },
-          ].map((n, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.07 }}
-              className="flex items-start gap-3 px-4 py-3 rounded-xl bg-card border border-border"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] text-foreground">{n.text}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{n.time}</p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
