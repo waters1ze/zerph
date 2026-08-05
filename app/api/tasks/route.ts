@@ -12,6 +12,10 @@ import {
   completeTaskByTitle, markReminderSent,
   deleteNote, updateGoal,
 } from '@/lib/backend/db'
+import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
+
+// Start background interval for Telegram reminders
+startReminderScheduler()
 
 function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj
