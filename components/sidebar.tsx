@@ -87,8 +87,8 @@ export function Sidebar() {
 
       {/* User */}
       {(() => {
-        const isConnected = settings.integrations.telegram || !!tgUser
         const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null)
+        const isConnected = settings.integrations.telegram || !!tgUser || !!displayName
 
         return (
           <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-sidebar-accent/50 flex items-center gap-2.5">
