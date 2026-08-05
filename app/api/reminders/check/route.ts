@@ -51,14 +51,21 @@ export async function GET() {
       // Check if time matches or is past within 5 minutes
       if (task.dueTime <= currentTimeStr) {
         for (const chatId of chatIds) {
-          await sendTelegramMessage(
-            chatId,
-            `⏰ *НАПОМИНАНИЕ!*\n\n` +
-            `📌 *${task.title}*\n` +
-            (task.description ? `_«${task.description}»_\n\n` : '\n') +
-            `📍 *Время:* ${task.dueTime}\n` +
-            `✨ _Отправлено из Zerf AI_`
-          )
+          const isRecipientMsg = task.description?.includes('📩 Отправить') || task.title?.toLowerCase().includes('отправь') || task.title?.toLowerCase().includes('напиши')
+          
+          const text = isRecipientMsg
+            ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
+              `📌 *Сообщение:* ${task.title}\n` +
+              (task.description ? `_«${task.description}»_\n\n` : '\n') +
+              `⏰ *Время отправки:* ${task.dueTime}\n` +
+              `✨ _Отправлено автоматически через Zerf AI_`
+            : `⏰ *НАПОМИНАНИЕ!*\n\n` +
+              `📌 *${task.title}*\n` +
+              (task.description ? `_«${task.description}»_\n\n` : '\n') +
+              `📍 *Время:* ${task.dueTime}\n` +
+              `✨ _Отправлено из Zerf AI_`
+
+          await sendTelegramMessage(chatId, text)
           sentCount++
         }
 
