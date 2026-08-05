@@ -91,9 +91,11 @@ export interface Note {
   originalText?: string        // Raw voice transcript or user input
   type: NoteType
   tags: string[]
+  dueDate?: string             // Optional linked date (YYYY-MM-DD)
+  dueTime?: string             // Optional linked time (HH:MM)
   projectId?: string
   goalId?: string
-  taskIds: string[]
+  taskIds?: string[]
   createdAt: string
   updatedAt: string
   aiGenerated?: boolean

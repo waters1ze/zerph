@@ -213,11 +213,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers,
         body: JSON.stringify(action.task),
       }).catch(() => {})
-    } else if (action.type === 'UPDATE_TASK') {
+    } else if (action.type === 'ADD_NOTE') {
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ itemType: 'note', ...action.note }),
+      }).catch(() => {})
+    } else if (action.type === 'UPDATE_NOTE') {
       fetch('/api/tasks', {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ id: action.id, ...action.updates }),
+        body: JSON.stringify({ id: action.id, itemType: 'note', ...action.updates }),
       }).catch(() => {})
     }
   }, [state.tasks])
