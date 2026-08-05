@@ -46,9 +46,9 @@ function AppShell() {
   const isFullHeight = state.currentView === 'notes'
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-56 shrink-0 h-full overflow-y-auto">
+    <div className="app-shell flex h-screen bg-background overflow-hidden">
+      {/* Desktop Sidebar */}
+      <div className="desktop-sidebar w-56 shrink-0 h-full overflow-y-auto">
         <Sidebar />
       </div>
 
@@ -61,8 +61,8 @@ function AppShell() {
           <main
             className={
               isFullHeight
-                ? 'flex-1 min-w-0 overflow-hidden px-6 py-5 flex flex-col'
-                : 'flex-1 min-w-0 overflow-y-auto px-6 py-5'
+                ? 'app-main flex-1 min-w-0 overflow-hidden px-6 py-5 flex flex-col'
+                : 'app-main flex-1 min-w-0 overflow-y-auto px-6 py-5'
             }
           >
             <AnimatePresence mode="wait">
