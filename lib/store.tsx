@@ -228,6 +228,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {})
+
+    // Check connected Telegram profile from Neon DB
+    fetch('/api/telegram/user')
+      .then(r => r.json())
+      .then(user => {
+        if (user.connected && user.name) {
+          dispatch({
+            type: 'UPDATE_SETTINGS',
+            updates: {
+              name: user.name,
+            },
+          })
+        }
+      })
+      .catch(() => {})
   }, [])
 
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
