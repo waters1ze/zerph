@@ -59,14 +59,13 @@ function DayCell({
     <motion.div
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
-      onClick={hasTasks || isToday ? onClick : undefined}
+      onClick={onClick}
       className={cn(
         'relative min-h-[88px] p-2 rounded-xl border transition-all duration-150 cursor-pointer flex flex-col gap-1',
         isToday
           ? 'border-primary/50 bg-primary/8 shadow-sm shadow-primary/10'
           : 'border-border/50 bg-card/60 hover:border-primary/25 hover:bg-accent/10',
-        !isCurrentMonth && 'opacity-30',
-        hasTasks && 'cursor-pointer'
+        !isCurrentMonth && 'opacity-30'
       )}
     >
       {/* Day number */}

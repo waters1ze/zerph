@@ -9,16 +9,17 @@ import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
 
 const VIEW_LABELS: Record<string, string> = {
-  today: 'Today',
-  inbox: 'Inbox',
-  tasks: 'Tasks',
-  goals: 'Goals',
-  projects: 'Projects',
-  notes: 'Notes',
-  chat: 'AI Chat',
-  stats: 'Analytics',
-  friends: 'Team',
-  settings: 'Settings',
+  today:    'Сегодня',
+  inbox:    'Входящие',
+  tasks:    'Задачи',
+  goals:    'Цели',
+  projects: 'Проекты',
+  notes:    'Заметки',
+  calendar: 'Календарь',
+  chat:     'AI Чат',
+  stats:    'Аналитика',
+  friends:  'Команда',
+  settings: 'Настройки',
 }
 
 interface Props {
@@ -36,7 +37,7 @@ export function TopBar({ onNewTask }: Props) {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <h1 className="text-base font-semibold text-foreground">
-            {VIEW_LABELS[state.currentView] ?? 'Nexus'}
+            {VIEW_LABELS[state.currentView] ?? 'Zerf'}
           </h1>
           {state.currentView === 'today' && (
             <span className="text-[12px] text-muted-foreground">
