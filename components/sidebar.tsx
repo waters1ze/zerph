@@ -21,15 +21,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'today',    label: 'Today',    icon: '📅', section: 'workspace' },
-  { id: 'inbox',    label: 'Inbox',    icon: '📥' },
-  { id: 'tasks',    label: 'Tasks',    icon: '✅' },
-  { id: 'goals',    label: 'Goals',    icon: '🎯', section: 'planning' },
-  { id: 'projects', label: 'Projects', icon: '🚀' },
-  { id: 'notes',    label: 'Notes',    icon: '📝' },
-  { id: 'stats',    label: 'Analytics',icon: '📊', section: 'intelligence' },
-  { id: 'friends',  label: 'Team',     icon: '👥', section: 'collaboration' },
-  { id: 'settings', label: 'Settings', icon: '⚙️', section: 'account' },
+  { id: 'today',    label: 'Today',    icon: '🗝️', section: 'workspace' },
+  { id: 'inbox',    label: 'Inbox',    icon: '🕯️' },
+  { id: 'tasks',    label: 'Tasks',    icon: '🕊️' },
+  { id: 'goals',    label: 'Goals',    icon: '⚜️', section: 'planning' },
+  { id: 'projects', label: 'Projects', icon: '👑' },
+  { id: 'notes',    label: 'Notes',    icon: '📜' },
+  { id: 'stats',    label: 'Analytics',icon: '💎', section: 'intelligence' },
+  { id: 'friends',  label: 'Team',     icon: '🥂', section: 'collaboration' },
+  { id: 'settings', label: 'Settings', icon: '⏳', section: 'account' },
 ]
 
 export function Sidebar() {
@@ -46,8 +46,16 @@ export function Sidebar() {
         username: u.username ? `@${u.username}` : 'Telegram',
         photoUrl: u.photo_url,
       })
+      dispatch({
+        type: 'UPDATE_SETTINGS',
+        updates: {
+          name: u.first_name || '',
+          avatar: u.photo_url || '',
+          integrations: { ...settings.integrations, telegram: true },
+        },
+      })
     }
-  }, [])
+  }, [dispatch])
 
   const todayCount = tasks.filter(t => {
     const d = t.dueDate
@@ -69,15 +77,8 @@ export function Sidebar() {
     <aside className="flex flex-col h-full bg-sidebar border-r border-sidebar-border select-none">
       {/* Brand */}
       <div className="px-4 pt-5 pb-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-md shadow-black/30 ring-1 ring-white/5">
-          <Image
-            src="/zerph-logo.png"
-            alt="Zerph logo"
-            width={36}
-            height={36}
-            className="w-full h-full object-cover"
-            priority
-          />
+        <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-primary/10 border border-amber-500/30 shadow-lg shadow-black/40">
+          <span className="text-xl leading-none select-none">📓</span>
         </div>
         <div className="flex flex-col">
           <p className="text-[15px] font-bold leading-none tracking-tight gold-shimmer">Zerph</p>
