@@ -73,14 +73,14 @@ export function Sidebar() {
       <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-sidebar-accent/50 flex items-center gap-2.5">
         <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
           <span className="text-[11px] font-semibold text-primary">
-            {settings.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            👤
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-medium text-sidebar-foreground truncate">{settings.name}</p>
-          <p className="text-[10px] text-muted-foreground truncate">{settings.email}</p>
+          <p className="text-[12px] font-medium text-sidebar-foreground truncate">Мой профиль</p>
+          <p className="text-[10px] text-muted-foreground truncate">Telegram Connected</p>
         </div>
-        <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)] shrink-0" />
+        <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)] shrink-0" title="Online" />
       </div>
 
       {/* Nav */}
