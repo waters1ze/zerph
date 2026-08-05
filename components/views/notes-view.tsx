@@ -11,7 +11,7 @@ import remarkGfm from 'remark-gfm'
 import {
   FileText, Plus, Folder, Pin, Tag, Edit3, Save,
   Trash2, Search, Calendar as CalendarIcon,
-  ChevronLeft, BookOpen, Users, Clock, AlignLeft
+  ChevronLeft, BookOpen, Users, Sparkles, Loader2
 } from 'lucide-react'
 import type { Note, NoteType } from '@/lib/types'
 
@@ -33,6 +33,7 @@ export function NotesView() {
   const [search, setSearch] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showMobileList, setShowMobileList] = useState(true)
+  const [isAiProcessing, setIsAiProcessing] = useState(false)
 
   // Draft state for note editing
   const [editTitle, setEditTitle] = useState('')
@@ -89,7 +90,7 @@ export function NotesView() {
     setShowMobileList(false)
   }
 
-  // Save current note edits
+  // Save current note edits to cloud DB
   const handleSave = () => {
     if (!activeNote) return
     dispatch({
@@ -105,6 +106,76 @@ export function NotesView() {
       },
     })
     setIsEditing(false)
+  }
+
+  // AI Auto-classification of notes into folders
+  const handleAiClassify = async () => {
+    if (!activeNote || isAiProcessing) return
+    setIsAiProcessing(true)
+
+    try {
+      const apiKey = state.settings.integrations.groqApiKey
+      const prompt = `Проанализируй этот текст заметки и верни JSON со свойствами:
+1. "type": из ["note", "journal", "meeting"]
+   - "journal" если это личные мысли, дневник, рефлексия
+   - "meeting" если это созвон, встреча, договорённость, протокол
+   - "note" если это обычная бытовая или рабочая заметка
+2. "dueDate": дата в формате YYYY-MM-DD если в тексте есть привязка к конкретному дню, иначе null
+3. "tags": массив из 1-3 тегов на русском языке
+
+Текст заметки:
+${editTitle}
+${editContent}`
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+          apiKey,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.content) {
+        const jsonMatch = data.content.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.type) setEditType(parsed.type)
+          if (parsed.dueDate) setEditDueDate(parsed.dueDate)
+          if (Array.isArray(parsed.tags)) setEditTags(parsed.tags)
+
+          // Instantly sync to cloud DB
+          dispatch({
+            type: 'UPDATE_NOTE',
+            id: activeNote.id,
+            updates: {
+              type: parsed.type || editType,
+              dueDate: parsed.dueDate || editDueDate || undefined,
+              tags: parsed.tags || editTags,
+              updatedAt: new Date().toISOString(),
+            },
+          })
+        }
+      }
+    } catch {
+      // Fallback: heuristic classification
+      const text = (editTitle + ' ' + editContent).toLowerCase()
+      let detectedType: NoteType = 'note'
+      if (text.includes('встреч') || text.includes('созвон') || text.includes('протокол') || text.includes('обсудили')) {
+        detectedType = 'meeting'
+      } else if (text.includes('дневник') || text.includes('мысли') || text.includes('сегодня я') || text.includes('настроение')) {
+        detectedType = 'journal'
+      }
+      setEditType(detectedType)
+      dispatch({
+        type: 'UPDATE_NOTE',
+        id: activeNote.id,
+        updates: { type: detectedType },
+      })
+    } finally {
+      setIsAiProcessing(false)
+    }
   }
 
   // Toggle pin
@@ -307,6 +378,16 @@ export function NotesView() {
                   <Pin className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">{activeNote.pinned ? 'Закреплено' : 'Закрепить'}</span>
                 </button>
+
+                <button
+                  onClick={handleAiClassify}
+                  disabled={isAiProcessing}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-[12px] font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
+                  title="Определить папку и привязать дату с помощью AI"
+                >
+                  {isAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">AI Сортировка</span>
+                </button>
               </div>
 
               {/* Toolbar right actions */}
@@ -356,27 +437,48 @@ export function NotesView() {
                 </h1>
               )}
 
-              {/* Linked Date Picker Bar */}
-              <div className="flex items-center gap-3 py-2 px-3 rounded-xl bg-card border border-border/60 text-[12px] flex-wrap">
-                <div className="flex items-center gap-1.5 text-primary font-medium shrink-0">
-                  <CalendarIcon className="w-4 h-4" />
-                  <span>Привязанная дата:</span>
+              {/* Folder Selector & Linked Date Picker Bar */}
+              <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl bg-card border border-border/60 text-[12px] flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground font-medium">Папка:</span>
+                  {isEditing ? (
+                    <select
+                      value={editType}
+                      onChange={e => setEditType(e.target.value as NoteType)}
+                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none"
+                    >
+                      <option value="note">Заметки</option>
+                      <option value="journal">Дневник</option>
+                      <option value="meeting">Встречи</option>
+                    </select>
+                  ) : (
+                    <span className="font-semibold text-primary capitalize">
+                      {editType === 'journal' ? 'Дневник' : editType === 'meeting' ? 'Встречи' : 'Заметки'}
+                    </span>
+                  )}
                 </div>
 
-                {isEditing ? (
-                  <input
-                    type="date"
-                    value={editDueDate}
-                    onChange={e => setEditDueDate(e.target.value)}
-                    className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-[12px] text-foreground outline-none focus:border-primary/50"
-                  />
-                ) : (
-                  <span className="font-semibold text-foreground">
-                    {activeNote.dueDate
-                      ? format(parseISO(activeNote.dueDate), 'd MMMM yyyy (EEEE)', { locale: ru })
-                      : 'Без даты'}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-primary font-medium shrink-0">
+                    <CalendarIcon className="w-4 h-4" />
+                    <span>Дата:</span>
+                  </div>
+
+                  {isEditing ? (
+                    <input
+                      type="date"
+                      value={editDueDate}
+                      onChange={e => setEditDueDate(e.target.value)}
+                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-[12px] text-foreground outline-none focus:border-primary/50"
+                    />
+                  ) : (
+                    <span className="font-semibold text-foreground">
+                      {activeNote.dueDate
+                        ? format(parseISO(activeNote.dueDate), 'd MMMM yyyy (EEEE)', { locale: ru })
+                        : 'Без даты'}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Note Content */}
