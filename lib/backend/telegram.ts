@@ -1,10 +1,10 @@
-/**
- * Zerf Backend — Telegram Bot Engine
- * Receives voice/text messages from Telegram, downloads audio, calls Groq AI, and saves tasks/goals.
+﻿/**
+ * Zerf Backend — Telegram Bot Engine (Full Russian, /start fix, sticker-style buttons)
  */
 
 import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem } from './groq'
-import { saveParsedItemToDb } from './db'
+import { saveParsedItemToDb, registerChatId } from './db'
+import { GROQ_API_KEYS } from '@/lib/config'
 
 export interface TelegramUpdate {
   update_id: number
@@ -13,24 +13,19 @@ export interface TelegramUpdate {
     from?: {
       id: number
       first_name?: string
+      last_name?: string
       username?: string
+      language_code?: string
     }
-    chat: {
-      id: number
-    }
+    chat: { id: number }
     date: number
     text?: string
-    voice?: {
-      file_id: string
-      duration: number
-      file_size?: number
-    }
-    audio?: {
-      file_id: string
-      duration: number
-    }
+    voice?: { file_id: string; duration: number; file_size?: number }
+    audio?: { file_id: string; duration: number }
   }
 }
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.up.railway.app'
 
 /**
  * Send a Markdown message to a Telegram chat
@@ -38,16 +33,17 @@ export interface TelegramUpdate {
 export async function sendTelegramMessage(
   botToken: string,
   chatId: number,
-  text: string
+  text: string,
+  extra?: object
 ): Promise<void> {
-  const url = `https://api.telegram.org/bot${botToken}/sendMessage`
-  await fetch(url, {
+  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: chatId,
       text,
       parse_mode: 'Markdown',
+      ...extra,
     }),
   })
 }
@@ -59,21 +55,49 @@ export async function downloadTelegramFile(
   botToken: string,
   fileId: string
 ): Promise<Buffer> {
-  // 1. Get file path
-  const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
-  const fileRes = await fetch(getFileUrl)
-  if (!fileRes.ok) throw new Error('Failed to get Telegram file path')
+  const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`)
+  if (!fileRes.ok) throw new Error('Не удалось получить путь к файлу Telegram')
   const fileData = await fileRes.json()
   const filePath = fileData.result?.file_path
-  if (!filePath) throw new Error('Telegram file path not found')
+  if (!filePath) throw new Error('Путь к файлу Telegram не найден')
 
-  // 2. Download file content
-  const downloadUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`
-  const audioRes = await fetch(downloadUrl)
-  if (!audioRes.ok) throw new Error('Failed to download Telegram voice file')
+  const audioRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`)
+  if (!audioRes.ok) throw new Error('Не удалось скачать голосовой файл')
 
-  const arrayBuffer = await audioRes.arrayBuffer()
-  return Buffer.from(arrayBuffer)
+  return Buffer.from(await audioRes.arrayBuffer())
+}
+
+/**
+ * /start handler — register user and send welcome in Russian
+ */
+async function handleStart(
+  botToken: string,
+  chatId: number,
+  firstName: string
+): Promise<void> {
+  // Register user in DB
+  try {
+    await registerChatId(chatId, firstName)
+  } catch { /* ignore if already registered */ }
+
+  const welcomeText =
+    `🎉 *Профиль успешно привязан!*\n\n` +
+    `Привет, *${firstName}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI.\n\n` +
+    `✨ *Твои возможности:*\n` +
+    `1️⃣ *Голосовой ввод* 🎙 — надиктуй задачу, цель или заметку сюда в чат.\n` +
+    `2️⃣ *Умное завершение* ✔️ — напиши «Задача X выполнена».\n` +
+    `3️⃣ *Авто-уведомления* ⏰ — напиши «Напомни завтра в 10:00».\n` +
+    `4️⃣ *Единый профиль* 🌐 — все данные автоматически видны и в боте, и на веб-сайте!\n\n` +
+    `Жми кнопки ниже, чтобы открыть приложение:`
+
+  await sendTelegramMessage(botToken, chatId, welcomeText, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '🚀 Открыть Zerf Mini App', web_app: { url: `${APP_URL}/tg?chatId=${chatId}` } }],
+        [{ text: '🌐 Открыть полный сайт', url: `${APP_URL}?chatId=${chatId}` }],
+      ],
+    },
+  })
 }
 
 /**
@@ -88,69 +112,135 @@ export async function handleTelegramUpdate(
   if (!message) return { success: false, message: 'No message in update' }
 
   const chatId = message.chat.id
+  const firstName = message.from?.first_name || 'Пользователь'
+  const text = message.text?.trim() || ''
+
+  // ── /start command — always handle first, never pass to AI ──
+  if (text === '/start' || text.startsWith('/start ')) {
+    await handleStart(botToken, chatId, firstName)
+    return { success: true, message: 'start handled' }
+  }
+
+  // ── /help command ──
+  if (text === '/help' || text === '/помощь') {
+    await sendTelegramMessage(botToken, chatId,
+      `📖 *Zerf AI — Справка*\n\n` +
+      `Просто напиши или надиктуй что хочешь сделать:\n\n` +
+      `🎯 *Задача:* «Позвонить клиенту завтра в 15:00»\n` +
+      `📌 *Заметка:* «Идея: сделать мобильное приложение»\n` +
+      `🏆 *Цель:* «Хочу за 3 месяца выучить английский»\n` +
+      `✔️ *Выполнено:* «Сделал задачу Позвонить клиенту»\n` +
+      `⏰ *Напоминание:* «Напомни мне через 30 минут»\n\n` +
+      `Всё остальное я пойму сам! 🤖`
+    )
+    return { success: true, message: 'help sent' }
+  }
+
+  // ── /today command ──
+  if (text === '/today' || text === '/сегодня') {
+    await sendTelegramMessage(botToken, chatId,
+      `📅 *Задачи на сегодня*\n\nОткрой приложение, чтобы увидеть полный список:`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '📱 Открыть Zerf', web_app: { url: `${APP_URL}/tg?chatId=${chatId}` } }],
+          ],
+        },
+      }
+    )
+    return { success: true, message: 'today sent' }
+  }
 
   try {
-    let rawText = message.text || ''
+    let rawText = text
 
-    // 1. If voice message is attached, download & transcribe via Groq Whisper
+    // ── Voice/Audio message ──
     if (message.voice || message.audio) {
       const fileId = message.voice?.file_id || message.audio?.file_id
-      if (!fileId) throw new Error('No voice file ID')
+      if (!fileId) throw new Error('Нет ID голосового файла')
 
-      await sendTelegramMessage(botToken, chatId, '🎙 *Processing voice message...* Transcribing with Groq AI...')
+      await sendTelegramMessage(botToken, chatId, '🎙 *Обрабатываю голосовое сообщение...* Транскрибирую через Groq AI...')
 
       const audioBuffer = await downloadTelegramFile(botToken, fileId)
-      rawText = await transcribeAudioWithGroq(audioBuffer, 'voice.ogg', groqApiKey)
+      // Try multi-key pool
+      let transcribed = ''
+      const keys = [groqApiKey, ...GROQ_API_KEYS].filter(Boolean)
+      for (const key of keys) {
+        try {
+          transcribed = await transcribeAudioWithGroq(audioBuffer, 'voice.ogg', key)
+          if (transcribed) break
+        } catch { continue }
+      }
+      rawText = transcribed
     }
 
     if (!rawText.trim()) {
-      await sendTelegramMessage(botToken, chatId, '⚠️ Could not extract text from message.')
+      await sendTelegramMessage(botToken, chatId, '⚠️ Не удалось извлечь текст из сообщения. Попробуй ещё раз.')
       return { success: false, message: 'Empty text' }
     }
 
-    // 2. Send status update
+    // ── Show transcript + processing ──
     await sendTelegramMessage(
       botToken,
       chatId,
-      `📝 *Transcript:* "${rawText}"\n\n🧠 *Zerf AI is structuring into your workspace...*`
+      `📝 *Распознано:* «${rawText}»\n\n🧠 *Zerf AI структурирует в твоё рабочее пространство...*`
     )
 
-    // 3. Parse intent with Groq LLM (Llama-3.3-70b)
+    // ── Parse intent ──
     const parsedItem = await parseIntentWithGroq(rawText, groqApiKey)
 
-    // 4. Save parsed item to local database
+    // ── Save to DB ──
     const saved = saveParsedItemToDb(parsedItem)
 
-    // 5. Send formatted Telegram response card
-    const emojiMap: Record<string, string> = {
-      task: '✅',
-      goal: '🎯',
-      note: '📌',
-      project: '📁',
-      reminder: '⏰',
+    // ── Format Russian reply ──
+    const typeLabel: Record<string, string> = {
+      task:       '✅ Задача',
+      goal:       '🎯 Цель',
+      note:       '📌 Заметка',
+      project:    '📁 Проект',
+      reminder:   '⏰ Напоминание',
+      completion: '✔️ Выполнено',
+    }
+    const priorityLabel: Record<string, string> = {
+      urgent: '🔴 Срочно',
+      high:   '🟠 Высокий',
+      medium: '🟢 Средний',
+      low:    '🔵 Низкий',
     }
 
-    const emoji = emojiMap[parsedItem.type] || '⚡'
-
-    let replyText = `${emoji} *Zerf AI Captured New ${parsedItem.type.toUpperCase()}*\n\n`
-    replyText += `*Title:* ${parsedItem.title}\n`
-    replyText += `*Summary:* ${parsedItem.summary}\n`
-    replyText += `*Priority:* ${parsedItem.priority.toUpperCase()}\n`
-    if (parsedItem.dueDate) replyText += `*Due Date:* ${parsedItem.dueDate}\n`
-    if (parsedItem.tags.length) replyText += `*Tags:* #${parsedItem.tags.join(' #')}\n`
+    const label = typeLabel[parsedItem.type] || '⚡ Запись'
+    let reply = `${label} *сохранена!*\n\n`
+    reply += `*Название:* ${parsedItem.title}\n`
+    if (parsedItem.summary && parsedItem.summary !== parsedItem.title) {
+      reply += `*Описание:* ${parsedItem.summary.slice(0, 200)}\n`
+    }
+    reply += `*Приоритет:* ${priorityLabel[parsedItem.priority] || parsedItem.priority}\n`
+    if (parsedItem.dueDate) reply += `*Срок:* ${parsedItem.dueDate}`
+    if (parsedItem.dueTime) reply += ` в ${parsedItem.dueTime}`
+    if (parsedItem.dueDate || parsedItem.dueTime) reply += '\n'
+    if (parsedItem.tags?.length) reply += `*Теги:* #${parsedItem.tags.join(' #')}\n`
 
     if (parsedItem.type === 'goal' && parsedItem.milestones?.length) {
-      replyText += `\n🚩 *Milestones:* \n` + parsedItem.milestones.map(m => ` • ${m}`).join('\n')
+      reply += `\n🚩 *Этапы:*\n` + parsedItem.milestones.map(m => ` • ${m}`).join('\n') + '\n'
+    }
+    if (parsedItem.type === 'task' && parsedItem.subtasks?.length) {
+      reply += `\n📋 *Подзадачи:*\n` + parsedItem.subtasks.map(s => ` • ${s}`).join('\n') + '\n'
     }
 
-    replyText += `\n\n✨ *Added to your Zerf Command Center!*`
+    reply += `\n✨ *Добавлено в твой Zerf!*`
 
-    await sendTelegramMessage(botToken, chatId, replyText)
+    await sendTelegramMessage(botToken, chatId, reply, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📱 Открыть в приложении', web_app: { url: `${APP_URL}/tg?chatId=${chatId}` } }],
+        ],
+      },
+    })
 
     return { success: true, item: saved }
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
-    await sendTelegramMessage(botToken, chatId, `❌ *Zerf Error:* ${errorMessage}`)
+    await sendTelegramMessage(botToken, chatId, `❌ *Ошибка Zerf:* ${errorMessage.slice(0, 300)}`)
     return { success: false, message: errorMessage }
   }
 }

@@ -89,7 +89,7 @@ export function saveDb(db: DbSchema): void {
 /**
  * Register a Telegram chat ID for reminder notifications
  */
-export function registerChatId(chatId: number): void {
+export function registerChatId(chatId: number, firstName?: string): void {
   const db = getDb()
   if (!db.chatIds.includes(chatId)) {
     db.chatIds.push(chatId)
