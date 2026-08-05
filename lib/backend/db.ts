@@ -4,7 +4,7 @@
  */
 
 import { prisma } from './prisma'
-import { ParsedItem, stringSimilarity } from './groq'
+import { ParsedItem, stringSimilarity, generateReminderContext } from './groq'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
@@ -241,6 +241,36 @@ export async function saveParsedItemToDb(
       tags: item.tags || [],
       aiGenerated: true,
     })
+
+    // ── Auto-reminder: if note content contains a time, create a companion task ──
+    const noteText = `${item.title} ${item.summary} ${item.rawText || ''}`
+    const timeMatch = noteText.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/)
+    const naturalMatch = noteText.match(/в\s+([01]?\d|2[0-3]):([0-5]\d)/i)
+    const extractedTime = (naturalMatch || timeMatch)
+      ? `${((naturalMatch || timeMatch)![1]).padStart(2, '0')}:${(naturalMatch || timeMatch)![2]}`
+      : null
+
+    if (extractedTime) {
+      const today = new Date().toISOString().slice(0, 10)
+      // Generate a warm AI context message
+      const context = await generateReminderContext(
+        item.title,
+        item.summary.slice(0, 500),
+        extractedTime
+      ).catch(() => `Напоминание: «${item.title}» в ${extractedTime}. Готовься! 🎯`)
+
+      await createTask({
+        title: `⏰ ${item.title}`,
+        description: context,
+        priority: item.priority || 'medium',
+        dueDate: item.dueDate || today,
+        dueTime: extractedTime,
+        tags: ['заметка', 'авто-напоминание', ...(item.tags || [])],
+        aiGenerated: true,
+        source: item.rawText,
+        ownerChatId: ownerChatId || null,
+      })
+    }
   } else {
     // Task, reminder, or default
     const desc = item.recipientName

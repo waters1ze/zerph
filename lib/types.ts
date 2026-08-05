@@ -9,6 +9,7 @@ export type View =
   | 'goals'
   | 'projects'
   | 'notes'
+  | 'calendar'
   | 'chat'
   | 'stats'
   | 'friends'

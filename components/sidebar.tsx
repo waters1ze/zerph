@@ -16,10 +16,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',     icon: '🗝️', section: 'workspace' },
+  { id: 'today',    label: 'Сегодня',     icon: '🗙️', section: 'workspace' },
   { id: 'inbox',    label: 'Входящие',    icon: '🕯️' },
   { id: 'tasks',    label: 'Задачи',      icon: '🕊️' },
-  { id: 'goals',    label: 'Цели',        icon: '⚜️', section: 'planning' },
+  { id: 'calendar', label: 'Календарь',   icon: '📆', section: 'planning' },
+  { id: 'goals',    label: 'Цели',        icon: '⚔️' },
   { id: 'projects', label: 'Проекты',     icon: '👑' },
   { id: 'notes',    label: 'Заметки',     icon: '📜' },
   { id: 'stats',    label: 'Аналитика',   icon: '💎', section: 'аналитика' },
@@ -29,10 +30,10 @@ const NAV_ITEMS: NavItem[] = [
 
 // Mobile bottom nav — only key sections
 const MOBILE_NAV: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',  icon: '🗝️' },
+  { id: 'today',    label: 'Сегодня',   icon: '🗙️' },
   { id: 'tasks',    label: 'Задачи',   icon: '🕊️' },
+  { id: 'calendar', label: 'Календарь', icon: '📆' },
   { id: 'notes',    label: 'Заметки',  icon: '📜' },
-  { id: 'goals',    label: 'Цели',     icon: '⚜️' },
   { id: 'settings', label: 'Настройки', icon: '⏳' },
 ]
 

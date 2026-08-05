@@ -207,3 +207,134 @@ export function stringSimilarity(a: string, b: string): number {
   const union = new Set([...aWords, ...bWords]).size
   return intersection / union
 }
+
+/**
+ * Generate a short 2-3 sentence motivational reminder context for a note/task.
+ * Returns a ready-to-send Russian string.
+ */
+export async function generateReminderContext(
+  noteTitle: string,
+  noteContent: string,
+  dueTime: string,
+  apiKey?: string
+): Promise<string> {
+  const key = apiKey || DEFAULT_KEY
+  if (!key) return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — дружелюбный AI-ассистент. Напиши 2-3 предложения на РУССКОМ языке:
+1. Приятное пожелание или напоминание о предстоящем событии
+2. 1 практическую рекомендацию или совет
+Стиль: тёплый, поддерживающий, конкретный. Без шаблонных фраз. Без упоминания «Zerf».
+Ответь ТОЛЬКО этими 2-3 предложениями, без лишнего текста.`,
+          },
+          {
+            role: 'user',
+            content: `Событие/тема: «${noteTitle}»\nВремя: ${dueTime}\nКонтекст: ${noteContent.slice(0, 400)}`,
+          },
+        ],
+        temperature: 0.75,
+        max_tokens: 200,
+      }),
+    })
+    if (!res.ok) return `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content?.trim() || `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
+  } catch {
+    return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
+  }
+}
+
+/**
+ * Generate a personalized morning greeting based on user's recent tasks and notes.
+ * Returns a ready-to-send Russian Telegram message (with Markdown).
+ */
+export async function generateMorningGreeting(
+  firstName: string,
+  recentTaskTitles: string[],
+  recentNoteTitles: string[],
+  pendingTasks: string[],
+  apiKey?: string
+): Promise<string> {
+  const key = apiKey || DEFAULT_KEY
+
+  const now = new Date()
+  const dayName = now.toLocaleDateString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
+
+  if (!key) {
+    return (
+      `☀️ *Доброе утро, ${firstName}!*\n\n` +
+      `Сегодня ${dayName}.\n\n` +
+      (pendingTasks.length
+        ? `📋 У тебя ${pendingTasks.length} задач на сегодня:\n${pendingTasks.slice(0, 3).map(t => `• ${t}`).join('\n')}\n\n`
+        : ``) +
+      `_Продуктивного дня! 🚀_`
+    )
+  }
+
+  try {
+    const contextLines: string[] = []
+    if (recentTaskTitles.length) contextLines.push(`Недавние задачи: ${recentTaskTitles.slice(0, 5).join(', ')}`)
+    if (recentNoteTitles.length) contextLines.push(`Недавние заметки: ${recentNoteTitles.slice(0, 3).join(', ')}`)
+    if (pendingTasks.length) contextLines.push(`Активные задачи сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — персональный AI-ассистент пользователя в Telegram. Каждое утро ты пишешь ему тёплое, персонализированное сообщение.
+Формат ответа — Markdown для Telegram. Пиши ТОЛЬКО на русском языке.
+Структура (строго):
+1. Приветствие с именем (1 строка)
+2. Упоминание дня/даты
+3. Персонализированный комментарий, основанный на известных задачах/заметках пользователя (2-3 предложения, как будто ты знаешь его жизнь — тепло и конкретно)
+4. 2 практические рекомендации на основе его активностей
+5. Мотивирующая фраза
+
+Максимум 200 слов. Без шаблонных «Желаю тебе». Конкретно и по-дружески.`,
+          },
+          {
+            role: 'user',
+            content: `Имя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
+          },
+        ],
+        temperature: 0.8,
+        max_tokens: 350,
+      }),
+    })
+
+    if (!res.ok) throw new Error('Groq error')
+    const data = await res.json()
+    const aiText = data.choices?.[0]?.message?.content?.trim() || ''
+    return aiText || buildFallbackGreeting(firstName, dayName, pendingTasks)
+  } catch {
+    return buildFallbackGreeting(firstName, dayName, pendingTasks)
+  }
+}
+
+function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[]): string {
+  return (
+    `☀️ *Доброе утро, ${firstName}!*\n\n` +
+    `Сегодня ${dayName}.\n\n` +
+    (pendingTasks.length
+      ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `• ${t}`).join('\n')}\n\n`
+      : `✅ На сегодня задач нет — можно планировать что-то новое!\n\n`) +
+    `_Продуктивного дня! 🚀_`
+  )
+}
+
