@@ -1,6 +1,4 @@
 // This is your Prisma schema file
-// Learn more: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -30,7 +28,7 @@ model Task {
   rawText      String?
   aiGenerated  Boolean   @default(false)
   source       String?
-  subtasks     Json?     // [{id, title, done}]
+  subtasks     Json?
 }
 
 model Goal {
@@ -42,7 +40,7 @@ model Goal {
   deadline    String?
   progress    Int      @default(0)
   color       String   @default("#2d7a4f")
-  milestones  Json?    // [{id, title, done, dueDate?}]
+  milestones  Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
