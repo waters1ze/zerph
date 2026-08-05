@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, Plus, BookOpen, ChevronDown, Pin, Tag, Edit3, Save, Volume2, Sparkles } from 'lucide-react'
+import { FileText, Plus, BookOpen, ChevronDown, Pin, Tag, Edit3, Save, Volume2, Sparkles, Trash2 } from 'lucide-react'
 import type { Note } from '@/lib/types'
 
 function NoteCard({ note, onClick, isSelected }: { note: Note; onClick: () => void; isSelected: boolean }) {
@@ -113,13 +113,28 @@ export function NotesView() {
                     Save
                   </button>
                 ) : (
-                  <button
-                    onClick={startEdit}
-                    className="flex items-center gap-1.5 h-7 px-3 rounded-lg border border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    Edit
-                  </button>
+                  <>
+                    <button
+                      onClick={startEdit}
+                      className="flex items-center gap-1.5 h-7 px-3 rounded-lg border border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm('Delete this note?')) {
+                          dispatch({ type: 'DELETE_NOTE', id: selected.id })
+                          fetch(`/api/tasks?id=${selected.id}&type=note`, { method: 'DELETE' })
+                          setSelectedId(null)
+                        }
+                      }}
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-red-500/20 text-[12px] text-red-400 hover:bg-red-500/10 transition-colors"
+                      title="Delete note"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>

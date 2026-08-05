@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Send, Sparkles, Bot, User, Loader2, X, ChevronLeft, AlertCircle } from 'lucide-react'
+import { Send, Sparkles, Bot, User, Loader2, X, ChevronLeft, AlertCircle, Mic } from 'lucide-react'
 import type { ChatMessage } from '@/lib/types'
 
 const QUICK_PROMPTS = [
@@ -198,21 +198,10 @@ export function AiChatPanel() {
               </div>
 
               <div className="flex items-center gap-2">
-                <div className={cn(
-                  'flex items-center gap-1.5 px-2 py-1 rounded-full border',
-                  hasApiKey
-                    ? 'bg-[var(--status-done)]/10 border-[var(--status-done)]/20'
-                    : 'bg-[var(--priority-high)]/10 border-[var(--priority-high)]/20'
-                )}>
-                  <span className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    hasApiKey ? 'bg-[var(--status-done)]' : 'bg-[var(--priority-high)]'
-                  )} />
-                  <span className={cn(
-                    'text-[11px] font-medium',
-                    hasApiKey ? 'text-[var(--status-done)]' : 'text-[var(--priority-high)]'
-                  )}>
-                    {hasApiKey ? 'Live' : 'No Key'}
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-[var(--status-done)]/10 border-[var(--status-done)]/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)]" />
+                  <span className="text-[11px] font-medium text-[var(--status-done)]">
+                    Live
                   </span>
                 </div>
                 <motion.button
@@ -225,17 +214,6 @@ export function AiChatPanel() {
                 </motion.button>
               </div>
             </div>
-
-            {/* No API key warning */}
-            {!hasApiKey && (
-              <div className="mx-4 mt-3 px-3.5 py-3 rounded-xl bg-[var(--priority-high)]/10 border border-[var(--priority-high)]/20 flex items-start gap-2.5 shrink-0">
-                <AlertCircle className="w-4 h-4 text-[var(--priority-high)] shrink-0 mt-0.5" />
-                <p className="text-[12px] text-foreground/80 leading-snug">
-                  Add your <strong>Groq API key</strong> in Settings to enable real AI responses.
-                  Free at <span className="text-primary">console.groq.com</span>
-                </p>
-              </div>
-            )}
 
             {/* Quick prompts */}
             <div className="px-4 pt-3 pb-2 flex gap-1.5 flex-wrap shrink-0 border-b border-border/50">
@@ -333,6 +311,18 @@ export function AiChatPanel() {
                   className="flex-1 text-[12px] text-foreground bg-transparent outline-none resize-none placeholder:text-muted-foreground/50 leading-relaxed max-h-24"
                   style={{ fieldSizing: 'content' } as React.CSSProperties}
                 />
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    dispatch({ type: 'TOGGLE_CHAT' })
+                    // dispatch custom event or window trigger to open voice modal
+                    window.dispatchEvent(new CustomEvent('zerf:open-voice'))
+                  }}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg bg-muted text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors shrink-0 mb-0.5"
+                  title="Voice command"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </motion.button>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   onClick={send}

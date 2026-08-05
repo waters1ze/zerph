@@ -22,10 +22,7 @@ When enhancing voice input, add structure, formatting, and relevant details whil
 export async function POST(req: NextRequest) {
   try {
     const { messages, apiKey, context, mode } = await req.json()
-    const groqApiKey =
-      apiKey ||
-      req.headers.get('x-groq-api-key') ||
-      process.env.GROQ_API_KEY ||
+    const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY ||
       GROQ_API_KEY
 
     if (!groqApiKey) {
