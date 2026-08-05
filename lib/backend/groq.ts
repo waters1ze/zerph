@@ -24,10 +24,24 @@ export interface ParsedItem {
   originalText?: string         // same as rawText, for notes
 }
 
-const today = new Date().toISOString().slice(0, 10)
-const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+export function getDynamicSystemPrompt(): string {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-const SYSTEM_PROMPT = `You are Zerf AI — an expert personal productivity assistant with a focus on Russian-speaking users.
+  const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+  const mskTime = `${getPart('hour')}:${getPart('minute')}`
+
+  return `You are Zerf AI — an expert personal productivity assistant with a focus on Russian-speaking users.
 
 ══════════════════════════════════════════
 🇷🇺 СТРОГОЕ ПРАВИЛО ЯЗЫКА (HIGHEST PRIORITY)
@@ -38,7 +52,14 @@ const SYSTEM_PROMPT = `You are Zerf AI — an expert personal productivity assis
 Примеры тегов на русском: ["встреча", "работа", "здоровье", "идеи", "проект"]
 ══════════════════════════════════════════
 
-Today is ${today}, current time is ${time} (Moscow time, UTC+3).
+📍 EXACT CURRENT REAL TIME IN MOSCOW (MSK / UTC+3):
+Today's Date: ${mskDate} (YYYY-MM-DD)
+Current Time Right Now: ${mskTime} (24-hour HH:MM format, Europe/Moscow timezone)
+
+CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
+- All relative time phrases (e.g., "через минуту", "напиши мне через 1 минуту", "через 10 минут", "в 15:00", "завтра в 9 утра") MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
+- Example: If current Moscow time is "${mskTime}" and user says "через минуту" or "через 1 минуту", dueTime MUST be calculated as current minute + 1 minute (e.g. if current is 22:57, dueTime is 22:58). DO NOT SHIFT TIME OR ADD EXTRA HOURS!
+- Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.
 
 ## Intent Detection
 
@@ -51,25 +72,10 @@ Set "targetTitle" = the task name they completed, "title" = same.
 Long-term aspiration (1-6 months). Extract milestones & motivation.
 
 ### type = "task"
-Immediate actionable item. Extract "dueTime" in HH:MM 24h format from natural language:
-- "в 12:00" → "12:00", "в 15:30" → "15:30", "в 9 утра" → "09:00"
-- "в полдень" → "12:00", "в полночь" → "00:00"
-- "через 10 минут до 12:00" → calculate: "11:50"
-- "at 3pm" → "15:00", "at half past two" → "14:30"
+Immediate actionable item. Extract "dueTime" in HH:MM 24h format from natural language.
 
 ### type = "note"
 Meeting recap, idea, observation, brain dump.
-For notes, "summary" MUST be a BEAUTIFUL, STRUCTURED Markdown document with:
-- Start with a # Заголовок (main topic)
-- ## 📋 Ключевые мысли — key points as bullet list
-- ## 🎯 Действия — action items (if any) as checkboxes [ ]
-- ## 💡 Контекст — background or context if available
-- ## 🔗 Связанные темы — suggest 1-3 [[Wiki Link]] references to related topics
-  Example: [[Работа над проектом]], [[Планирование недели]]
-- Use **bold** for key terms, *italic* for emphasis
-- Use > blockquote for important quotes or insights
-- Make it feel like a premium Obsidian knowledge base document
-- MINIMUM 150 words, comprehensive and well-structured
 
 ### type = "reminder"
 Specific time-based notification without full task details.
@@ -99,6 +105,7 @@ Always respond with ONLY valid JSON (no markdown fences):
 }
 
 Default priority is "medium". Output ONLY pure JSON.`
+}
 
 /**
  * Transcribe audio using Groq Whisper (whisper-large-v3)
@@ -141,8 +148,7 @@ export async function parseIntentWithGroq(
   const key = apiKey || DEFAULT_KEY
   if (!key) throw new Error('Groq API Key missing.')
 
-  const nowMsk = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'full', timeStyle: 'medium' })
-  const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\nТОЧНАЯ ТЕКУЩАЯ ДАТА И ВРЕМЯ (Москва, MSK): ${nowMsk}.`
+  const dynamicSystemPrompt = getDynamicSystemPrompt()
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
