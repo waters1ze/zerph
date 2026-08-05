@@ -86,22 +86,39 @@ export function Sidebar() {
       </div>
 
       {/* User */}
-      <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-sidebar-accent/50 flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
-          {tgUser?.photoUrl ? (
-            <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-[11px] font-semibold text-primary">
-              {tgUser?.name ? tgUser.name[0] : '👤'}
-            </span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-medium text-sidebar-foreground truncate">{tgUser?.name || 'Мой профиль'}</p>
-          <p className="text-[10px] text-muted-foreground truncate">{tgUser?.username || 'Telegram Connected'}</p>
-        </div>
-        <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)] shrink-0" title="Online" />
-      </div>
+      {(() => {
+        const isConnected = settings.integrations.telegram || !!tgUser
+        const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null)
+
+        return (
+          <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-sidebar-accent/50 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+              {tgUser?.photoUrl ? (
+                <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[11px] font-semibold text-primary">
+                  {displayName ? displayName[0] : '👤'}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium text-sidebar-foreground truncate">
+                {displayName || 'Профиль не привязан'}
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {isConnected ? (tgUser?.username || 'Telegram Connected') : 'Telegram Not Connected'}
+              </p>
+            </div>
+            <div
+              className={cn(
+                'w-1.5 h-1.5 rounded-full shrink-0',
+                isConnected ? 'bg-[var(--status-done)]' : 'bg-muted-foreground/30'
+              )}
+              title={isConnected ? 'Connected' : 'Not Connected'}
+            />
+          </div>
+        )
+      })()}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
