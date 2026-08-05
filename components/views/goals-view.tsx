@@ -6,7 +6,6 @@ import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { Target, ChevronDown, CheckCircle2, Circle, Plus, TrendingUp, AlertTriangle, Clock3 } from 'lucide-react'
-import { useLanguage } from '@/lib/i18n/LanguageContext'
 import type { Goal, Milestone } from '@/lib/types'
 
 function MilestoneItem({ milestone, onToggle }: { milestone: Milestone; onToggle: () => void }) {
@@ -29,15 +28,14 @@ function MilestoneItem({ milestone, onToggle }: { milestone: Milestone; onToggle
 function GoalCard({ goal, index }: { goal: Goal; index: number }) {
   const [expanded, setExpanded] = useState(false)
   const { state, dispatch } = useApp()
-  const { t, language } = useLanguage()
   const relatedTasks = state.tasks.filter(t => t.goalId === goal.id)
   const doneTasks = relatedTasks.filter(t => t.status === 'done')
 
   const statusConfig = {
-    on_track: { label: language === 'ru' ? 'В графике' : 'On track', icon: TrendingUp, color: 'text-[var(--status-done)]', bg: 'bg-[var(--status-done)]/10' },
-    at_risk:  { label: language === 'ru' ? 'Под риском' : 'At risk',  icon: AlertTriangle, color: 'text-[var(--priority-medium)]', bg: 'bg-[var(--priority-medium)]/10' },
-    delayed:  { label: language === 'ru' ? 'Задерживается' : 'Delayed', icon: Clock3, color: 'text-[var(--status-overdue)]', bg: 'bg-[var(--status-overdue)]/10' },
-    completed:{ label: language === 'ru' ? 'Завершено' : 'Completed', icon: CheckCircle2, color: 'text-[var(--status-done)]', bg: 'bg-[var(--status-done)]/10' },
+    on_track: { label: 'On track', icon: TrendingUp, color: 'text-[var(--status-done)]', bg: 'bg-[var(--status-done)]/10' },
+    at_risk:  { label: 'At risk',  icon: AlertTriangle, color: 'text-[var(--priority-medium)]', bg: 'bg-[var(--priority-medium)]/10' },
+    delayed:  { label: 'Delayed', icon: Clock3, color: 'text-[var(--status-overdue)]', bg: 'bg-[var(--status-overdue)]/10' },
+    completed:{ label: 'Completed', icon: CheckCircle2, color: 'text-[var(--status-done)]', bg: 'bg-[var(--status-done)]/10' },
   }
   const sc = statusConfig[goal.status]
   const StatusIcon = sc.icon

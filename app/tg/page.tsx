@@ -2,39 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckSquare, Target, FileText, Plus, Check, Clock, AlertCircle, Sparkles, RefreshCw, Globe } from 'lucide-react'
+import { CheckSquare, Target, FileText, Plus, Check, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Task { id: string; title: string; status: string; priority: string; dueDate?: string; description?: string }
 interface Goal { id: string; title: string; progress: number; status: string; deadline?: string; color?: string }
 interface Note { id: string; title: string; content: string; type: string; createdAt: string }
-
-type Lang = 'ru' | 'en'
-
-const T = {
-  ru: {
-    loading: 'Загрузка рабочего пространства…',
-    today: 'Сегодня', tasks: 'Задачи', goals: 'Цели', notes: 'Заметки',
-    dailyProgress: 'Прогресс за день', allDone: '🎉 Все задачи выполнены!',
-    quickAdd: 'Быстро добавить задачу…', noTasks: 'Задач нет', noGoals: 'Целей нет',
-    noNotes: 'Заметок нет', of: 'из', progress: 'Прогресс',
-    onTrack: '✅ В норме', atRisk: '⚠️ Риск', delayed: '❌ Отложено',
-    addVoice: 'Отправь голосовое сообщение боту',
-    priority: { urgent: 'Срочно', high: 'Высокий', medium: 'Средний', low: 'Низкий' },
-    done: 'выполнено',
-  },
-  en: {
-    loading: 'Loading your workspace…',
-    today: 'Today', tasks: 'Tasks', goals: 'Goals', notes: 'Notes',
-    dailyProgress: 'Daily progress', allDone: '🎉 All done for today!',
-    quickAdd: 'Quick add task…', noTasks: 'No tasks yet', noGoals: 'No goals yet',
-    noNotes: 'No notes yet', of: 'of', progress: 'Progress',
-    onTrack: '✅ On track', atRisk: '⚠️ At risk', delayed: '❌ Delayed',
-    addVoice: 'Send a voice message to the bot',
-    priority: { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' },
-    done: 'done',
-  },
-}
 
 const PRIORITY_PILL: Record<string, string> = {
   urgent: 'bg-red-500/15 text-red-400 border-red-500/20',
@@ -66,43 +39,18 @@ export default function TelegramApp() {
   const [loading, setLoading] = useState(true)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [adding, setAdding] = useState(false)
-  const [lang, setLang] = useState<Lang>('ru')
   const today = new Date().toISOString().slice(0, 10)
-
-  const t = T[lang]
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (tg) { tg.ready(); tg.expand() }
-    // Restore saved language preference
-    const saved = localStorage.getItem('zerf_lang') as Lang | null
-    if (saved === 'en' || saved === 'ru') setLang(saved)
     loadData()
   }, [])
-
-  const toggleLang = () => {
-    const next: Lang = lang === 'ru' ? 'en' : 'ru'
-    setLang(next)
-    localStorage.setItem('zerf_lang', next)
-    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light')
-  }
-
-  const getTgChatId = () => {
-    if (typeof window !== 'undefined') {
-      const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
-      if (u?.id) return String(u.id)
-    }
-    return null
-  }
 
   const loadData = async () => {
     setLoading(true)
     try {
-      const chatId = getTgChatId()
-      const headers: Record<string, string> = {}
-      if (chatId) headers['x-chat-id'] = chatId
-
-      const res = await fetch('/api/tasks', { headers })
+      const res = await fetch('/api/tasks')
       const data = await res.json()
       setTasks(data.tasks || [])
       setGoals(data.goals || [])
@@ -111,42 +59,21 @@ export default function TelegramApp() {
     finally { setLoading(false) }
   }
 
-  const toggleTask = async (taskId: string) => {
-    let nextStatus = 'done'
-    setTasks(prev => prev.map(tk => {
-      if (tk.id === taskId) {
-        nextStatus = tk.status === 'done' ? 'todo' : 'done'
-        return { ...tk, status: nextStatus }
-      }
-      return tk
-    }))
+  const toggleTask = (taskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: t.status === 'done' ? 'todo' : 'done' } : t
+    ))
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light')
-
-    try {
-      const chatId = getTgChatId()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (chatId) headers['x-chat-id'] = chatId
-
-      await fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: taskId, status: nextStatus }),
-      })
-    } catch {}
   }
 
   const addTask = async () => {
     if (!newTaskTitle.trim() || adding) return
     setAdding(true)
     try {
-      const chatId = getTgChatId()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (chatId) headers['x-chat-id'] = chatId
-
       const res = await fetch('/api/tasks', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ title: newTaskTitle, priority: 'medium', dueDate: today, ownerChatId: chatId }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTaskTitle, priority: 'medium', dueDate: today }),
       })
       const data = await res.json()
       if (data.task) setTasks(prev => [data.task, ...prev])
@@ -155,19 +82,17 @@ export default function TelegramApp() {
     } finally { setAdding(false) }
   }
 
-  const todayTasks = tasks.filter(tk => tk.dueDate === today || !tk.dueDate)
-  const doneTodayCount = tasks.filter(tk => tk.status === 'done').length
+  const todayTasks = tasks.filter(t => t.dueDate === today || !t.dueDate)
+  const doneTodayCount = tasks.filter(t => t.status === 'done').length
   const totalCount = tasks.length
   const completionPct = totalCount ? Math.round((doneTodayCount / totalCount) * 100) : 0
 
   const TABS = [
-    { id: 'today' as const, label: t.today, icon: Clock },
-    { id: 'tasks' as const, label: t.tasks, icon: CheckSquare },
-    { id: 'goals' as const, label: t.goals, icon: Target },
-    { id: 'notes' as const, label: t.notes, icon: FileText },
+    { id: 'today' as const, label: 'Today', icon: Clock },
+    { id: 'tasks' as const, label: 'Tasks', icon: CheckSquare },
+    { id: 'goals' as const, label: 'Goals', icon: Target },
+    { id: 'notes' as const, label: 'Notes', icon: FileText },
   ]
-
-  const priorityLabel = (p: string) => t.priority[p as keyof typeof t.priority] || p
 
   if (loading) {
     return (
@@ -177,7 +102,7 @@ export default function TelegramApp() {
             <Sparkles className="w-7 h-7 text-primary animate-pulse" />
           </div>
           <p className="text-[14px] font-semibold text-foreground">Zerf</p>
-          <p className="text-[12px] text-muted-foreground">{t.loading}</p>
+          <p className="text-[12px] text-muted-foreground">Loading your workspace…</p>
         </div>
       </div>
     )
@@ -195,27 +120,16 @@ export default function TelegramApp() {
             <div>
               <p className="text-[14px] font-bold text-foreground leading-none">Zerf</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {doneTodayCount}/{totalCount} · {completionPct}% {t.done}
+                {doneTodayCount}/{totalCount} · {completionPct}% done
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {/* Language toggle */}
-            <button
-              onClick={toggleLang}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
-              title="Переключить язык / Switch language"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              {lang === 'ru' ? 'EN' : 'RU'}
-            </button>
-            <button
-              onClick={loadData}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={loadData}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -236,8 +150,8 @@ export default function TelegramApp() {
                 {/* Progress card */}
                 <div className="p-4 rounded-2xl bg-card border border-border">
                   <div className="flex justify-between items-center mb-2.5">
-                    <p className="text-[13px] font-semibold text-foreground">{t.dailyProgress}</p>
-                    <p className="text-[12px] text-muted-foreground">{doneTodayCount} {t.of} {totalCount}</p>
+                    <p className="text-[13px] font-semibold text-foreground">Daily progress</p>
+                    <p className="text-[12px] text-muted-foreground">{doneTodayCount} of {totalCount}</p>
                   </div>
                   <div className="h-2 rounded-full bg-border overflow-hidden">
                     <motion.div
@@ -248,7 +162,7 @@ export default function TelegramApp() {
                     />
                   </div>
                   {completionPct === 100 && (
-                    <p className="text-[11px] text-primary mt-2 font-medium">{t.allDone}</p>
+                    <p className="text-[11px] text-primary mt-2 font-medium">🎉 All done for today!</p>
                   )}
                 </div>
 
@@ -258,7 +172,7 @@ export default function TelegramApp() {
                     value={newTaskTitle}
                     onChange={e => setNewTaskTitle(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addTask()}
-                    placeholder={t.quickAdd}
+                    placeholder="Quick add task…"
                     className="flex-1 h-11 px-3.5 rounded-xl bg-card border border-border text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 transition-colors"
                   />
                   <motion.button
@@ -276,7 +190,7 @@ export default function TelegramApp() {
                   {todayTasks.length === 0 ? (
                     <div className="text-center py-10">
                       <Check className="w-10 h-10 text-primary/30 mx-auto mb-2" />
-                      <p className="text-[13px] text-muted-foreground">{t.noTasks}</p>
+                      <p className="text-[13px] text-muted-foreground">No tasks yet</p>
                     </div>
                   ) : todayTasks.map(task => (
                     <motion.div
@@ -302,7 +216,7 @@ export default function TelegramApp() {
                           'text-[10px] px-1.5 py-0.5 rounded-full border inline-block mt-1',
                           PRIORITY_PILL[task.priority] || PRIORITY_PILL.medium
                         )}>
-                          {priorityLabel(task.priority)}
+                          {task.priority}
                         </span>
                       </div>
                     </motion.div>
@@ -317,7 +231,7 @@ export default function TelegramApp() {
                 {tasks.length === 0 ? (
                   <div className="text-center py-14">
                     <CheckSquare className="w-10 h-10 text-primary/30 mx-auto mb-2" />
-                    <p className="text-[13px] text-muted-foreground">{t.noTasks}</p>
+                    <p className="text-[13px] text-muted-foreground">No tasks yet</p>
                   </div>
                 ) : tasks.map(task => (
                   <div
@@ -343,7 +257,7 @@ export default function TelegramApp() {
                     <span className={cn(
                       'text-[10px] px-1.5 py-0.5 rounded-full border shrink-0',
                       PRIORITY_PILL[task.priority] || PRIORITY_PILL.medium
-                    )}>{priorityLabel(task.priority)}</span>
+                    )}>{task.priority}</span>
                   </div>
                 ))}
               </div>
@@ -355,8 +269,8 @@ export default function TelegramApp() {
                 {goals.length === 0 ? (
                   <div className="text-center py-14">
                     <Target className="w-10 h-10 text-primary/30 mx-auto mb-2" />
-                    <p className="text-[13px] text-muted-foreground">{t.noGoals}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">{t.addVoice}</p>
+                    <p className="text-[13px] text-muted-foreground">No goals yet</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Send a voice message to the bot to create one</p>
                   </div>
                 ) : goals.map(goal => (
                   <div key={goal.id} className="p-4 rounded-2xl bg-card border border-border space-y-3">
@@ -371,12 +285,12 @@ export default function TelegramApp() {
                         goal.status === 'at_risk' ? 'bg-orange-500/15 text-orange-400' :
                         'bg-red-500/15 text-red-400'
                       )}>
-                        {goal.status === 'on_track' ? t.onTrack : goal.status === 'at_risk' ? t.atRisk : t.delayed}
+                        {goal.status === 'on_track' ? '✅ On track' : goal.status === 'at_risk' ? '⚠️ At risk' : '❌ Delayed'}
                       </span>
                     </div>
                     <div>
                       <div className="flex justify-between mb-1.5">
-                        <span className="text-[11px] text-muted-foreground">{t.progress}</span>
+                        <span className="text-[11px] text-muted-foreground">Progress</span>
                         <span className="text-[11px] font-semibold text-foreground">{goal.progress}%</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-border overflow-hidden">
@@ -403,7 +317,7 @@ export default function TelegramApp() {
                 {notes.length === 0 ? (
                   <div className="text-center py-14">
                     <FileText className="w-10 h-10 text-primary/30 mx-auto mb-2" />
-                    <p className="text-[13px] text-muted-foreground">{t.noNotes}</p>
+                    <p className="text-[13px] text-muted-foreground">No notes yet</p>
                   </div>
                 ) : notes.map(note => (
                   <div key={note.id} className="p-4 rounded-xl bg-card border border-border">
@@ -417,7 +331,7 @@ export default function TelegramApp() {
                       {note.content.replace(/[#*>`\[\]]/g, '').trim().slice(0, 140)}
                     </p>
                     <p className="text-[10px] text-muted-foreground/50 mt-2">
-                      {new Date(note.createdAt).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US')}
+                      {new Date(note.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                 ))}

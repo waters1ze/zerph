@@ -127,38 +127,38 @@
 .dark {
   color-scheme: dark;
 
-  /* Base — OLED Luxury Obsidian */
-  --background:  oklch(0.09 0.005 60);
-  --foreground:  oklch(0.95 0.008 75);
+  /* Base — deep warm charcoal, NOT blue-black */
+  --background:  oklch(0.115 0.007 60);
+  --foreground:  oklch(0.93 0.006 75);
 
-  --card:        oklch(0.125 0.006 60);
-  --card-foreground: oklch(0.95 0.008 75);
+  --card:        oklch(0.145 0.008 60);
+  --card-foreground: oklch(0.93 0.006 75);
 
-  --popover:     oklch(0.13 0.007 60);
-  --popover-foreground: oklch(0.95 0.008 75);
+  --popover:     oklch(0.150 0.009 60);
+  --popover-foreground: oklch(0.93 0.006 75);
 
-  /* Primary — Luxury Emerald Gold Accent */
-  --primary:     oklch(0.78 0.15 78);
-  --primary-foreground: oklch(0.12 0.01 60);
+  /* Primary — Forest Green (slightly brightened for dark bg) */
+  --primary:         oklch(0.55 0.16 152);
+  --primary-foreground: oklch(0.99 0 0);
 
-  --secondary:   oklch(0.18 0.008 60);
-  --secondary-foreground: oklch(0.85 0.01 75);
+  --secondary:       oklch(0.195 0.010 60);
+  --secondary-foreground: oklch(0.84 0.007 75);
 
-  --muted:       oklch(0.16 0.008 60);
-  --muted-foreground: oklch(0.58 0.01 60);
+  --muted:           oklch(0.185 0.009 60);
+  --muted-foreground: oklch(0.56 0.010 70);
 
-  --accent:      oklch(0.18 0.015 78);
-  --accent-foreground: oklch(0.85 0.12 78);
+  --accent:          oklch(0.22 0.016 152);
+  --accent-foreground: oklch(0.65 0.15 152);
 
-  --destructive: oklch(0.52 0.22 25);
-  --border:      oklch(0.20 0.008 60);
-  --input:       oklch(0.18 0.008 60);
-  --ring:        oklch(0.78 0.15 78 / 35%);
+  --destructive:     oklch(0.65 0.22 25);
+  --border:          oklch(1 0 0 / 7%);
+  --input:           oklch(1 0 0 / 9%);
+  --ring:            oklch(0.55 0.16 152 / 45%);
 
   /* Brand — Champagne Gold */
-  --brand:       oklch(0.78 0.15 78);
-  --brand-subtle: oklch(0.18 0.03 78);
-  --brand-foreground: oklch(0.98 0 0);
+  --brand:           oklch(0.78 0.14 78);
+  --brand-subtle:    oklch(0.22 0.06 78);
+  --brand-foreground: oklch(0.18 0.06 60);
 
   /* Charts */
   --chart-1:  oklch(0.55 0.16 152);
@@ -167,14 +167,14 @@
   --chart-4:  oklch(0.60 0.12 260);
   --chart-5:  oklch(0.68 0.18 30);
 
-  --sidebar:          oklch(0.10 0.005 60);
-  --sidebar-foreground: oklch(0.90 0.008 75);
-  --sidebar-primary:  oklch(0.78 0.15 78);
-  --sidebar-primary-foreground: oklch(0.10 0.01 60);
-  --sidebar-accent:   oklch(0.16 0.01 78);
-  --sidebar-accent-foreground: oklch(0.95 0.008 75);
-  --sidebar-border:   oklch(0.18 0.006 60);
-  --sidebar-ring:     oklch(0.78 0.15 78 / 35%);
+  --sidebar:          oklch(0.125 0.008 60);
+  --sidebar-foreground: oklch(0.88 0.007 75);
+  --sidebar-primary:  oklch(0.55 0.16 152);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent:   oklch(0.22 0.016 152);
+  --sidebar-accent-foreground: oklch(0.65 0.15 152);
+  --sidebar-border:   oklch(1 0 0 / 7%);
+  --sidebar-ring:     oklch(0.55 0.16 152 / 45%);
 
   --priority-urgent:  oklch(0.68 0.22 25);
   --priority-high:    oklch(0.74 0.16 50);
@@ -274,35 +274,19 @@
   -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }
 
-/* markdown rendered — note content */
-.prose-task h1 { @apply text-xl font-bold text-foreground mt-5 mb-3 pb-2 border-b border-border/50; }
-.prose-task h2 { @apply text-base font-semibold text-foreground mt-4 mb-2; }
-.prose-task h3 { @apply text-sm font-semibold text-muted-foreground mt-3 mb-1.5; }
-.prose-task p  { @apply text-[14px] text-foreground/85 leading-[1.75] mb-3; }
-.prose-task ul { @apply list-none text-[14px] text-foreground/85 mb-3 space-y-1.5 pl-1; }
-.prose-task ul li { @apply flex items-start gap-2; }
-.prose-task ul li::before { content: '·'; @apply text-primary font-bold shrink-0 mt-0.5; }
-.prose-task ol { @apply list-decimal list-inside text-[14px] text-foreground/85 mb-3 space-y-1.5; }
-.prose-task li input[type='checkbox'] { @apply mr-1.5 accent-primary; }
-.prose-task code { @apply text-[12px] font-mono bg-muted/80 text-primary px-1.5 py-0.5 rounded-md border border-border/40; }
-.prose-task pre  { @apply bg-muted/60 rounded-xl p-4 text-[12px] font-mono overflow-x-auto mb-4 border border-border/40; }
-.prose-task blockquote { @apply border-l-[3px] border-primary/50 pl-4 py-1 italic text-muted-foreground text-[14px] mb-3 bg-accent/10 rounded-r-lg; }
+/* markdown rendered */
+.prose-task h1 { @apply text-lg font-semibold text-foreground mt-4 mb-2; }
+.prose-task h2 { @apply text-base font-semibold text-foreground mt-3 mb-1.5; }
+.prose-task h3 { @apply text-sm font-semibold text-muted-foreground mt-2.5 mb-1; }
+.prose-task p  { @apply text-sm text-foreground/80 leading-relaxed mb-2; }
+.prose-task ul { @apply list-disc list-inside text-sm text-foreground/80 mb-2 space-y-1; }
+.prose-task ol { @apply list-decimal list-inside text-sm text-foreground/80 mb-2 space-y-1; }
+.prose-task code { @apply text-xs font-mono bg-muted text-primary px-1.5 py-0.5 rounded-sm; }
+.prose-task pre  { @apply bg-muted rounded-lg p-3 text-xs font-mono overflow-x-auto mb-3; }
+.prose-task blockquote { @apply border-l-2 border-primary/40 pl-3 italic text-muted-foreground text-sm mb-2; }
 .prose-task a    { @apply text-primary underline underline-offset-2 hover:opacity-80 transition-opacity; }
-.prose-task hr   { @apply border-border/40 my-5; }
+.prose-task hr   { @apply border-border my-4; }
 .prose-task strong { @apply font-semibold text-foreground; }
-.prose-task em { @apply italic text-foreground/70; }
-.prose-task table { @apply w-full text-[13px] mb-4 border-collapse; }
-.prose-task th { @apply text-left font-semibold text-foreground/70 py-2 px-3 border-b border-border bg-muted/30; }
-.prose-task td { @apply py-2 px-3 border-b border-border/40 text-foreground/80; }
-
-/* wiki-link style — [[Note Title]] */
-.wiki-link {
-  @apply inline-flex items-center gap-1 text-primary/90 underline underline-offset-2 decoration-dashed cursor-pointer hover:text-primary transition-colors;
-  font-weight: 500;
-}
-.wiki-link-broken {
-  @apply text-muted-foreground/60 line-through cursor-default;
-}
 
 /* gold shimmer on brand accent elements */
 .gold-shimmer {
@@ -316,108 +300,4 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-}
-
-/* monochrome B&W luxury emojis */
-.mono-emoji {
-  filter: grayscale(100%) contrast(1.2) brightness(0.9);
-  opacity: 0.85;
-  transition: filter 0.2s ease, opacity 0.2s ease;
-}
-
-.mono-emoji:hover {
-  filter: grayscale(100%) contrast(1.4) brightness(1.1);
-  opacity: 1;
-}
-
-/* ─── MOBILE RESPONSIVE ──────────────────────────────────────────── */
-
-/* Hide desktop sidebar on mobile, show bottom nav instead */
-@media (max-width: 768px) {
-  .desktop-sidebar {
-    display: none !important;
-  }
-  .mobile-bottom-nav {
-    display: flex !important;
-  }
-  .app-shell {
-    flex-direction: column !important;
-    height: 100dvh;
-  }
-  .app-main {
-    padding-bottom: 72px !important; /* space for bottom nav */
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    padding-top: 12px !important;
-  }
-  .app-topbar {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-  }
-  /* Bigger touch targets */
-  button, [role="button"] {
-    min-height: 36px;
-  }
-  /* Notes view: stack panels vertically */
-  .notes-layout {
-    flex-direction: column !important;
-  }
-  .notes-list-panel {
-    width: 100% !important;
-    max-height: 45vh;
-    border-right: none !important;
-    border-bottom: 1px solid var(--border);
-    padding-right: 0 !important;
-  }
-  .notes-editor-panel {
-    padding-left: 0 !important;
-    min-height: 50vh;
-  }
-  /* Stats grid: 2x2 on mobile */
-  .stats-grid-4 {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-/* Mobile bottom nav bar */
-.mobile-bottom-nav {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  z-index: 100;
-  background: var(--sidebar);
-  border-top: 1px solid var(--sidebar-border);
-  align-items: center;
-  justify-content: space-around;
-  padding: 0 4px;
-  padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-.mobile-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 8px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  min-width: 52px;
-  color: var(--sidebar-foreground);
-  opacity: 0.6;
-}
-
-.mobile-nav-item.active {
-  color: var(--primary);
-  background: oklch(from var(--primary) l c h / 12%);
-  opacity: 1;
-}
-
-.mobile-nav-item span.label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
