@@ -1,0 +1,69 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  priority     String    @default("medium")
+  status       String    @default("todo")
+  dueDate      String?
+  dueTime      String?
+  reminderSent Boolean   @default(false)
+  tags         String[]
+  assignees    String[]
+  isShared     Boolean   @default(false)
+  projectId    String?
+  goalId       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  completedAt  DateTime?
+  rawText      String?
+  aiGenerated  Boolean   @default(false)
+  source       String?
+  subtasks     Json?     // [{id, title, done}]
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  motivation  String?
+  status      String   @default("on_track")
+  deadline    String?
+  progress    Int      @default(0)
+  color       String   @default("#2d7a4f")
+  milestones  Json?    // [{id, title, done, dueDate?}]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Note {
+  id           String   @id @default(cuid())
+  title        String
+  content      String   @db.Text
+  originalText String?  @db.Text
+  type         String   @default("note")
+  tags         String[]
+  projectId    String?
+  goalId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  aiGenerated  Boolean  @default(false)
+  pinned       Boolean  @default(false)
+}
+
+model TelegramChat {
+  chatId    BigInt   @id
+  firstName String?
+  addedAt   DateTime @default(now())
+}
