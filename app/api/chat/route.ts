@@ -1,9 +1,9 @@
 /**
- * Next.js API Route — Groq Chat Completion
+ * Next.js API Route — Groq Chat Completion with Multi-Key Rotation
  * POST /api/chat
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { GROQ_API_KEY, GROQ_CHAT_MODEL } from '@/lib/config'
+import { GROQ_API_KEY, GROQ_API_KEYS, GROQ_CHAT_MODEL } from '@/lib/config'
 
 const SYSTEM_PROMPT = `You are Zerf AI — a highly intelligent personal productivity assistant embedded in the Zerf app, a premium personal command center for tasks, goals, notes, and projects.
 
@@ -22,15 +22,12 @@ When enhancing voice input, add structure, formatting, and relevant details whil
 export async function POST(req: NextRequest) {
   try {
     const { messages, apiKey, context, mode } = await req.json()
-    const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY ||
-      GROQ_API_KEY
+    const userApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY
 
-    if (!groqApiKey) {
-      return NextResponse.json(
-        { error: 'Groq API key missing. Please add it in Settings → AI & Integrations.' },
-        { status: 400 }
-      )
-    }
+    // Key pool (custom user key first, followed by system multi-key pool)
+    const keysToTry = userApiKey && userApiKey.startsWith('gsk_')
+      ? [userApiKey, ...GROQ_API_KEYS]
+      : GROQ_API_KEYS
 
     const nowMsk = new Date().toLocaleString('ru-RU', {
       timeZone: 'Europe/Moscow',
@@ -47,29 +44,44 @@ export async function POST(req: NextRequest) {
       systemContent += `\n\n## User's Current Workspace Context:\n${JSON.stringify(context, null, 2)}`
     }
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${groqApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [{ role: 'system', content: systemContent }, ...messages],
-        temperature: mode === 'enhance' ? 0.8 : 0.7,
-        max_tokens: mode === 'enhance' ? 2048 : 1024,
-        stream: false,
-      }),
-    })
+    let lastErrText = ''
 
-    if (!res.ok) {
-      const err = await res.text()
-      return NextResponse.json({ error: `Groq API error: ${err}` }, { status: res.status })
+    for (const key of keysToTry) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: GROQ_CHAT_MODEL,
+            messages: [{ role: 'system', content: systemContent }, ...messages],
+            temperature: mode === 'enhance' ? 0.8 : 0.7,
+            max_tokens: mode === 'enhance' ? 2048 : 1024,
+            stream: false,
+          }),
+        })
+
+        if (res.status === 429) {
+          console.warn(`[Groq Multi-Key] Chat key ${key.slice(0, 8)}... Rate limited. Trying next...`)
+          continue
+        }
+
+        if (!res.ok) {
+          lastErrText = await res.text()
+          continue
+        }
+
+        const data = await res.json()
+        const content = data.choices?.[0]?.message?.content || 'No response from AI.'
+        return NextResponse.json({ content })
+      } catch (err: unknown) {
+        lastErrText = err instanceof Error ? err.message : String(err)
+      }
     }
 
-    const data = await res.json()
-    const content = data.choices?.[0]?.message?.content || 'No response from AI.'
-    return NextResponse.json({ content })
+    return NextResponse.json({ error: `Groq API error: ${lastErrText}` }, { status: 500 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
