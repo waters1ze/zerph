@@ -1,9 +1,9 @@
 /**
- * Zerf Backend — Groq AI Integration Module
- * whisper-large-v3 for speech · openai/gpt-oss-120b for intelligence
+ * Zerf Backend — Groq AI Integration Module with Multi-Key Auto-Rotation
+ * whisper-large-v3 for speech · llama-3.3-70b-versatile for intelligence
  */
 
-import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
+import { GROQ_API_KEY as DEFAULT_KEY, GROQ_API_KEYS, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
 
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion'
@@ -22,6 +22,18 @@ export interface ParsedItem {
   motivation?: string
   rawText: string
   originalText?: string         // same as rawText, for notes
+}
+
+let currentKeyIndex = 0
+
+function getKeysToTry(customKey?: string): string[] {
+  if (customKey && customKey.trim().startsWith('gsk_')) {
+    return [customKey.trim(), ...GROQ_API_KEYS]
+  }
+  const pool = [...GROQ_API_KEYS]
+  const start = currentKeyIndex % pool.length
+  currentKeyIndex = (currentKeyIndex + 1) % pool.length
+  return [...pool.slice(start), ...pool.slice(0, start)]
 }
 
 export function getDynamicSystemPrompt(): string {
@@ -108,242 +120,210 @@ Default priority is "medium". Output ONLY pure JSON.`
 }
 
 /**
- * Transcribe audio using Groq Whisper (whisper-large-v3)
+ * Transcribe audio using Groq Whisper (whisper-large-v3) with Auto-Key Rotation
  */
 export async function transcribeAudioWithGroq(
   audioBuffer: Buffer,
   filename: string,
   apiKey?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) throw new Error('Groq API Key missing.')
-
+  const keys = getKeysToTry(apiKey)
   const ext = filename.split('.').pop() || 'webm'
   const mimeType = ext === 'webm' ? 'audio/webm' : ext === 'ogg' ? 'audio/ogg' : 'audio/mpeg'
 
-  const formData = new FormData()
-  formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename)
-  formData.append('model', GROQ_WHISPER_MODEL)
-  formData.append('response_format', 'json')
+  let lastError: Error | null = null
 
-  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}` },
-    body: formData,
-  })
+  for (const key of keys) {
+    try {
+      const formData = new FormData()
+      formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename)
+      formData.append('model', GROQ_WHISPER_MODEL)
+      formData.append('response_format', 'json')
 
-  if (!res.ok) throw new Error(`Whisper Error (${res.status}): ${await res.text()}`)
-  const data = await res.json()
-  return data.text || ''
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}` },
+        body: formData,
+      })
+
+      if (res.status === 429) {
+        console.warn(`[Groq Multi-Key] Key ${key.slice(0, 10)}... Rate limited (429). Rotating to next key...`)
+        continue
+      }
+
+      if (!res.ok) {
+        throw new Error(`Whisper Error (${res.status}): ${await res.text()}`)
+      }
+
+      const data = await res.json()
+      return data.text || ''
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  throw lastError || new Error('All Groq API keys exhausted or rate limited.')
 }
 
 /**
- * Parse intent from text using Groq LLM (openai/gpt-oss-120b)
+ * Parse intent from text using Groq LLM (openai/gpt-oss-120b) with Auto-Key Rotation
  */
 export async function parseIntentWithGroq(
   text: string,
   apiKey?: string,
   model?: string
 ): Promise<ParsedItem> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) throw new Error('Groq API Key missing.')
-
+  const keys = getKeysToTry(apiKey)
   const dynamicSystemPrompt = getDynamicSystemPrompt()
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: model || GROQ_CHAT_MODEL,
-      messages: [
-        { role: 'system', content: dynamicSystemPrompt },
-        { role: 'user', content: text },
-      ],
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-    }),
-  })
+  let lastError: Error | null = null
 
-  if (!res.ok) throw new Error(`Groq Chat Error (${res.status}): ${await res.text()}`)
+  for (const key of keys) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model || GROQ_CHAT_MODEL,
+          messages: [
+            { role: 'system', content: dynamicSystemPrompt },
+            { role: 'user', content: text },
+          ],
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+        }),
+      })
 
-  const data = await res.json()
-  const raw = data.choices?.[0]?.message?.content || '{}'
+      if (res.status === 429) {
+        console.warn(`[Groq Multi-Key] Key ${key.slice(0, 10)}... Rate limited (429). Rotating to next key...`)
+        continue
+      }
 
-  try {
-    const p = JSON.parse(raw)
-    return {
-      type: p.type || 'task',
-      title: p.title || text.slice(0, 50),
-      summary: p.summary || text,
-      priority: p.priority || 'medium',
-      dueDate: p.dueDate || null,
-      dueTime: p.dueTime || null,
-      targetTitle: p.targetTitle || null,
-      projectId: p.projectId || null,
-      goalId: p.goalId || null,
-      tags: Array.isArray(p.tags) ? p.tags : [],
-      subtasks: Array.isArray(p.subtasks) ? p.subtasks : [],
-      milestones: Array.isArray(p.milestones) ? p.milestones : [],
-      motivation: p.motivation || null,
-      rawText: text,
-      originalText: text,
-    }
-  } catch {
-    return {
-      type: 'task',
-      title: text.slice(0, 50),
-      summary: text,
-      priority: 'medium',
-      tags: ['voice-input'],
-      rawText: text,
-      originalText: text,
+      if (!res.ok) {
+        throw new Error(`Groq Chat Error (${res.status}): ${await res.text()}`)
+      }
+
+      const data = await res.json()
+      const raw = data.choices?.[0]?.message?.content || '{}'
+
+      const p = JSON.parse(raw)
+      return {
+        type: p.type || 'task',
+        title: p.title || text.slice(0, 50),
+        summary: p.summary || text,
+        priority: p.priority || 'medium',
+        dueDate: p.dueDate || null,
+        dueTime: p.dueTime || null,
+        targetTitle: p.targetTitle || null,
+        projectId: p.projectId || null,
+        goalId: p.goalId || null,
+        tags: p.tags || [],
+        subtasks: p.subtasks || [],
+        milestones: p.milestones || [],
+        motivation: p.motivation || null,
+        rawText: text,
+        originalText: text,
+      }
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err))
     }
   }
+
+  throw lastError || new Error('All Groq API keys exhausted or rate limited.')
 }
 
 /**
- * Fuzzy similarity score between two strings (0–1)
- */
-export function stringSimilarity(a: string, b: string): number {
-  a = a.toLowerCase().trim()
-  b = b.toLowerCase().trim()
-  if (a === b) return 1
-  if (a.includes(b) || b.includes(a)) return 0.9
-
-  const aWords = new Set(a.split(/\s+/))
-  const bWords = new Set(b.split(/\s+/))
-  const intersection = [...aWords].filter(w => bWords.has(w)).length
-  const union = new Set([...aWords, ...bWords]).size
-  return intersection / union
-}
-
-/**
- * Generate a short 2-3 sentence motivational reminder context for a note/task.
- * Returns a ready-to-send Russian string.
+ * Generate context message for reminders
  */
 export async function generateReminderContext(
-  noteTitle: string,
-  noteContent: string,
-  dueTime: string,
-  apiKey?: string
+  title: string,
+  summary: string,
+  dueTime?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
+  const prompt = `Пользователь просил напомнить о задаче "${title}"${dueTime ? ` в ${dueTime}` : ''}.\nКонтекст: ${summary}\n\nНапиши 1-2 мотивирующих предложения на русском языке с эмодзи.`
 
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Ты — дружелюбный AI-ассистент. Напиши 2-3 предложения на РУССКОМ языке:
-1. Приятное пожелание или напоминание о предстоящем событии
-2. 1 практическую рекомендацию или совет
-Стиль: тёплый, поддерживающий, конкретный. Без шаблонных фраз. Без упоминания «Zerf».
-Ответь ТОЛЬКО этими 2-3 предложениями, без лишнего текста.`,
-          },
-          {
-            role: 'user',
-            content: `Событие/тема: «${noteTitle}»\nВремя: ${dueTime}\nКонтекст: ${noteContent.slice(0, 400)}`,
-          },
-        ],
-        temperature: 0.75,
-        max_tokens: 200,
-      }),
-    })
-    if (!res.ok) return `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
-    const data = await res.json()
-    return data.choices?.[0]?.message?.content?.trim() || `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
-  } catch {
-    return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
+  const keys = getKeysToTry()
+  for (const key of keys) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: GROQ_CHAT_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 150,
+        }),
+      })
+
+      if (res.status === 429) continue
+      if (!res.ok) continue
+
+      const data = await res.json()
+      return data.choices?.[0]?.message?.content?.trim() || `Напоминание: ${title}!`
+    } catch {}
   }
+
+  return `Напоминание: ${title}!`
 }
 
-/**
- * Generate a personalized morning greeting based on user's recent tasks and notes.
- * Returns a ready-to-send Russian Telegram message (with Markdown).
- */
 export async function generateMorningGreeting(
-  firstName: string,
-  recentTaskTitles: string[],
-  recentNoteTitles: string[],
-  pendingTasks: string[],
+  name: string,
+  recentTasks: string[],
+  recentNotes: string[],
+  pendingToday: string[],
   apiKey?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-
-  const now = new Date()
-  const dayName = now.toLocaleDateString('ru-RU', {
-    timeZone: 'Europe/Moscow',
-    weekday: 'long', day: 'numeric', month: 'long',
-  })
-
-  if (!key) {
-    return (
-      `☀️ *Доброе утро, ${firstName}!*\n\n` +
-      `Сегодня ${dayName}.\n\n` +
-      (pendingTasks.length
-        ? `📋 У тебя ${pendingTasks.length} задач на сегодня:\n${pendingTasks.slice(0, 3).map(t => `• ${t}`).join('\n')}\n\n`
-        : ``) +
-      `_Продуктивного дня! 🚀_`
-    )
+  const prompt = `Пользователь: ${name}\nЗадачи на сегодня: ${pendingToday.join(', ') || 'нет'}\n\nНапиши бодрое утреннее приветствие и план на день на русском языке с эмодзи.`
+  const keys = getKeysToTry(apiKey)
+  for (const key of keys) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: GROQ_CHAT_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 250,
+        }),
+      })
+      if (res.status === 429) continue
+      if (!res.ok) continue
+      const data = await res.json()
+      return data.choices?.[0]?.message?.content?.trim() || `Доброе утро, ${name}!`
+    } catch {}
   }
-
-  try {
-    const contextLines: string[] = []
-    if (recentTaskTitles.length) contextLines.push(`Недавние задачи: ${recentTaskTitles.slice(0, 5).join(', ')}`)
-    if (recentNoteTitles.length) contextLines.push(`Недавние заметки: ${recentNoteTitles.slice(0, 3).join(', ')}`)
-    if (pendingTasks.length) contextLines.push(`Активные задачи сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
-
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Ты — персональный AI-ассистент пользователя в Telegram. Каждое утро ты пишешь ему тёплое, персонализированное сообщение.
-Формат ответа — Markdown для Telegram. Пиши ТОЛЬКО на русском языке.
-Структура (строго):
-1. Приветствие с именем (1 строка)
-2. Упоминание дня/даты
-3. Персонализированный комментарий, основанный на известных задачах/заметках пользователя (2-3 предложения, как будто ты знаешь его жизнь — тепло и конкретно)
-4. 2 практические рекомендации на основе его активностей
-5. Мотивирующая фраза
-
-Максимум 200 слов. Без шаблонных «Желаю тебе». Конкретно и по-дружески.`,
-          },
-          {
-            role: 'user',
-            content: `Имя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
-          },
-        ],
-        temperature: 0.8,
-        max_tokens: 350,
-      }),
-    })
-
-    if (!res.ok) throw new Error('Groq error')
-    const data = await res.json()
-    const aiText = data.choices?.[0]?.message?.content?.trim() || ''
-    return aiText || buildFallbackGreeting(firstName, dayName, pendingTasks)
-  } catch {
-    return buildFallbackGreeting(firstName, dayName, pendingTasks)
-  }
+  return `Доброе утро, ${name}!`
 }
 
-function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[]): string {
-  return (
-    `☀️ *Доброе утро, ${firstName}!*\n\n` +
-    `Сегодня ${dayName}.\n\n` +
-    (pendingTasks.length
-      ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `• ${t}`).join('\n')}\n\n`
-      : `✅ На сегодня задач нет — можно планировать что-то новое!\n\n`) +
-    `_Продуктивного дня! 🚀_`
-  )
+export function stringSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase().trim()
+  const s2 = str2.toLowerCase().trim()
+  if (s1 === s2) return 1.0
+  if (s1.includes(s2) || s2.includes(s1)) return 0.8
+  const pairs1 = getBigrams(s1)
+  const pairs2 = getBigrams(s2)
+  if (!pairs1.length || !pairs2.length) return 0
+  let union = pairs1.length + pairs2.length
+  let intersection = 0
+  for (const p1 of pairs1) {
+    for (let i = 0; i < pairs2.length; i++) {
+      if (p1 === pairs2[i]) {
+        intersection++
+        pairs2.splice(i, 1)
+        break
+      }
+    }
+  }
+  return (2 * intersection) / union
 }
 
+function getBigrams(str: string): string[] {
+  const s = str.toLowerCase()
+  const bg: string[] = []
+  for (let i = 0; i < s.length - 1; i++) {
+    bg.push(s.slice(i, i + 2))
+  }
+  return bg
+}
