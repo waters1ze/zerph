@@ -86,7 +86,7 @@ function AppShell() {
       </AnimatePresence>
 
       {/* ── Desktop Sidebar ── */}
-      <div className="desktop-sidebar w-56 shrink-0 h-full overflow-y-auto hidden sm:block">
+      <div className="hidden sm:block sm:w-56 shrink-0 h-full overflow-y-auto border-r border-border">
         <Sidebar />
       </div>
 
