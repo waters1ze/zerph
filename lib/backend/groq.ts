@@ -63,7 +63,12 @@ For notes, generate a BEAUTIFUL structured Markdown document in the "summary" fi
 ### type = "reminder"
 Specific time-based reminder without a detailed task.
 
-## Response Schema
+## Dynamic Priority Rules (Do NOT default to medium everywhere)
+Analyze the urgency and emotional weight of the user input:
+- "urgent": If input mentions "срочно", "прямо сейчас", "как можно скорее", "ASAP", "немедленно", "срочная задача", "критично", "алярм", "дедлайн сегодня/через час".
+- "high": If input mentions "очень важно", "главная задача", "важно", "обязательно сделать", "проект", "клиенту", "начальнику", "отчет", "экзамен".
+- "low": If input mentions "когда будет время", "если получится", "потом", "не к спеху", "почитать на досуге", "когда-нибудь", "хобби".
+- "medium": Standard routine everyday tasks without explicit urgency indicators.
 Always respond with ONLY valid JSON, no markdown code blocks:
 {
   "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
