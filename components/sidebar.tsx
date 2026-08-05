@@ -28,14 +28,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Настройки',   icon: '⏳', section: 'аккаунт' },
 ]
 
-// Mobile bottom nav — only key sections
-const MOBILE_NAV: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',   icon: '🗙️' },
-  { id: 'tasks',    label: 'Задачи',   icon: '🕊️' },
-  { id: 'calendar', label: 'Календарь', icon: '📆' },
-  { id: 'notes',    label: 'Заметки',  icon: '📜' },
-  { id: 'settings', label: 'Настройки', icon: '⏳' },
-]
 
 const SECTIONS = [
   { id: 'workspace',          label: 'Рабочее пространство' },
@@ -82,9 +74,7 @@ export function Sidebar() {
   const isConnected = settings.integrations.telegram || !!tgUser || !!displayName
 
   return (
-    <>
-      {/* ── Desktop sidebar ── */}
-      <aside className="desktop-sidebar flex flex-col h-full bg-sidebar border-r border-sidebar-border select-none">
+    <aside className="desktop-sidebar flex flex-col h-full bg-sidebar border-r border-sidebar-border select-none">
         {/* Brand */}
         <div className="px-5 pt-6 pb-4 flex flex-col justify-center">
           <h1 className="text-2xl italic font-serif tracking-wide gold-shimmer select-none font-bold">
@@ -179,31 +169,5 @@ export function Sidebar() {
           </div>
         </div>
       </aside>
-
-      {/* ── Mobile bottom nav bar ── */}
-      <nav className="mobile-bottom-nav">
-        {MOBILE_NAV.map(item => {
-          const isActive = currentView === item.id
-          const badge = item.id === 'today' ? todayCount : 0
-          return (
-            <button
-              key={item.id}
-              onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}
-              className={cn('mobile-nav-item', isActive && 'active')}
-            >
-              <span className="text-xl leading-none mono-emoji relative">
-                {item.icon}
-                {badge > 0 && (
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold">
-                    {badge}
-                  </span>
-                )}
-              </span>
-              <span className="label">{item.label}</span>
-            </button>
-          )
-        })}
-      </nav>
-    </>
   )
 }
