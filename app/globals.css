@@ -301,3 +301,15 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* monochrome B&W luxury emojis */
+.mono-emoji {
+  filter: grayscale(100%) contrast(1.2) brightness(0.9);
+  opacity: 0.85;
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.mono-emoji:hover {
+  filter: grayscale(100%) contrast(1.4) brightness(1.1);
+  opacity: 1;
+}
