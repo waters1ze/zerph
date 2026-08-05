@@ -113,15 +113,15 @@ const SEED_FRIENDS: Friend[] = [
 const SEED_CHAT: ChatMessage[] = [
   {
     id: 'c1', role: 'assistant',
-    content: 'Hello! I\'m your Nexus AI assistant. I can help you manage tasks, summarize notes, create plans, and answer questions about your projects. What would you like to do today?',
+    content: 'Привет! Я твой AI-ассистент Zerf. Могу помочь управлять задачами, конспектировать заметки, строить планы и отвечать на вопросы по твоим проектам. Что хочешь сделать сегодня?',
     createdAt: today + 'T08:00:00Z',
   },
 ]
 
 const DEFAULT_SETTINGS: UserSettings = {
   theme: 'dark',
-  name: 'Kirill Perekatnov',
-  email: 'kirill@corp.io',
+  name: '',
+  email: '',
   avatar: '',
   accentColor: '#2d7a4f',
   notifications: { desktop: true, email: false, dueReminders: true, teamUpdates: true },
@@ -294,10 +294,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.settings])
 
-  // Load settings from localStorage
+  // Load settings from localStorage — keyed by chatId for multi-user isolation
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('zerf-settings')
+      const urlParams = new URLSearchParams(window.location.search)
+      const chatId = urlParams.get('chatId') || urlParams.get('chat_id') || localStorage.getItem('zerf_chat_id') || ''
+      const storageKey = chatId ? `zerf-settings-${chatId}` : 'zerf-settings'
+      const saved = localStorage.getItem(storageKey)
       if (saved) {
         const parsed = JSON.parse(saved) as Partial<UserSettings>
         dispatch({ type: 'UPDATE_SETTINGS', updates: parsed })
@@ -305,24 +308,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [])
 
-  // Sync from backend DB on mount
+  // Sync from backend DB on mount — load user profile from Telegram
   useEffect(() => {
-    fetch('/api/tasks')
+    const urlParams = new URLSearchParams(window.location.search)
+    const chatId = urlParams.get('chatId') || urlParams.get('chat_id') || localStorage.getItem('zerf_chat_id') || ''
+    const headers: Record<string, string> = {}
+    if (chatId) {
+      headers['x-chat-id'] = chatId
+      localStorage.setItem('zerf_chat_id', chatId)
+    }
+
+    // Load tasks/goals/notes
+    fetch('/api/tasks', { headers })
       .then(r => r.json())
       .then(data => {
         if (data.tasks?.length || data.goals?.length || data.notes?.length) {
           dispatch({
             type: 'LOAD_STATE',
             state: {
-              tasks: [...(data.tasks || []), ...SEED_TASKS],
-              goals: [...(data.goals || []), ...SEED_GOALS],
-              notes: [...(data.notes || []), ...SEED_NOTES],
+              tasks: data.tasks?.length ? data.tasks : SEED_TASKS,
+              goals: data.goals?.length ? data.goals : SEED_GOALS,
+              notes: data.notes?.length ? data.notes : SEED_NOTES,
+            },
+          })
+        }
+      })
+      .catch(() => {})
+
+    // Load Telegram user profile dynamically
+    const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
+    fetch(userUrl, { headers })
+      .then(r => r.json())
+      .then(user => {
+        if (user?.connected && user?.name) {
+          dispatch({
+            type: 'UPDATE_SETTINGS',
+            updates: {
+              name: user.name,
+              email: user.username ? `@${user.username}` : '',
+              integrations: { telegram: true, aiApiKey: '', aiModel: 'llama-3.3-70b-versatile', groqApiKey: '' },
             },
           })
         }
       })
       .catch(() => {})
   }, [])
+
+  // Persist settings to localStorage — keyed by chatId
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search)
+      const chatId = urlParams.get('chatId') || urlParams.get('chat_id') || localStorage.getItem('zerf_chat_id') || ''
+      const storageKey = chatId ? `zerf-settings-${chatId}` : 'zerf-settings'
+      localStorage.setItem(storageKey, JSON.stringify(state.settings))
+    } catch {}
+  }, [state.settings])
 
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
 }
