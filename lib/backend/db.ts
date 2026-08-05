@@ -236,16 +236,20 @@ export async function saveParsedItemToDb(item: ParsedItem): Promise<{
       aiGenerated: true,
     })
   } else {
-    // task / reminder
+    // Task, reminder, or default
+    const desc = item.recipientName
+      ? `📩 Отправить ${item.recipientName}: ${item.summary}`
+      : item.summary
+
     await createTask({
       title: item.title,
-      description: item.summary,
+      description: desc,
       priority: item.priority || 'medium',
       dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
       dueTime: item.dueTime || undefined,
-      tags: item.tags || [],
-      rawText: item.rawText,
+      tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
       aiGenerated: true,
+      source: item.rawText,
       subtasks: (item.subtasks || []).map((st, i) => ({
         id: `st_${i}_${Date.now()}`,
         title: st,

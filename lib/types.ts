@@ -23,6 +23,8 @@ export interface Task {
   dueDate?: string
   dueTime?: string             // HH:MM — for timed reminders e.g. "12:00"
   reminderSent?: boolean       // true after TG notification sent
+  targetContact?: string       // Telegram username or ChatID of the contact to message (e.g. "@artem")
+  recipientName?: string       // Name of the recipient (e.g. "Артем")
   projectId?: string
   goalId?: string
   tags: string[]

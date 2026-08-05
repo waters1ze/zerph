@@ -12,6 +12,7 @@ export interface ParsedItem {
   priority: 'urgent' | 'high' | 'medium' | 'low'
   dueDate?: string | null
   dueTime?: string | null       // HH:MM — extracted from "at 12:00", "в 15:30" etc.
+  recipientName?: string | null // Extracted name if sending a message to a contact e.g. "Артем", "Мама"
   targetTitle?: string          // for 'completion' type — the task being marked done
   projectId?: string | null
   goalId?: string | null
