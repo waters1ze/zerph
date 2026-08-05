@@ -18,16 +18,16 @@ export function TodayView() {
   const completionRate = todayTasks.length ? Math.round((doneTasks.length / todayTasks.length) * 100) : 0
 
   const stats = [
-    { label: 'Remaining', value: activeTasks.length, icon: Clock, color: 'text-primary' },
-    { label: 'Done today', value: doneTasks.length, icon: CheckCircle2, color: 'text-[var(--status-done)]' },
-    { label: 'Overdue', value: overdueTasks.length, icon: AlertCircle, color: 'text-[var(--status-overdue)]' },
-    { label: 'Completion', value: `${completionRate}%`, icon: TrendingUp, color: 'text-[var(--status-inprogress)]' },
+    { label: 'Осталось',    value: activeTasks.length, icon: Clock, color: 'text-primary' },
+    { label: 'Выполнено',   value: doneTasks.length, icon: CheckCircle2, color: 'text-[var(--status-done)]' },
+    { label: 'Просрочено',  value: overdueTasks.length, icon: AlertCircle, color: 'text-[var(--status-overdue)]' },
+    { label: 'Прогресс',    value: `${completionRate}%`, icon: TrendingUp, color: 'text-[var(--status-inprogress)]' },
   ]
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="stats-grid-4 grid grid-cols-4 gap-3">
         {stats.map((s, i) => {
           const Icon = s.icon
           return (
@@ -59,8 +59,8 @@ export function TodayView() {
           <Flame className="w-4 h-4 text-[var(--priority-high)] shrink-0" />
           <div className="flex-1">
             <div className="flex justify-between mb-1.5">
-              <span className="text-[12px] font-medium text-foreground">Daily progress</span>
-              <span className="text-[12px] text-muted-foreground">{doneTasks.length} of {todayTasks.length}</span>
+              <span className="text-[12px] font-medium text-foreground">Прогресс за день</span>
+              <span className="text-[12px] text-muted-foreground">{doneTasks.length} из {todayTasks.length}</span>
             </div>
             <div className="h-1.5 rounded-full bg-border overflow-hidden">
               <motion.div
@@ -79,7 +79,7 @@ export function TodayView() {
         <div>
           <div className="flex items-center gap-2 mb-2.5">
             <Target className="w-3.5 h-3.5 text-muted-foreground" />
-            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Active goals</h2>
+            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Активные цели</h2>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {state.goals.slice(0, 2).map((goal, i) => (
@@ -98,7 +98,7 @@ export function TodayView() {
                     goal.status === 'at_risk'  ? 'bg-[var(--priority-medium)]/15 text-[var(--priority-medium)]' :
                     'bg-[var(--status-overdue)]/15 text-[var(--status-overdue)]'
                   )}>
-                    {goal.status === 'on_track' ? 'On track' : goal.status === 'at_risk' ? 'At risk' : 'Delayed'}
+                    {goal.status === 'on_track' ? 'В норме' : goal.status === 'at_risk' ? 'Риск' : 'Отложено'}
                   </span>
                 </div>
                 <div className="h-1 rounded-full bg-border overflow-hidden">
@@ -110,7 +110,7 @@ export function TodayView() {
                     transition={{ duration: 0.7, delay: 0.4 + i * 0.08 }}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">{goal.progress}% complete</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{goal.progress}% завершено</p>
               </motion.div>
             ))}
           </div>
@@ -122,7 +122,7 @@ export function TodayView() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="w-3.5 h-3.5 text-[var(--status-overdue)]" />
-            <h2 className="text-[12px] font-semibold text-[var(--status-overdue)] uppercase tracking-wide">Overdue</h2>
+            <h2 className="text-[12px] font-semibold text-[var(--status-overdue)] uppercase tracking-wide">Просрочено</h2>
           </div>
           <div className="space-y-0.5">
             {overdueTasks.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}
@@ -134,7 +134,7 @@ export function TodayView() {
         <div className="flex items-center gap-2 mb-2">
           <Clock className="w-3.5 h-3.5 text-muted-foreground" />
           <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Today — {activeTasks.length} remaining
+            Сегодня — {activeTasks.length} задач осталось
           </h2>
         </div>
         {activeTasks.length === 0 ? (
@@ -144,8 +144,8 @@ export function TodayView() {
             className="flex flex-col items-center gap-2 py-10 text-center"
           >
             <CheckCircle2 className="w-10 h-10 text-[var(--status-done)]/50" />
-            <p className="text-sm font-medium text-foreground">All done for today!</p>
-            <p className="text-[13px] text-muted-foreground">Great work. Come back tomorrow.</p>
+            <p className="text-sm font-medium text-foreground">Все задачи выполнены!</p>
+            <p className="text-[13px] text-muted-foreground">Отличная работа. Возвращайся завтра.</p>
           </motion.div>
         ) : (
           <div className="space-y-0.5">
@@ -158,7 +158,7 @@ export function TodayView() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
-            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Completed</h2>
+            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">Завершено</h2>
           </div>
           <div className="space-y-0.5">
             {doneTasks.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}

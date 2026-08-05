@@ -38,10 +38,11 @@ export async function GET(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         commands: [
-          { command: 'today', description: '📅 Задачи на сегодня' },
-          { command: 'goals', description: '🎯 Активные цели' },
-          { command: 'notes', description: '📌 Последние заметки' },
-          { command: 'help',  description: '❓ Инструкция и возможности' },
+          { command: 'today',    description: '📅 Задачи на сегодня' },
+          { command: 'goals',    description: '🎯 Активные цели' },
+          { command: 'notes',    description: '📌 Последние заметки' },
+          { command: 'language', description: '🌐 Выбрать язык интерфейса' },
+          { command: 'help',     description: '❓ Инструкция и возможности' },
         ],
       }),
     })
