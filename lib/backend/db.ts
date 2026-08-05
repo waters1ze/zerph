@@ -366,15 +366,33 @@ export async function saveParsedItemToDb(
 
 // ── Reminders — find tasks due right now ──────────────────────────────────────
 
-export async function getTasksDueNow(): Promise<DbTask[]> {
+export function getMskDateTime() {
   const now = new Date()
-  const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-  const todayStr = now.toISOString().slice(0, 10)
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+
+  const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+  const mskTime = `${getPart('hour')}:${getPart('minute')}`
+
+  return { mskDate, mskTime }
+}
+
+export async function getTasksDueNow(): Promise<DbTask[]> {
+  const { mskDate, mskTime } = getMskDateTime()
 
   const tasks = await prisma.task.findMany({
     where: {
-      dueTime: timeStr,
-      dueDate: todayStr,
+      dueTime: mskTime,
+      dueDate: mskDate,
       status: { not: 'done' },
       reminderSent: false,
     },
