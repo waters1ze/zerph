@@ -74,42 +74,32 @@ export function Sidebar() {
   const isConnected = settings.integrations.telegram || !!tgUser || !!displayName
 
   return (
-    <aside className="flex flex-col h-full bg-card text-card-foreground border-r border-border select-none w-full">
-      {/* Brand */}
-      <div className="px-5 pt-6 pb-4 flex flex-col justify-center border-b border-border/40">
-        <h1 className="text-2xl italic font-serif tracking-wide gold-shimmer select-none font-bold">
-          Zerph
-        </h1>
-        <p className="text-[9px] text-muted-foreground/80 tracking-[0.2em] uppercase font-medium mt-1">
-          Task Intelligence
-        </p>
-      </div>
-
-      {/* User */}
-      <div className="mx-3 my-3 px-3 py-2.5 rounded-xl bg-muted/50 border border-border/50 flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+    <aside className="flex flex-col h-full bg-card text-card-foreground border-r border-border select-none w-full font-sans">
+      {/* Top Profile / Telegram Status Block */}
+      <div className="mx-3 mt-4 mb-3 px-3.5 py-3 rounded-xl bg-muted/50 border border-border/60 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30">
           {tgUser?.photoUrl ? (
             <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
           ) : (
-            <span className="text-[11px] font-semibold text-primary">
+            <span className="text-[12px] font-bold text-primary font-sans">
               {displayName ? displayName[0] : '👤'}
             </span>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-medium text-foreground truncate">
-            {displayName || 'Профиль не привязан'}
+          <p className="text-[13px] font-bold text-foreground truncate font-sans">
+            {displayName || 'w-size'}
           </p>
-          <p className="text-[10px] text-muted-foreground truncate">
-            {isConnected ? (tgUser?.username || 'Telegram Подключён') : 'Telegram Не подключён'}
+          <p className="text-[11px] text-muted-foreground truncate font-sans">
+            {isConnected ? 'Telegram Подключён' : 'Telegram Не подключён'}
           </p>
         </div>
         <div
           className={cn(
-            'w-1.5 h-1.5 rounded-full shrink-0',
+            'w-2 h-2 rounded-full shrink-0',
             isConnected ? 'bg-[var(--status-done)]' : 'bg-muted-foreground/30'
           )}
-          title={isConnected ? 'Подключён' : 'Не подключён'}
+          title={isConnected ? 'Telegram Подключён' : 'Не подключён'}
         />
       </div>
 
@@ -120,7 +110,7 @@ export function Sidebar() {
           if (!items.length) return null
           return (
             <div key={section.id} className="mb-2">
-              <p className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/70">
+              <p className="px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/70 font-sans">
                 {section.label}
               </p>
               <div className="space-y-0.5 mt-1">
@@ -138,9 +128,9 @@ export function Sidebar() {
                       whileTap={{ scale: 0.97 }}
                       onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}
                       className={cn(
-                        'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-150',
+                        'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-150 font-sans',
                         isActive
-                          ? 'bg-primary/15 text-primary font-semibold border border-primary/20 shadow-sm'
+                          ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-sm'
                           : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
                       )}
                     >
@@ -164,10 +154,10 @@ export function Sidebar() {
       {/* Status bar */}
       <div className="px-4 pb-4 pt-3 border-t border-border bg-card">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">{todayCount} задач осталось</span>
+          <span className="text-[11px] text-muted-foreground font-sans">{todayCount} задач осталось</span>
           <div className="flex items-center gap-1.5">
             <Circle className="w-2 h-2 fill-[var(--status-done)] text-[var(--status-done)]" />
-            <span className="text-[11px] text-muted-foreground font-medium">В сети</span>
+            <span className="text-[11px] text-muted-foreground font-medium font-sans">В сети</span>
           </div>
         </div>
       </div>
