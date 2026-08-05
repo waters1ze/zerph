@@ -4,12 +4,28 @@ import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { cn } from '@/lib/utils'
-import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb } from 'lucide-react'
 import { parseISO, isToday } from 'date-fns'
+import { useState, useEffect } from 'react'
+
+interface DailyContext {
+  formattedDate: string
+  weather: string
+  tip: string
+}
 
 export function TodayView() {
   const { state } = useApp()
   const today = new Date().toISOString().slice(0, 10)
+  const [context, setContext] = useState<DailyContext | null>(null)
+
+  // Fetch daily context on mount
+  useEffect(() => {
+    fetch('/api/daily-context')
+      .then(r => r.json())
+      .then(d => { if (d.formattedDate) setContext(d) })
+      .catch(() => {})
+  }, [])
 
   const todayTasks = state.tasks.filter(t => t.dueDate === today || isToday(parseISO(t.createdAt)))
   const doneTasks = todayTasks.filter(t => t.status === 'done')
@@ -26,6 +42,29 @@ export function TodayView() {
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
+
+      {/* Daily context card */}
+      {context && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col gap-2.5 px-4 py-3.5 rounded-xl bg-card border border-border/60"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-foreground capitalize">{context.formattedDate}</p>
+            <div className="flex items-center gap-1.5">
+              <Cloud className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[12px] text-muted-foreground">{context.weather}</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 pt-1 border-t border-border/40">
+            <Lightbulb className="w-3.5 h-3.5 text-primary/70 shrink-0 mt-0.5" />
+            <p className="text-[12px] text-muted-foreground leading-relaxed italic">{context.tip}</p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Stats row */}
       <div className="stats-grid-4 grid grid-cols-4 gap-3">
         {stats.map((s, i) => {
@@ -117,7 +156,7 @@ export function TodayView() {
         </div>
       )}
 
-      {/* Task sections */}
+      {/* Overdue tasks */}
       {overdueTasks.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -130,6 +169,7 @@ export function TodayView() {
         </div>
       )}
 
+      {/* Today tasks */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Clock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -149,11 +189,15 @@ export function TodayView() {
           </motion.div>
         ) : (
           <div className="space-y-0.5">
-            {activeTasks.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}
+            {activeTasks
+              .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
+              .map((t, i) => <TaskItem key={t.id} task={t} index={i} />)
+            }
           </div>
         )}
       </div>
 
+      {/* Completed */}
       {doneTasks.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2">

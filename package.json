@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && node -e \"if(process.env.DATABASE_URL){require('child_process').execSync('npx prisma migrate deploy',{stdio:'inherit'})}\" && next build",
     "start": "next start",
     "bot": "npx tsx server/bot.ts",
     "lint": "eslint ."
