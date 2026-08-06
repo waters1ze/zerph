@@ -7,7 +7,7 @@ import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from
 
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion'
-  action?: 'create' | 'update' | 'delete' | 'completion'
+  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion'
   targetId?: string | null
   title: string
   summary: string
@@ -68,19 +68,20 @@ CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
 📋 СУЩЕСТВУЮЩИЕ АКТИВНЫЕ ЭЛЕМЕНТЫ ПОЛЬЗОВАТЕЛЯ:
 ${existingItemsContext}
 ══════════════════════════════════════════
-ИНСТРУКЦИЯ ПО РЕДАКТИРОВАНИЮ / ИЗМЕНЕНИЮ:
-- Если пользователь хочет ИЗМЕНИТЬ, ОБНОВИТЬ или УТОЧНИТЬ существующую цель/задачу/напоминание (например: "давай ты пришлешь напоминание в 12:00 лучше, а сама цель до 00:00", "поменяй время на 15:00", "сделай дедлайн завтра", "удали задачу X"), ты ДОЛЖЕН установить:
-  - "action": "update" (или "delete")
-  - "targetId": "<ID соответствующего элемента из списка выше>"
-  - "type": тип элемента (goal / task / note / reminder)
-  - Обнови нужные поля ("dueTime", "dueDate", "title", "summary" и т.д.)`
+ИНСТРУКЦИЯ ПО РЕДАКТИРОВАНИЮ И УДАЛЕНИЮ:
+- Если пользователь говорит "удали все задачи", "очисти все задачи", "удали всё", "очистить тодо" — установи "action": "delete_all".
+- Если пользователь просит удалить КОНКРЕТНУЮ задачу/цель (например: "удали задачу Перейти на канал", "удали задачу Подрочить"):
+  - Найди её в списке выше и установи "action": "delete", "targetId": "<ID элемента>", "targetTitle": "<название задачи>".
+- Если пользователь просит ИЗМЕНИТЬ время, дату или название существующего элемента (например: "давай в 12:00 лучше", "поменяй время"):
+  - Установи "action": "update", "targetId": "<ID элемента>" и укажи обновленные поля.`
   }
 
   prompt += `\n\n## Intent Detection & Actions
 
 ### action = "create" (по умолчанию, если создается новый элемент)
-### action = "update" (если редактируется существующий элемент, обязательно укажи "targetId")
-### action = "delete" (если пользователь просит удалить элемент, обязательно укажи "targetId")
+### action = "update" (если редактируется существующий элемент, укажи targetId)
+### action = "delete" (если удаляется конкретная задача/цель, укажи targetId или targetTitle)
+### action = "delete_all" (если пользователь просит удалить ВСЕ задачи / очистить список)
 ### action = "completion" (если пользователь говорит, что сделано)
 
 ## Dynamic Priority Rules
@@ -91,7 +92,7 @@ ${existingItemsContext}
 
 Always respond with ONLY valid JSON (no markdown fences):
 {
-  "action": "create" | "update" | "delete" | "completion",
+  "action": "create" | "update" | "delete" | "delete_all" | "completion",
   "targetId": "ID элемента если action update/delete" | null,
   "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
   "title": "Краткое описание (максимум 60 символов)",
@@ -99,7 +100,7 @@ Always respond with ONLY valid JSON (no markdown fences):
   "priority": "urgent" | "high" | "medium" | "low",
   "dueDate": "YYYY-MM-DD" | null,
   "dueTime": "HH:MM" | null,
-  "targetTitle": "для типа completion: название выполненной задачи" | null,
+  "targetTitle": "для типа completion или delete: название задачи" | null,
   "projectId": null,
   "goalId": null,
   "tags": ["тег1", "тег2"],
