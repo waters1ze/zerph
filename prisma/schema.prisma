@@ -69,6 +69,8 @@ model Note {
 model TelegramChat {
   chatId                 BigInt    @id
   firstName              String?
+  lastName               String?
+  username               String?
   reminderIntervalMinutes Int       @default(5)
   reminderRepeatCount    Int       @default(3)
   plan                   String    @default("free") // "free" | "premium"
@@ -79,4 +81,14 @@ model TelegramChat {
   chatMessagesToday      Int       @default(0)
   lastResetDate          String?   // YYYY-MM-DD
   addedAt                DateTime  @default(now())
+}
+
+model Friendship {
+  id           String   @id @default(cuid())
+  userChatId   BigInt
+  friendChatId BigInt
+  status       String   @default("accepted") // "pending" | "accepted" | "declined"
+  createdAt    DateTime @default(now())
+
+  @@unique([userChatId, friendChatId])
 }
