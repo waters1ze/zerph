@@ -635,12 +635,12 @@ export async function POST(req: NextRequest) {
         await handleGoals(chatId)
       } else if (cmd === '/notes') {
         await handleNotes(chatId)
-      } else if (cmd === '/premium' || cmd === '/subscribe') {
+      } else if (cmd === '/premium' || cmd === '/subscribe' || cmd === '/buy') {
         await handleSubscribe(chatId)
       } else if (cmd === '/admin') {
         await handleAdminCommand(chatId, parts.slice(1))
       } else {
-        await send(chatId, 'Попробуй /settings, /today, /premium или /help')
+        await send(chatId, 'Попробуй /settings, /today, /buy или /help')
       }
     } else if (voice) {
       await processVoice(chatId, voice.file_id)
