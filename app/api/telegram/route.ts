@@ -16,6 +16,7 @@ import {
   getUserUsageAndLimits, incrementUserUsage,
   autoAddFriends, checkGroupOrUserHasPremium,
 } from '@/lib/backend/db'
+import { getUserAuthToken } from '@/lib/backend/auth'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -76,7 +77,16 @@ async function editMessageText(chatId: number, messageId: number, text: string, 
 }
 
 function miniAppKeyboard(chatId?: number) {
-  const query = chatId ? `?chatId=${chatId}` : ''
+  if (!chatId) {
+    return {
+      inline_keyboard: [
+        [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
+        [{ text: '🌐 Open Full Web Site', url: APP_URL }],
+      ],
+    }
+  }
+  const token = getUserAuthToken(chatId)
+  const query = `?chatId=${chatId}&token=${token}`
   return {
     inline_keyboard: [
       [{ text: '📱 Open Zerf App', web_app: { url: `${MINIAPP_URL}${query}` } }],
