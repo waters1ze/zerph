@@ -42,8 +42,14 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       const num = Number(ownerChatId)
       if (!isNaN(num) && num !== 0) {
         const cid = BigInt(ownerChatId)
+        const strId = String(ownerChatId)
         return await prisma.task.findMany({
-          where: { ownerChatId: cid },
+          where: {
+            OR: [
+              { ownerChatId: cid },
+              { assignees: { has: strId } }
+            ]
+          },
           orderBy: { createdAt: 'desc' },
         })
       }
@@ -558,6 +564,8 @@ export async function saveParsedItemToDb(
       aiGenerated: true,
       source: item.rawText,
       ownerChatId: ownerChatId || null,   // Store the owner's chatId
+      assignees: item.assignees || [],
+      isShared: item.isShared || false,
       subtasks: (item.subtasks || []).map((st, i) => ({
         id: `st_${i}_${Date.now()}`,
         title: st,
@@ -567,6 +575,43 @@ export async function saveParsedItemToDb(
   }
 
   return { item }
+}
+
+export async function getFriends(ownerChatId?: number | bigint | string | null) {
+  try {
+    if (!ownerChatId) return []
+    const cid = BigInt(ownerChatId)
+    const friendships = await prisma.friendship.findMany({
+      where: { userChatId: cid, status: 'accepted' },
+    })
+    if (friendships.length === 0) return []
+
+    const friendIds = friendships.map(f => f.friendChatId)
+    const chats = await prisma.telegramChat.findMany({
+      where: { chatId: { in: friendIds } }
+    })
+
+    const chatMap = new Map(chats.map(c => [String(c.chatId), c]))
+
+    return friendships.map(f => {
+      const fidStr = String(f.friendChatId)
+      const chat = chatMap.get(fidStr)
+      const name = chat
+        ? [chat.firstName, chat.lastName].filter(Boolean).join(' ') || chat.username || `Коллега #${fidStr.slice(-4)}`
+        : `Коллега #${fidStr.slice(-4)}`
+      return {
+        id: fidStr,
+        name,
+        email: chat?.username ? `@${chat.username}` : '',
+        chatId: fidStr,
+        username: chat?.username || '',
+        status: 'online' as const,
+        addedAt: f.createdAt.toISOString(),
+      }
+    })
+  } catch {
+    return []
+  }
 }
 
 // ── Reminders — find tasks due right now ──────────────────────────────────────
