@@ -267,13 +267,15 @@ export function TaskDetail() {
             </p>
             <div className="flex flex-wrap gap-2">
               {task.assignees.map(aid => {
+                const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : ''
+                const isMe = currentChatId && String(currentChatId) === String(aid)
                 const friend = state.friends.find(f => f.id === aid || f.chatId === aid)
-                const name = friend?.name || `Участник #${aid.slice(-4)}`
+                const name = isMe ? 'Вы (Владелец)' : (friend?.name || `Участник #${aid.slice(-4)}`)
                 return (
                   <div key={aid} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card border border-border/60 shadow-xs">
                     <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
                       <span className="text-[10px] font-bold text-primary">
-                        {name.slice(0, 2).toUpperCase()}
+                        {isMe ? 'ВЫ' : name.slice(0, 2).toUpperCase()}
                       </span>
                     </div>
                     <span className="text-[12px] font-medium text-foreground">{name}</span>

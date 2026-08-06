@@ -584,9 +584,10 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
     const friendships = await prisma.friendship.findMany({
       where: { userChatId: cid, status: 'accepted' },
     })
-    if (friendships.length === 0) return []
 
     const friendIds = friendships.map(f => f.friendChatId)
+    friendIds.push(cid) // include self so name resolves everywhere
+
     const chats = await prisma.telegramChat.findMany({
       where: { chatId: { in: friendIds } }
     })
