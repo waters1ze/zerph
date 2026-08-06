@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -110,9 +110,11 @@ export function FriendsView() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const inviteLink = typeof window !== 'undefined'
-    ? `${window.location.origin}?invitedBy=${encodeURIComponent(state.settings.name || 'user')}`
-    : 'https://zerph.up.railway.app'
+  const appUrl = typeof window !== 'undefined'
+    ? window.location.origin
+    : (process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app')
+  
+  const inviteLink = `${appUrl}?invitedBy=${encodeURIComponent(state.settings.name || 'user')}`
 
   const copyInviteLink = () => {
     navigator.clipboard.writeText(inviteLink)
