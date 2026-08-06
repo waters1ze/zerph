@@ -177,42 +177,41 @@ const INITIAL_STATE: AppState = {
 // ─── Context ──────────────────────────────────────────────────────────────────
 const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | null>(null)
 
+export function getTgChatId(): string | null {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search)
+    const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
+    if (qChatId) {
+      try { localStorage.setItem('zerf_chat_id', qChatId) } catch {}
+      return qChatId
+    }
+
+    const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
+    if (u?.id) {
+      const tgId = String(u.id)
+      try { localStorage.setItem('zerf_chat_id', tgId) } catch {}
+      return tgId
+    }
+
+    try {
+      const savedChatId = localStorage.getItem('zerf_chat_id')
+      if (savedChatId) return savedChatId
+    } catch {}
+
+    try {
+      let guestId = localStorage.getItem('zerf_guest_id')
+      if (!guestId) {
+        guestId = String(Math.floor(100000000 + Math.random() * 899999999))
+        localStorage.setItem('zerf_guest_id', guestId)
+      }
+      return guestId
+    } catch {}
+  }
+  return null
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
-
-  // Get current telegram chatId from URL, WebApp, or localStorage
-  const getTgChatId = (): string | null => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search)
-      const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
-      if (qChatId) {
-        try { localStorage.setItem('zerf_chat_id', qChatId) } catch {}
-        return qChatId
-      }
-
-      const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
-      if (u?.id) {
-        const tgId = String(u.id)
-        try { localStorage.setItem('zerf_chat_id', tgId) } catch {}
-        return tgId
-      }
-
-      try {
-        const savedChatId = localStorage.getItem('zerf_chat_id')
-        if (savedChatId) return savedChatId
-      } catch {}
-
-      try {
-        let guestId = localStorage.getItem('zerf_guest_id')
-        if (!guestId) {
-          guestId = String(Math.floor(100000000 + Math.random() * 899999999))
-          localStorage.setItem('zerf_guest_id', guestId)
-        }
-        return guestId
-      } catch {}
-    }
-    return null
-  }
 
   const enhancedDispatch: React.Dispatch<Action> = useCallback((action: Action) => {
     // Perform state change locally immediately
