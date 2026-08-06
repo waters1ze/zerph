@@ -114,95 +114,6 @@ async function safeEditOrSend(
   })
 }
 
-/**
- * Track that a user was seen in a group. Upserts into GroupMembership.
- * Over time this builds the full list of all group members.
- */
-async function trackGroupMember(groupChatId: number, memberChatId: number) {
-  try {
-    await prisma.groupMembership.upsert({
-      where: {
-        groupChatId_memberChatId: {
-          groupChatId: BigInt(groupChatId),
-          memberChatId: BigInt(memberChatId),
-        },
-      },
-      update: {},
-      create: {
-        groupChatId: BigInt(groupChatId),
-        memberChatId: BigInt(memberChatId),
-      },
-    })
-  } catch {}
-}
-
-/**
- * Get ALL known members of a group from our DB (accumulated over time).
- * Also fetches current admins from Telegram API (the only ones available without admin rights).
- */
-async function getGroupMembers(groupChatId: number): Promise<number[]> {
-  const idSet = new Set<number>()
-
-  // 1. From our GroupMembership DB table (all historically seen members)
-  try {
-    const memberships = await prisma.groupMembership.findMany({
-      where: { groupChatId: BigInt(groupChatId) },
-    })
-    memberships.forEach(m => idSet.add(Number(m.memberChatId)))
-  } catch {}
-
-  // 2. From Telegram getChatAdministrators (admins only, but at least catches them)
-  try {
-    const res = await tgApi('getChatAdministrators', { chat_id: groupChatId })
-    if (res?.ok && Array.isArray(res.result)) {
-      for (const member of res.result) {
-        const u = member.user
-        if (!u || u.is_bot) continue
-        await registerChatId(u.id, u.first_name, u.username, u.last_name)
-        await trackGroupMember(groupChatId, u.id)
-        idSet.add(u.id)
-      }
-    }
-  } catch {}
-
-  return Array.from(idSet)
-}
-
-function miniAppKeyboard(chatId?: number) {
-  if (!chatId) {
-    return {
-      inline_keyboard: [
-        [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
-        [{ text: '🌐 Open Full Web Site', url: APP_URL }],
-      ],
-    }
-  }
-  const token = getUserAuthToken(chatId)
-  const query = `?chatId=${chatId}&token=${token}`
-  return {
-    inline_keyboard: [
-      [{ text: '📱 Open Zerf App', web_app: { url: `${MINIAPP_URL}${query}` } }],
-      [{ text: '🌐 Open Full Web Site', url: `${APP_URL}${query}` }],
-    ],
-  }
-}
-
-// ── Command handlers ──────────────────────────────────────────────────────────
-
-async function handleStart(chatId: number, firstName: string) {
-  await registerChatId(chatId, firstName)
-  await send(chatId,
-    `🎉 *Профиль успешно привязан!*\n\n` +
-    `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI.\n\n` +
-    `✨ *Твои возможности:*\n` +
-    `1️⃣ *Голосовой ввод* 🎙️ — надиктуй задачу, цель или заметку сюда в чат.\n` +
-    `2️⃣ *Умное редактирование* ✏️ — "измени время цели на 12:00".\n` +
-    `3️⃣ *Авто-уведомления* ⏰ — настрой интервалы через /settings.\n` +
-    `4️⃣ *Единый профиль* 🌐 — данные видны и в боте, и на веб-сайте!\n\n` +
-    `Жми кнопки ниже, чтобы открыть Mini App или перейти на полный сайт:`,
-    { reply_markup: miniAppKeyboard(chatId) }
-  )
-}
 
 async function handleToday(chatId: number) {
   const tasks = await getAllTasks(chatId)
@@ -596,6 +507,93 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 }
 
+/** Get bot's own Telegram user ID */
+let cachedBotId: number | null = null
+async function getBotId(): Promise<number | null> {
+  if (cachedBotId) return cachedBotId
+  const res = await tgApi('getMe', {})
+  if (res?.ok && res.result?.id) {
+    cachedBotId = res.result.id
+    return cachedBotId
+  }
+  return null
+}
+
+/** Track that a user was seen in a group. Upserts into GroupMembership. */
+async function trackGroupMember(groupChatId: number, memberChatId: number) {
+  if (!memberChatId || memberChatId <= 0) return
+  const botId = await getBotId()
+  if (botId && memberChatId === botId) return
+
+  try {
+    await prisma.groupMembership.upsert({
+      where: {
+        groupChatId_memberChatId: {
+          groupChatId: BigInt(groupChatId),
+          memberChatId: BigInt(memberChatId),
+        },
+      },
+      update: {},
+      create: {
+        groupChatId: BigInt(groupChatId),
+        memberChatId: BigInt(memberChatId),
+      },
+    })
+  } catch {}
+}
+
+/** Get ALL known human members of a group from DB + Telegram admins. */
+async function getGroupMembers(groupChatId: number): Promise<number[]> {
+  const botId = await getBotId()
+  const idSet = new Set<number>()
+
+  // 1. From GroupMembership DB table
+  try {
+    const memberships = await prisma.groupMembership.findMany({
+      where: { groupChatId: BigInt(groupChatId) },
+    })
+    memberships.forEach(m => {
+      const num = Number(m.memberChatId)
+      if (num > 0 && num !== botId) idSet.add(num)
+    })
+  } catch {}
+
+  // 2. From Telegram getChatAdministrators
+  try {
+    const res = await tgApi('getChatAdministrators', { chat_id: groupChatId })
+    if (res?.ok && Array.isArray(res.result)) {
+      for (const member of res.result) {
+        const u = member.user
+        if (!u || u.is_bot || u.id <= 0 || u.id === botId) continue
+        await registerChatId(u.id, u.first_name, u.username, u.last_name)
+        await trackGroupMember(groupChatId, u.id)
+        idSet.add(u.id)
+      }
+    }
+  } catch {}
+
+  return Array.from(idSet)
+}
+
+function miniAppKeyboard(chatId?: number) {
+  if (!chatId) {
+    return {
+      inline_keyboard: [
+        [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
+        [{ text: '🌐 Open Full Web Site', url: APP_URL }],
+      ],
+    }
+  }
+  const token = getUserAuthToken(chatId)
+  const query = `?chatId=${chatId}&token=${token}`
+  return {
+    inline_keyboard: [
+      [{ text: '📱 Open Zerf App', web_app: { url: `${MINIAPP_URL}${query}` } }],
+      [{ text: '🌐 Open Full Web Site', url: `${APP_URL}${query}` }],
+    ],
+  }
+}
+
 async function processVoice(chatId: number, fileId: string) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
@@ -649,15 +647,29 @@ async function processVoice(chatId: number, fileId: string) {
   }
 }
 
-// ── Group & Friend Handlers ───────────────────────────────────────────────────
+// ── Group & Friend Handlers ──────────────────────────────────────────────────────────
+
+async function handleStart(chatId: number, firstName: string) {
+  await registerChatId(chatId, firstName)
+  await send(chatId,
+    `🎉 *Профиль успешно привязан!*\n\n` +
+    `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI.\n\n` +
+    `✨ *Твои возможности:*\n` +
+    `1️⃣ *Голосовой ввод* 🎙️ — надиктуй задачу, цель или заметку сюда в чат.\n` +
+    `2️⃣ *Умное редактирование* ✏️ — "измени время цели на 12:00".\n` +
+    `3️⃣ *Авто-уведомления* ⏰ — настрой интервалы через /settings.\n` +
+    `4️⃣ *Единый профиль* 🌐 — данные видны и в боте, и на веб-сайте!\n\n` +
+    `Жми кнопки ниже, чтобы открыть Mini App или перейти на полный сайт:`,
+    { reply_markup: miniAppKeyboard(chatId) }
+  )
+}
 
 async function handleGroupAddCommand(msg: any) {
   const groupChatId: number = msg.chat.id
   const senderId: number = msg.from.id
   const senderName: string = msg.from.first_name || 'Участник'
   const senderUsername: string | undefined = msg.from.username
-
-  // ── Phase 1: Fast pre-checks (<2s total) ─────────────────────────────────────
+  const botId = await getBotId()
 
   await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
   await trackGroupMember(groupChatId, senderId)
@@ -675,7 +687,7 @@ async function handleGroupAddCommand(msg: any) {
   const replySenderName: string = replyMsg.from?.first_name || 'Коллега'
   const replySenderUsername: string | undefined = replyMsg.from?.username
 
-  if (replySenderId && !replyMsg.from?.is_bot) {
+  if (replySenderId && !replyMsg.from?.is_bot && replySenderId > 0 && replySenderId !== botId) {
     await registerChatId(replySenderId, replySenderName, replySenderUsername, replyMsg.from?.last_name)
     await trackGroupMember(groupChatId, replySenderId)
     await autoAddFriends(senderId, replySenderId)
@@ -722,14 +734,19 @@ async function handleGroupAddCommand(msg: any) {
         return
       }
 
-      // 1. Get ALL group members registered in DB + Telegram admins
+      // 1. Collect human members only (filtering botId and negative IDs)
       const groupMembers = await getGroupMembers(groupChatId)
-      const assigneeSet = new Set<string>([String(senderId)])
-      if (replySenderId) assigneeSet.add(String(replySenderId))
-      groupMembers.forEach(m => assigneeSet.add(String(m)))
+      const assigneeSet = new Set<string>()
+      if (senderId > 0 && senderId !== botId) assigneeSet.add(String(senderId))
+      if (replySenderId && replySenderId > 0 && replySenderId !== botId && !replyMsg.from?.is_bot) {
+        assigneeSet.add(String(replySenderId))
+      }
+      groupMembers.forEach(m => {
+        if (m > 0 && m !== botId) assigneeSet.add(String(m))
+      })
       const allAssignees = Array.from(assigneeSet)
 
-      // 2. Auto-friend all members with each other
+      // 2. Auto-friend all members
       for (const mId of allAssignees) {
         const numId = Number(mId)
         if (numId !== senderId) autoAddFriends(senderId, numId).catch(() => {})
@@ -776,13 +793,12 @@ async function handleGroupAddCommand(msg: any) {
         }]
       }
 
-      // 5. Save task for ALL assignees in DB
+      // 5. Save task ONCE for creator (senderId) with all assignees — NO DUPLICATES!
       for (const item of items) {
         item.isShared = true
         item.assignees = allAssignees
-        for (const aid of allAssignees) {
-          try { await saveParsedItemToDb(item, Number(aid)) } catch {}
-        }
+        item.type = 'task' // Force task type in group processing (never note!)
+        try { await saveParsedItemToDb(item, senderId) } catch {}
       }
 
       // 6. Build final status card text (plain text for guaranteed delivery)

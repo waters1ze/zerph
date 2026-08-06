@@ -137,34 +137,38 @@ export async function POST(req: NextRequest) {
       }]
     }
 
-    // Step 3: Get ALL known group members from DB
+    // Step 3: Get ALL known human group members from DB (excluding bots and negative chat IDs)
     let knownMemberIds: number[] = []
     try {
       const memberships = await prisma.groupMembership.findMany({
         where: { groupChatId: BigInt(groupChatId) },
       })
-      knownMemberIds = memberships.map(m => Number(m.memberChatId))
+      knownMemberIds = memberships
+        .map(m => Number(m.memberChatId))
+        .filter(id => id > 0)
     } catch {}
 
-    // Ensure sender + reply-to are in assignee list
-    const assigneeSet = new Set<string>(allAssignees || [String(senderId)])
-    if (replySenderId) assigneeSet.add(String(replySenderId))
-    knownMemberIds.forEach(id => assigneeSet.add(String(id)))
+    // Ensure sender + reply-to are in assignee list (filtering positive IDs)
+    const assigneeSet = new Set<string>()
+    if (senderId > 0) assigneeSet.add(String(senderId))
+    if (replySenderId && replySenderId > 0) assigneeSet.add(String(replySenderId))
+    knownMemberIds.forEach(id => {
+      if (id > 0) assigneeSet.add(String(id))
+    })
     const finalAssignees = Array.from(assigneeSet)
 
     // Step 4: Auto-friend all group members with each other
     for (const mid of knownMemberIds) {
-      if (mid !== senderId) autoAddFriends(senderId, mid).catch(() => {})
-      if (replySenderId && mid !== replySenderId) autoAddFriends(replySenderId, mid).catch(() => {})
+      if (mid !== senderId && mid > 0) autoAddFriends(senderId, mid).catch(() => {})
+      if (replySenderId && mid !== replySenderId && mid > 0) autoAddFriends(replySenderId, mid).catch(() => {})
     }
 
-    // Step 5: Save task for ALL assignees
+    // Step 5: Save task ONCE for creator with all assignees (no duplicate items created!)
     for (const item of items) {
       item.isShared = true
       item.assignees = finalAssignees
-      for (const aid of finalAssignees) {
-        try { await saveParsedItemToDb(item, Number(aid)) } catch {}
-      }
+      item.type = 'task' // Force task, never note!
+      try { await saveParsedItemToDb(item, senderId) } catch {}
     }
 
     // Step 6: Build response card (plain text - guaranteed no parse errors)

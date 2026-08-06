@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -105,21 +105,30 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
 
 export function FriendsView() {
   const { state, dispatch } = useApp()
+  const [mounted, setMounted] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [inviteName, setInviteName] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const appUrl = typeof window !== 'undefined'
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const isGuest = mounted && typeof window !== 'undefined' && !localStorage.getItem('zerf_chat_id')
+
+  const appUrl = mounted && typeof window !== 'undefined'
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app')
   
   const inviteLink = `${appUrl}?invitedBy=${encodeURIComponent(state.settings.name || 'user')}`
 
   const copyInviteLink = () => {
-    navigator.clipboard.writeText(inviteLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(inviteLink)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   const addFriend = () => {
@@ -137,8 +146,28 @@ export function FriendsView() {
     setInviteName(''); setInviteEmail(''); setShowInvite(false)
   }
 
+  if (!mounted) {
+    return (
+      <div className="flex flex-col gap-5 max-w-2xl opacity-0">
+        <h2 className="text-base font-bold text-foreground">Команда и совместная работа</h2>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
+      {/* Telegram Auth Notice Banner for Guest sessions */}
+      {isGuest && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2 text-amber-200">
+          <p className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
+            ⚠️ Гостевой режим веб-версии
+          </p>
+          <p className="text-[11px] text-amber-200/90 leading-relaxed">
+            Чтобы автоматически увидеть своих коллег из группы Telegram и синхронизировать команду с ботом, открой веб-сайт или Mini App через кнопку в боте <span className="font-semibold text-amber-400">@Zerph_bot</span> (или напиши /start в боте)!
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
