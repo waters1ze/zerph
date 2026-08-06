@@ -95,3 +95,13 @@ model Friendship {
 
   @@unique([userChatId, friendChatId])
 }
+
+// Tracks every user ever seen in each Telegram group chat
+model GroupMembership {
+  id          String   @id @default(cuid())
+  groupChatId BigInt
+  memberChatId BigInt
+  createdAt   DateTime @default(now())
+
+  @@unique([groupChatId, memberChatId])
+}
