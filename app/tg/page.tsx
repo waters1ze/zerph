@@ -59,7 +59,7 @@ declare global {
 }
 
 export default function TelegramApp() {
-  const [tab, setTab] = useState<'today' | 'tasks' | 'goals' | 'notes'>('today')
+  const [tab, setTab] = useState<'today' | 'tasks' | 'goals' | 'notes' | 'premium'>('today')
   const [tasks, setTasks] = useState<Task[]>([])
   const [goals, setGoals] = useState<Goal[]>([])
   const [notes, setNotes] = useState<Note[]>([])
@@ -67,6 +67,8 @@ export default function TelegramApp() {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [adding, setAdding] = useState(false)
   const [lang, setLang] = useState<Lang>('ru')
+  const [usage, setUsage] = useState<any>(null)
+  const [loadingPay, setLoadingPay] = useState(false)
   const today = new Date().toISOString().slice(0, 10)
 
   const t = T[lang]
@@ -102,13 +104,42 @@ export default function TelegramApp() {
       const headers: Record<string, string> = {}
       if (chatId) headers['x-chat-id'] = chatId
 
-      const res = await fetch('/api/tasks', { headers })
-      const data = await res.json()
+      const [taskRes, usageRes] = await Promise.all([
+        fetch('/api/tasks', { headers }),
+        fetch('/api/subscription', { headers }),
+      ])
+      const data = await taskRes.json()
       setTasks(data.tasks || [])
       setGoals(data.goals || [])
       setNotes(data.notes || [])
+      const usageData = await usageRes.json()
+      setUsage(usageData)
     } catch { /* use empty */ }
     finally { setLoading(false) }
+  }
+
+  const handleSubscribe = async () => {
+    const chatId = getTgChatId()
+    if (!chatId) {
+      alert('Сначала откройте мини-приложение из Telegram бота')
+      return
+    }
+    setLoadingPay(true)
+    try {
+      const res = await fetch('/api/subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-chat-id': chatId },
+        body: JSON.stringify({ ownerChatId: chatId }),
+      })
+      const data = await res.json()
+      if (data.paymentUrl) {
+        window.open(data.paymentUrl, '_blank')
+      }
+    } catch {
+      alert('Ошибка при создании ссылки на оплату')
+    } finally {
+      setLoadingPay(false)
+    }
   }
 
   const toggleTask = async (taskId: string) => {
@@ -165,6 +196,7 @@ export default function TelegramApp() {
     { id: 'tasks' as const, label: t.tasks, icon: CheckSquare },
     { id: 'goals' as const, label: t.goals, icon: Target },
     { id: 'notes' as const, label: t.notes, icon: FileText },
+    { id: 'premium' as const, label: '⭐', icon: Sparkles },
   ]
 
   const priorityLabel = (p: string) => t.priority[p as keyof typeof t.priority] || p
@@ -421,6 +453,109 @@ export default function TelegramApp() {
                     </p>
                   </div>
                 ))}
+              </div>
+            )}
+            {/* PREMIUM */}
+            {tab === 'premium' && (
+              <div className="space-y-4">
+                {/* Status Card */}
+                <div className={cn(
+                  'rounded-2xl p-5 border',
+                  usage?.plan === 'premium'
+                    ? 'bg-gradient-to-br from-amber-500/20 to-emerald-500/10 border-amber-500/30'
+                    : 'bg-card border-border'
+                )}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl">⭐</div>
+                    <div>
+                      <p className="text-[15px] font-bold text-foreground">
+                        {usage?.plan === 'premium' ? 'Zerf Premium' : 'Бесплатный тариф'}
+                      </p>
+                      {usage?.plan === 'premium' && usage?.subscriptionExpiry && (
+                        <p className="text-[11px] text-amber-400">
+                          Активна до: {new Date(usage.subscriptionExpiry).toLocaleDateString('ru-RU')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Usage bars */}
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-[11px] mb-1">
+                        <span className="text-muted-foreground">🎙 Голосовые</span>
+                        <span className="font-medium">
+                          {usage?.plan === 'premium'
+                            ? `${Math.round((usage?.voice?.secondsUsed || 0) / 60)} / 10 мин`
+                            : `${usage?.voice?.used || 0} / 2 в день`}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full bg-amber-400 rounded-full transition-all" style={{
+                          width: usage?.plan === 'premium'
+                            ? `${Math.min(100, ((usage?.voice?.secondsUsed || 0) / 600) * 100)}%`
+                            : `${Math.min(100, ((usage?.voice?.used || 0) / 2) * 100)}%`
+                        }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-[11px] mb-1">
+                        <span className="text-muted-foreground">📌 Заметки</span>
+                        <span className="font-medium">{usage?.plan === 'premium' ? 'Безлимитно ✨' : `${usage?.notes?.used || 0} / 2 в день`}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: usage?.plan === 'premium' ? '0%' : `${Math.min(100, ((usage?.notes?.used || 0) / 2) * 100)}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-[11px] mb-1">
+                        <span className="text-muted-foreground">💬 ИИ чат</span>
+                        <span className="font-medium">{usage?.plan === 'premium' ? 'Безлимитно ✨' : `${usage?.chat?.used || 0} / 10 в день`}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: usage?.plan === 'premium' ? '0%' : `${Math.min(100, ((usage?.chat?.used || 0) / 10) * 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Buy / Features */}
+                {usage?.plan !== 'premium' && (
+                  <div className="rounded-2xl bg-card border border-border p-5 space-y-4">
+                    <p className="text-[14px] font-bold text-foreground">✨ Zerf Premium — 99 ₽/мес</p>
+                    <div className="space-y-2">
+                      {[
+                        '🎙 Голос: неограниченно (до 10 мин/день)',
+                        '📌 Заметки: безлимитно',
+                        '💬 Zerf AI: безлимитно',
+                        '⚡ Сброс лимитов: каждые 24 часа',
+                        '🔔 Умные напоминания',
+                      ].map(f => (
+                        <div key={f} className="flex items-center gap-2 text-[12px] text-foreground">
+                          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={handleSubscribe}
+                      disabled={loadingPay}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold text-[14px] hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-amber-500/25 disabled:opacity-50"
+                    >
+                      {loadingPay ? '⏳ Переход на оплату…' : '💳 Оплатить через ЮMoney (99 ₽)'}
+                    </button>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Оплата через ЮMoney. После оплаты подписка активируется автоматически во всём приложении.
+                    </p>
+                  </div>
+                )}
+
+                {usage?.plan === 'premium' && (
+                  <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
+                    <p className="text-[13px] font-medium text-emerald-400">✅ Все функции разблокированы!</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Подписка активна во всех устройствах и в боте</p>
+                  </div>
+                )}
               </div>
             )}
           </motion.div>
