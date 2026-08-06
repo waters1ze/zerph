@@ -609,51 +609,63 @@ async function handleGroupAddCommand(msg: any) {
     return
   }
 
-  // Parse items with Groq AI
-  const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
-  const context = await getExistingItemsContext(senderId)
-  const items = await parseIntentWithGroq(targetText, key, undefined, context)
+  try {
+    const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
+    const context = await getExistingItemsContext(senderId)
+    const items = await parseIntentWithGroq(targetText, key, undefined, context)
 
-  if (!items || items.length === 0) {
-    await send(groupChatId, '🤔 Не удалось извлечь задачи из сообщения.', { reply_to_message_id: msg.message_id })
-    return
-  }
-
-  let groupResponseCard = `👥 *Групповые задачи успешно созданы в Zerf!*\n\n`
-  groupResponseCard += `Назначено для: *${escMd(senderName)}*`
-  if (replySenderName && replySenderId !== senderId) {
-    groupResponseCard += ` и *${escMd(replySenderName)}*`
-  }
-  groupResponseCard += `\n\n`
-
-  for (let idx = 0; idx < items.length; idx++) {
-    const item = items[idx]
-    // Save for sender
-    await saveParsedItemToDb(item, senderId)
-    // Save for reply sender if different
-    if (replySenderId && replySenderId !== senderId) {
-      await saveParsedItemToDb(item, replySenderId)
+    if (!items || items.length === 0) {
+      await send(groupChatId, '🤔 Не удалось извлечь задачи из сообщения.', { reply_to_message_id: msg.message_id })
+      return
     }
 
-    const prefix = items.length > 1 ? `${idx + 1}. ` : ''
-    groupResponseCard += `${prefix}📌 *${escMd(item.title)}*\n`
-    if (item.summary && item.summary !== item.title) {
-      groupResponseCard += `📝 _${escMd(item.summary)}_\n`
+    let groupResponseCard = `👥 *Групповая задача создана в Zerf!*\n\n`
+    groupResponseCard += `👥 Назначено: *${escMd(senderName)}*`
+    if (replySenderName && replySenderId !== senderId) {
+      groupResponseCard += ` и *${escMd(replySenderName)}*`
     }
-    if (item.subtasks && item.subtasks.length > 0) {
-      groupResponseCard += `📋 *Шаги:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+    groupResponseCard += `\n\n`
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx]
+      item.isShared = true
+      item.assignees = [String(senderId)]
+      if (replySenderId && replySenderId !== senderId) {
+        item.assignees.push(String(replySenderId))
+      }
+
+      // Save for sender
+      await saveParsedItemToDb(item, senderId)
+      // Save for reply sender if different
+      if (replySenderId && replySenderId !== senderId) {
+        await saveParsedItemToDb(item, replySenderId)
+      }
+
+      const prefix = items.length > 1 ? `${idx + 1}. ` : ''
+      groupResponseCard += `${prefix}📌 *${escMd(item.title)}*\n`
+      if (item.summary && item.summary !== item.title) {
+        groupResponseCard += `📝 _${escMd(item.summary)}_\n`
+      }
+      if (item.subtasks && item.subtasks.length > 0) {
+        groupResponseCard += `📋 *Шаги:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+      }
+      if (item.dueDate) groupResponseCard += `📅 Дата: ${item.dueDate}\n`
+      if (item.dueTime) groupResponseCard += `⏰ Время: *${item.dueTime}*\n`
+      groupResponseCard += `\n`
     }
-    if (item.dueDate) groupResponseCard += `📅 Дата: ${item.dueDate}\n`
-    if (item.dueTime) groupResponseCard += `⏰ Время: *${item.dueTime}*\n`
-    groupResponseCard += `\n`
+
+    groupResponseCard += `✨ *Синхронизировано в приложении участников!*`
+
+    await send(groupChatId, groupResponseCard, {
+      reply_to_message_id: msg.message_id,
+      reply_markup: miniAppKeyboard(senderId)
+    })
+  } catch (err: any) {
+    console.error('Group add command error:', err)
+    await send(groupChatId, `❌ Ошибка при создании задачи в группе: ${String(err.message || err).slice(0, 200)}`, {
+      reply_to_message_id: msg.message_id
+    })
   }
-
-  groupResponseCard += `✨ *Синхронизировано в приложении участников!*`
-
-  await send(groupChatId, groupResponseCard, {
-    reply_to_message_id: msg.message_id,
-    reply_markup: miniAppKeyboard(senderId)
-  })
 }
 
 async function handleInviteCommand(chatId: number, senderName: string, param?: string) {

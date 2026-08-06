@@ -33,13 +33,25 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
   if (task.dueTime && !isDone) {
     const now = new Date()
     const [h, m] = task.dueTime.split(':').map(Number)
-    const due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m)
+    let due: Date
+    if (task.dueDate && task.dueDate.includes('-')) {
+      const [year, month, day] = task.dueDate.split('-').map(Number)
+      due = new Date(year, month - 1, day, h, m)
+    } else {
+      due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m)
+    }
     const diffMs = due.getTime() - now.getTime()
     minutesLeft = Math.round(diffMs / 60000)
 
     if (minutesLeft > 0) {
-      countdownLabel = `⏳ Осталось: ${minutesLeft} мин`
-    } else if (minutesLeft === 0) {
+      if (minutesLeft > 120) {
+        const hours = Math.floor(minutesLeft / 60)
+        const mins = minutesLeft % 60
+        countdownLabel = `⏳ Осталось: ${hours} ч ${mins} мин`
+      } else {
+        countdownLabel = `⏳ Осталось: ${minutesLeft} мин`
+      }
+    } else if (minutesLeft >= -5 && minutesLeft <= 0) {
       countdownLabel = `🔔 Напоминание прямо сейчас!`
     } else {
       isPassed = true
