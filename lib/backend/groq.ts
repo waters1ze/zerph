@@ -26,6 +26,8 @@ export interface ParsedItem {
   originalText?: string         // same as rawText, for notes
   isShared?: boolean
   assignees?: string[]
+  repeat?: string | null
+  reminderOffsetMinutes?: number | null
 }
 
 export function getDynamicSystemPrompt(existingItemsContext?: string): string {
@@ -111,6 +113,8 @@ Always respond with ONLY valid JSON (no markdown fences):
       "priority": "urgent" | "high" | "medium" | "low",
       "dueDate": "YYYY-MM-DD" | null,
       "dueTime": "HH:MM" | null,
+      "repeat": "yearly" | "monthly" | "weekly" | "daily" | null,
+      "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
       "targetTitle": "для типа completion или delete: название задачи" | null,
       "projectId": null,
       "goalId": null,
@@ -121,6 +125,10 @@ Always respond with ONLY valid JSON (no markdown fences):
     }
   ]
 }
+
+RECURRENCE & ADVANCE REMINDERS RULES:
+- If input mentions a birthday, anniversary, holiday, or yearly event ("день рождения", "др", "праздник", "годовщина"), set "repeat": "yearly"!
+- If input asks to be reminded in advance ("за 5 минут", "за 15 минут", "за 1 час", "за 1 день до..."), calculate and set "reminderOffsetMinutes" (e.g. 5, 15, 60, 1440)!
 
 Default priority is "medium". Output ONLY pure JSON.`
 
@@ -238,6 +246,8 @@ export async function parseIntentWithGroq(
           priority: item.priority || 'medium',
           dueDate: item.dueDate || null,
           dueTime: item.dueTime || null,
+          repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+          reminderOffsetMinutes: Number(item.reminderOffsetMinutes) || 0,
           targetTitle: item.targetTitle || null,
           projectId: item.projectId || null,
           goalId: item.goalId || null,
