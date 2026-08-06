@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem } from '@/lib/backend/groq'
 import {
   saveParsedItemToDb,
@@ -20,6 +21,9 @@ import { getUserAuthToken } from '@/lib/backend/auth'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
+
+// Extend function timeout to 60s (active on Vercel Pro/Enterprise)
+export const maxDuration = 60
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
@@ -110,22 +114,58 @@ async function safeEditOrSend(
   })
 }
 
-/** Register all visible members of a Telegram group */
-async function getAndRegisterGroupMembers(groupChatId: number): Promise<number[]> {
+/**
+ * Track that a user was seen in a group. Upserts into GroupMembership.
+ * Over time this builds the full list of all group members.
+ */
+async function trackGroupMember(groupChatId: number, memberChatId: number) {
+  try {
+    await prisma.groupMembership.upsert({
+      where: {
+        groupChatId_memberChatId: {
+          groupChatId: BigInt(groupChatId),
+          memberChatId: BigInt(memberChatId),
+        },
+      },
+      update: {},
+      create: {
+        groupChatId: BigInt(groupChatId),
+        memberChatId: BigInt(memberChatId),
+      },
+    })
+  } catch {}
+}
+
+/**
+ * Get ALL known members of a group from our DB (accumulated over time).
+ * Also fetches current admins from Telegram API (the only ones available without admin rights).
+ */
+async function getGroupMembers(groupChatId: number): Promise<number[]> {
+  const idSet = new Set<number>()
+
+  // 1. From our GroupMembership DB table (all historically seen members)
+  try {
+    const memberships = await prisma.groupMembership.findMany({
+      where: { groupChatId: BigInt(groupChatId) },
+    })
+    memberships.forEach(m => idSet.add(Number(m.memberChatId)))
+  } catch {}
+
+  // 2. From Telegram getChatAdministrators (admins only, but at least catches them)
   try {
     const res = await tgApi('getChatAdministrators', { chat_id: groupChatId })
-    if (!res?.ok || !Array.isArray(res.result)) return []
-    const ids: number[] = []
-    for (const member of res.result) {
-      const u = member.user
-      if (!u || u.is_bot) continue
-      await registerChatId(u.id, u.first_name, u.username, u.last_name)
-      ids.push(u.id)
+    if (res?.ok && Array.isArray(res.result)) {
+      for (const member of res.result) {
+        const u = member.user
+        if (!u || u.is_bot) continue
+        await registerChatId(u.id, u.first_name, u.username, u.last_name)
+        await trackGroupMember(groupChatId, u.id)
+        idSet.add(u.id)
+      }
     }
-    return ids
-  } catch {
-    return []
-  }
+  } catch {}
+
+  return Array.from(idSet)
 }
 
 function miniAppKeyboard(chatId?: number) {
@@ -620,163 +660,172 @@ async function processVoice(chatId: number, fileId: string) {
 // ── Group & Friend Handlers ───────────────────────────────────────────────────
 
 async function handleGroupAddCommand(msg: any) {
-  const groupChatId = msg.chat.id
-  const senderId = msg.from.id
-  const senderName = msg.from.first_name || 'Участник'
-  const senderUsername = msg.from.username
-  let statusMsgId: number | undefined
+  const groupChatId: number = msg.chat.id
+  const senderId: number = msg.from.id
+  const senderName: string = msg.from.first_name || 'Участник'
+  const senderUsername: string | undefined = msg.from.username
 
-  try {
-    await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
+  // ── Phase 1: Fast pre-checks (runs before returning 200 to Telegram) ─────────
 
-    const replyMsg = msg.reply_to_message
-    if (!replyMsg) {
-      await send(groupChatId,
-        `ℹ️ *Как использовать /add в группе:*\n\n` +
-        `Ответьте командой */add* на любое голосовое или текстовое сообщение в группе, чтобы Zerf AI вычленил из него задачи и создал их для участников!`,
-        { reply_to_message_id: msg.message_id }
-      )
-      return
-    }
+  await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
+  await trackGroupMember(groupChatId, senderId)
 
-    const replySenderId = replyMsg.from?.id
-    const replySenderName = replyMsg.from?.first_name || 'Коллега'
-    const replySenderUsername = replyMsg.from?.username
-    if (replySenderId) {
-      await registerChatId(replySenderId, replySenderName, replySenderUsername, replyMsg.from?.last_name)
-      await autoAddFriends(senderId, replySenderId)
-    }
+  const replyMsg = msg.reply_to_message
+  if (!replyMsg) {
+    await send(groupChatId,
+      `Как использовать /add в группе:\n\nОтветьте командой /add на любое голосовое или текстовое сообщение в группе, и Zerf AI создаст задачи для всех участников!`,
+      { reply_to_message_id: msg.message_id }
+    )
+    return
+  }
 
-    // Auto-register + auto-friend ALL group members (admins visible via API)
-    const groupMemberIds = await getAndRegisterGroupMembers(groupChatId)
-    for (const memberId of groupMemberIds) {
-      if (memberId !== senderId) await autoAddFriends(senderId, memberId)
-      if (replySenderId && memberId !== replySenderId) await autoAddFriends(replySenderId, memberId)
-    }
+  const replySenderId: number | undefined = replyMsg.from?.id
+  const replySenderName: string = replyMsg.from?.first_name || 'Коллега'
+  const replySenderUsername: string | undefined = replyMsg.from?.username
 
-    // Check if at least ONE user in group has Zerf Premium
-    const { hasPremium } = await checkGroupOrUserHasPremium(senderId, groupChatId, replySenderId ? [replySenderId] : [])
+  if (replySenderId && !replyMsg.from?.is_bot) {
+    await registerChatId(replySenderId, replySenderName, replySenderUsername, replyMsg.from?.last_name)
+    await trackGroupMember(groupChatId, replySenderId)
+    await autoAddFriends(senderId, replySenderId)
+  }
 
-    if (!hasPremium) {
-      await send(groupChatId,
-        `❌ *Для работы Zerf AI в группах требуется Zerf Premium!*\n\n` +
-        `Хотя бы у одного участника группы должна быть активная подписка *Zerf Premium* (99 ₽/мес).\n\n` +
-        `Оформить подписку можно в личном боте через /buy или в Mini App! 💳`,
-        {
-          reply_to_message_id: msg.message_id,
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '💳 Оформить Zerf Premium (99 ₽)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` }
-            ]]
-          }
+  // Premium check (fast DB query)
+  const { hasPremium } = await checkGroupOrUserHasPremium(
+    senderId, groupChatId,
+    replySenderId ? [replySenderId] : []
+  )
+
+  if (!hasPremium) {
+    await send(groupChatId,
+      `Для работы Zerf AI в группах требуется Zerf Premium!\n\nХотя бы у одного участника должна быть подписка (99 руб/мес).\nОформить: /buy или через Mini App.`,
+      {
+        reply_to_message_id: msg.message_id,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: 'Оформить Zerf Premium (99 руб)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` }
+          ]]
         }
-      )
-      return
-    }
+      }
+    )
+    return
+  }
 
-    // Send initial status message & record its message_id for in-place edit
-    let targetText = replyMsg.text || replyMsg.caption || ''
-    const targetVoice = replyMsg.voice || replyMsg.audio
+  const targetVoice = replyMsg.voice || replyMsg.audio
+  const targetTextDirect = replyMsg.text || replyMsg.caption || ''
 
-    if (targetVoice) {
+  // Send status message NOW — this is what the user sees instantly
+  const statusRes = await send(
+    groupChatId,
+    targetVoice ? 'Обрабатываю голосовое из группы...' : 'Обрабатываю сообщение из группы...',
+    { reply_to_message_id: msg.message_id }
+  )
+  const statusMsgId: number | undefined = statusRes?.result?.message_id
+
+  // ── Phase 2: Heavy work inside after() — runs AFTER 200 is returned ─────────
+  after(async () => {
+    try {
       const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
       if (!key) {
-        await send(groupChatId, '❌ Groq API key не настроен.')
+        await safeEditOrSend(groupChatId, statusMsgId, 'Groq API key не настроен.')
         return
       }
-      const statusRes = await send(groupChatId, '🎙️ Обрабатываю голосовое из группы…', { reply_to_message_id: msg.message_id })
-      statusMsgId = statusRes?.result?.message_id
 
-      const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
-      const fileData = await fileRes.json()
-      const filePath = fileData.result?.file_path
-      if (filePath) {
-        const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
-        const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
-        targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
-      }
-    } else {
-      const statusRes = await send(groupChatId, '⚡ Обрабатываю сообщение из группы…', { reply_to_message_id: msg.message_id })
-      statusMsgId = statusRes?.result?.message_id
-    }
+      // Get all known group members from DB (accumulated over time)
+      const knownMemberIds = await getGroupMembers(groupChatId)
 
-    if (!targetText.trim()) {
-      if (statusMsgId) {
-        await editMessageText(groupChatId, statusMsgId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.')
-      } else {
-        await send(groupChatId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.', { reply_to_message_id: msg.message_id })
-      }
-      return
-    }
+      // Ensure sender + reply-to are in the set
+      const assigneeSet = new Set<string>([String(senderId)])
+      if (replySenderId) assigneeSet.add(String(replySenderId))
+      knownMemberIds.forEach(id => assigneeSet.add(String(id)))
+      const allAssignees = Array.from(assigneeSet)
 
-    const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
-    const context = await getExistingItemsContext(senderId)
-    let items = await parseIntentWithGroq(targetText, key, undefined, context)
-
-    // Fallback: If AI extracted no structured items, create a task directly from the message text!
-    if (!items || items.length === 0) {
-      items = [{
-        type: 'task',
-        action: 'create',
-        title: targetText.trim().slice(0, 100),
-        summary: targetText.trim(),
-        priority: 'medium',
-        dueDate: new Date().toISOString().slice(0, 10),
-        tags: ['группа'],
-        rawText: targetText,
-      }]
-    }
-
-    // Collect ALL group members as assignees (not just sender + reply-to)
-    const allGroupMemberIds = await getAndRegisterGroupMembers(groupChatId)
-    const assigneeSet = new Set<string>([String(senderId)])
-    if (replySenderId) assigneeSet.add(String(replySenderId))
-    for (const mid of allGroupMemberIds) assigneeSet.add(String(mid))
-    const allAssignees = Array.from(assigneeSet)
-
-    let groupResponseCard = `Групповая задача успешно создана в Zerf\n\n`
-    groupResponseCard += `Назначено: ${senderName}`
-    if (replySenderName && replySenderId !== senderId) {
-      groupResponseCard += ` и ${replySenderName}`
-    }
-    groupResponseCard += `\n\n`
-
-    for (let idx = 0; idx < items.length; idx++) {
-      const item = items[idx]
-      item.isShared = true
-      item.assignees = allAssignees
-
-      // Save for ALL assignees
-      for (const aid of allAssignees) {
-        try { await saveParsedItemToDb(item, Number(aid)) } catch {}
+      // Auto-friend all known group members with each other
+      for (const mid of knownMemberIds) {
+        if (mid !== senderId) autoAddFriends(senderId, mid).catch(() => {})
+        if (replySenderId && mid !== replySenderId) autoAddFriends(replySenderId, mid).catch(() => {})
       }
 
-      const prefix = items.length > 1 ? `${idx + 1}. ` : ''
-      groupResponseCard += `${prefix}Задача: ${item.title}\n`
-      if (item.summary && item.summary !== item.title) {
-        groupResponseCard += `Описание: ${item.summary}\n`
+      // Transcribe voice if needed
+      let targetText = targetTextDirect
+      if (targetVoice) {
+        try {
+          const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
+          const fileData = await fileRes.json()
+          const filePath = fileData.result?.file_path
+          if (filePath) {
+            const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
+            const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+            targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
+          }
+        } catch (err) {
+          await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
+          return
+        }
       }
-      if (item.dueDate) groupResponseCard += `Дата: ${item.dueDate}\n`
-      if (item.dueTime) groupResponseCard += `Время: ${item.dueTime}\n`
-      groupResponseCard += `\n`
-    }
 
-    groupResponseCard += `Синхронизировано в приложении участников.`
+      if (!targetText.trim()) {
+        await safeEditOrSend(groupChatId, statusMsgId, 'В выбранном сообщении нет текста или речи для создания задачи.')
+        return
+      }
 
-    await safeEditOrSend(groupChatId, statusMsgId, groupResponseCard, {
-      reply_markup: miniAppKeyboard(senderId),
-    })
-  } catch (err: any) {
-    console.error('Group add command error:', err)
-    if (statusMsgId) {
-      await editMessageText(groupChatId, statusMsgId, `❌ Ошибка при обработке в группе: ${String(err.message || err).slice(0, 200)}`)
-    } else {
-      await send(groupChatId, `❌ Ошибка при обработке в группе: ${String(err.message || err).slice(0, 200)}`, {
-        reply_to_message_id: msg.message_id
+      // AI parsing
+      const context = await getExistingItemsContext(senderId)
+      let items = await parseIntentWithGroq(targetText, key, undefined, context)
+
+      // Fallback: create task from raw text if AI found nothing
+      if (!items || items.length === 0) {
+        items = [{
+          type: 'task',
+          action: 'create',
+          title: targetText.trim().slice(0, 100),
+          summary: targetText.trim(),
+          priority: 'medium',
+          dueDate: new Date().toISOString().slice(0, 10),
+          tags: ['группа'],
+          rawText: targetText,
+        }]
+      }
+
+      // Save to DB for ALL assignees
+      for (const item of items) {
+        item.isShared = true
+        item.assignees = allAssignees
+        for (const aid of allAssignees) {
+          try { await saveParsedItemToDb(item, Number(aid)) } catch {}
+        }
+      }
+
+      // Build response card (plain text — no Markdown to avoid parse failures)
+      let card = `Групповая задача создана в Zerf\n\n`
+      card += `Участники: ${senderName}`
+      if (replySenderName && replySenderId !== senderId) card += `, ${replySenderName}`
+      const others = knownMemberIds.filter(id => id !== senderId && id !== replySenderId)
+      if (others.length > 0) card += ` и ещё ${others.length} уч.`
+      card += `\n\n`
+
+      items.forEach((item, idx) => {
+        const prefix = items.length > 1 ? `${idx + 1}. ` : ''
+        card += `${prefix}Задача: ${item.title}\n`
+        if (item.dueDate) card += `Дата: ${item.dueDate}\n`
+        if (item.dueTime) card += `Время: ${item.dueTime}\n`
+        card += `\n`
       })
+      card += `Синхронизировано для ${allAssignees.length} участников.`
+
+      await safeEditOrSend(groupChatId, statusMsgId, card, {
+        reply_markup: miniAppKeyboard(senderId),
+      })
+    } catch (err: any) {
+      console.error('Group add after() error:', err)
+      await safeEditOrSend(
+        groupChatId,
+        statusMsgId,
+        `Ошибка: ${String(err?.message || err).slice(0, 200)}`
+      ).catch(() => {})
     }
-  }
+  })
 }
+
 
 async function handleInviteCommand(chatId: number, senderName: string, param?: string) {
   if (!param) {
@@ -917,6 +966,11 @@ export async function POST(req: NextRequest) {
 
     // Register user details (updates name automatically on every message!)
     await registerChatId(senderId, firstName, username, lastName).catch(() => {})
+
+    // Track every group message sender → builds complete member list over time
+    if (isGroup && senderId && senderId !== chatId) {
+      trackGroupMember(chatId, senderId).catch(() => {})
+    }
 
     if (text.startsWith('/')) {
       const parts = text.split(' ')
