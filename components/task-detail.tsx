@@ -269,13 +269,26 @@ export function TaskDetail() {
               {task.assignees.map(aid => {
                 const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : ''
                 const isMe = currentChatId && String(currentChatId) === String(aid)
-                const friend = state.friends.find(f => f.id === aid || f.chatId === aid)
-                const name = isMe ? 'Вы (Владелец)' : (friend?.name || `Участник #${aid.slice(-4)}`)
+                const friend = state.friends.find(f =>
+                  String(f.id) === String(aid) ||
+                  String(f.chatId) === String(aid)
+                )
+                let name: string
+                if (isMe) {
+                  name = 'Вы'
+                } else if (friend?.name) {
+                  name = friend.name
+                } else if (friend?.username) {
+                  name = `@${friend.username}`
+                } else {
+                  name = `Участник #${String(aid).slice(-4)}`
+                }
+                const initials = isMe ? 'ВЫ' : name.replace('@', '').slice(0, 2).toUpperCase()
                 return (
                   <div key={aid} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card border border-border/60 shadow-xs">
                     <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
                       <span className="text-[10px] font-bold text-primary">
-                        {isMe ? 'ВЫ' : name.slice(0, 2).toUpperCase()}
+                        {initials}
                       </span>
                     </div>
                     <span className="text-[12px] font-medium text-foreground">{name}</span>

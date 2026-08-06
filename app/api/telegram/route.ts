@@ -76,14 +76,56 @@ async function editMessageText(chatId: number, messageId: number, text: string, 
   })
 }
 
-async function safeEditOrSend(chatId: number, messageId: number | undefined, text: string, extra?: object) {
+/** Edit a bot message in-place; if that fails (e.g. parse error, permission), send a new plain message */
+async function safeEditOrSend(
+  chatId: number,
+  messageId: number | undefined,
+  text: string,
+  extra?: object
+) {
   if (messageId) {
-    try {
-      const res = await editMessageText(chatId, messageId, text, extra)
-      if (res?.ok) return res
-    } catch {}
+    // Try with Markdown
+    const r1 = await tgApi('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: 'Markdown',
+      ...extra,
+    })
+    if (r1?.ok) return r1
+    // Retry without Markdown (special chars in task title may break it)
+    const r2 = await tgApi('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      ...extra,
+    })
+    if (r2?.ok) return r2
   }
-  return await send(chatId, text, extra)
+  // Fallback: send as new message (plain, no parse_mode - guaranteed delivery)
+  return await tgApi('sendMessage', {
+    chat_id: chatId,
+    text,
+    ...extra,
+  })
+}
+
+/** Register all visible members of a Telegram group */
+async function getAndRegisterGroupMembers(groupChatId: number): Promise<number[]> {
+  try {
+    const res = await tgApi('getChatAdministrators', { chat_id: groupChatId })
+    if (!res?.ok || !Array.isArray(res.result)) return []
+    const ids: number[] = []
+    for (const member of res.result) {
+      const u = member.user
+      if (!u || u.is_bot) continue
+      await registerChatId(u.id, u.first_name, u.username, u.last_name)
+      ids.push(u.id)
+    }
+    return ids
+  } catch {
+    return []
+  }
 }
 
 function miniAppKeyboard(chatId?: number) {
@@ -605,6 +647,13 @@ async function handleGroupAddCommand(msg: any) {
       await autoAddFriends(senderId, replySenderId)
     }
 
+    // Auto-register + auto-friend ALL group members (admins visible via API)
+    const groupMemberIds = await getAndRegisterGroupMembers(groupChatId)
+    for (const memberId of groupMemberIds) {
+      if (memberId !== senderId) await autoAddFriends(senderId, memberId)
+      if (replySenderId && memberId !== replySenderId) await autoAddFriends(replySenderId, memberId)
+    }
+
     // Check if at least ONE user in group has Zerf Premium
     const { hasPremium } = await checkGroupOrUserHasPremium(senderId, groupChatId, replySenderId ? [replySenderId] : [])
 
@@ -678,35 +727,34 @@ async function handleGroupAddCommand(msg: any) {
       }]
     }
 
+    // Collect ALL group members as assignees (not just sender + reply-to)
+    const allGroupMemberIds = await getAndRegisterGroupMembers(groupChatId)
+    const assigneeSet = new Set<string>([String(senderId)])
+    if (replySenderId) assigneeSet.add(String(replySenderId))
+    for (const mid of allGroupMemberIds) assigneeSet.add(String(mid))
+    const allAssignees = Array.from(assigneeSet)
+
     let groupResponseCard = `Групповая задача успешно создана в Zerf\n\n`
-    groupResponseCard += `Назначено: *${escMd(senderName)}*`
+    groupResponseCard += `Назначено: ${senderName}`
     if (replySenderName && replySenderId !== senderId) {
-      groupResponseCard += ` и *${escMd(replySenderName)}*`
+      groupResponseCard += ` и ${replySenderName}`
     }
     groupResponseCard += `\n\n`
 
     for (let idx = 0; idx < items.length; idx++) {
       const item = items[idx]
       item.isShared = true
-      item.assignees = [String(senderId)]
-      if (replySenderId && replySenderId !== senderId) {
-        item.assignees.push(String(replySenderId))
-      }
+      item.assignees = allAssignees
 
-      // Save for sender
-      await saveParsedItemToDb(item, senderId)
-      // Save for reply sender if different
-      if (replySenderId && replySenderId !== senderId) {
-        await saveParsedItemToDb(item, replySenderId)
+      // Save for ALL assignees
+      for (const aid of allAssignees) {
+        try { await saveParsedItemToDb(item, Number(aid)) } catch {}
       }
 
       const prefix = items.length > 1 ? `${idx + 1}. ` : ''
-      groupResponseCard += `${prefix}Задача: *${escMd(item.title)}*\n`
+      groupResponseCard += `${prefix}Задача: ${item.title}\n`
       if (item.summary && item.summary !== item.title) {
-        groupResponseCard += `Описание: ${escMd(item.summary)}\n`
-      }
-      if (item.subtasks && item.subtasks.length > 0) {
-        groupResponseCard += `Чек-лист:\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+        groupResponseCard += `Описание: ${item.summary}\n`
       }
       if (item.dueDate) groupResponseCard += `Дата: ${item.dueDate}\n`
       if (item.dueTime) groupResponseCard += `Время: ${item.dueTime}\n`
