@@ -101,10 +101,12 @@ export async function createTask(data: {
   dueDate?: string
   dueTime?: string
   tags?: string[]
-  subtasks?: object[]
+  subtasks?: Array<{ id: string; title: string; done: boolean }>
   rawText?: string
   aiGenerated?: boolean
   source?: string
+  assignees?: string[]
+  isShared?: boolean
   ownerChatId?: number | bigint | string | null   // Telegram chatId of the creator
 }) {
   return prisma.task.create({
@@ -116,7 +118,8 @@ export async function createTask(data: {
       dueDate: data.dueDate || new Date().toISOString().slice(0, 10),
       dueTime: data.dueTime || null,
       tags: data.tags || [],
-      assignees: [],
+      assignees: data.assignees || [],
+      isShared: data.isShared || false,
       subtasks: data.subtasks || [],
       rawText: data.rawText || null,
       aiGenerated: data.aiGenerated || false,
@@ -264,12 +267,75 @@ export async function deleteNote(id: string) {
 
 // ── Telegram Chat IDs ─────────────────────────────────────────────────────────
 
-export async function registerChatId(chatId: number, firstName?: string) {
-  await prisma.telegramChat.upsert({
-    where: { chatId: BigInt(chatId) },
-    update: {},
-    create: { chatId: BigInt(chatId), firstName: firstName || null },
-  })
+export async function registerChatId(
+  chatId: number | bigint,
+  firstName?: string,
+  username?: string,
+  lastName?: string
+) {
+  try {
+    const cid = BigInt(chatId)
+    const updateData: { firstName?: string; username?: string; lastName?: string } = {}
+    if (firstName) updateData.firstName = firstName
+    if (username) updateData.username = username
+    if (lastName) updateData.lastName = lastName
+
+    await prisma.telegramChat.upsert({
+      where: { chatId: cid },
+      update: updateData,
+      create: {
+        chatId: cid,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        username: username || null,
+      },
+    })
+  } catch {}
+}
+
+export async function checkGroupOrUserHasPremium(
+  senderChatId: number | bigint,
+  groupChatId?: number | bigint,
+  memberChatIds: (number | bigint)[] = []
+): Promise<{ hasPremium: boolean; premiumPayerId?: bigint }> {
+  try {
+    const allIds = Array.from(new Set([senderChatId, ...(groupChatId ? [groupChatId] : []), ...memberChatIds])).map(id => BigInt(id))
+
+    const premiumUsers = await prisma.telegramChat.findMany({
+      where: {
+        chatId: { in: allIds },
+        plan: 'premium',
+        OR: [
+          { subscriptionExpiry: null },
+          { subscriptionExpiry: { gte: new Date() } }
+        ]
+      }
+    })
+
+    if (premiumUsers.length > 0) {
+      return { hasPremium: true, premiumPayerId: premiumUsers[0].chatId }
+    }
+  } catch {}
+  return { hasPremium: false }
+}
+
+export async function autoAddFriends(chatId1: number | bigint, chatId2: number | bigint) {
+  if (chatId1 === chatId2) return
+  const c1 = BigInt(chatId1)
+  const c2 = BigInt(chatId2)
+
+  try {
+    await prisma.friendship.upsert({
+      where: { userChatId_friendChatId: { userChatId: c1, friendChatId: c2 } },
+      update: { status: 'accepted' },
+      create: { userChatId: c1, friendChatId: c2, status: 'accepted' }
+    })
+    await prisma.friendship.upsert({
+      where: { userChatId_friendChatId: { userChatId: c2, friendChatId: c1 } },
+      update: { status: 'accepted' },
+      create: { userChatId: c2, friendChatId: c1, status: 'accepted' }
+    })
+  } catch {}
 }
 
 export async function getAllChatIds(): Promise<number[]> {

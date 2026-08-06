@@ -14,6 +14,7 @@ import {
   getAllTasks, getAllGoals, getAllNotes,
   registerChatId, getExistingItemsContext,
   getUserUsageAndLimits, incrementUserUsage,
+  autoAddFriends, checkGroupOrUserHasPremium,
 } from '@/lib/backend/db'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
@@ -533,6 +534,176 @@ async function processVoice(chatId: number, fileId: string) {
   }
 }
 
+// ── Group & Friend Handlers ───────────────────────────────────────────────────
+
+async function handleGroupAddCommand(msg: any) {
+  const groupChatId = msg.chat.id
+  const senderId = msg.from.id
+  const senderName = msg.from.first_name || 'Участник'
+  const senderUsername = msg.from.username
+
+  await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
+
+  const replyMsg = msg.reply_to_message
+  if (!replyMsg) {
+    await send(groupChatId,
+      `ℹ️ *Как использовать /add в группе:*\n\n` +
+      `Ответьте командой */add* на любое голосовое или текстовое сообщение в группе, чтобы Zerf AI вычленил из него задачи и создал их для участников!`,
+      { reply_to_message_id: msg.message_id }
+    )
+    return
+  }
+
+  const replySenderId = replyMsg.from?.id
+  const replySenderName = replyMsg.from?.first_name || 'Коллега'
+  const replySenderUsername = replyMsg.from?.username
+  if (replySenderId) {
+    await registerChatId(replySenderId, replySenderName, replySenderUsername, replyMsg.from?.last_name)
+    await autoAddFriends(senderId, replySenderId)
+  }
+
+  // Check if at least ONE user in group has Zerf Premium
+  const { hasPremium } = await checkGroupOrUserHasPremium(senderId, groupChatId, replySenderId ? [replySenderId] : [])
+
+  if (!hasPremium) {
+    await send(groupChatId,
+      `❌ *Для работы Zerf AI в группах требуется Zerf Premium!*\n\n` +
+      `Хотя бы у одного участника группы должна быть активная подписка *Zerf Premium* (99 ₽/мес).\n\n` +
+      `Оформить подписку можно в личном боте через /buy или в Mini App! 💳`,
+      {
+        reply_to_message_id: msg.message_id,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '💳 Оформить Zerf Premium (99 ₽)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` }
+          ]]
+        }
+      }
+    )
+    return
+  }
+
+  // Get target text or transcribe voice
+  let targetText = replyMsg.text || replyMsg.caption || ''
+  const targetVoice = replyMsg.voice || replyMsg.audio
+
+  if (targetVoice) {
+    const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
+    if (!key) {
+      await send(groupChatId, '❌ Groq API key не настроен.')
+      return
+    }
+    await send(groupChatId, '🎙️ Обрабатываю голосовое из группы…', { reply_to_message_id: msg.message_id })
+
+    const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
+    const fileData = await fileRes.json()
+    const filePath = fileData.result?.file_path
+    if (filePath) {
+      const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
+      const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+      targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
+    }
+  }
+
+  if (!targetText.trim()) {
+    await send(groupChatId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.', { reply_to_message_id: msg.message_id })
+    return
+  }
+
+  // Parse items with Groq AI
+  const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
+  const context = await getExistingItemsContext(senderId)
+  const items = await parseIntentWithGroq(targetText, key, undefined, context)
+
+  if (!items || items.length === 0) {
+    await send(groupChatId, '🤔 Не удалось извлечь задачи из сообщения.', { reply_to_message_id: msg.message_id })
+    return
+  }
+
+  let groupResponseCard = `👥 *Групповые задачи успешно созданы в Zerf!*\n\n`
+  groupResponseCard += `Назначено для: *${escMd(senderName)}*`
+  if (replySenderName && replySenderId !== senderId) {
+    groupResponseCard += ` и *${escMd(replySenderName)}*`
+  }
+  groupResponseCard += `\n\n`
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx]
+    // Save for sender
+    await saveParsedItemToDb(item, senderId)
+    // Save for reply sender if different
+    if (replySenderId && replySenderId !== senderId) {
+      await saveParsedItemToDb(item, replySenderId)
+    }
+
+    const prefix = items.length > 1 ? `${idx + 1}. ` : ''
+    groupResponseCard += `${prefix}📌 *${escMd(item.title)}*\n`
+    if (item.summary && item.summary !== item.title) {
+      groupResponseCard += `📝 _${escMd(item.summary)}_\n`
+    }
+    if (item.subtasks && item.subtasks.length > 0) {
+      groupResponseCard += `📋 *Шаги:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+    }
+    if (item.dueDate) groupResponseCard += `📅 Дата: ${item.dueDate}\n`
+    if (item.dueTime) groupResponseCard += `⏰ Время: *${item.dueTime}*\n`
+    groupResponseCard += `\n`
+  }
+
+  groupResponseCard += `✨ *Синхронизировано в приложении участников!*`
+
+  await send(groupChatId, groupResponseCard, {
+    reply_to_message_id: msg.message_id,
+    reply_markup: miniAppKeyboard(senderId)
+  })
+}
+
+async function handleInviteCommand(chatId: number, senderName: string, param?: string) {
+  if (!param) {
+    await send(chatId,
+      `🤝 *Приглашение друзей в Zerf AI*\n\n` +
+      `Чтобы добавить друга по юзернейму, введите:\n` +
+      `\`/invite @username\`\n\n` +
+      `Или отправьте другу ссылку:\n` +
+      `https://t.me/Zerph_bot?start=invite_${chatId}`,
+      { reply_markup: miniAppKeyboard(chatId) }
+    )
+    return
+  }
+
+  const cleanUsername = param.replace('@', '').trim()
+  const targetUser = await prisma.telegramChat.findFirst({
+    where: { username: { equals: cleanUsername, mode: 'insensitive' } }
+  })
+
+  if (!targetUser) {
+    await send(chatId, `🔍 Пользователь *@${cleanUsername}* не найден в Zerf. Попроси его сначала запустить бота через /start!`)
+    return
+  }
+
+  const friendId = Number(targetUser.chatId)
+  await prisma.friendship.upsert({
+    where: { userChatId_friendChatId: { userChatId: BigInt(chatId), friendChatId: BigInt(friendId) } },
+    update: { status: 'pending' },
+    create: { userChatId: BigInt(chatId), friendChatId: BigInt(friendId), status: 'pending' }
+  })
+
+  await send(friendId,
+    `🤝 *Новое приглашение в друзья в Zerf AI!*\n\n` +
+    `Пользователь *${escMd(senderName)}* хочет добавить вас в друзья!`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ Принять', callback_data: `friend_accept_${chatId}` },
+            { text: '❌ Отклонить', callback_data: `friend_decline_${chatId}` }
+          ]
+        ]
+      }
+    }
+  )
+
+  await send(chatId, `✉️ Приглашение отправлено пользователю *@${cleanUsername}*! Ждём подтверждения.`)
+}
+
 // ── Main webhook handler ──────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -593,6 +764,17 @@ export async function POST(req: NextRequest) {
           create: { chatId: BigInt(chatId), reminderRepeatCount: val },
         })
         await send(chatId, `✅ *Количество повторов обновлено:* ${val} раза!`, { reply_markup: miniAppKeyboard(chatId) })
+      } else if (data.startsWith('friend_accept_')) {
+        const inviterId = BigInt(data.replace('friend_accept_', ''))
+        await autoAddFriends(Number(inviterId), chatId)
+        await send(chatId, `🎉 *Приглашение принято!* Теперь вы друзья в Zerf AI.`)
+        await send(Number(inviterId), `🎉 Пользователь принял ваше приглашение! Теперь вы друзья в Zerf AI.`)
+      } else if (data.startsWith('friend_decline_')) {
+        const inviterId = BigInt(data.replace('friend_decline_', ''))
+        await prisma.friendship.deleteMany({
+          where: { userChatId: inviterId, friendChatId: BigInt(chatId) }
+        })
+        await send(chatId, `❌ *Приглашение отклонено.*`)
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id })
@@ -603,19 +785,30 @@ export async function POST(req: NextRequest) {
     if (!msg) return NextResponse.json({ ok: true })
 
     const chatId: number = msg.chat.id
+    const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup'
+    const senderId: number = msg.from?.id || chatId
     const firstName: string = msg.from?.first_name || 'Friend'
+    const username: string = msg.from?.username || ''
+    const lastName: string = msg.from?.last_name || ''
     const text: string = msg.text || ''
     const voice = msg.voice || msg.audio
 
-    // Register for reminders
-    await registerChatId(chatId, firstName).catch(() => {})
+    // Register user details (updates name automatically on every message!)
+    await registerChatId(senderId, firstName, username, lastName).catch(() => {})
 
     if (text.startsWith('/')) {
       const parts = text.split(' ')
-      const cmd = parts[0].toLowerCase()
+      const rawCmd = parts[0].toLowerCase()
+      const cmd = rawCmd.split('@')[0] // handle /add@ZerfBot
       const param = parts[1]?.toLowerCase()
 
-      if (cmd === '/login' || (cmd === '/start' && param === 'login')) {
+      if (cmd === '/add' && isGroup) {
+        await handleGroupAddCommand(msg)
+      } else if (cmd === '/add' && !isGroup && msg.reply_to_message) {
+        await handleGroupAddCommand(msg)
+      } else if (cmd === '/invite') {
+        await handleInviteCommand(senderId, firstName, parts[1])
+      } else if (cmd === '/login' || (cmd === '/start' && param === 'login')) {
         await handleStart(chatId, firstName)
       } else if (cmd === '/start' || cmd === '/help') {
         await handleStart(chatId, firstName)
@@ -633,13 +826,15 @@ export async function POST(req: NextRequest) {
         await handleSubscribe(chatId)
       } else if (cmd === '/admin') {
         await handleAdminCommand(chatId, parts.slice(1))
-      } else {
-        await send(chatId, 'Попробуй /settings, /today, /buy или /help')
+      } else if (!isGroup) {
+        await send(chatId, 'Попробуй /settings, /today, /invite, /buy или /help')
       }
-    } else if (voice) {
-      await processVoice(chatId, voice.file_id)
-    } else if (text.trim()) {
-      await processText(chatId, text)
+    } else if (!isGroup) {
+      if (voice) {
+        await processVoice(chatId, voice.file_id)
+      } else if (text.trim()) {
+        await processText(chatId, text)
+      }
     }
 
     // Trigger instant check for due reminders
