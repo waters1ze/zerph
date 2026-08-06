@@ -36,17 +36,32 @@ function escMd(s: string) {
 }
 
 async function tgApi(method: string, body: object) {
-  if (!BOT_TOKEN) return
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  if (!BOT_TOKEN) return null
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    return await res.json()
+  } catch {
+    return null
+  }
 }
 
 async function send(chatId: number, text: string, extra?: object) {
-  await tgApi('sendMessage', {
+  return await tgApi('sendMessage', {
     chat_id: chatId,
+    text,
+    parse_mode: 'Markdown',
+    ...extra,
+  })
+}
+
+async function editMessageText(chatId: number, messageId: number, text: string, extra?: object) {
+  return await tgApi('editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
     text,
     parse_mode: 'Markdown',
     ...extra,
@@ -541,6 +556,7 @@ async function handleGroupAddCommand(msg: any) {
   const senderId = msg.from.id
   const senderName = msg.from.first_name || 'Участник'
   const senderUsername = msg.from.username
+  let statusMsgId: number | undefined
 
   try {
     await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
@@ -583,7 +599,7 @@ async function handleGroupAddCommand(msg: any) {
       return
     }
 
-    // Get target text or transcribe voice
+    // Send initial status message & record its message_id for in-place edit
     let targetText = replyMsg.text || replyMsg.caption || ''
     const targetVoice = replyMsg.voice || replyMsg.audio
 
@@ -593,7 +609,8 @@ async function handleGroupAddCommand(msg: any) {
         await send(groupChatId, '❌ Groq API key не настроен.')
         return
       }
-      await send(groupChatId, '🎙️ Обрабатываю голосовое из группы…', { reply_to_message_id: msg.message_id })
+      const statusRes = await send(groupChatId, '🎙️ Обрабатываю голосовое из группы…', { reply_to_message_id: msg.message_id })
+      statusMsgId = statusRes?.result?.message_id
 
       const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
       const fileData = await fileRes.json()
@@ -603,10 +620,17 @@ async function handleGroupAddCommand(msg: any) {
         const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
         targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
       }
+    } else {
+      const statusRes = await send(groupChatId, '⚡ Обрабатываю сообщение из группы…', { reply_to_message_id: msg.message_id })
+      statusMsgId = statusRes?.result?.message_id
     }
 
     if (!targetText.trim()) {
-      await send(groupChatId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.', { reply_to_message_id: msg.message_id })
+      if (statusMsgId) {
+        await editMessageText(groupChatId, statusMsgId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.')
+      } else {
+        await send(groupChatId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.', { reply_to_message_id: msg.message_id })
+      }
       return
     }
 
@@ -628,7 +652,7 @@ async function handleGroupAddCommand(msg: any) {
       }]
     }
 
-    let groupResponseCard = `👥 *Групповая задача создана в Zerf!*\n\n`
+    let groupResponseCard = `👥 *Групповая задача успешно создана в Zerf!*\n\n`
     groupResponseCard += `👥 Назначено: *${escMd(senderName)}*`
     if (replySenderName && replySenderId !== senderId) {
       groupResponseCard += ` и *${escMd(replySenderName)}*`
@@ -665,15 +689,31 @@ async function handleGroupAddCommand(msg: any) {
 
     groupResponseCard += `✨ *Синхронизировано в приложении участников!*`
 
-    await send(groupChatId, groupResponseCard, {
-      reply_to_message_id: msg.message_id,
-      reply_markup: miniAppKeyboard(senderId)
-    })
+    if (statusMsgId) {
+      const editRes = await editMessageText(groupChatId, statusMsgId, groupResponseCard, {
+        reply_markup: miniAppKeyboard(senderId)
+      })
+      if (!editRes?.ok) {
+        await send(groupChatId, groupResponseCard, {
+          reply_to_message_id: msg.message_id,
+          reply_markup: miniAppKeyboard(senderId)
+        })
+      }
+    } else {
+      await send(groupChatId, groupResponseCard, {
+        reply_to_message_id: msg.message_id,
+        reply_markup: miniAppKeyboard(senderId)
+      })
+    }
   } catch (err: any) {
     console.error('Group add command error:', err)
-    await send(groupChatId, `❌ Ошибка при обработке в группе: ${String(err.message || err).slice(0, 200)}`, {
-      reply_to_message_id: msg.message_id
-    })
+    if (statusMsgId) {
+      await editMessageText(groupChatId, statusMsgId, `❌ Ошибка при обработке в группе: ${String(err.message || err).slice(0, 200)}`)
+    } else {
+      await send(groupChatId, `❌ Ошибка при обработке в группе: ${String(err.message || err).slice(0, 200)}`, {
+        reply_to_message_id: msg.message_id
+      })
+    }
   }
 }
 
