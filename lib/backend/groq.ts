@@ -220,7 +220,14 @@ export async function parseIntentWithGroq(
 
       try {
         const p = JSON.parse(raw)
-        const rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
+        let rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
+
+        rawItems = rawItems.filter((item: any) => {
+          const t = (item.title || '').toLowerCase()
+          return item.title && !t.includes('неизвестное сообщение') && !t.includes('нечитаемое сообщение') && !t.includes('неизвестный текст')
+        })
+
+        if (rawItems.length === 0) return []
 
         return rawItems.map((item: any) => ({
           action: item.action || (item.type === 'completion' ? 'completion' : 'create'),

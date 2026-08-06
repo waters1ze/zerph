@@ -19,11 +19,14 @@ You have access to the user's context (tasks, goals, notes) and can help them:
 Be concise, smart, actionable. Use markdown formatting. Keep responses focused and helpful.
 When enhancing voice input, add structure, formatting, and relevant details while preserving the original intent.`
 
-import { getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
+import { getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext } from '@/lib/backend/db'
 
 export async function POST(req: NextRequest) {
   try {
-    const ownerChatId = req.headers.get('x-chat-id')
+    const body = await req.json()
+    const { searchParams } = new URL(req.url)
+    const ownerChatId = req.headers.get('x-chat-id') || body.ownerChatId || searchParams.get('chatId') || searchParams.get('chat_id')
+
     if (ownerChatId) {
       const limits = await getUserUsageAndLimits(ownerChatId)
       if (!limits.canSendChatMessage) {
@@ -34,9 +37,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { messages, apiKey, context, mode } = await req.json()
-    const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY ||
-      GROQ_API_KEY
+    const { messages, apiKey, context: clientContext, mode } = body
+    const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY
 
     if (!groqApiKey) {
       return NextResponse.json(
@@ -51,13 +53,18 @@ export async function POST(req: NextRequest) {
       timeStyle: 'medium',
     })
 
+    // Auto-fetch workspace context (notes, tasks, goals) for ownerChatId
+    const serverContext = ownerChatId ? await getExistingItemsContext(ownerChatId) : ''
+
     // Build system message with context
     let systemContent =
       SYSTEM_PROMPT +
-      `\n\nТОЧНОЕ ТЕКУЩЕЕ ВРЕМЯ И ДАТА ПОЛЬЗОВАТЕЛЯ (Москва, MSK): ${nowMsk}.\nПри ответах, составлении расписания и планировании ориентируйся строго на это текущее время!`
+      `\n\nТОЧНОЕ ТЕКУЩЕЕ ВРЕМЯ И ДАТА ПОЛЬЗОВАТЕЛЯ (Москва, MSK): ${nowMsk}.\nПри ответах ориентируйся строго на это текущее время!`
 
-    if (context) {
-      systemContent += `\n\n## User's Current Workspace Context:\n${JSON.stringify(context, null, 2)}`
+    if (serverContext) {
+      systemContent += `\n\n## Полный контекст пользователя (Заметки, Задачи, Цели):\n${serverContext}`
+    } else if (clientContext) {
+      systemContent += `\n\n## User Workspace Context:\n${JSON.stringify(clientContext, null, 2)}`
     }
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {

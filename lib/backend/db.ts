@@ -366,28 +366,28 @@ export async function getExistingItemsContext(ownerChatId?: number | bigint | st
 
     const activeTasks = tasks.filter(t => t.status !== 'done').slice(0, 15)
     const activeGoals = goals.slice(0, 10)
-    const activeNotes = notes.slice(0, 5)
 
     const lines: string[] = []
 
     if (activeGoals.length) {
-      lines.push('🎯 ЦЕЛИ:')
+      lines.push('🎯 ЦЕЛИ ПОЛЬЗОВАТЕЛЯ:')
       activeGoals.forEach(g => {
         lines.push(`- ID: ${g.id} | Название: "${g.title}" | Дедлайн: ${g.deadline || 'не указан'} | Описание: ${g.description || ''}`)
       })
     }
 
     if (activeTasks.length) {
-      lines.push('\n📋 ЗАДАЧИ / НАПОМИНАНИЯ:')
+      lines.push('\n📋 ЗАДАЧИ / НАПОМИНАНИЯ ПОЛЬЗОВАТЕЛЯ:')
       activeTasks.forEach(t => {
         lines.push(`- ID: ${t.id} | Название: "${t.title}" | Дата: ${t.dueDate || 'не указана'} | Время: ${t.dueTime || 'не указано'} | Приоритет: ${t.priority}`)
       })
     }
 
-    if (activeNotes.length) {
-      lines.push('\n📌 ЗАМЕТКИ:')
-      activeNotes.forEach(n => {
-        lines.push(`- ID: ${n.id} | Заголовок: "${n.title}"`)
+    if (notes.length) {
+      lines.push('\n📌 ВСЕ ЗАМЕТКИ ПОЛЬЗОВАТЕЛЯ (полный текст):')
+      notes.slice(0, 20).forEach(n => {
+        const bodyText = (n.content || n.originalText || '').replace(/\n+/g, ' ').slice(0, 500)
+        lines.push(`- ID: ${n.id} | Заголовок: "${n.title}" | Содержание: "${bodyText}"`)
       })
     }
 
