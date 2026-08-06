@@ -36,6 +36,8 @@ export interface Task {
   completedAt?: string
   aiGenerated?: boolean
   source?: string
+  summary?: string             // AI detailed explanation & context
+  rawText?: string             // Original raw voice transcript
   progress?: number
   subtasks?: SubTask[]
 }
