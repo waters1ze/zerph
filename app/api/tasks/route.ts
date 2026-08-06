@@ -11,7 +11,7 @@ import {
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
-  createGoal, updateGoal,
+  createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 
@@ -68,6 +68,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.itemType === 'note' || body.type === 'note') {
+      if (ownerChatId) {
+        const limits = await getUserUsageAndLimits(ownerChatId)
+        if (!limits.canCreateNote) {
+          return NextResponse.json({
+            error: '❌ Лимит создания заметок исчерпан (2 заметки в день на бесплатном тарифе). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
+            limitReached: true,
+          }, { status: 403 })
+        }
+      }
+
       const note = await createNote({
         title: body.title || 'Новая заметка',
         content: body.content || '',
@@ -77,6 +87,11 @@ export async function POST(req: NextRequest) {
         dueTime: body.dueTime || null,
         ownerChatId: ownerChatId,
       })
+
+      if (ownerChatId) {
+        await incrementUserUsage(ownerChatId, 'note')
+      }
+
       return NextResponse.json(serialize({ success: true, note }))
     }
 

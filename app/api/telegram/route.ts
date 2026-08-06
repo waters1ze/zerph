@@ -13,6 +13,7 @@ import {
   saveParsedItemToDb,
   getAllTasks, getAllGoals, getAllNotes,
   registerChatId, getExistingItemsContext,
+  getUserUsageAndLimits, incrementUserUsage,
 } from '@/lib/backend/db'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
@@ -279,6 +280,24 @@ async function processVoice(chatId: number, fileId: string) {
     return
   }
 
+  // Check limits
+  const limits = await getUserUsageAndLimits(chatId)
+  if (!limits.canSendVoice) {
+    await send(chatId,
+      limits.plan === 'premium'
+        ? `❌ *Достигнут дневной лимит записи голоса (10 минут).* Сброс наступит завтра!`
+        : `❌ *Достигнут лимит голосовых сообщений (2 в день).* Оформите подписку *Zerf Premium* за 99 ₽!`,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '💳 Оформить подписку (99 ₽)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
+          ]]
+        }
+      }
+    )
+    return
+  }
+
   try {
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
     await send(chatId, '🎙 Обрабатываю голосовое…')
@@ -301,6 +320,9 @@ async function processVoice(chatId: number, fileId: string) {
       await send(chatId, '🤔 Не удалось распознать речь. Попробуй ещё раз.')
       return
     }
+
+    // Increment voice usage (~15s)
+    await incrementUserUsage(chatId, 'voice', 15)
 
     // Parse & save with context
     const context = await getExistingItemsContext(chatId)

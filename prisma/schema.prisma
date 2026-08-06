@@ -67,9 +67,16 @@ model Note {
 }
 
 model TelegramChat {
-  chatId                 BigInt   @id
+  chatId                 BigInt    @id
   firstName              String?
-  reminderIntervalMinutes Int      @default(5)
-  reminderRepeatCount    Int      @default(3)
-  addedAt                DateTime @default(now())
+  reminderIntervalMinutes Int       @default(5)
+  reminderRepeatCount    Int       @default(3)
+  plan                   String    @default("free") // "free" | "premium"
+  subscriptionExpiry     DateTime?
+  voiceCountToday        Int       @default(0)
+  voiceSecondsToday      Int       @default(0)
+  notesCountToday        Int       @default(0)
+  chatMessagesToday      Int       @default(0)
+  lastResetDate          String?   // YYYY-MM-DD
+  addedAt                DateTime  @default(now())
 }

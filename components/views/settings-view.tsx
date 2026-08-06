@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useSettings, useApp } from '@/lib/store'
 import { useLanguage } from '@/lib/i18n'
@@ -68,14 +68,128 @@ export function SettingsView() {
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage()
   const [saved, setSaved] = useState(false)
+  const [usage, setUsage] = useState<any>(null)
+  const [loadingPay, setLoadingPay] = useState(false)
 
   const save = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
+  useEffect(() => {
+    fetch('/api/subscription')
+      .then(r => r.json())
+      .then(data => setUsage(data))
+      .catch(() => {})
+  }, [])
+
+  const handleSubscribe = async () => {
+    setLoadingPay(true)
+    try {
+      const res = await fetch('/api/subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const data = await res.json()
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl
+      }
+    } catch {
+      alert('Ошибка при генерации ссылки на оплату ЮMoney')
+    } finally {
+      setLoadingPay(false)
+    }
+  }
+
+  const isPremium = usage?.plan === 'premium'
+
   return (
     <div className="flex flex-col gap-6 max-w-xl">
+      {/* Subscription & Limits */}
+      <Section title="Подписка и Дневные Лимиты">
+        <div className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase',
+                isPremium
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+              )}>
+                {isPremium ? '✨ Zerf Premium' : 'Free (Бесплатный)'}
+              </span>
+              {isPremium && usage?.subscriptionExpiry && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Активна до: {new Date(usage.subscriptionExpiry).toLocaleDateString('ru-RU')}
+                </p>
+              )}
+            </div>
+            {!isPremium && (
+              <button
+                onClick={handleSubscribe}
+                disabled={loadingPay}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium text-[13px] hover:brightness-110 active:scale-95 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+              >
+                {loadingPay ? 'Переход...' : 'Подписаться 99 ₽/мес'}
+              </button>
+            )}
+          </div>
+
+          {/* Limits Progress */}
+          <div className="space-y-3 pt-2 border-t border-border/50">
+            <div>
+              <div className="flex justify-between text-[12px] mb-1 font-medium">
+                <span>🎙 Голосовые сообщения в день</span>
+                <span className="text-muted-foreground">
+                  {isPremium
+                    ? `${Math.round((usage?.voice?.secondsUsed || 0) / 60)}м / 10 мин`
+                    : `${usage?.voice?.used || 0} / 2`}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{
+                    width: isPremium
+                      ? `${Math.min(100, ((usage?.voice?.secondsUsed || 0) / 600) * 100)}%`
+                      : `${Math.min(100, ((usage?.voice?.used || 0) / 2) * 100)}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[12px] mb-1 font-medium">
+                <span>📌 Заметки в день</span>
+                <span className="text-muted-foreground">
+                  {isPremium ? 'Безлимитно ✨' : `${usage?.notes?.used || 0} / 2`}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: isPremium ? '0%' : `${Math.min(100, ((usage?.notes?.used || 0) / 2) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[12px] mb-1 font-medium">
+                <span>💬 Сообщения в ИИ чат</span>
+                <span className="text-muted-foreground">
+                  {isPremium ? 'Безлимитно ✨' : `${usage?.chat?.used || 0} / 10`}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: isPremium ? '0%' : `${Math.min(100, ((usage?.chat?.used || 0) / 10) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Section>
       {/* Appearance */}
       <Section title="Appearance">
         <Row label="Theme" description="Choose your preferred color scheme">

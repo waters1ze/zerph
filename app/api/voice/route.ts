@@ -5,11 +5,24 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb } from '@/lib/backend/db'
+import { saveParsedItemToDb, getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
 import { GROQ_API_KEY } from '@/lib/config'
 
 export async function POST(req: NextRequest) {
   try {
+    const ownerChatId = req.headers.get('x-chat-id')
+    if (ownerChatId) {
+      const limits = await getUserUsageAndLimits(ownerChatId)
+      if (!limits.canSendVoice) {
+        return NextResponse.json({
+          error: limits.plan === 'premium'
+            ? '❌ Достигнут лимит голосового ввода на сегодня (10 минут). Наступит сброс завтра!'
+            : '❌ Достигнут дневной лимит (2 голосовых сообщения в день). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
+          limitReached: true,
+        }, { status: 403 })
+      }
+    }
+
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     const textInput = formData.get('text') as string | null  // allow text-only mode
@@ -38,7 +51,11 @@ export async function POST(req: NextRequest) {
     const parsedItem = await parseIntentWithGroq(transcript, apiKey)
 
     // Save to DB (handles completion internally)
-    const { item, completedTask } = await saveParsedItemToDb(parsedItem)
+    const { item, completedTask } = await saveParsedItemToDb(parsedItem, ownerChatId)
+
+    if (ownerChatId && file) {
+      await incrementUserUsage(ownerChatId, 'voice', 15) // estimate ~15s per voice clip
+    }
 
     return NextResponse.json({
       success: true,

@@ -19,8 +19,21 @@ You have access to the user's context (tasks, goals, notes) and can help them:
 Be concise, smart, actionable. Use markdown formatting. Keep responses focused and helpful.
 When enhancing voice input, add structure, formatting, and relevant details while preserving the original intent.`
 
+import { getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
+
 export async function POST(req: NextRequest) {
   try {
+    const ownerChatId = req.headers.get('x-chat-id')
+    if (ownerChatId) {
+      const limits = await getUserUsageAndLimits(ownerChatId)
+      if (!limits.canSendChatMessage) {
+        return NextResponse.json({
+          error: '❌ Дневной лимит сообщений в ИИ чат исчерпан (10 сообщений в день на бесплатном тарифе). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
+          limitReached: true,
+        }, { status: 403 })
+      }
+    }
+
     const { messages, apiKey, context, mode } = await req.json()
     const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY ||
       GROQ_API_KEY
@@ -69,6 +82,11 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json()
     const content = data.choices?.[0]?.message?.content || 'No response from AI.'
+
+    if (ownerChatId) {
+      await incrementUserUsage(ownerChatId, 'chat')
+    }
+
     return NextResponse.json({ content })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
