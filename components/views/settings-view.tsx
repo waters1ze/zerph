@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { useSettings, useApp } from '@/lib/store'
+import { useSettings, useApp, getTgChatId } from '@/lib/store'
 import { useLanguage } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
@@ -70,25 +70,40 @@ export function SettingsView() {
   const [saved, setSaved] = useState(false)
   const [usage, setUsage] = useState<any>(null)
   const [loadingPay, setLoadingPay] = useState(false)
+  const [inputChatId, setInputChatId] = useState('')
+  const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
   const save = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
-  useEffect(() => {
-    fetch('/api/subscription')
+  const fetchSubscription = () => {
+    const cid = getTgChatId()
+    const headers: Record<string, string> = {}
+    if (cid) headers['x-chat-id'] = cid
+
+    fetch('/api/subscription', { headers })
       .then(r => r.json())
       .then(data => setUsage(data))
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    fetchSubscription()
   }, [])
 
   const handleSubscribe = async () => {
     setLoadingPay(true)
     try {
+      const cid = getTgChatId()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (cid) headers['x-chat-id'] = cid
+
       const res = await fetch('/api/subscription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        body: JSON.stringify({ ownerChatId: cid }),
       })
       const data = await res.json()
       if (data.paymentUrl) {
@@ -275,30 +290,30 @@ export function SettingsView() {
           />
         </Row>
 
-        <Row label="Telegram account" description={settings.integrations.telegram ? "Telegram profile connected" : "Link your Telegram account for reminders & sync"}>
-          {settings.integrations.telegram ? (
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-full bg-[var(--status-done)]/10 text-[var(--status-done)] text-[12px] font-medium border border-[var(--status-done)]/20">
-                ✓ Connected
-              </span>
-              <button
-                onClick={() => update({ integrations: { ...settings.integrations, telegram: false } })}
-                className="text-[11px] text-muted-foreground hover:text-red-400 underline ml-1"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
+        <Row label="Telegram account" description={currentChatId ? `Связанный Chat ID: ${currentChatId}` : "Привяжите Telegram chatId для синхронизации подписки и задач"}>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Ваш Chat ID (напр. 6136950061)"
+              defaultValue={currentChatId || ''}
+              onChange={e => setInputChatId(e.target.value)}
+              className="h-8 px-2.5 rounded-lg bg-muted/50 border border-border text-[12px] text-foreground outline-none focus:border-primary/50 transition-colors w-40"
+            />
             <button
               onClick={() => {
-                update({ integrations: { ...settings.integrations, telegram: true } })
-                window.open('https://t.me/zerph_bot?start=login', '_blank')
+                const targetId = inputChatId || currentChatId || ''
+                if (targetId.trim()) {
+                  localStorage.setItem('zerf_chat_id', targetId.trim())
+                  update({ integrations: { ...settings.integrations, telegram: true } })
+                  fetchSubscription()
+                  alert(`✅ Telegram Chat ID (${targetId.trim()}) успешно привязан к сайту!`)
+                }
               }}
-              className="flex items-center gap-2 h-8 px-3.5 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-colors shadow-sm"
+              className="h-8 px-3 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-colors shrink-0 shadow-sm"
             >
-              <span>✈️</span> Connect Telegram (/login)
+              Синхронизировать
             </button>
-          )}
+          </div>
         </Row>
 
         <Row label="Focus mode" description="Hides distractions and shows only today's tasks">
