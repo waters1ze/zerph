@@ -450,7 +450,13 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
     const actionWord = updatedItem || item.action === 'update' ? 'изменена ✨' : 'создана ✨'
     const prefix = items.length > 1 ? `${idx + 1}. ` : ''
 
-    msg += `${prefix}${typeLabel} ${actionWord}\n*${escMd(item.title)}*\n`
+    msg += `${prefix}${typeLabel} ${actionWord}\n📌 *${escMd(item.title)}*\n`
+    if (item.summary && item.summary !== item.title) {
+      msg += `📝 _${escMd(item.summary.slice(0, 300))}_\n`
+    }
+    if (item.subtasks && item.subtasks.length > 0) {
+      msg += `📋 *Шаги:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+    }
     if (item.priority) msg += `${P_EMOJI[item.priority] || '⚪'} ${item.priority}\n`
     if (item.dueDate) msg += `📅 ${item.dueDate}\n`
     if (item.dueTime) msg += `⏰ *${item.dueTime}* — напомню!\n`
