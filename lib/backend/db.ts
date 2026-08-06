@@ -327,11 +327,28 @@ export async function saveParsedItemToDb(
   updatedItem?: boolean
 }> {
   // Delete action
-  if (item.action === 'delete' && item.targetId) {
-    await deleteTask(item.targetId)
-    await deleteGoal(item.targetId)
-    await deleteNote(item.targetId)
-    return { item, updatedItem: true }
+  if (item.action === 'delete') {
+    if (item.targetId) {
+      await deleteTask(item.targetId)
+      await deleteGoal(item.targetId)
+      await deleteNote(item.targetId)
+      return { item, updatedItem: true }
+    } else {
+      // Find matching task or goal by title similarity
+      const targetName = item.targetTitle || item.title || item.rawText
+      const tasks = await getAllTasks(ownerChatId)
+      let best: { id: string; score: number } | null = null
+      for (const t of tasks) {
+        const score = stringSimilarity(targetName, t.title)
+        if (score > 0.3 && (!best || score > best.score)) {
+          best = { id: t.id, score }
+        }
+      }
+      if (best) {
+        await deleteTask(best.id)
+        return { item, updatedItem: true }
+      }
+    }
   }
 
   // Update action
