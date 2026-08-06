@@ -113,6 +113,8 @@ export async function createTask(data: {
   source?: string
   assignees?: string[]
   isShared?: boolean
+  repeat?: string | null
+  reminderOffsetMinutes?: number | null
   ownerChatId?: number | bigint | string | null   // Telegram chatId of the creator
 }) {
   return prisma.task.create({
@@ -123,6 +125,8 @@ export async function createTask(data: {
       status: data.status || 'todo',
       dueDate: data.dueDate || new Date().toISOString().slice(0, 10),
       dueTime: data.dueTime || null,
+      repeat: data.repeat || null,
+      reminderOffsetMinutes: data.reminderOffsetMinutes || 0,
       tags: data.tags || [],
       assignees: data.assignees || [],
       isShared: data.isShared || false,
@@ -560,10 +564,12 @@ export async function saveParsedItemToDb(
       priority: item.priority || 'medium',
       dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
       dueTime: item.dueTime || undefined,
+      repeat: item.repeat || ((item.title || item.rawText || '').toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+      reminderOffsetMinutes: item.reminderOffsetMinutes || 0,
       tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
       aiGenerated: true,
       source: item.rawText,
-      ownerChatId: ownerChatId || null,   // Store the owner's chatId
+      ownerChatId: ownerChatId || null,
       assignees: item.assignees || [],
       isShared: item.isShared || false,
       subtasks: (item.subtasks || []).map((st, i) => ({
@@ -720,15 +726,39 @@ export function getMskDateTime() {
 export async function getTasksDueNow(): Promise<DbTask[]> {
   const { mskDate, mskTime } = getMskDateTime()
 
-  const tasks = await prisma.task.findMany({
+  const allActiveTasks = await prisma.task.findMany({
     where: {
-      dueTime: mskTime,
-      dueDate: mskDate,
       status: { not: 'done' },
-      reminderSent: false,
     },
   })
-  return tasks as DbTask[]
+
+  const dueNow: DbTask[] = []
+  const nowMs = new Date(`${mskDate}T${mskTime}:00+03:00`).getTime()
+
+  for (const task of allActiveTasks as any[]) {
+    if (!task.dueDate) continue
+    const tTime = task.dueTime || '09:00'
+
+    // Determine target year/month/date for task
+    let tDate = task.dueDate
+    if (task.repeat === 'yearly') {
+      const currentYear = mskDate.slice(0, 4)
+      const monthDay = task.dueDate.length >= 10 ? task.dueDate.slice(5) : task.dueDate
+      tDate = `${currentYear}-${monthDay}`
+    }
+
+    const taskTargetMs = new Date(`${tDate}T${tTime}:00+03:00`).getTime()
+    const offsetMs = (task.reminderOffsetMinutes || 0) * 60 * 1000
+    const reminderTriggerMs = taskTargetMs - offsetMs
+
+    // If current MSK minute matches reminderTriggerMs (within 90s window)
+    const diffSeconds = Math.abs((nowMs - reminderTriggerMs) / 1000)
+    if (diffSeconds < 90) {
+      dueNow.push(task as DbTask)
+    }
+  }
+
+  return dueNow
 }
 
 export async function markReminderSent(id: string) {
