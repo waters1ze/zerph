@@ -35,9 +35,10 @@ function getOwnerChatId(req: NextRequest): string | null {
   const { searchParams } = new URL(req.url)
   const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId')
   const token = req.headers.get('x-auth-token') || searchParams.get('token')
+  const initData = req.headers.get('x-tg-init-data')
+  
   if (!chatId) return null
-  if (!verifyUserAuth(chatId, token)) {
-    // If invalid token, return null so unauthenticated user sees zero private tasks!
+  if (!verifyUserAuth(chatId, token, initData)) {
     return null
   }
   return chatId
@@ -46,9 +47,9 @@ function getOwnerChatId(req: NextRequest): string | null {
 export async function GET(req: NextRequest) {
   try {
     const ownerChatId = getOwnerChatId(req)
-    if (ownerChatId) {
-      await syncFriendBirthdays(ownerChatId)
-    }
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    
+    await syncFriendBirthdays(ownerChatId)
     const [tasks, goals, notes, friends] = await Promise.all([
       getAllTasks(ownerChatId),
       getAllGoals(ownerChatId),
@@ -63,8 +64,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const ownerChatId = getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
-    const ownerChatId = body.ownerChatId || getOwnerChatId(req)
 
     if (body.itemType === 'goal' || body.type === 'goal') {
       const goal = await createGoal({
@@ -128,8 +131,10 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const ownerChatId = getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
-    const ownerChatId = body.ownerChatId || getOwnerChatId(req)
 
     // Update goal by ID
     if (body.id && (body.itemType === 'goal' || body.type === 'goal')) {
@@ -175,6 +180,9 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const ownerChatId = getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     const type = searchParams.get('type') || 'task'

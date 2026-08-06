@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
+import { verifyUserAuth } from '@/lib/backend/auth'
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,6 +12,12 @@ export async function GET(req: NextRequest) {
     const headerChatId = req.headers.get('x-chat-id')
     const queryChatId = searchParams.get('chatId') || searchParams.get('chat_id')
     const cid = queryChatId || headerChatId
+    const token = req.headers.get('x-auth-token') || searchParams.get('token')
+    const initData = req.headers.get('x-tg-init-data')
+
+    if (!cid || !verifyUserAuth(cid, token, initData)) {
+      return NextResponse.json({ connected: false, error: 'Unauthorized' }, { status: 401 })
+    }
 
     if (cid) {
       const chat = await prisma.telegramChat.findUnique({
@@ -25,20 +32,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Fallback: return the latest registered chat profile
-    const latestChat = await prisma.telegramChat.findFirst({
-      orderBy: { addedAt: 'desc' },
-    })
-
-    if (!latestChat) {
-      return NextResponse.json({ connected: false })
-    }
-
-    return NextResponse.json({
-      connected: true,
-      chatId: Number(latestChat.chatId),
-      name: latestChat.firstName || 'Telegram Пользователь',
-    })
+    return NextResponse.json({ connected: false })
   } catch (err: unknown) {
     return NextResponse.json({ connected: false, error: String(err) }, { status: 500 })
   }

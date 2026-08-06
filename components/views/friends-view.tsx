@@ -121,7 +121,8 @@ export function FriendsView() {
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app')
   
-  const inviteLink = `${appUrl}?invitedBy=${encodeURIComponent(state.settings.name || 'user')}`
+  const chatId = mounted && typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : ''
+  const inviteLink = `https://t.me/Zerph_bot?start=invite_${chatId || 'user'}`
 
   const copyInviteLink = () => {
     if (typeof window !== 'undefined') {

@@ -6,14 +6,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
 
+import { verifyUserAuth } from '@/lib/backend/auth'
+
 function getOwnerChatId(req: NextRequest): string | null {
   const { searchParams } = new URL(req.url)
-  return req.headers.get('x-chat-id') || searchParams.get('chatId') || null
+  const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId') || null
+  const token = req.headers.get('x-auth-token') || searchParams.get('token') || null
+  const initData = req.headers.get('x-tg-init-data') || null
+  
+  if (!chatId) return null
+  if (!verifyUserAuth(chatId, token, initData)) return null
+  return chatId
 }
 
 export async function GET(req: NextRequest) {
   try {
     const ownerChatId = getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    
     const usage = await getUserUsageAndLimits(ownerChatId)
     return NextResponse.json(usage)
   } catch (err: unknown) {
@@ -23,8 +33,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const ownerChatId = getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    
     const body = await req.json().catch(() => ({}))
-    const ownerChatId = body.ownerChatId || getOwnerChatId(req)
 
     if (!ownerChatId) {
       return NextResponse.json({ error: 'ownerChatId is required' }, { status: 400 })

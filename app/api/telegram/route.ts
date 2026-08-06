@@ -511,6 +511,11 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 let cachedBotId: number | null = null
 async function getBotId(): Promise<number | null> {
   if (cachedBotId) return cachedBotId
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    const idStr = process.env.TELEGRAM_BOT_TOKEN.split(':')[0]
+    cachedBotId = Number(idStr)
+    return cachedBotId
+  }
   const res = await tgApi('getMe', {})
   if (res?.ok && res.result?.id) {
     cachedBotId = res.result.id
@@ -725,9 +730,8 @@ async function handleGroupAddCommand(msg: any) {
   )
   const statusMsgId: number | undefined = statusRes?.result?.message_id
 
-  // ── Phase 2: Background processing with after() ─────────────────────────────
-  after(async () => {
-    try {
+  // ── Phase 2: Processing ─────────────────────────────
+  try {
       const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
       if (!key) {
         await safeEditOrSend(groupChatId, statusMsgId, 'Groq API key не настроен.')
@@ -791,6 +795,9 @@ async function handleGroupAddCommand(msg: any) {
           tags: ['группа'],
           rawText: targetText,
         }]
+      } else {
+        // Enforce exactly ONE item in groups to prevent duplication
+        items = [items[0]]
       }
 
       // 5. Save task ONCE for creator (senderId) with all assignees — NO DUPLICATES!
@@ -823,10 +830,9 @@ async function handleGroupAddCommand(msg: any) {
         reply_markup: miniAppKeyboard(senderId),
       })
     } catch (err: any) {
-      console.error('Error in group add after():', err)
+      console.error('Error in group add processing:', err)
       await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при обработке в группе: ${String(err?.message || err).slice(0, 150)}`).catch(() => {})
     }
-  })
 }
 
 async function handleInviteCommand(chatId: number, senderName: string, param?: string) {
@@ -988,6 +994,37 @@ export async function POST(req: NextRequest) {
         await handleInviteCommand(senderId, firstName, parts[1])
       } else if (cmd === '/login' || (cmd === '/start' && param === 'login')) {
         await handleStart(chatId, firstName)
+      } else if (cmd === '/start' && param?.startsWith('invite_')) {
+        await handleStart(chatId, firstName)
+        const inviterId = Number(param.split('_')[1])
+        if (!isNaN(inviterId) && inviterId !== chatId) {
+          try {
+            const inviterUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(inviterId) } })
+            if (inviterUser) {
+              await prisma.friendship.upsert({
+                where: { userChatId_friendChatId: { userChatId: BigInt(inviterId), friendChatId: BigInt(chatId) } },
+                update: { status: 'pending' },
+                create: { userChatId: BigInt(inviterId), friendChatId: BigInt(chatId), status: 'pending' }
+              })
+              await send(chatId,
+                `🤝 *Новое приглашение в команду в Zerf AI!*\n\n` +
+                `*${escMd(inviterUser.firstName || 'Пользователь')}* хочет добавить вас в команду!`,
+                {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [
+                        { text: '✅ Принять', callback_data: `friend_accept_${inviterId}` },
+                        { text: '❌ Отклонить', callback_data: `friend_decline_${inviterId}` }
+                      ]
+                    ]
+                  }
+                }
+              )
+            }
+          } catch (e) {
+            console.error('Failed to process deep link invite:', e)
+          }
+        }
       } else if (cmd === '/start' || cmd === '/help') {
         await handleStart(chatId, firstName)
       } else if (cmd === '/settings' || cmd === '/reminders') {

@@ -212,8 +212,20 @@ export function getTgChatId(): string | null {
       }
       return guestId
     } catch {}
-  }
+}
   return null
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const chatId = getTgChatId()
+  const token = typeof window !== 'undefined' ? localStorage.getItem('zerf_auth_token') : null
+  const initData = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initData : null
+  
+  const headers: Record<string, string> = {}
+  if (chatId) headers['x-chat-id'] = chatId
+  if (token) headers['x-auth-token'] = token
+  if (initData) headers['x-tg-init-data'] = initData
+  return headers
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -224,9 +236,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch(action)
 
     // Sync deletion / updates to cloud DB via API
-    const chatId = getTgChatId()
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (chatId) headers['x-chat-id'] = chatId
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 
     if (action.type === 'DELETE_TASK') {
       fetch(`/api/tasks?id=${action.id}&type=task`, { method: 'DELETE', headers }).catch(() => {})
@@ -310,11 +320,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Sync from backend DB on mount (with user isolation)
   useEffect(() => {
-    const chatId = getTgChatId()
-    const token = typeof window !== 'undefined' ? localStorage.getItem('zerf_auth_token') : null
-    const headers: Record<string, string> = {}
-    if (chatId) headers['x-chat-id'] = chatId
-    if (token) headers['x-auth-token'] = token
+    const headers = getAuthHeaders()
+    const chatId = headers['x-chat-id']
 
     fetch('/api/tasks', { headers })
       .then(r => r.json())
