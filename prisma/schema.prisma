@@ -30,6 +30,7 @@ model Task {
   source       String?
   subtasks     Json?
   ownerChatId  BigInt?   // Telegram chatId of the user who created this task
+  remindersSentCount Int   @default(0)
 }
 
 model Goal {
@@ -66,7 +67,9 @@ model Note {
 }
 
 model TelegramChat {
-  chatId    BigInt   @id
-  firstName String?
-  addedAt   DateTime @default(now())
+  chatId                 BigInt   @id
+  firstName              String?
+  reminderIntervalMinutes Int      @default(5)
+  reminderRepeatCount    Int      @default(3)
+  addedAt                DateTime @default(now())
 }

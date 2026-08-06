@@ -4,7 +4,7 @@
  */
 
 import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem } from './groq'
-import { saveParsedItemToDb } from './db'
+import { saveParsedItemToDb, getExistingItemsContext } from './db'
 
 export interface TelegramUpdate {
   update_id: number
@@ -115,11 +115,12 @@ export async function handleTelegramUpdate(
       `📝 *Transcript:* "${rawText}"\n\n🧠 *Zerf AI is structuring into your workspace...*`
     )
 
-    // 3. Parse intent with Groq LLM (Llama-3.3-70b)
-    const parsedItem = await parseIntentWithGroq(rawText, groqApiKey)
+    // 3. Fetch existing items context for user & parse intent with Groq LLM (Llama-3.3-70b)
+    const existingItemsContext = await getExistingItemsContext(chatId)
+    const parsedItem = await parseIntentWithGroq(rawText, groqApiKey, undefined, existingItemsContext)
 
     // 4. Save parsed item to local database (isolated by chatId)
-    const { item: saved } = await saveParsedItemToDb(parsedItem, chatId)
+    const { item: saved, updatedItem } = await saveParsedItemToDb(parsedItem, chatId)
 
     // 5. Send formatted Telegram response card in Russian
     const typeLabel: Record<string, string> = {
@@ -139,7 +140,8 @@ export async function handleTelegramUpdate(
     }
 
     const label = typeLabel[parsedItem.type] || '⚡ Запись'
-    let replyText = `${label} *сохранена в твой Zerf!*\n\n`
+    const statusMsg = updatedItem || parsedItem.action === 'update' ? 'изменена в твоем Zerf!' : 'сохранена в твой Zerf!'
+    let replyText = `${label} *${statusMsg}*\n\n`
     replyText += `*Название:* ${parsedItem.title}\n`
     if (parsedItem.summary && parsedItem.summary !== parsedItem.title) {
       replyText += `*Описание:* ${parsedItem.summary.slice(0, 200)}\n`

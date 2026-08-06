@@ -27,6 +27,8 @@ async function sendTelegramMessage(chatId: number, text: string) {
 
 // ── Reminder check — per-task owner only ─────────────────────────────────────
 
+// ── Reminder check — per-task owner with configurable multi-stage intervals ──
+
 export async function runReminderCheck() {
   try {
     const now = new Date()
@@ -38,7 +40,9 @@ export async function runReminderCheck() {
     const parts = formatter.formatToParts(now)
     const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-    const currentTimeStr = `${getPart('hour')}:${getPart('minute')}`
+    const currentHour = parseInt(getPart('hour'), 10)
+    const currentMin = parseInt(getPart('minute'), 10)
+    const currentTotalMin = currentHour * 60 + currentMin
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
     const tasks = await getAllTasks()
@@ -47,39 +51,72 @@ export async function runReminderCheck() {
       if (!task.dueTime) continue
       if (task.status === 'done') continue
       if (task.reminderSent) continue
-      if (task.dueTime !== currentTimeStr) continue
       if (task.dueDate && task.dueDate !== todayStr) continue
 
-      // Send ONLY to the task owner — never broadcast
+      const [dueH, dueM] = task.dueTime.split(':').map(n => parseInt(n, 10))
+      if (isNaN(dueH) || isNaN(dueM)) continue
+      const targetTotalMin = dueH * 60 + dueM
+
       const ownerChatId = task.ownerChatId ? Number(task.ownerChatId) : null
 
+      // Get owner's custom reminder interval settings from DB
+      let intervalMinutes = 5
+      let repeatCount = 3
       if (ownerChatId) {
-        const isRecipientMsg =
-          task.description?.includes('📩 Отправить') ||
-          task.title?.toLowerCase().includes('отправь') ||
-          task.title?.toLowerCase().includes('напиши')
-
-        const text = isRecipientMsg
-          ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
-            `📌 *Сообщение:* ${task.title}\n` +
-            (task.description ? `_«${task.description}»_\n\n` : '\n') +
-            `⏰ *Время:* ${task.dueTime}\n` +
-            `✨ _Отправлено из Zerf AI_`
-          : `⏰ *НАПОМИНАНИЕ!*\n\n` +
-            `📌 *${task.title}*\n` +
-            (task.description ? `\n${task.description}\n\n` : '\n') +
-            `📍 *Время:* ${task.dueTime}\n` +
-            `✨ _Отправлено из Zerf AI_`
-
-        await sendTelegramMessage(ownerChatId, text)
+        try {
+          const userChat = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(ownerChatId) } })
+          if (userChat) {
+            intervalMinutes = userChat.reminderIntervalMinutes || 5
+            repeatCount = userChat.reminderRepeatCount || 3
+          }
+        } catch {}
       }
 
-      // Always mark done to prevent future triggers
-      await updateTask(task.id, {
-        status: 'done',
-        reminderSent: true,
-        completedAt: new Date(),
-      })
+      const sentCount = (task as { remindersSentCount?: number }).remindersSentCount || 0
+      const remainingStages = repeatCount - 1 - sentCount
+      const expectedDiffMin = remainingStages * intervalMinutes
+      const actualDiffMin = targetTotalMin - currentTotalMin
+
+      // Check if current time matches the scheduled stage
+      if (actualDiffMin <= expectedDiffMin && actualDiffMin >= expectedDiffMin - 1) {
+        if (ownerChatId) {
+          const isRecipientMsg =
+            task.description?.includes('📩 Отправить') ||
+            task.title?.toLowerCase().includes('отправь') ||
+            task.title?.toLowerCase().includes('напиши')
+
+          let stageText = 'СЕЙЧАС'
+          if (actualDiffMin > 0) {
+            stageText = `за ${actualDiffMin} мин`
+          }
+
+          const text = isRecipientMsg
+            ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
+              `📌 *Сообщение:* ${task.title}\n` +
+              (task.description ? `_«${task.description}»_\n\n` : '\n') +
+              `⏰ *Время:* ${task.dueTime}\n` +
+              `✨ _Отправлено из Zerf AI_`
+            : `⏰ *НАПОМИНАНИЕ (${stageText.toUpperCase()})!*\n\n` +
+              `📌 *${task.title}*\n` +
+              (task.description ? `\n${task.description}\n\n` : '\n') +
+              `📍 *Срок:* ${task.dueTime}\n` +
+              `✨ _Отправлено из Zerf AI_`
+
+          await sendTelegramMessage(ownerChatId, text)
+        }
+
+        const nextSentCount = sentCount + 1
+        const isFinal = nextSentCount >= repeatCount || actualDiffMin <= 0
+
+        await prisma.task.update({
+          where: { id: task.id },
+          data: {
+            remindersSentCount: nextSentCount,
+            reminderSent: isFinal,
+            ...(isFinal ? { status: 'done', completedAt: new Date() } : {}),
+          },
+        })
+      }
     }
   } catch (err) {
     console.error('Reminder check error:', err)

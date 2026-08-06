@@ -7,6 +7,8 @@ import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from
 
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion'
+  action?: 'create' | 'update' | 'delete' | 'completion'
+  targetId?: string | null
   title: string
   summary: string
   priority: 'urgent' | 'high' | 'medium' | 'low'
@@ -24,7 +26,7 @@ export interface ParsedItem {
   originalText?: string         // same as rawText, for notes
 }
 
-export function getDynamicSystemPrompt(): string {
+export function getDynamicSystemPrompt(existingItemsContext?: string): string {
   const now = new Date()
   const formatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Moscow',
@@ -41,7 +43,7 @@ export function getDynamicSystemPrompt(): string {
   const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
   const mskTime = `${getPart('hour')}:${getPart('minute')}`
 
-  return `You are Zerf AI — an expert personal productivity assistant with a focus on Russian-speaking users.
+  let prompt = `You are Zerf AI — an expert personal productivity assistant with a focus on Russian-speaking users.
 
 ══════════════════════════════════════════
 🇷🇺 СТРОГОЕ ПРАВИЛО ЯЗЫКА (HIGHEST PRIORITY)
@@ -59,26 +61,27 @@ Current Time Right Now: ${mskTime} (24-hour HH:MM format, Europe/Moscow timezone
 CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
 - All relative time phrases (e.g., "через минуту", "напиши мне через 1 минуту", "через 10 минут", "в 15:00", "завтра в 9 утра") MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
 - Example: If current Moscow time is "${mskTime}" and user says "через минуту" or "через 1 минуту", dueTime MUST be calculated as current minute + 1 minute (e.g. if current is 22:57, dueTime is 22:58). DO NOT SHIFT TIME OR ADD EXTRA HOURS!
-- Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.
+- Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.`
 
-## Intent Detection
+  if (existingItemsContext) {
+    prompt += `\n\n══════════════════════════════════════════
+📋 СУЩЕСТВУЮЩИЕ АКТИВНЫЕ ЭЛЕМЕНТЫ ПОЛЬЗОВАТЕЛЯ:
+${existingItemsContext}
+══════════════════════════════════════════
+ИНСТРУКЦИЯ ПО РЕДАКТИРОВАНИЮ / ИЗМЕНЕНИЮ:
+- Если пользователь хочет ИЗМЕНИТЬ, ОБНОВИТЬ или УТОЧНИТЬ существующую цель/задачу/напоминание (например: "давай ты пришлешь напоминание в 12:00 лучше, а сама цель до 00:00", "поменяй время на 15:00", "сделай дедлайн завтра", "удали задачу X"), ты ДОЛЖЕН установить:
+  - "action": "update" (или "delete")
+  - "targetId": "<ID соответствующего элемента из списка выше>"
+  - "type": тип элемента (goal / task / note / reminder)
+  - Обнови нужные поля ("dueTime", "dueDate", "title", "summary" и т.д.)`
+  }
 
-### type = "completion"
-Triggers when user indicates something is DONE.
-Keywords: done, finished, готово, выполнил, сделал, закончил, завершил, сделано, готов
-Set "targetTitle" = the task name they completed, "title" = same.
+  prompt += `\n\n## Intent Detection & Actions
 
-### type = "goal"
-Long-term aspiration (1-6 months). Extract milestones & motivation.
-
-### type = "task"
-Immediate actionable item. Extract "dueTime" in HH:MM 24h format from natural language.
-
-### type = "note"
-Meeting recap, idea, observation, brain dump.
-
-### type = "reminder"
-Specific time-based notification without full task details.
+### action = "create" (по умолчанию, если создается новый элемент)
+### action = "update" (если редактируется существующий элемент, обязательно укажи "targetId")
+### action = "delete" (если пользователь просит удалить элемент, обязательно укажи "targetId")
+### action = "completion" (если пользователь говорит, что сделано)
 
 ## Dynamic Priority Rules
 - "urgent": срочно, прямо сейчас, как можно скорее, ASAP, немедленно, критично, дедлайн сегодня
@@ -88,6 +91,8 @@ Specific time-based notification without full task details.
 
 Always respond with ONLY valid JSON (no markdown fences):
 {
+  "action": "create" | "update" | "delete" | "completion",
+  "targetId": "ID элемента если action update/delete" | null,
   "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
   "title": "Краткое описание (максимум 60 символов)",
   "summary": "1-2 предложения для задач/целей. Полный Markdown-документ для заметок.",
@@ -105,6 +110,8 @@ Always respond with ONLY valid JSON (no markdown fences):
 }
 
 Default priority is "medium". Output ONLY pure JSON.`
+
+  return prompt
 }
 
 /**
@@ -143,12 +150,13 @@ export async function transcribeAudioWithGroq(
 export async function parseIntentWithGroq(
   text: string,
   apiKey?: string,
-  model?: string
+  model?: string,
+  existingItemsContext?: string
 ): Promise<ParsedItem> {
   const key = apiKey || DEFAULT_KEY
   if (!key) throw new Error('Groq API Key missing.')
 
-  const dynamicSystemPrompt = getDynamicSystemPrompt()
+  const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext)
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -172,6 +180,8 @@ export async function parseIntentWithGroq(
   try {
     const p = JSON.parse(raw)
     return {
+      action: p.action || (p.type === 'completion' ? 'completion' : 'create'),
+      targetId: p.targetId || null,
       type: p.type || 'task',
       title: p.title || text.slice(0, 50),
       summary: p.summary || text,

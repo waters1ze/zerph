@@ -135,6 +135,8 @@ export interface UserSettings {
     email: boolean
     dueReminders: boolean
     teamUpdates: boolean
+    reminderIntervalMinutes: number
+    reminderRepeatCount: number
   }
   integrations: {
     telegram: boolean
