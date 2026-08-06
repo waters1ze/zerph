@@ -101,7 +101,9 @@ ${existingItemsContext}
 IMPORTANT MULTI-ITEM INSTRUCTION:
 - If the user input mentions MULTIPLE tasks, goals, notes, or actions (e.g. "купить хлеб и еще через 2 часа позвонить маме" or "создай задачу А и заметку Б"), extract ALL of them into the "items" array in JSON!
 
-Always respond with ONLY valid JSON (no markdown fences):
+CRITICAL INSTRUCTION: DO NOT INCLUDE ANY CONVERSATIONAL TEXT, EXPLANATIONS, OR REASONING (e.g. "Вот ваша заметка", "Я создал").
+OUTPUT PURE JSON ONLY. NO MARKDOWN FENCES (DO NOT WRAP IN \`\`\`json).
+Always respond with ONLY valid JSON:
 {
   "items": [
     {
@@ -226,8 +228,15 @@ export async function parseIntentWithGroq(
       const data = await res.json()
       const raw = data.choices?.[0]?.message?.content || '{}'
 
+      // Clean up any markdown json wrappers the LLM might have output
+      let cleanRaw = raw.trim()
+      if (cleanRaw.startsWith('```json')) cleanRaw = cleanRaw.replace(/^```json\s*/i, '')
+      if (cleanRaw.startsWith('```')) cleanRaw = cleanRaw.replace(/^```\s*/i, '')
+      if (cleanRaw.endsWith('```')) cleanRaw = cleanRaw.replace(/```\s*$/i, '')
+      cleanRaw = cleanRaw.trim()
+
       try {
-        const p = JSON.parse(raw)
+        const p = JSON.parse(cleanRaw)
         let rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
 
         rawItems = rawItems.filter((item: any) => {

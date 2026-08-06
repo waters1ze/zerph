@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
@@ -65,7 +65,7 @@ export function AiChatPanel() {
 
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages, apiKey: state.settings.integrations.groqApiKey || '', context }),
       })
 

@@ -7,10 +7,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq'
 import { saveParsedItemToDb, getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
 import { GROQ_API_KEY } from '@/lib/config'
+import { verifyUserAuth } from '@/lib/backend/auth'
+
+function getOwnerChatId(req: NextRequest): string | null {
+  const { searchParams } = new URL(req.url)
+  const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId')
+  const token = req.headers.get('x-auth-token') || searchParams.get('token')
+  const initData = req.headers.get('x-tg-init-data')
+  
+  if (!chatId) return null
+  if (!verifyUserAuth(chatId, token, initData)) return null
+  return chatId
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const ownerChatId = req.headers.get('x-chat-id')
+    const ownerChatId = getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (ownerChatId) {
       const limits = await getUserUsageAndLimits(ownerChatId)
       if (!limits.canSendVoice) {
@@ -51,8 +64,8 @@ export async function POST(req: NextRequest) {
     const parsedItems = await parseIntentWithGroq(transcript, apiKey)
     const results = []
 
-    for (const pItem of parsedItems) {
-      const savedResult = await saveParsedItemToDb(pItem, ownerChatId)
+    for (const item of parsedItems) {
+      const savedResult = await saveParsedItemToDb(item, ownerChatId)
       results.push(savedResult)
     }
 

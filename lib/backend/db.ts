@@ -55,7 +55,7 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       }
       return []
     }
-    return await prisma.task.findMany({ orderBy: { createdAt: 'desc' } })
+    return []
   } catch {
     return []
   }
@@ -74,7 +74,7 @@ export async function getAllGoals(ownerChatId?: number | bigint | string | null)
       }
       return []
     }
-    return await prisma.goal.findMany({ orderBy: { createdAt: 'desc' } })
+    return []
   } catch {
     return []
   }
@@ -93,7 +93,7 @@ export async function getAllNotes(ownerChatId?: number | bigint | string | null)
       }
       return []
     }
-    return await prisma.note.findMany({ orderBy: { createdAt: 'desc' } })
+    return []
   } catch {
     return []
   }

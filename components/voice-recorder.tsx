@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mic, Square, Check, X, Loader2, AlertCircle, Sparkles, Volume2, CheckCircle2, Search } from 'lucide-react'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Task, Goal, Note } from '@/lib/types'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -132,7 +132,11 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
       fd.append('file', blob, `voice.${ext}`)
       fd.append('apiKey', GROQ_API_KEY)
 
-      const res = await fetch('/api/voice', { method: 'POST', body: fd })
+      const res = await fetch('/api/voice', { 
+        method: 'POST', 
+        headers: getAuthHeaders(),
+        body: fd 
+      })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Processing failed')
 
