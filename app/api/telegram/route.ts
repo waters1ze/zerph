@@ -612,11 +612,20 @@ async function handleGroupAddCommand(msg: any) {
   try {
     const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
     const context = await getExistingItemsContext(senderId)
-    const items = await parseIntentWithGroq(targetText, key, undefined, context)
+    let items = await parseIntentWithGroq(targetText, key, undefined, context)
 
+    // Fallback: If AI extracted no structured items, create a task directly from the message text!
     if (!items || items.length === 0) {
-      await send(groupChatId, '🤔 Не удалось извлечь задачи из сообщения.', { reply_to_message_id: msg.message_id })
-      return
+      items = [{
+        type: 'task',
+        action: 'create',
+        title: targetText.trim().slice(0, 100),
+        summary: targetText.trim(),
+        priority: 'medium',
+        dueDate: new Date().toISOString().slice(0, 10),
+        tags: ['группа'],
+        rawText: targetText,
+      }]
     }
 
     let groupResponseCard = `👥 *Групповая задача создана в Zerf!*\n\n`
