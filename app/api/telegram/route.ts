@@ -208,6 +208,14 @@ async function processText(chatId: number, text: string) {
     const item = await parseIntentWithGroq(text, key, undefined, context)
     const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
 
+    if (item.action === 'delete_all') {
+      await send(chatId,
+        `🗑️ *Все задачи успешно удалены!*`,
+        { reply_markup: miniAppKeyboard(chatId) }
+      )
+      return
+    }
+
     if (item.action === 'delete' || item.type === 'completion') {
       if (completedTask) {
         await send(chatId,

@@ -326,7 +326,16 @@ export async function saveParsedItemToDb(
   completedTask?: DbTask | null
   updatedItem?: boolean
 }> {
-  // Delete action
+  // Delete all tasks action
+  const textLower = (item.rawText || item.title || '').toLowerCase().trim()
+  if (item.action === 'delete_all' || textLower.includes('удали все') || textLower.includes('очисти все') || textLower.includes('удали всё') || textLower.includes('очистить все')) {
+    if (ownerChatId) {
+      await prisma.task.deleteMany({ where: { ownerChatId: BigInt(ownerChatId) } })
+    }
+    return { item, updatedItem: true }
+  }
+
+  // Delete specific task action
   if (item.action === 'delete') {
     if (item.targetId) {
       await deleteTask(item.targetId)
