@@ -196,10 +196,190 @@ const TYPE_RU: Record<string, string> = {
   project: 'Проект', reminder: 'Напоминание', completion: 'Выполнено',
 }
 
+async function handleSubscribe(chatId: number) {
+  const limits = await getUserUsageAndLimits(chatId)
+  const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+
+  const params = new URLSearchParams({
+    receiver,
+    'quickpay-form': 'shop',
+    targets: 'Подписка Zerf Premium (30 дней)',
+    paymentType: 'AC',
+    sum: '99',
+    label: String(chatId),
+    successURL: `${appUrl}/?payment=success`,
+  })
+  const paymentUrl = `https://yoomoney.ru/quickpay/confirm?${params.toString()}`
+
+  if (limits.plan === 'premium') {
+    const exp = limits.subscriptionExpiry
+      ? new Date(limits.subscriptionExpiry).toLocaleDateString('ru-RU')
+      : '?'
+    await send(chatId,
+      `✨ *У тебя уже активна подписка Zerf Premium!*\n\n` +
+      `📅 Активна до: *${exp}*\n\n` +
+      `• 🎙 Голос: до 10 минут в день\n` +
+      `• 📌 Заметки: безлимитно\n` +
+      `• 💬 ИИ чат: безлимитно`,
+      { reply_markup: miniAppKeyboard(chatId) }
+    )
+    return
+  }
+
+  await send(chatId,
+    `⭐ *Zerf Premium — 99 ₽/месяц*\n\n` +
+    `🆓 *Сейчас у тебя бесплатный тариф:*\n` +
+    `• 🎙 Голосовые: 2 в день (осталось: ${Math.max(0, 2 - (limits.voice.used || 0))})
+• 📌 Заметки: 2 в день (осталось: ${Math.max(0, 2 - (limits.notes.used || 0))})
+• 💬 ИИ чат: 10 в день (осталось: ${Math.max(0, 10 - (limits.chat.used || 0))})
+\n✨ *С Premium:*\n` +
+    `• 🎙 Голос: неограниченно (до 10 мин/день)
+• 📌 Заметки: безлимитно\n` +
+    `• 💬 ИИ чат: безлимитно\n\n` +
+    `💳 Нажми кнопку ниже, чтобы оплатить через ЮMoney:`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '💳 Оплатить 99 ₽ через ЮMoney', url: paymentUrl }],
+          [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
+        ]
+      }
+    }
+  )
+}
+
+async function handleAdminCommand(chatId: number, args: string[]) {
+  const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
+  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+
+  // Check if caller is admin
+  if (!ADMIN_CHAT_IDS.includes(String(chatId))) {
+    await send(chatId, '❌ У тебя нет прав администратора.')
+    return
+  }
+
+  const [subCmd, targetChatId, daysStr] = args
+
+  if (!subCmd) {
+    await send(chatId,
+      `🔧 *Admin Panel Zerf*\n\n` +
+      `Доступные команды:\n` +
+      `• \`/admin grant <chatId> [дни]\` — выдать Premium\n` +
+      `• \`/admin revoke <chatId>\` — забрать Premium\n` +
+      `• \`/admin status <chatId>\` — статус пользователя\n` +
+      `• \`/admin reset <chatId>\` — сбросить дневные лимиты\n` +
+      `• \`/admin list\` — список всех пользователей`
+    )
+    return
+  }
+
+  if (subCmd === 'grant') {
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin grant <chatId> [дни]'); return }
+    const days = parseInt(daysStr || '30', 10)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ADMIN_SECRET}` },
+      body: JSON.stringify({ chatId: targetChatId, action: 'grant', days }),
+    })
+    const data = await res.json()
+    await send(chatId, data.message || data.error || '✅ Готово')
+    // Notify the target user
+    try {
+      await send(parseInt(targetChatId),
+        `🎉 *Поздравляем! Тебе выдана подписка Zerf Premium на ${days} дней!*\n\n` +
+        `✨ Теперь доступны:\n• 🎙 Голос: до 10 мин/день\n• 📌 Заметки: безлимитно\n• 💬 ИИ: безлимитно`
+      )
+    } catch {}
+    return
+  }
+
+  if (subCmd === 'revoke') {
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin revoke <chatId>'); return }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ADMIN_SECRET}` },
+      body: JSON.stringify({ chatId: targetChatId, action: 'revoke' }),
+    })
+    const data = await res.json()
+    await send(chatId, data.message || data.error || '✅ Готово')
+    try {
+      await send(parseInt(targetChatId), `ℹ️ Ваша подписка Zerf Premium была деактивирована.`)
+    } catch {}
+    return
+  }
+
+  if (subCmd === 'status') {
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin status <chatId>'); return }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription?chatId=${targetChatId}&secret=${ADMIN_SECRET}`)
+    const data = await res.json()
+    const exp = data.subscriptionExpiry ? new Date(data.subscriptionExpiry).toLocaleDateString('ru-RU') : 'нет'
+    await send(chatId,
+      `👤 *Пользователь ${targetChatId}*\n\n` +
+      `📋 Тариф: *${data.plan === 'premium' ? '✨ Premium' : '🆓 Free'}*\n` +
+      `📅 Истекает: ${exp}\n\n` +
+      `🎙 Голос сегодня: ${data.voice?.used || 0}${data.plan === 'premium' ? ` (${Math.round((data.voice?.secondsUsed || 0)/60)} мин)` : '/2'}\n` +
+      `📌 Заметки сегодня: ${data.notes?.used || 0}${data.plan !== 'premium' ? '/2' : ''}\n` +
+      `💬 Чат сегодня: ${data.chat?.used || 0}${data.plan !== 'premium' ? '/10' : ''}`
+    )
+    return
+  }
+
+  if (subCmd === 'reset') {
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin reset <chatId>'); return }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ADMIN_SECRET}` },
+      body: JSON.stringify({ chatId: targetChatId, action: 'reset_usage' }),
+    })
+    const data = await res.json()
+    await send(chatId, data.message || data.error || '✅ Готово')
+    return
+  }
+
+  if (subCmd === 'list') {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const data = await res.json()
+    const users = data.users || []
+    const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
+    let msg = `👥 *Всего пользователей: ${users.length}*\n✨ Premium: ${premiums.length}\n\n`
+    premiums.slice(0, 15).forEach((u: { chatId: string; firstName?: string; subscriptionExpiry?: string }) => {
+      const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : '?'
+      msg += `• \`${u.chatId}\` ${u.firstName || ''} — до ${exp}\n`
+    })
+    if (users.length > premiums.length) {
+      msg += `\n🆓 Free: ${users.length - premiums.length} чел.`
+    }
+    await send(chatId, msg)
+    return
+  }
+
+  await send(chatId, `❓ Неизвестная команда. /admin — список команд`)
+}
+
 async function processText(chatId: number, text: string) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
     await send(chatId, '❌ Groq API key не настроен. Добавь GROQ\\_API\\_KEY в переменные окружения.')
+    return
+  }
+
+  // Check chat message limits
+  const limits = await getUserUsageAndLimits(chatId)
+  if (!limits.canSendChatMessage) {
+    await send(chatId,
+      `❌ *Дневной лимит AI-сообщений исчерпан!*\n\n` +
+      `🆓 На бесплатном тарифе: *10 сообщений в день*.\n` +
+      `Сброс лимитов произойдёт завтра в 00:00.\n\n` +
+      `✨ Оформи *Zerf Premium* за 99 ₽/мес и пиши сколько угодно!`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '⭐ Оформить Premium (99 ₽)', callback_data: 'cmd_subscribe' }],
+          ]
+        }
+      }
+    )
     return
   }
 
@@ -371,7 +551,9 @@ export async function POST(req: NextRequest) {
       const chatId = cb.message.chat.id
       const data = cb.data as string
 
-      if (data === 'cfg_interval_menu') {
+      if (data === 'cmd_subscribe') {
+        await handleSubscribe(chatId)
+      } else if (data === 'cfg_interval_menu') {
         await send(chatId, `⏱️ *Выберите интервал между напоминаниями:*`, {
           reply_markup: {
             inline_keyboard: [
@@ -453,8 +635,12 @@ export async function POST(req: NextRequest) {
         await handleGoals(chatId)
       } else if (cmd === '/notes') {
         await handleNotes(chatId)
+      } else if (cmd === '/premium' || cmd === '/subscribe') {
+        await handleSubscribe(chatId)
+      } else if (cmd === '/admin') {
+        await handleAdminCommand(chatId, parts.slice(1))
       } else {
-        await send(chatId, 'Попробуй /settings, /today или /help')
+        await send(chatId, 'Попробуй /settings, /today, /premium или /help')
       }
     } else if (voice) {
       await processVoice(chatId, voice.file_id)
