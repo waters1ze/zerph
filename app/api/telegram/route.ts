@@ -251,7 +251,7 @@ async function handleSubscribe(chatId: number) {
 
 async function handleAdminCommand(chatId: number, args: string[]) {
   const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061').split(',').map(s => s.trim()).filter(Boolean)
 
   // Check if caller is admin
   if (!ADMIN_CHAT_IDS.includes(String(chatId))) {
