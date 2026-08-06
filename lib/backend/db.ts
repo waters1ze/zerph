@@ -587,25 +587,58 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
   try {
     if (!ownerChatId) return []
     const cid = BigInt(ownerChatId)
+
+    // 1. Get explicit friendships (bidirectional)
     const friendships = await prisma.friendship.findMany({
-      where: { userChatId: cid, status: 'accepted' },
+      where: {
+        OR: [{ userChatId: cid }, { friendChatId: cid }],
+      },
     })
 
-    const friendIds = friendships.map(f => f.friendChatId)
-    friendIds.push(cid) // include self so name resolves everywhere
+    const contactIdsSet = new Set<bigint>()
+    friendships.forEach(f => {
+      if (f.userChatId !== cid) contactIdsSet.add(f.userChatId)
+      if (f.friendChatId !== cid) contactIdsSet.add(f.friendChatId)
+    })
+
+    // 2. Find all co-assignees from shared tasks
+    const strId = String(ownerChatId)
+    const sharedTasks = await prisma.task.findMany({
+      where: {
+        OR: [{ ownerChatId: cid }, { assignees: { has: strId } }],
+      },
+      select: { assignees: true, ownerChatId: true },
+    })
+
+    sharedTasks.forEach(t => {
+      if (t.ownerChatId && t.ownerChatId !== cid) contactIdsSet.add(t.ownerChatId)
+      t.assignees.forEach(a => {
+        try {
+          const aCid = BigInt(a)
+          if (aCid !== cid) contactIdsSet.add(aCid)
+        } catch {}
+      })
+    })
+
+    // Include self so owner name resolves too
+    contactIdsSet.add(cid)
+
+    const friendIds = Array.from(contactIdsSet)
+    if (friendIds.length === 0) return []
 
     const chats = await prisma.telegramChat.findMany({
-      where: { chatId: { in: friendIds } }
+      where: { chatId: { in: friendIds } },
     })
 
     const chatMap = new Map(chats.map(c => [String(c.chatId), c]))
 
-    return friendships.map(f => {
-      const fidStr = String(f.friendChatId)
+    return friendIds.map(fid => {
+      const fidStr = String(fid)
       const chat = chatMap.get(fidStr)
       const name = chat
-        ? [chat.firstName, chat.lastName].filter(Boolean).join(' ') || chat.username || `Коллега #${fidStr.slice(-4)}`
-        : `Коллега #${fidStr.slice(-4)}`
+        ? ([chat.firstName, chat.lastName].filter(Boolean).join(' ') || (chat.username ? `@${chat.username}` : `Участник #${fidStr.slice(-4)}`))
+        : `Участник #${fidStr.slice(-4)}`
+
       return {
         id: fidStr,
         name,
@@ -613,10 +646,11 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
         chatId: fidStr,
         username: chat?.username || '',
         status: 'online' as const,
-        addedAt: f.createdAt.toISOString(),
+        addedAt: new Date().toISOString(),
       }
     })
-  } catch {
+  } catch (err) {
+    console.error('Error in getFriends:', err)
     return []
   }
 }

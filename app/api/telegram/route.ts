@@ -76,6 +76,16 @@ async function editMessageText(chatId: number, messageId: number, text: string, 
   })
 }
 
+async function safeEditOrSend(chatId: number, messageId: number | undefined, text: string, extra?: object) {
+  if (messageId) {
+    try {
+      const res = await editMessageText(chatId, messageId, text, extra)
+      if (res?.ok) return res
+    } catch {}
+  }
+  return await send(chatId, text, extra)
+}
+
 function miniAppKeyboard(chatId?: number) {
   if (!chatId) {
     return {
@@ -705,22 +715,9 @@ async function handleGroupAddCommand(msg: any) {
 
     groupResponseCard += `Синхронизировано в приложении участников.`
 
-    if (statusMsgId) {
-      const editRes = await editMessageText(groupChatId, statusMsgId, groupResponseCard, {
-        reply_markup: miniAppKeyboard(senderId)
-      })
-      if (!editRes?.ok) {
-        await send(groupChatId, groupResponseCard, {
-          reply_to_message_id: msg.message_id,
-          reply_markup: miniAppKeyboard(senderId)
-        })
-      }
-    } else {
-      await send(groupChatId, groupResponseCard, {
-        reply_to_message_id: msg.message_id,
-        reply_markup: miniAppKeyboard(senderId)
-      })
-    }
+    await safeEditOrSend(groupChatId, statusMsgId, groupResponseCard, {
+      reply_markup: miniAppKeyboard(senderId),
+    })
   } catch (err: any) {
     console.error('Group add command error:', err)
     if (statusMsgId) {
