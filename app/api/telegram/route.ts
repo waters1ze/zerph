@@ -542,74 +542,74 @@ async function handleGroupAddCommand(msg: any) {
   const senderName = msg.from.first_name || 'Участник'
   const senderUsername = msg.from.username
 
-  await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
+  try {
+    await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
 
-  const replyMsg = msg.reply_to_message
-  if (!replyMsg) {
-    await send(groupChatId,
-      `ℹ️ *Как использовать /add в группе:*\n\n` +
-      `Ответьте командой */add* на любое голосовое или текстовое сообщение в группе, чтобы Zerf AI вычленил из него задачи и создал их для участников!`,
-      { reply_to_message_id: msg.message_id }
-    )
-    return
-  }
-
-  const replySenderId = replyMsg.from?.id
-  const replySenderName = replyMsg.from?.first_name || 'Коллега'
-  const replySenderUsername = replyMsg.from?.username
-  if (replySenderId) {
-    await registerChatId(replySenderId, replySenderName, replySenderUsername, replyMsg.from?.last_name)
-    await autoAddFriends(senderId, replySenderId)
-  }
-
-  // Check if at least ONE user in group has Zerf Premium
-  const { hasPremium } = await checkGroupOrUserHasPremium(senderId, groupChatId, replySenderId ? [replySenderId] : [])
-
-  if (!hasPremium) {
-    await send(groupChatId,
-      `❌ *Для работы Zerf AI в группах требуется Zerf Premium!*\n\n` +
-      `Хотя бы у одного участника группы должна быть активная подписка *Zerf Premium* (99 ₽/мес).\n\n` +
-      `Оформить подписку можно в личном боте через /buy или в Mini App! 💳`,
-      {
-        reply_to_message_id: msg.message_id,
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '💳 Оформить Zerf Premium (99 ₽)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` }
-          ]]
-        }
-      }
-    )
-    return
-  }
-
-  // Get target text or transcribe voice
-  let targetText = replyMsg.text || replyMsg.caption || ''
-  const targetVoice = replyMsg.voice || replyMsg.audio
-
-  if (targetVoice) {
-    const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
-    if (!key) {
-      await send(groupChatId, '❌ Groq API key не настроен.')
+    const replyMsg = msg.reply_to_message
+    if (!replyMsg) {
+      await send(groupChatId,
+        `ℹ️ *Как использовать /add в группе:*\n\n` +
+        `Ответьте командой */add* на любое голосовое или текстовое сообщение в группе, чтобы Zerf AI вычленил из него задачи и создал их для участников!`,
+        { reply_to_message_id: msg.message_id }
+      )
       return
     }
-    await send(groupChatId, '🎙️ Обрабатываю голосовое из группы…', { reply_to_message_id: msg.message_id })
 
-    const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
-    const fileData = await fileRes.json()
-    const filePath = fileData.result?.file_path
-    if (filePath) {
-      const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
-      const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
-      targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
+    const replySenderId = replyMsg.from?.id
+    const replySenderName = replyMsg.from?.first_name || 'Коллега'
+    const replySenderUsername = replyMsg.from?.username
+    if (replySenderId) {
+      await registerChatId(replySenderId, replySenderName, replySenderUsername, replyMsg.from?.last_name)
+      await autoAddFriends(senderId, replySenderId)
     }
-  }
 
-  if (!targetText.trim()) {
-    await send(groupChatId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.', { reply_to_message_id: msg.message_id })
-    return
-  }
+    // Check if at least ONE user in group has Zerf Premium
+    const { hasPremium } = await checkGroupOrUserHasPremium(senderId, groupChatId, replySenderId ? [replySenderId] : [])
 
-  try {
+    if (!hasPremium) {
+      await send(groupChatId,
+        `❌ *Для работы Zerf AI в группах требуется Zerf Premium!*\n\n` +
+        `Хотя бы у одного участника группы должна быть активная подписка *Zerf Premium* (99 ₽/мес).\n\n` +
+        `Оформить подписку можно в личном боте через /buy или в Mini App! 💳`,
+        {
+          reply_to_message_id: msg.message_id,
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '💳 Оформить Zerf Premium (99 ₽)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` }
+            ]]
+          }
+        }
+      )
+      return
+    }
+
+    // Get target text or transcribe voice
+    let targetText = replyMsg.text || replyMsg.caption || ''
+    const targetVoice = replyMsg.voice || replyMsg.audio
+
+    if (targetVoice) {
+      const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
+      if (!key) {
+        await send(groupChatId, '❌ Groq API key не настроен.')
+        return
+      }
+      await send(groupChatId, '🎙️ Обрабатываю голосовое из группы…', { reply_to_message_id: msg.message_id })
+
+      const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
+      const fileData = await fileRes.json()
+      const filePath = fileData.result?.file_path
+      if (filePath) {
+        const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
+        const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+        targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
+      }
+    }
+
+    if (!targetText.trim()) {
+      await send(groupChatId, '🤔 В выбранном сообщении нет текста или речи для создания задачи.', { reply_to_message_id: msg.message_id })
+      return
+    }
+
     const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
     const context = await getExistingItemsContext(senderId)
     let items = await parseIntentWithGroq(targetText, key, undefined, context)
@@ -671,7 +671,7 @@ async function handleGroupAddCommand(msg: any) {
     })
   } catch (err: any) {
     console.error('Group add command error:', err)
-    await send(groupChatId, `❌ Ошибка при создании задачи в группе: ${String(err.message || err).slice(0, 200)}`, {
+    await send(groupChatId, `❌ Ошибка при обработке в группе: ${String(err.message || err).slice(0, 200)}`, {
       reply_to_message_id: msg.message_id
     })
   }
