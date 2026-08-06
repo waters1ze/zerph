@@ -108,6 +108,8 @@ export interface Friend {
   id: string
   name: string
   email: string
+  chatId?: string
+  username?: string
   avatar?: string
   status: 'online' | 'offline' | 'away'
   addedAt: string

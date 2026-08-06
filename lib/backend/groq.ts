@@ -24,6 +24,8 @@ export interface ParsedItem {
   motivation?: string
   rawText: string
   originalText?: string         // same as rawText, for notes
+  isShared?: boolean
+  assignees?: string[]
 }
 
 export function getDynamicSystemPrompt(existingItemsContext?: string): string {

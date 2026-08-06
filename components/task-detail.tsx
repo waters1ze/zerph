@@ -260,21 +260,23 @@ export function TaskDetail() {
         )}
 
         {/* Collaborators */}
-        {task.assignees.length > 0 && (
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">КОМАНДА</p>
-            <div className="flex gap-2">
+        {task.assignees && task.assignees.length > 0 && (
+          <div className="p-3.5 rounded-xl bg-accent/40 border border-border/60">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2.5 flex items-center gap-1.5">
+              👥 КОМАНДА И УЧАСТНИКИ ЗАДАЧИ
+            </p>
+            <div className="flex flex-wrap gap-2">
               {task.assignees.map(aid => {
-                const friend = state.friends.find(f => f.id === aid)
-                if (!friend) return null
+                const friend = state.friends.find(f => f.id === aid || f.chatId === aid)
+                const name = friend?.name || `Участник #${aid.slice(-4)}`
                 return (
-                  <div key={aid} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-muted/50 border border-border/50">
-                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                      <span className="text-[9px] font-semibold text-primary">
-                        {friend.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  <div key={aid} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card border border-border/60 shadow-xs">
+                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-primary">
+                        {name.slice(0, 2).toUpperCase()}
                       </span>
                     </div>
-                    <span className="text-[12px] text-foreground">{friend.name.split(' ')[0]}</span>
+                    <span className="text-[12px] font-medium text-foreground">{name}</span>
                   </div>
                 )
               })}

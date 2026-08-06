@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
+import { NotificationsPanel } from '@/components/notifications-panel'
 import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu } from 'lucide-react'
 import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
@@ -115,11 +116,8 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
           <Mic className="w-4 h-4" />
         </motion.button>
 
-        {/* Notifications — desktop only */}
-        <button className="relative w-8 h-8 hidden sm:flex items-center justify-center rounded-lg hover:bg-muted/60 transition-colors">
-          <Bell className="w-4 h-4 text-muted-foreground" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary" />
-        </button>
+        {/* Notifications */}
+        <NotificationsPanel />
 
         {/* AI Chat — desktop only */}
         <motion.button
