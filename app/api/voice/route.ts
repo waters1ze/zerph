@@ -47,11 +47,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Provide audio file or text input.' }, { status: 400 })
     }
 
-    // Parse intent — detects task/goal/note/completion/reminder
-    const parsedItem = await parseIntentWithGroq(transcript, apiKey)
+    // Parse intent — detects task/goal/note/completion/reminder (can extract multiple items)
+    const parsedItems = await parseIntentWithGroq(transcript, apiKey)
+    const results = []
 
-    // Save to DB (handles completion internally)
-    const { item, completedTask } = await saveParsedItemToDb(parsedItem, ownerChatId)
+    for (const pItem of parsedItems) {
+      const savedResult = await saveParsedItemToDb(pItem, ownerChatId)
+      results.push(savedResult)
+    }
 
     if (ownerChatId && file) {
       await incrementUserUsage(ownerChatId, 'voice', 15) // estimate ~15s per voice clip
@@ -60,9 +63,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       transcript,
-      item,
-      completedTask: completedTask || null,
-      isCompletion: item.type === 'completion',
+      items: results.map(r => r.item),
+      completedTask: results.find(r => r.completedTask)?.completedTask || null,
+      isCompletion: results.some(r => r.item.type === 'completion'),
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

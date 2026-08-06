@@ -19,10 +19,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Groq API Key is missing' }, { status: 400 })
     }
 
-    const parsedItem = await parseIntentWithGroq(text, groqApiKey)
-    saveParsedItemToDb(parsedItem)
+    const parsedItems = await parseIntentWithGroq(text, groqApiKey)
+    for (const item of parsedItems) {
+      await saveParsedItemToDb(item)
+    }
 
-    return NextResponse.json({ success: true, item: parsedItem })
+    return NextResponse.json({ success: true, items: parsedItems, item: parsedItems[0] || null })
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: errorMessage }, { status: 500 })
