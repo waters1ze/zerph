@@ -583,10 +583,50 @@ export async function saveParsedItemToDb(
   return { item }
 }
 
+async function fetchTelegramUserProfile(chatId: bigint | number): Promise<{ firstName?: string; lastName?: string; username?: string } | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return null
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: Number(chatId) }),
+    })
+    const data = await res.json()
+    if (data?.ok && data.result) {
+      const u = data.result
+      const firstName = u.first_name || ''
+      const lastName = u.last_name || ''
+      const username = u.username || ''
+      if (firstName || username) {
+        await prisma.telegramChat.upsert({
+          where: { chatId: BigInt(chatId) },
+          update: {
+            firstName: firstName || undefined,
+            lastName: lastName || undefined,
+            username: username || undefined,
+          },
+          create: {
+            chatId: BigInt(chatId),
+            firstName: firstName || null,
+            lastName: lastName || null,
+            username: username || null,
+          },
+        }).catch(() => {})
+        return { firstName, lastName, username }
+      }
+    }
+  } catch {}
+  return null
+}
+
 export async function getFriends(ownerChatId?: number | bigint | string | null) {
   try {
     if (!ownerChatId) return []
     const cid = BigInt(ownerChatId)
+    const strId = String(ownerChatId)
+
+    const contactIdsSet = new Set<bigint>()
 
     // 1. Get explicit friendships (bidirectional)
     const friendships = await prisma.friendship.findMany({
@@ -594,15 +634,12 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
         OR: [{ userChatId: cid }, { friendChatId: cid }],
       },
     })
-
-    const contactIdsSet = new Set<bigint>()
     friendships.forEach(f => {
       if (f.userChatId !== cid) contactIdsSet.add(f.userChatId)
       if (f.friendChatId !== cid) contactIdsSet.add(f.friendChatId)
     })
 
     // 2. Find all co-assignees from shared tasks
-    const strId = String(ownerChatId)
     const sharedTasks = await prisma.task.findMany({
       where: {
         OR: [{ ownerChatId: cid }, { assignees: { has: strId } }],
@@ -620,8 +657,30 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
       })
     })
 
-    // Include self so owner name resolves too
-    contactIdsSet.add(cid)
+    // 3. Find all co-members from GroupMembership table (all members of any group this user is in)
+    try {
+      const userGroups = await prisma.groupMembership.findMany({
+        where: { memberChatId: cid },
+        select: { groupChatId: true },
+      })
+      if (userGroups.length > 0) {
+        const groupIds = userGroups.map(g => g.groupChatId)
+        const groupMembers = await prisma.groupMembership.findMany({
+          where: { groupChatId: { in: groupIds } },
+          select: { memberChatId: true },
+        })
+        groupMembers.forEach(m => {
+          if (m.memberChatId !== cid) contactIdsSet.add(m.memberChatId)
+        })
+      }
+    } catch {}
+
+    // Auto-create bidirectional friendship records in DB for all discovered contacts
+    for (const fid of contactIdsSet) {
+      if (fid !== cid) {
+        autoAddFriends(cid, fid).catch(() => {})
+      }
+    }
 
     const friendIds = Array.from(contactIdsSet)
     if (friendIds.length === 0) return []
@@ -632,23 +691,51 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
 
     const chatMap = new Map(chats.map(c => [String(c.chatId), c]))
 
-    return friendIds.map(fid => {
-      const fidStr = String(fid)
-      const chat = chatMap.get(fidStr)
-      const name = chat
-        ? ([chat.firstName, chat.lastName].filter(Boolean).join(' ') || (chat.username ? `@${chat.username}` : `Участник #${fidStr.slice(-4)}`))
-        : `Участник #${fidStr.slice(-4)}`
+    const results = await Promise.all(
+      friendIds.map(async fid => {
+        const fidStr = String(fid)
+        let chat = chatMap.get(fidStr)
 
-      return {
-        id: fidStr,
-        name,
-        email: chat?.username ? `@${chat.username}` : '',
-        chatId: fidStr,
-        username: chat?.username || '',
-        status: 'online' as const,
-        addedAt: new Date().toISOString(),
-      }
-    })
+        if (!chat || (!chat.firstName && !chat.username)) {
+          const fetched = await fetchTelegramUserProfile(fid)
+          if (fetched) {
+            chat = {
+              chatId: fid,
+              firstName: fetched.firstName || null,
+              lastName: fetched.lastName || null,
+              username: fetched.username || null,
+              birthday: chat?.birthday || null,
+              reminderIntervalMinutes: 5,
+              reminderRepeatCount: 3,
+              plan: 'free',
+              subscriptionExpiry: null,
+              voiceCountToday: 0,
+              voiceSecondsToday: 0,
+              notesCountToday: 0,
+              chatMessagesToday: 0,
+              lastResetDate: null,
+              addedAt: new Date(),
+            }
+          }
+        }
+
+        const name = chat
+          ? ([chat.firstName, chat.lastName].filter(Boolean).join(' ') || (chat.username ? `@${chat.username}` : `Участник #${fidStr.slice(-4)}`))
+          : `Участник #${fidStr.slice(-4)}`
+
+        return {
+          id: fidStr,
+          name,
+          email: chat?.username ? `@${chat.username}` : '',
+          chatId: fidStr,
+          username: chat?.username || '',
+          status: 'online' as const,
+          addedAt: new Date().toISOString(),
+        }
+      })
+    )
+
+    return results
   } catch (err) {
     console.error('Error in getFriends:', err)
     return []

@@ -581,7 +581,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       msg += `Описание: ${escMd(item.summary)}\n`
     }
     if (item.subtasks && item.subtasks.length > 0) {
-      msg += `Чек-лист:\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+      msg += `Чек-лист:\n` + item.subtasks.map((s: string) => `  • ${escMd(s)}`).join('\n') + `\n`
     }
     if (item.priority) msg += `Приоритет: ${pText}\n`
     if (item.dueDate) msg += `Дата: ${item.dueDate}\n`
@@ -599,21 +599,20 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 async function processVoice(chatId: number, fileId: string) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
-    await send(chatId, '❌ Groq API key не настроен.')
+    await send(chatId, 'Groq API key не настроен.')
     return
   }
 
-  // Check limits
   const limits = await getUserUsageAndLimits(chatId)
   if (!limits.canSendVoice) {
     await send(chatId,
       limits.plan === 'premium'
-        ? `❌ *Достигнут дневной лимит записи голоса (10 минут).* Сброс наступит завтра!`
-        : `❌ *Достигнут лимит голосовых сообщений (2 в день).* Оформите подписку *Zerf Premium* за 99 ₽!`,
+        ? 'Достигнут дневной лимит записи голоса (10 минут). Сброс наступит завтра!'
+        : 'Достигнут лимит голосовых сообщений (2 в день). Оформите подписку Zerf Premium за 99 руб!',
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: '💳 Оформить подписку (99 ₽)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
+            { text: 'Оформить подписку (99 руб)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
           ]]
         }
       }
@@ -623,37 +622,30 @@ async function processVoice(chatId: number, fileId: string) {
 
   try {
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
-    await send(chatId, '🎙 Обрабатываю голосовое…')
+    await send(chatId, 'Обрабатываю голосовое...')
 
-    // Get file path from Telegram
-    const fileRes = await fetch(
-      `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
-    )
+    const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`)
     const fileData = await fileRes.json()
     const filePath: string = fileData.result?.file_path
     if (!filePath) throw new Error('Не удалось получить файл')
 
-    // Download audio
     const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
     const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
 
-    // Transcribe
     const transcript = await transcribeAudioWithGroq(audioBuffer, `voice.ogg`, key)
     if (!transcript.trim()) {
-      await send(chatId, '🤔 Не удалось распознать речь. Попробуй ещё раз.')
+      await send(chatId, 'Не удалось распознать речь. Попробуй ещё раз.')
       return
     }
 
-    // Increment voice usage (~15s)
     await incrementUserUsage(chatId, 'voice', 15)
 
-    // Parse & save with context (multi-item support)
     const context = await getExistingItemsContext(chatId)
     const items = await parseIntentWithGroq(transcript, key, undefined, context)
 
     await saveAndRespondParsedItems(chatId, items, transcript)
   } catch (err: unknown) {
-    await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
+    await send(chatId, `Ошибка: ${String(err).slice(0, 200)}`)
   }
 }
 
@@ -665,7 +657,7 @@ async function handleGroupAddCommand(msg: any) {
   const senderName: string = msg.from.first_name || 'Участник'
   const senderUsername: string | undefined = msg.from.username
 
-  // ── Phase 1: Fast pre-checks (runs before returning 200 to Telegram) ─────────
+  // ── Phase 1: Fast pre-checks (<2s total) ─────────────────────────────────────
 
   await registerChatId(senderId, senderName, senderUsername, msg.from.last_name)
   await trackGroupMember(groupChatId, senderId)
@@ -689,7 +681,7 @@ async function handleGroupAddCommand(msg: any) {
     await autoAddFriends(senderId, replySenderId)
   }
 
-  // Premium check (fast DB query)
+  // Premium check
   const { hasPremium } = await checkGroupOrUserHasPremium(
     senderId, groupChatId,
     replySenderId ? [replySenderId] : []
@@ -713,7 +705,7 @@ async function handleGroupAddCommand(msg: any) {
   const targetVoice = replyMsg.voice || replyMsg.audio
   const targetTextDirect = replyMsg.text || replyMsg.caption || ''
 
-  // Send status message NOW — this is what the user sees instantly
+  // Send status message — user sees this immediately
   const statusRes = await send(
     groupChatId,
     targetVoice ? 'Обрабатываю голосовое из группы...' : 'Обрабатываю сообщение из группы...',
@@ -721,7 +713,7 @@ async function handleGroupAddCommand(msg: any) {
   )
   const statusMsgId: number | undefined = statusRes?.result?.message_id
 
-  // ── Phase 2: Heavy work inside after() — runs AFTER 200 is returned ─────────
+  // ── Phase 2: Background processing with after() ─────────────────────────────
   after(async () => {
     try {
       const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
@@ -730,22 +722,21 @@ async function handleGroupAddCommand(msg: any) {
         return
       }
 
-      // Get all known group members from DB (accumulated over time)
-      const knownMemberIds = await getGroupMembers(groupChatId)
-
-      // Ensure sender + reply-to are in the set
+      // 1. Get ALL group members registered in DB + Telegram admins
+      const groupMembers = await getGroupMembers(groupChatId)
       const assigneeSet = new Set<string>([String(senderId)])
       if (replySenderId) assigneeSet.add(String(replySenderId))
-      knownMemberIds.forEach(id => assigneeSet.add(String(id)))
+      groupMembers.forEach(m => assigneeSet.add(String(m)))
       const allAssignees = Array.from(assigneeSet)
 
-      // Auto-friend all known group members with each other
-      for (const mid of knownMemberIds) {
-        if (mid !== senderId) autoAddFriends(senderId, mid).catch(() => {})
-        if (replySenderId && mid !== replySenderId) autoAddFriends(replySenderId, mid).catch(() => {})
+      // 2. Auto-friend all members with each other
+      for (const mId of allAssignees) {
+        const numId = Number(mId)
+        if (numId !== senderId) autoAddFriends(senderId, numId).catch(() => {})
+        if (replySenderId && numId !== replySenderId) autoAddFriends(replySenderId, numId).catch(() => {})
       }
 
-      // Transcribe voice if needed
+      // 3. Transcribe audio if needed
       let targetText = targetTextDirect
       if (targetVoice) {
         try {
@@ -768,11 +759,10 @@ async function handleGroupAddCommand(msg: any) {
         return
       }
 
-      // AI parsing
+      // 4. AI parsing
       const context = await getExistingItemsContext(senderId)
       let items = await parseIntentWithGroq(targetText, key, undefined, context)
 
-      // Fallback: create task from raw text if AI found nothing
       if (!items || items.length === 0) {
         items = [{
           type: 'task',
@@ -786,7 +776,7 @@ async function handleGroupAddCommand(msg: any) {
         }]
       }
 
-      // Save to DB for ALL assignees
+      // 5. Save task for ALL assignees in DB
       for (const item of items) {
         item.isShared = true
         item.assignees = allAssignees
@@ -795,12 +785,12 @@ async function handleGroupAddCommand(msg: any) {
         }
       }
 
-      // Build response card (plain text — no Markdown to avoid parse failures)
+      // 6. Build final status card text (plain text for guaranteed delivery)
       let card = `Групповая задача создана в Zerf\n\n`
       card += `Участники: ${senderName}`
-      if (replySenderName && replySenderId !== senderId) card += `, ${replySenderName}`
-      const others = knownMemberIds.filter(id => id !== senderId && id !== replySenderId)
-      if (others.length > 0) card += ` и ещё ${others.length} уч.`
+      if (replySenderName && replySenderId !== senderId) {
+        card += `, ${replySenderName}`
+      }
       card += `\n\n`
 
       items.forEach((item, idx) => {
@@ -812,20 +802,16 @@ async function handleGroupAddCommand(msg: any) {
       })
       card += `Синхронизировано для ${allAssignees.length} участников.`
 
+      // 7. Update status message in Telegram group chat!
       await safeEditOrSend(groupChatId, statusMsgId, card, {
         reply_markup: miniAppKeyboard(senderId),
       })
     } catch (err: any) {
-      console.error('Group add after() error:', err)
-      await safeEditOrSend(
-        groupChatId,
-        statusMsgId,
-        `Ошибка: ${String(err?.message || err).slice(0, 200)}`
-      ).catch(() => {})
+      console.error('Error in group add after():', err)
+      await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при обработке в группе: ${String(err?.message || err).slice(0, 150)}`).catch(() => {})
     }
   })
 }
-
 
 async function handleInviteCommand(chatId: number, senderName: string, param?: string) {
   if (!param) {
