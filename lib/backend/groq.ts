@@ -118,35 +118,57 @@ Default priority is "medium". Output ONLY pure JSON.`
 /**
  * Transcribe audio using Groq Whisper (whisper-large-v3)
  */
+function getGroqKeys(providedKey?: string): string[] {
+  const raw = providedKey || DEFAULT_KEY || process.env.GROQ_API_KEY || ''
+  const keys = raw.split(/[\s,]+/).map(k => k.trim()).filter(Boolean)
+  return keys.length > 0 ? keys : []
+}
+
+/**
+ * Transcribe audio using Groq Whisper (whisper-large-v3) with multi-key fallback rotation
+ */
 export async function transcribeAudioWithGroq(
   audioBuffer: Buffer,
   filename: string,
   apiKey?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) throw new Error('Groq API Key missing.')
+  const keys = getGroqKeys(apiKey)
+  if (keys.length === 0) throw new Error('Groq API Key missing.')
 
   const ext = filename.split('.').pop() || 'webm'
   const mimeType = ext === 'webm' ? 'audio/webm' : ext === 'ogg' ? 'audio/ogg' : 'audio/mpeg'
 
-  const formData = new FormData()
-  formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename)
-  formData.append('model', GROQ_WHISPER_MODEL)
-  formData.append('response_format', 'json')
+  let lastError: Error | null = null
 
-  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}` },
-    body: formData,
-  })
+  for (const key of keys) {
+    try {
+      const formData = new FormData()
+      formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename)
+      formData.append('model', GROQ_WHISPER_MODEL)
+      formData.append('response_format', 'json')
 
-  if (!res.ok) throw new Error(`Whisper Error (${res.status}): ${await res.text()}`)
-  const data = await res.json()
-  return data.text || ''
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}` },
+        body: formData,
+      })
+
+      if (!res.ok) {
+        throw new Error(`Whisper Error (${res.status}): ${await res.text()}`)
+      }
+      const data = await res.json()
+      return data.text || ''
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      console.warn(`Groq Key failed, trying next key... Error: ${lastError.message}`)
+    }
+  }
+
+  throw lastError || new Error('All Groq API keys failed.')
 }
 
 /**
- * Parse intent from text using Groq LLM (openai/gpt-oss-120b)
+ * Parse intent from text using Groq LLM with multi-key fallback rotation
  */
 export async function parseIntentWithGroq(
   text: string,
@@ -154,62 +176,74 @@ export async function parseIntentWithGroq(
   model?: string,
   existingItemsContext?: string
 ): Promise<ParsedItem> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) throw new Error('Groq API Key missing.')
+  const keys = getGroqKeys(apiKey)
+  if (keys.length === 0) throw new Error('Groq API Key missing.')
 
   const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext)
+  let lastError: Error | null = null
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: model || GROQ_CHAT_MODEL,
-      messages: [
-        { role: 'system', content: dynamicSystemPrompt },
-        { role: 'user', content: text },
-      ],
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-    }),
-  })
+  for (const key of keys) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model || GROQ_CHAT_MODEL,
+          messages: [
+            { role: 'system', content: dynamicSystemPrompt },
+            { role: 'user', content: text },
+          ],
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+        }),
+      })
 
-  if (!res.ok) throw new Error(`Groq Chat Error (${res.status}): ${await res.text()}`)
+      if (!res.ok) {
+        throw new Error(`Groq Chat Error (${res.status}): ${await res.text()}`)
+      }
 
-  const data = await res.json()
-  const raw = data.choices?.[0]?.message?.content || '{}'
+      const data = await res.json()
+      const raw = data.choices?.[0]?.message?.content || '{}'
 
-  try {
-    const p = JSON.parse(raw)
-    return {
-      action: p.action || (p.type === 'completion' ? 'completion' : 'create'),
-      targetId: p.targetId || null,
-      type: p.type || 'task',
-      title: p.title || text.slice(0, 50),
-      summary: p.summary || text,
-      priority: p.priority || 'medium',
-      dueDate: p.dueDate || null,
-      dueTime: p.dueTime || null,
-      targetTitle: p.targetTitle || null,
-      projectId: p.projectId || null,
-      goalId: p.goalId || null,
-      tags: Array.isArray(p.tags) ? p.tags : [],
-      subtasks: Array.isArray(p.subtasks) ? p.subtasks : [],
-      milestones: Array.isArray(p.milestones) ? p.milestones : [],
-      motivation: p.motivation || null,
-      rawText: text,
-      originalText: text,
-    }
-  } catch {
-    return {
-      type: 'task',
-      title: text.slice(0, 50),
-      summary: text,
-      priority: 'medium',
-      tags: ['voice-input'],
-      rawText: text,
-      originalText: text,
+      try {
+        const p = JSON.parse(raw)
+        return {
+          action: p.action || (p.type === 'completion' ? 'completion' : 'create'),
+          targetId: p.targetId || null,
+          type: p.type || 'task',
+          title: p.title || text.slice(0, 50),
+          summary: p.summary || text,
+          priority: p.priority || 'medium',
+          dueDate: p.dueDate || null,
+          dueTime: p.dueTime || null,
+          targetTitle: p.targetTitle || null,
+          projectId: p.projectId || null,
+          goalId: p.goalId || null,
+          tags: Array.isArray(p.tags) ? p.tags : [],
+          subtasks: Array.isArray(p.subtasks) ? p.subtasks : [],
+          milestones: Array.isArray(p.milestones) ? p.milestones : [],
+          motivation: p.motivation || null,
+          rawText: text,
+          originalText: text,
+        }
+      } catch {
+        return {
+          type: 'task',
+          title: text.slice(0, 50),
+          summary: text,
+          priority: 'medium',
+          tags: ['voice-input'],
+          rawText: text,
+          originalText: text,
+        }
+      }
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      console.warn(`Groq Key failed, trying next key... Error: ${lastError.message}`)
     }
   }
+
+  throw lastError || new Error('All Groq API keys failed.')
 }
 
 /**
