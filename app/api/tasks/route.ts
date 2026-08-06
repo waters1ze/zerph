@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getAllTasks, getAllGoals, getAllNotes,
+  getAllTasks, getAllGoals, getAllNotes, getFriends,
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
@@ -38,12 +38,13 @@ function getOwnerChatId(req: NextRequest): string | null {
 export async function GET(req: NextRequest) {
   try {
     const ownerChatId = getOwnerChatId(req)
-    const [tasks, goals, notes] = await Promise.all([
+    const [tasks, goals, notes, friends] = await Promise.all([
       getAllTasks(ownerChatId),
       getAllGoals(ownerChatId),
       getAllNotes(ownerChatId),
+      getFriends(ownerChatId),
     ])
-    return NextResponse.json(serialize({ tasks, goals, notes }))
+    return NextResponse.json(serialize({ tasks, goals, notes, friends }))
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
