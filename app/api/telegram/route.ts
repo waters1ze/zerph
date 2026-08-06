@@ -452,19 +452,19 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 
     msg += `${prefix}${typeLabel} ${actionWord}\n📌 *${escMd(item.title)}*\n`
     if (item.summary && item.summary !== item.title) {
-      msg += `📝 _${escMd(item.summary.slice(0, 300))}_\n`
+      msg += `📝 *Описание от ИИ:*\n_${escMd(item.summary)}_\n`
     }
     if (item.subtasks && item.subtasks.length > 0) {
-      msg += `📋 *Шаги:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+      msg += `📋 *Чек-лист:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
     }
-    if (item.priority) msg += `${P_EMOJI[item.priority] || '⚪'} ${item.priority}\n`
-    if (item.dueDate) msg += `📅 ${item.dueDate}\n`
-    if (item.dueTime) msg += `⏰ *${item.dueTime}* — напомню!\n`
+    if (item.priority) msg += `${P_EMOJI[item.priority] || '⚪'} Приоритет: ${item.priority}\n`
+    if (item.dueDate) msg += `📅 Дата: ${item.dueDate}\n`
+    if (item.dueTime) msg += `⏰ Время: *${item.dueTime}* — напомню!\n`
     msg += `\n`
   }
 
   if (transcript) {
-    msg += `_«${escMd(transcript.slice(0, 60))}${transcript.length > 60 ? '…' : ''}»_`
+    msg += `🗣️ *Исходный текст голосового:*\n_«${escMd(transcript)}»_`
   } else {
     msg += `_Сохранено в Zerf_`
   }
