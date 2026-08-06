@@ -193,7 +193,7 @@ export function SettingsView() {
       </Section>
 
       {/* Notifications */}
-      <Section title="Notifications">
+      <Section title="Notifications & Reminders">
         <Row label="Desktop notifications" description="Browser push notifications for reminders">
           <Toggle
             checked={settings.notifications.desktop}
@@ -205,6 +205,32 @@ export function SettingsView() {
             checked={settings.notifications.dueReminders}
             onChange={v => update({ notifications: { ...settings.notifications, dueReminders: v } })}
           />
+        </Row>
+        <Row label="Reminder interval" description="Minutes between multi-stage reminders before deadline">
+          <select
+            value={settings.notifications.reminderIntervalMinutes || 5}
+            onChange={e => update({ notifications: { ...settings.notifications, reminderIntervalMinutes: Number(e.target.value) } })}
+            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+          >
+            <option value={1}>1 min</option>
+            <option value={3}>3 min</option>
+            <option value={5}>5 min (Default)</option>
+            <option value={10}>10 min</option>
+            <option value={15}>15 min</option>
+            <option value={30}>30 min</option>
+          </select>
+        </Row>
+        <Row label="Reminder count" description="How many times to remind before and at deadline">
+          <select
+            value={settings.notifications.reminderRepeatCount || 3}
+            onChange={e => update({ notifications: { ...settings.notifications, reminderRepeatCount: Number(e.target.value) } })}
+            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+          >
+            <option value={1}>1 time (Exact time only)</option>
+            <option value={2}>2 times</option>
+            <option value={3}>3 times (Default: -10m, -5m, 0m)</option>
+            <option value={5}>5 times</option>
+          </select>
         </Row>
         <Row label="Team updates" description="Activity from shared tasks and collaborators">
           <Toggle

@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   email: '',
   avatar: '',
   accentColor: '#2d7a4f',
-  notifications: { desktop: true, email: false, dueReminders: true, teamUpdates: true },
+  notifications: { desktop: true, email: false, dueReminders: true, teamUpdates: true, reminderIntervalMinutes: 5, reminderRepeatCount: 3 },
   integrations: { telegram: false, aiApiKey: '', aiModel: 'llama-3.3-70b-versatile', groqApiKey: '', telegramBotToken: '' },
   weekStartsOn: 1,
   focusModeEnabled: false,
@@ -200,6 +200,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const savedChatId = localStorage.getItem('zerf_chat_id')
         if (savedChatId) return savedChatId
+      } catch {}
+
+      try {
+        let guestId = localStorage.getItem('zerf_guest_id')
+        if (!guestId) {
+          guestId = String(Math.floor(100000000 + Math.random() * 899999999))
+          localStorage.setItem('zerf_guest_id', guestId)
+        }
+        return guestId
       } catch {}
     }
     return null

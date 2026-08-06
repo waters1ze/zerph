@@ -12,9 +12,10 @@ import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq
 import {
   saveParsedItemToDb,
   getAllTasks, getAllGoals, getAllNotes,
-  registerChatId,
+  registerChatId, getExistingItemsContext,
 } from '@/lib/backend/db'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
+import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
@@ -69,16 +70,16 @@ async function handleStart(chatId: number, firstName: string) {
     `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI.\n\n` +
     `✨ *Твои возможности:*\n` +
     `1️⃣ *Голосовой ввод* 🎙️ — надиктуй задачу, цель или заметку сюда в чат.\n` +
-    `2️⃣ *Умное завершение* ✔️ — напиши «Задача X выполнена».\n` +
-    `3️⃣ *Авто-уведомления* ⏰ — напиши «Напомни завтра в 10:00».\n` +
-    `4️⃣ *Единый профиль* 🌐 — все данные автоматически видны и в боте, и на веб-сайте!\n\n` +
+    `2️⃣ *Умное редактирование* ✏️ — "измени время цели на 12:00".\n` +
+    `3️⃣ *Авто-уведомления* ⏰ — настрой интервалы через /settings.\n` +
+    `4️⃣ *Единый профиль* 🌐 — данные видны и в боте, и на веб-сайте!\n\n` +
     `Жми кнопки ниже, чтобы открыть Mini App или перейти на полный сайт:`,
     { reply_markup: miniAppKeyboard(chatId) }
   )
 }
 
 async function handleToday(chatId: number) {
-  const tasks = await getAllTasks()
+  const tasks = await getAllTasks(chatId)
   const today = new Date().toISOString().slice(0, 10)
   const now = new Date()
   const dayName = now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -109,11 +110,11 @@ async function handleToday(chatId: number) {
     }
   }
 
-  await send(chatId, msg, { reply_markup: miniAppKeyboard() })
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 }
 
 async function handleGoals(chatId: number) {
-  const goals = await getAllGoals()
+  const goals = await getAllGoals(chatId)
   let msg = `🎯 *Твои цели*\n\n`
   if (goals.length === 0) {
     msg += 'Нет целей. Отправь голосовое — создам!'
@@ -123,11 +124,11 @@ async function handleGoals(chatId: number) {
       msg += `${G_STATUS[g.status] || '📌'} *${escMd(g.title)}* — ${g.progress}%${dl}\n`
     })
   }
-  await send(chatId, msg, { reply_markup: miniAppKeyboard() })
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 }
 
 async function handleNotes(chatId: number) {
-  const notes = await getAllNotes()
+  const notes = await getAllNotes(chatId)
   const ICON: Record<string, string> = { note: '📌', journal: '📓', meeting: '🤝' }
   let msg = `📌 *Последние заметки*\n\n`
   if (notes.length === 0) {
@@ -139,6 +140,36 @@ async function handleNotes(chatId: number) {
     })
   }
   await send(chatId, msg)
+}
+
+async function handleSettings(chatId: number) {
+  let interval = 5
+  let repeat = 3
+  try {
+    const userChat = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+    if (userChat) {
+      interval = userChat.reminderIntervalMinutes
+      repeat = userChat.reminderRepeatCount
+    }
+  } catch {}
+
+  await send(chatId,
+    `⚙️ *Настройки напоминаний*\n\n` +
+    `⏱️ *Интервал между напоминаниями:* ${interval} мин\n` +
+    `🔁 *Количество повторов:* ${repeat} раза\n\n` +
+    `_Выберите параметр для изменения:_`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: `⏱️ Интервал: ${interval} м`, callback_data: 'cfg_interval_menu' },
+            { text: `🔁 Повторы: ${repeat}x`, callback_data: 'cfg_repeat_menu' },
+          ],
+          [{ text: '📱 Открыть сайт / App', web_app: { url: `${MINIAPP_URL}?chatId=${chatId}` } }],
+        ],
+      },
+    }
+  )
 }
 
 async function handleLanguage(chatId: number) {
@@ -173,19 +204,25 @@ async function processText(chatId: number, text: string) {
 
   try {
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
-    const item = await parseIntentWithGroq(text, key)
-    const { completedTask } = await saveParsedItemToDb(item, chatId)
+    const context = await getExistingItemsContext(chatId)
+    const item = await parseIntentWithGroq(text, key, undefined, context)
+    const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
 
-    if (item.type === 'completion') {
+    if (item.action === 'delete' || item.type === 'completion') {
       if (completedTask) {
         await send(chatId,
           `✅ *Задача выполнена!*\n\n~~${escMd(completedTask.title)}~~\n\n_Синхронизировано с Zerf_`,
-          { reply_markup: miniAppKeyboard() }
+          { reply_markup: miniAppKeyboard(chatId) }
+        )
+      } else if (updatedItem) {
+        await send(chatId,
+          `🗑️ *Элемент удален из твоего Zerf!*`,
+          { reply_markup: miniAppKeyboard(chatId) }
         )
       } else {
         await send(chatId,
           `🔍 Задача *«${escMd(item.targetTitle || item.title)}»* не найдена.\n\nПроверь список /today`,
-          { reply_markup: miniAppKeyboard() }
+          { reply_markup: miniAppKeyboard(chatId) }
         )
       }
       return
@@ -208,13 +245,14 @@ async function processText(chatId: number, text: string) {
         `⚠️ *Время «${item.dueTime}» уже прошло на сегодня!*\n\n` +
         `Текущее время в MSK: *${currentTimeStr}*\n` +
         `Пожалуйста, укажи время в будущем (например, «в ${currentTimeStr}» или позже).`,
-        { reply_markup: miniAppKeyboard() }
+        { reply_markup: miniAppKeyboard(chatId) }
       )
       return
     }
 
     const typeLabel = TYPE_RU[item.type] || item.type
-    let msg = `${typeLabel} создана ✨\n\n*${escMd(item.title)}*\n`
+    const actionWord = updatedItem || item.action === 'update' ? 'изменена ✨' : 'создана ✨'
+    let msg = `${typeLabel} ${actionWord}\n\n*${escMd(item.title)}*\n`
     if (item.priority) msg += `\n${P_EMOJI[item.priority] || '⚪'} ${item.priority}`
     if (item.dueDate) msg += `\n📅 ${item.dueDate}`
     if (item.dueTime) msg += `\n⏰ *${item.dueTime}* — пришлю напоминание!`
@@ -256,34 +294,36 @@ async function processVoice(chatId: number, fileId: string) {
       return
     }
 
-    // Parse & save
-    const item = await parseIntentWithGroq(transcript, key)
-    const { completedTask } = await saveParsedItemToDb(item, chatId)
+    // Parse & save with context
+    const context = await getExistingItemsContext(chatId)
+    const item = await parseIntentWithGroq(transcript, key, undefined, context)
+    const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
 
     if (item.type === 'completion') {
       if (completedTask) {
         await send(chatId,
           `✅ *Выполнено!*\n\n~~${escMd(completedTask.title)}~~\n\n_«${escMd(transcript.slice(0, 60))}»_`,
-          { reply_markup: miniAppKeyboard() }
+          { reply_markup: miniAppKeyboard(chatId) }
         )
       } else {
         await send(chatId,
           `🔍 Задача не найдена: *«${escMd(item.targetTitle || item.title)}»*\n\n_«${escMd(transcript.slice(0, 60))}»_`,
-          { reply_markup: miniAppKeyboard() }
+          { reply_markup: miniAppKeyboard(chatId) }
         )
       }
       return
     }
 
     const typeLabel = TYPE_RU[item.type] || item.type
-    let msg = `${typeLabel} создана ✨\n\n*${escMd(item.title)}*\n`
+    const actionWord = updatedItem || item.action === 'update' ? 'изменена ✨' : 'создана ✨'
+    let msg = `${typeLabel} ${actionWord}\n\n*${escMd(item.title)}*\n`
     if (item.priority) msg += `\n${P_EMOJI[item.priority] || '⚪'} ${item.priority}`
     if (item.dueDate) msg += `\n📅 ${item.dueDate}`
     if (item.dueTime) msg += `\n⏰ *${item.dueTime}* — напомню!`
     if (item.type === 'note') msg += `\n📝 _Оригинал сохранён_`
     msg += `\n\n_«${escMd(transcript.slice(0, 60))}${transcript.length > 60 ? '…' : ''}»_`
 
-    await send(chatId, msg, { reply_markup: miniAppKeyboard() })
+    await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
   } catch (err: unknown) {
     await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
   }
@@ -294,6 +334,65 @@ async function processVoice(chatId: number, fileId: string) {
 export async function POST(req: NextRequest) {
   try {
     const update = await req.json()
+
+    // Handle Callback Queries (inline buttons)
+    if (update.callback_query) {
+      const cb = update.callback_query
+      const chatId = cb.message.chat.id
+      const data = cb.data as string
+
+      if (data === 'cfg_interval_menu') {
+        await send(chatId, `⏱️ *Выберите интервал между напоминаниями:*`, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '1 мин', callback_data: 'set_int_1' },
+                { text: '3 мин', callback_data: 'set_int_3' },
+                { text: '5 мин', callback_data: 'set_int_5' },
+              ],
+              [
+                { text: '10 мин', callback_data: 'set_int_10' },
+                { text: '15 мин', callback_data: 'set_int_15' },
+                { text: '30 мин', callback_data: 'set_int_30' },
+              ],
+            ],
+          },
+        })
+      } else if (data.startsWith('set_int_')) {
+        const val = parseInt(data.replace('set_int_', ''), 10)
+        await prisma.telegramChat.upsert({
+          where: { chatId: BigInt(chatId) },
+          update: { reminderIntervalMinutes: val },
+          create: { chatId: BigInt(chatId), reminderIntervalMinutes: val },
+        })
+        await send(chatId, `✅ *Интервал обновлен:* ${val} минут!`, { reply_markup: miniAppKeyboard(chatId) })
+      } else if (data === 'cfg_repeat_menu') {
+        await send(chatId, `🔁 *Выберите количество повторов напоминаний:*`, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '1 раз', callback_data: 'set_rep_1' },
+                { text: '2 раза', callback_data: 'set_rep_2' },
+                { text: '3 раза', callback_data: 'set_rep_3' },
+                { text: '5 раз', callback_data: 'set_rep_5' },
+              ],
+            ],
+          },
+        })
+      } else if (data.startsWith('set_rep_')) {
+        const val = parseInt(data.replace('set_rep_', ''), 10)
+        await prisma.telegramChat.upsert({
+          where: { chatId: BigInt(chatId) },
+          update: { reminderRepeatCount: val },
+          create: { chatId: BigInt(chatId), reminderRepeatCount: val },
+        })
+        await send(chatId, `✅ *Количество повторов обновлено:* ${val} раза!`, { reply_markup: miniAppKeyboard(chatId) })
+      }
+
+      await tgApi('answerCallbackQuery', { callback_query_id: cb.id })
+      return NextResponse.json({ ok: true })
+    }
+
     const msg = update.message
     if (!msg) return NextResponse.json({ ok: true })
 
@@ -314,6 +413,8 @@ export async function POST(req: NextRequest) {
         await handleStart(chatId, firstName)
       } else if (cmd === '/start' || cmd === '/help') {
         await handleStart(chatId, firstName)
+      } else if (cmd === '/settings' || cmd === '/reminders') {
+        await handleSettings(chatId)
       } else if (cmd === '/language' || cmd === '/lang') {
         await handleLanguage(chatId)
       } else if (cmd === '/today') {
@@ -323,7 +424,7 @@ export async function POST(req: NextRequest) {
       } else if (cmd === '/notes') {
         await handleNotes(chatId)
       } else {
-        await send(chatId, 'Попробуй /help или /language')
+        await send(chatId, 'Попробуй /settings, /today или /help')
       }
     } else if (voice) {
       await processVoice(chatId, voice.file_id)

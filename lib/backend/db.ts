@@ -38,12 +38,16 @@ export type DbTask = {
 
 export async function getAllTasks(ownerChatId?: number | bigint | string | null) {
   try {
-    if (ownerChatId) {
-      const cid = BigInt(ownerChatId)
-      return await prisma.task.findMany({
-        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
-        orderBy: { createdAt: 'desc' },
-      })
+    if (ownerChatId !== undefined && ownerChatId !== null) {
+      const num = Number(ownerChatId)
+      if (!isNaN(num) && num !== 0) {
+        const cid = BigInt(ownerChatId)
+        return await prisma.task.findMany({
+          where: { ownerChatId: cid },
+          orderBy: { createdAt: 'desc' },
+        })
+      }
+      return []
     }
     return await prisma.task.findMany({ orderBy: { createdAt: 'desc' } })
   } catch {
@@ -53,12 +57,16 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
 
 export async function getAllGoals(ownerChatId?: number | bigint | string | null) {
   try {
-    if (ownerChatId) {
-      const cid = BigInt(ownerChatId)
-      return await prisma.goal.findMany({
-        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
-        orderBy: { createdAt: 'desc' },
-      })
+    if (ownerChatId !== undefined && ownerChatId !== null) {
+      const num = Number(ownerChatId)
+      if (!isNaN(num) && num !== 0) {
+        const cid = BigInt(ownerChatId)
+        return await prisma.goal.findMany({
+          where: { ownerChatId: cid },
+          orderBy: { createdAt: 'desc' },
+        })
+      }
+      return []
     }
     return await prisma.goal.findMany({ orderBy: { createdAt: 'desc' } })
   } catch {
@@ -68,12 +76,16 @@ export async function getAllGoals(ownerChatId?: number | bigint | string | null)
 
 export async function getAllNotes(ownerChatId?: number | bigint | string | null) {
   try {
-    if (ownerChatId) {
-      const cid = BigInt(ownerChatId)
-      return await prisma.note.findMany({
-        where: { OR: [{ ownerChatId: cid }, { ownerChatId: null }] },
-        orderBy: { createdAt: 'desc' },
-      })
+    if (ownerChatId !== undefined && ownerChatId !== null) {
+      const num = Number(ownerChatId)
+      if (!isNaN(num) && num !== 0) {
+        const cid = BigInt(ownerChatId)
+        return await prisma.note.findMany({
+          where: { ownerChatId: cid },
+          orderBy: { createdAt: 'desc' },
+        })
+      }
+      return []
     }
     return await prisma.note.findMany({ orderBy: { createdAt: 'desc' } })
   } catch {
@@ -265,6 +277,45 @@ export async function getAllChatIds(): Promise<number[]> {
   return chats.map((c: { chatId: bigint }) => Number(c.chatId))
 }
 
+export async function getExistingItemsContext(ownerChatId?: number | bigint | string | null): Promise<string> {
+  try {
+    const tasks = await getAllTasks(ownerChatId)
+    const goals = await getAllGoals(ownerChatId)
+    const notes = await getAllNotes(ownerChatId)
+
+    const activeTasks = tasks.filter(t => t.status !== 'done').slice(0, 15)
+    const activeGoals = goals.slice(0, 10)
+    const activeNotes = notes.slice(0, 5)
+
+    const lines: string[] = []
+
+    if (activeGoals.length) {
+      lines.push('🎯 ЦЕЛИ:')
+      activeGoals.forEach(g => {
+        lines.push(`- ID: ${g.id} | Название: "${g.title}" | Дедлайн: ${g.deadline || 'не указан'} | Описание: ${g.description || ''}`)
+      })
+    }
+
+    if (activeTasks.length) {
+      lines.push('\n📋 ЗАДАЧИ / НАПОМИНАНИЯ:')
+      activeTasks.forEach(t => {
+        lines.push(`- ID: ${t.id} | Название: "${t.title}" | Дата: ${t.dueDate || 'не указана'} | Время: ${t.dueTime || 'не указано'} | Приоритет: ${t.priority}`)
+      })
+    }
+
+    if (activeNotes.length) {
+      lines.push('\n📌 ЗАМЕТКИ:')
+      activeNotes.forEach(n => {
+        lines.push(`- ID: ${n.id} | Заголовок: "${n.title}"`)
+      })
+    }
+
+    return lines.join('\n')
+  } catch {
+    return ''
+  }
+}
+
 // ── High-level: save ParsedItem from Groq AI ──────────────────────────────────
 
 export async function saveParsedItemToDb(
@@ -273,9 +324,62 @@ export async function saveParsedItemToDb(
 ): Promise<{
   item: ParsedItem
   completedTask?: DbTask | null
+  updatedItem?: boolean
 }> {
+  // Delete action
+  if (item.action === 'delete' && item.targetId) {
+    await deleteTask(item.targetId)
+    await deleteGoal(item.targetId)
+    await deleteNote(item.targetId)
+    return { item, updatedItem: true }
+  }
+
+  // Update action
+  if (item.action === 'update' && item.targetId) {
+    const updateData: Record<string, unknown> = {}
+    if (item.title) updateData.title = item.title
+    if (item.summary) updateData.description = item.summary
+    if (item.dueDate !== undefined) updateData.dueDate = item.dueDate
+    if (item.dueTime !== undefined) updateData.dueTime = item.dueTime
+    if (item.priority) updateData.priority = item.priority
+
+    // Try updating task first
+    try {
+      await prisma.task.update({
+        where: { id: item.targetId },
+        data: updateData as never,
+      })
+      return { item, updatedItem: true }
+    } catch {}
+
+    // Try updating goal
+    try {
+      const goalUpdateData: Record<string, unknown> = {}
+      if (item.title) goalUpdateData.title = item.title
+      if (item.summary) goalUpdateData.description = item.summary
+      if (item.dueDate !== undefined) goalUpdateData.deadline = item.dueDate
+      await prisma.goal.update({
+        where: { id: item.targetId },
+        data: goalUpdateData as never,
+      })
+      return { item, updatedItem: true }
+    } catch {}
+
+    // Try updating note
+    try {
+      const noteUpdateData: Record<string, unknown> = {}
+      if (item.title) noteUpdateData.title = item.title
+      if (item.summary) noteUpdateData.content = item.summary
+      await prisma.note.update({
+        where: { id: item.targetId },
+        data: noteUpdateData as never,
+      })
+      return { item, updatedItem: true }
+    } catch {}
+  }
+
   // Completion intent — mark existing task done
-  if (item.type === 'completion' && item.targetTitle) {
+  if ((item.action === 'completion' || item.type === 'completion') && item.targetTitle) {
     const completed = await completeTaskByTitle(item.targetTitle, ownerChatId)
     return { item, completedTask: completed }
   }
