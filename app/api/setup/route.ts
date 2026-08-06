@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
           { command: 'today',    description: '📅 Задачи на сегодня' },
           { command: 'goals',    description: '🎯 Активные цели' },
           { command: 'notes',    description: '📌 Последние заметки' },
+          { command: 'settings', description: '⚙️ Настройки интервалов и повторов' },
           { command: 'language', description: '🌐 Выбрать язык интерфейса' },
           { command: 'help',     description: '❓ Инструкция и возможности' },
         ],
