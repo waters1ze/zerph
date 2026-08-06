@@ -30,9 +30,16 @@ const P_EMOJI: Record<string, string> = {
 const G_STATUS: Record<string, string> = {
   on_track: '✅', at_risk: '⚠️', delayed: '❌', completed: '🏆',
 }
+const PRIORITY_RU: Record<string, string> = {
+  urgent: 'Срочный',
+  high: 'Высокий',
+  medium: 'Средний',
+  low: 'Низкий',
+}
 
 function escMd(s: string) {
-  return s.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')
+  if (!s) return ''
+  return s.replace(/[_*`\[\]]/g, '\\$&')
 }
 
 async function tgApi(method: string, body: object) {
@@ -438,14 +445,14 @@ async function processText(chatId: number, text: string) {
 async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], transcript?: string) {
   if (!items || items.length === 0) return
 
-  let msg = items.length > 1 ? `✨ *Обработано элементов: ${items.length}*\n\n` : ''
+  let msg = items.length > 1 ? `Обработано элементов: ${items.length}\n\n` : ''
 
   for (let idx = 0; idx < items.length; idx++) {
     const item = items[idx]
 
     if (item.action === 'delete_all') {
       await saveParsedItemToDb(item, chatId)
-      await send(chatId, `🗑️ *Все задачи успешно удалены!*`, { reply_markup: miniAppKeyboard(chatId) })
+      await send(chatId, `Все задачи успешно удалены.`, { reply_markup: miniAppKeyboard(chatId) })
       return
     }
 
@@ -453,36 +460,35 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 
     if (item.action === 'delete' || item.type === 'completion') {
       if (completedTask) {
-        msg += `✅ *Выполнено:* ~~${escMd(completedTask.title)}~~\n\n`
+        msg += `Выполнено: ${escMd(completedTask.title)}\n\n`
       } else if (updatedItem) {
-        msg += `🗑️ *Элемент удален из Zerf*\n\n`
+        msg += `Элемент удален из Zerf\n\n`
       } else {
-        msg += `🔍 Задача *«${escMd(item.targetTitle || item.title)}»* не найдена\n\n`
+        msg += `Задача «${escMd(item.targetTitle || item.title)}» не найдена\n\n`
       }
       continue
     }
 
     const typeLabel = TYPE_RU[item.type] || item.type
-    const actionWord = updatedItem || item.action === 'update' ? 'изменена ✨' : 'создана ✨'
+    const actionWord = updatedItem || item.action === 'update' ? 'изменена' : 'создана'
     const prefix = items.length > 1 ? `${idx + 1}. ` : ''
+    const pText = PRIORITY_RU[item.priority] || item.priority
 
-    msg += `${prefix}${typeLabel} ${actionWord}\n📌 *${escMd(item.title)}*\n`
+    msg += `${prefix}${typeLabel} ${actionWord}: *${escMd(item.title)}*\n`
     if (item.summary && item.summary !== item.title) {
-      msg += `📝 *Описание от ИИ:*\n_${escMd(item.summary)}_\n`
+      msg += `Описание: ${escMd(item.summary)}\n`
     }
     if (item.subtasks && item.subtasks.length > 0) {
-      msg += `📋 *Чек-лист:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+      msg += `Чек-лист:\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
     }
-    if (item.priority) msg += `${P_EMOJI[item.priority] || '⚪'} Приоритет: ${item.priority}\n`
-    if (item.dueDate) msg += `📅 Дата: ${item.dueDate}\n`
-    if (item.dueTime) msg += `⏰ Время: *${item.dueTime}* — напомню!\n`
+    if (item.priority) msg += `Приоритет: ${pText}\n`
+    if (item.dueDate) msg += `Дата: ${item.dueDate}\n`
+    if (item.dueTime) msg += `Время: ${item.dueTime}\n`
     msg += `\n`
   }
 
   if (transcript) {
-    msg += `🗣️ *Исходный текст голосового:*\n_«${escMd(transcript)}»_`
-  } else {
-    msg += `_Сохранено в Zerf_`
+    msg += `Исходный текст: ${escMd(transcript)}`
   }
 
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
@@ -652,8 +658,8 @@ async function handleGroupAddCommand(msg: any) {
       }]
     }
 
-    let groupResponseCard = `👥 *Групповая задача успешно создана в Zerf!*\n\n`
-    groupResponseCard += `👥 Назначено: *${escMd(senderName)}*`
+    let groupResponseCard = `Групповая задача успешно создана в Zerf\n\n`
+    groupResponseCard += `Назначено: *${escMd(senderName)}*`
     if (replySenderName && replySenderId !== senderId) {
       groupResponseCard += ` и *${escMd(replySenderName)}*`
     }
@@ -675,19 +681,19 @@ async function handleGroupAddCommand(msg: any) {
       }
 
       const prefix = items.length > 1 ? `${idx + 1}. ` : ''
-      groupResponseCard += `${prefix}📌 *${escMd(item.title)}*\n`
+      groupResponseCard += `${prefix}Задача: *${escMd(item.title)}*\n`
       if (item.summary && item.summary !== item.title) {
-        groupResponseCard += `📝 _${escMd(item.summary)}_\n`
+        groupResponseCard += `Описание: ${escMd(item.summary)}\n`
       }
       if (item.subtasks && item.subtasks.length > 0) {
-        groupResponseCard += `📋 *Шаги:*\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
+        groupResponseCard += `Чек-лист:\n` + item.subtasks.map(s => `  • ${escMd(s)}`).join('\n') + `\n`
       }
-      if (item.dueDate) groupResponseCard += `📅 Дата: ${item.dueDate}\n`
-      if (item.dueTime) groupResponseCard += `⏰ Время: *${item.dueTime}*\n`
+      if (item.dueDate) groupResponseCard += `Дата: ${item.dueDate}\n`
+      if (item.dueTime) groupResponseCard += `Время: ${item.dueTime}\n`
       groupResponseCard += `\n`
     }
 
-    groupResponseCard += `✨ *Синхронизировано в приложении участников!*`
+    groupResponseCard += `Синхронизировано в приложении участников.`
 
     if (statusMsgId) {
       const editRes = await editMessageText(groupChatId, statusMsgId, groupResponseCard, {

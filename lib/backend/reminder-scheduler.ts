@@ -38,10 +38,12 @@ export async function checkAndSendReminders() {
 
     for (const task of dueTasks) {
       const timeStr = task.dueTime || 'сейчас'
-      const msg = `⏰ *Напоминание!*\n\n` +
-        `${P_EMOJI[task.priority] || '⚪'} *${task.title}*\n` +
-        (task.description ? `_${task.description.slice(0, 120)}_\n` : '') +
-        `\nВремя: *${timeStr}*`
+      let msg = `НАПОМИНАНИЕ\n\n` +
+        `Задача: *${task.title}*\n`
+      if (task.description) {
+        msg += `Описание: ${task.description.slice(0, 150)}\n`
+      }
+      msg += `Время: ${timeStr}`
 
       for (const chatId of chatIds) {
         await sendTgNotification(chatId, msg)
