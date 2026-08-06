@@ -531,5 +531,192 @@ export async function getTasksDueNow(): Promise<DbTask[]> {
 }
 
 export async function markReminderSent(id: string) {
-  return prisma.task.update({ where: { id }, data: { reminderSent: true } })
+  try {
+    await prisma.task.update({
+      where: { id },
+      data: {
+        reminderSent: true,
+        remindersSentCount: { increment: 1 },
+      },
+    })
+  } catch {}
+}
+
+// ── Subscriptions & Daily Usage Limits ─────────────────────────────────────────
+
+export interface UserUsageLimits {
+  plan: 'free' | 'premium'
+  subscriptionExpiry: string | null
+  voice: {
+    used: number
+    max: number
+    secondsUsed: number
+    maxSeconds: number
+  }
+  notes: {
+    used: number
+    max: number
+  }
+  chat: {
+    used: number
+    max: number
+  }
+  canSendVoice: boolean
+  canCreateNote: boolean
+  canSendChatMessage: boolean
+}
+
+export async function getUserUsageAndLimits(ownerChatId?: number | bigint | string | null): Promise<UserUsageLimits> {
+  const defaultLimits: UserUsageLimits = {
+    plan: 'free',
+    subscriptionExpiry: null,
+    voice: { used: 0, max: 2, secondsUsed: 0, maxSeconds: Infinity },
+    notes: { used: 0, max: 2 },
+    chat: { used: 0, max: 10 },
+    canSendVoice: true,
+    canCreateNote: true,
+    canSendChatMessage: true,
+  }
+
+  if (!ownerChatId) return defaultLimits
+
+  try {
+    const cid = BigInt(ownerChatId)
+    const { mskDate } = getMskDateTime()
+
+    let chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
+
+    if (!chat) {
+      chat = await prisma.telegramChat.create({
+        data: { chatId: cid, lastResetDate: mskDate }
+      })
+    }
+
+    // Expiry check
+    let isPremium = chat.plan === 'premium'
+    if (isPremium && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < new Date()) {
+      isPremium = false
+      await prisma.telegramChat.update({
+        where: { chatId: cid },
+        data: { plan: 'free' }
+      })
+    }
+
+    // Daily reset check
+    if (chat.lastResetDate !== mskDate) {
+      chat = await prisma.telegramChat.update({
+        where: { chatId: cid },
+        data: {
+          lastResetDate: mskDate,
+          voiceCountToday: 0,
+          voiceSecondsToday: 0,
+          notesCountToday: 0,
+          chatMessagesToday: 0,
+        }
+      })
+    }
+
+    const voiceMax = isPremium ? Infinity : 2
+    const voiceMaxSeconds = isPremium ? 600 : Infinity // 10 min = 600s for premium
+    const notesMax = isPremium ? Infinity : 2
+    const chatMax = isPremium ? Infinity : 10
+
+    const canSendVoice = isPremium
+      ? (chat.voiceSecondsToday < 600)
+      : (chat.voiceCountToday < 2)
+
+    const canCreateNote = isPremium ? true : (chat.notesCountToday < 2)
+    const canSendChatMessage = isPremium ? true : (chat.chatMessagesToday < 10)
+
+    return {
+      plan: isPremium ? 'premium' : 'free',
+      subscriptionExpiry: chat.subscriptionExpiry ? chat.subscriptionExpiry.toISOString() : null,
+      voice: {
+        used: chat.voiceCountToday,
+        max: voiceMax,
+        secondsUsed: chat.voiceSecondsToday,
+        maxSeconds: voiceMaxSeconds,
+      },
+      notes: {
+        used: chat.notesCountToday,
+        max: notesMax,
+      },
+      chat: {
+        used: chat.chatMessagesToday,
+        max: chatMax,
+      },
+      canSendVoice,
+      canCreateNote,
+      canSendChatMessage,
+    }
+  } catch {
+    return defaultLimits
+  }
+}
+
+export async function incrementUserUsage(
+  ownerChatId: number | bigint | string,
+  type: 'voice' | 'note' | 'chat',
+  seconds: number = 0
+) {
+  try {
+    const cid = BigInt(ownerChatId)
+    const { mskDate } = getMskDateTime()
+
+    const chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
+    if (!chat) return
+
+    const isDifferentDay = chat.lastResetDate !== mskDate
+
+    if (type === 'voice') {
+      await prisma.telegramChat.update({
+        where: { chatId: cid },
+        data: {
+          voiceCountToday: isDifferentDay ? 1 : { increment: 1 },
+          voiceSecondsToday: isDifferentDay ? Math.round(seconds) : { increment: Math.round(seconds) },
+          lastResetDate: mskDate,
+        }
+      })
+    } else if (type === 'note') {
+      await prisma.telegramChat.update({
+        where: { chatId: cid },
+        data: {
+          notesCountToday: isDifferentDay ? 1 : { increment: 1 },
+          lastResetDate: mskDate,
+        }
+      })
+    } else if (type === 'chat') {
+      await prisma.telegramChat.update({
+        where: { chatId: cid },
+        data: {
+          chatMessagesToday: isDifferentDay ? 1 : { increment: 1 },
+          lastResetDate: mskDate,
+        }
+      })
+    }
+  } catch {}
+}
+
+export async function activateUserSubscription(ownerChatId: number | bigint | string, days: number = 30) {
+  try {
+    const cid = BigInt(ownerChatId)
+    const expiry = new Date()
+    expiry.setDate(expiry.getDate() + days)
+
+    await prisma.telegramChat.upsert({
+      where: { chatId: cid },
+      update: {
+        plan: 'premium',
+        subscriptionExpiry: expiry,
+      },
+      create: {
+        chatId: cid,
+        plan: 'premium',
+        subscriptionExpiry: expiry,
+      }
+    })
+    return true
+  } catch {
+    return false
+  }
 }
