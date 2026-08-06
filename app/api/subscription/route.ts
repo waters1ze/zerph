@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ownerChatId is required' }, { status: 400 })
     }
 
-    const receiver = process.env.YOOMONEY_RECEIVER || '6913F36D914E2B370F4202923A5314792215877DA20450DA45851502CAC10C72'
+    const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
     const successUrl = `${appUrl}/?payment=success`
 
