@@ -117,53 +117,55 @@ export async function handleTelegramUpdate(
 
     // 3. Fetch existing items context for user & parse intent with Groq LLM (Llama-3.3-70b)
     const existingItemsContext = await getExistingItemsContext(chatId)
-    const parsedItem = await parseIntentWithGroq(rawText, groqApiKey, undefined, existingItemsContext)
+    const parsedItems = await parseIntentWithGroq(rawText, groqApiKey, undefined, existingItemsContext)
+    const savedItems = []
 
-    // 4. Save parsed item to local database (isolated by chatId)
-    const { item: saved, updatedItem } = await saveParsedItemToDb(parsedItem, chatId)
+    for (const parsedItem of parsedItems) {
+      const { item: saved, updatedItem } = await saveParsedItemToDb(parsedItem, chatId)
+      savedItems.push(saved)
 
-    // 5. Send formatted Telegram response card in Russian
-    const typeLabel: Record<string, string> = {
-      task:       '✅ Задача',
-      goal:       '🎯 Цель',
-      note:       '📌 Заметка',
-      project:    '📁 Проект',
-      reminder:   '⏰ Напоминание',
-      completion: '✔️ Выполнено',
+      const typeLabel: Record<string, string> = {
+        task:       '✅ Задача',
+        goal:       '🎯 Цель',
+        note:       '📌 Заметка',
+        project:    '📁 Проект',
+        reminder:   '⏰ Напоминание',
+        completion: '✔️ Выполнено',
+      }
+
+      const priorityLabel: Record<string, string> = {
+        urgent: '🔴 Срочно',
+        high:   '🟠 Высокий',
+        medium: '🟢 Средний',
+        low:    '🔵 Низкий',
+      }
+
+      const label = typeLabel[parsedItem.type] || '⚡ Запись'
+      const statusMsg = updatedItem || parsedItem.action === 'update' ? 'изменена в твоем Zerf!' : 'сохранена в твой Zerf!'
+      let replyText = `${label} *${statusMsg}*\n\n`
+      replyText += `*Название:* ${parsedItem.title}\n`
+      if (parsedItem.summary && parsedItem.summary !== parsedItem.title) {
+        replyText += `*Описание:* ${parsedItem.summary.slice(0, 200)}\n`
+      }
+      replyText += `*Приоритет:* ${priorityLabel[parsedItem.priority] || parsedItem.priority}\n`
+      if (parsedItem.dueDate) replyText += `*Срок:* ${parsedItem.dueDate}`
+      if (parsedItem.dueTime) replyText += ` в ${parsedItem.dueTime}`
+      if (parsedItem.dueDate || parsedItem.dueTime) replyText += '\n'
+      if (parsedItem.tags?.length) replyText += `*Теги:* #${parsedItem.tags.join(' #')}\n`
+
+      if (parsedItem.type === 'goal' && parsedItem.milestones?.length) {
+        replyText += `\n🚩 *Ключевые этапы:*\n` + parsedItem.milestones.map((m: string) => ` • ${m}`).join('\n') + '\n'
+      }
+      if (parsedItem.type === 'task' && parsedItem.subtasks?.length) {
+        replyText += `\n📋 *Подзадачи:*\n` + parsedItem.subtasks.map((s: string) => ` • ${s}`).join('\n') + '\n'
+      }
+
+      replyText += `\n✨ *Синхронизировано с твоим приложением!*`
+
+      await sendTelegramMessage(botToken, chatId, replyText)
     }
 
-    const priorityLabel: Record<string, string> = {
-      urgent: '🔴 Срочно',
-      high:   '🟠 Высокий',
-      medium: '🟢 Средний',
-      low:    '🔵 Низкий',
-    }
-
-    const label = typeLabel[parsedItem.type] || '⚡ Запись'
-    const statusMsg = updatedItem || parsedItem.action === 'update' ? 'изменена в твоем Zerf!' : 'сохранена в твой Zerf!'
-    let replyText = `${label} *${statusMsg}*\n\n`
-    replyText += `*Название:* ${parsedItem.title}\n`
-    if (parsedItem.summary && parsedItem.summary !== parsedItem.title) {
-      replyText += `*Описание:* ${parsedItem.summary.slice(0, 200)}\n`
-    }
-    replyText += `*Приоритет:* ${priorityLabel[parsedItem.priority] || parsedItem.priority}\n`
-    if (parsedItem.dueDate) replyText += `*Срок:* ${parsedItem.dueDate}`
-    if (parsedItem.dueTime) replyText += ` в ${parsedItem.dueTime}`
-    if (parsedItem.dueDate || parsedItem.dueTime) replyText += '\n'
-    if (parsedItem.tags?.length) replyText += `*Теги:* #${parsedItem.tags.join(' #')}\n`
-
-    if (parsedItem.type === 'goal' && parsedItem.milestones?.length) {
-      replyText += `\n🚩 *Ключевые этапы:*\n` + parsedItem.milestones.map(m => ` • ${m}`).join('\n') + '\n'
-    }
-    if (parsedItem.type === 'task' && parsedItem.subtasks?.length) {
-      replyText += `\n📋 *Подзадачи:*\n` + parsedItem.subtasks.map(s => ` • ${s}`).join('\n') + '\n'
-    }
-
-    replyText += `\n✨ *Синхронизировано с твоим приложением!*`
-
-    await sendTelegramMessage(botToken, chatId, replyText)
-
-    return { success: true, item: saved }
+    return { success: true, item: savedItems[0] || null }
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     await sendTelegramMessage(botToken, chatId, `❌ *Zerf Error:* ${errorMessage}`)

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq'
+import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem } from '@/lib/backend/groq'
 import {
   saveParsedItemToDb,
   getAllTasks, getAllGoals, getAllNotes,
@@ -83,7 +83,17 @@ async function handleToday(chatId: number) {
   const tasks = await getAllTasks(chatId)
   const today = new Date().toISOString().slice(0, 10)
   const now = new Date()
-  const dayName = now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
+  const dayName = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', weekday: 'long', day: 'numeric', month: 'long' })
+
+  // Current MSK time in minutes
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const curHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10)
+  const curMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10)
+  const nowTotalMinutes = curHour * 60 + curMin
 
   const pending = tasks.filter((t: { status: string; dueDate?: string | null }) =>
     t.status !== 'done' && (t.dueDate === today || !t.dueDate)
@@ -97,8 +107,23 @@ async function handleToday(chatId: number) {
     if (pending.length > 0) {
       msg += `*${pending.length} задач осталось:*\n`
       pending.slice(0, 12).forEach((t: { priority: string; title: string; dueTime?: string | null }) => {
-        const time = t.dueTime ? ` _(${t.dueTime})_` : ''
-        msg += `${P_EMOJI[t.priority] || '⚪'} ${escMd(t.title)}${time}\n`
+        const priorityEmoji = P_EMOJI[t.priority] || '⚪'
+        const timeLabel = t.dueTime ? ` _(${t.dueTime})_` : ''
+        msg += `${priorityEmoji} *${escMd(t.title)}*${timeLabel}\n`
+
+        if (t.dueTime) {
+          const [hStr, mStr] = t.dueTime.split(':')
+          const taskMinutes = parseInt(hStr, 10) * 60 + parseInt(mStr, 10)
+          const diff = taskMinutes - nowTotalMinutes
+
+          if (diff > 0) {
+            msg += `   └ ⏳ _Осталось: *${diff} мин* (до ${t.dueTime})_\n`
+          } else if (diff === 0) {
+            msg += `   └ 🔔 _Напоминание сработает прямо сейчас!_\n`
+          } else {
+            msg += `   └ ⚠️ _Время прошло (${Math.abs(diff)} мин назад)_\n`
+          }
+        }
       })
       if (pending.length > 12) msg += `_...и ещё ${pending.length - 12}_\n`
     }
@@ -386,71 +411,59 @@ async function processText(chatId: number, text: string) {
   try {
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
     const context = await getExistingItemsContext(chatId)
-    const item = await parseIntentWithGroq(text, key, undefined, context)
-    const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
+    const items = await parseIntentWithGroq(text, key, undefined, context)
+
+    await saveAndRespondParsedItems(chatId, items)
+  } catch (err: unknown) {
+    await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
+  }
+}
+
+async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], transcript?: string) {
+  if (!items || items.length === 0) return
+
+  let msg = items.length > 1 ? `✨ *Обработано элементов: ${items.length}*\n\n` : ''
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx]
 
     if (item.action === 'delete_all') {
-      await send(chatId,
-        `🗑️ *Все задачи успешно удалены!*`,
-        { reply_markup: miniAppKeyboard(chatId) }
-      )
+      await saveParsedItemToDb(item, chatId)
+      await send(chatId, `🗑️ *Все задачи успешно удалены!*`, { reply_markup: miniAppKeyboard(chatId) })
       return
     }
+
+    const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
 
     if (item.action === 'delete' || item.type === 'completion') {
       if (completedTask) {
-        await send(chatId,
-          `✅ *Задача выполнена!*\n\n~~${escMd(completedTask.title)}~~\n\n_Синхронизировано с Zerf_`,
-          { reply_markup: miniAppKeyboard(chatId) }
-        )
+        msg += `✅ *Выполнено:* ~~${escMd(completedTask.title)}~~\n\n`
       } else if (updatedItem) {
-        await send(chatId,
-          `🗑️ *Элемент удален из твоего Zerf!*`,
-          { reply_markup: miniAppKeyboard(chatId) }
-        )
+        msg += `🗑️ *Элемент удален из Zerf*\n\n`
       } else {
-        await send(chatId,
-          `🔍 Задача *«${escMd(item.targetTitle || item.title)}»* не найдена.\n\nПроверь список /today`,
-          { reply_markup: miniAppKeyboard(chatId) }
-        )
+        msg += `🔍 Задача *«${escMd(item.targetTitle || item.title)}»* не найдена\n\n`
       }
-      return
-    }
-
-    // Check past time validation
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/Moscow',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    })
-    const parts = formatter.formatToParts(now)
-    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
-    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
-    const currentTimeStr = `${getPart('hour')}:${getPart('minute')}`
-
-    if (item.dueTime && (item.dueDate === todayStr || !item.dueDate) && item.dueTime < currentTimeStr) {
-      await send(chatId,
-        `⚠️ *Время «${item.dueTime}» уже прошло на сегодня!*\n\n` +
-        `Текущее время в MSK: *${currentTimeStr}*\n` +
-        `Пожалуйста, укажи время в будущем (например, «в ${currentTimeStr}» или позже).`,
-        { reply_markup: miniAppKeyboard(chatId) }
-      )
-      return
+      continue
     }
 
     const typeLabel = TYPE_RU[item.type] || item.type
     const actionWord = updatedItem || item.action === 'update' ? 'изменена ✨' : 'создана ✨'
-    let msg = `${typeLabel} ${actionWord}\n\n*${escMd(item.title)}*\n`
-    if (item.priority) msg += `\n${P_EMOJI[item.priority] || '⚪'} ${item.priority}`
-    if (item.dueDate) msg += `\n📅 ${item.dueDate}`
-    if (item.dueTime) msg += `\n⏰ *${item.dueTime}* — пришлю напоминание!`
-    msg += `\n\n_Сохранено в Zerf_`
+    const prefix = items.length > 1 ? `${idx + 1}. ` : ''
 
-    await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
-  } catch (err: unknown) {
-    await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
+    msg += `${prefix}${typeLabel} ${actionWord}\n*${escMd(item.title)}*\n`
+    if (item.priority) msg += `${P_EMOJI[item.priority] || '⚪'} ${item.priority}\n`
+    if (item.dueDate) msg += `📅 ${item.dueDate}\n`
+    if (item.dueTime) msg += `⏰ *${item.dueTime}* — напомню!\n`
+    msg += `\n`
   }
+
+  if (transcript) {
+    msg += `_«${escMd(transcript.slice(0, 60))}${transcript.length > 60 ? '…' : ''}»_`
+  } else {
+    msg += `_Сохранено в Zerf_`
+  }
+
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 }
 
 async function processVoice(chatId: number, fileId: string) {
@@ -504,36 +517,11 @@ async function processVoice(chatId: number, fileId: string) {
     // Increment voice usage (~15s)
     await incrementUserUsage(chatId, 'voice', 15)
 
-    // Parse & save with context
+    // Parse & save with context (multi-item support)
     const context = await getExistingItemsContext(chatId)
-    const item = await parseIntentWithGroq(transcript, key, undefined, context)
-    const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
+    const items = await parseIntentWithGroq(transcript, key, undefined, context)
 
-    if (item.type === 'completion') {
-      if (completedTask) {
-        await send(chatId,
-          `✅ *Выполнено!*\n\n~~${escMd(completedTask.title)}~~\n\n_«${escMd(transcript.slice(0, 60))}»_`,
-          { reply_markup: miniAppKeyboard(chatId) }
-        )
-      } else {
-        await send(chatId,
-          `🔍 Задача не найдена: *«${escMd(item.targetTitle || item.title)}»*\n\n_«${escMd(transcript.slice(0, 60))}»_`,
-          { reply_markup: miniAppKeyboard(chatId) }
-        )
-      }
-      return
-    }
-
-    const typeLabel = TYPE_RU[item.type] || item.type
-    const actionWord = updatedItem || item.action === 'update' ? 'изменена ✨' : 'создана ✨'
-    let msg = `${typeLabel} ${actionWord}\n\n*${escMd(item.title)}*\n`
-    if (item.priority) msg += `\n${P_EMOJI[item.priority] || '⚪'} ${item.priority}`
-    if (item.dueDate) msg += `\n📅 ${item.dueDate}`
-    if (item.dueTime) msg += `\n⏰ *${item.dueTime}* — напомню!`
-    if (item.type === 'note') msg += `\n📝 _Оригинал сохранён_`
-    msg += `\n\n_«${escMd(transcript.slice(0, 60))}${transcript.length > 60 ? '…' : ''}»_`
-
-    await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+    await saveAndRespondParsedItems(chatId, items, transcript)
   } catch (err: unknown) {
     await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
   }

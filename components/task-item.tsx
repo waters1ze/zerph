@@ -27,6 +27,26 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
       : format(parseISO(task.dueDate), 'MMM d')
     : null
 
+  let countdownLabel: string | null = null
+  let minutesLeft = 0
+  let isPassed = false
+  if (task.dueTime && !isDone) {
+    const now = new Date()
+    const [h, m] = task.dueTime.split(':').map(Number)
+    const due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m)
+    const diffMs = due.getTime() - now.getTime()
+    minutesLeft = Math.round(diffMs / 60000)
+
+    if (minutesLeft > 0) {
+      countdownLabel = `⏳ Осталось: ${minutesLeft} мин`
+    } else if (minutesLeft === 0) {
+      countdownLabel = `🔔 Напоминание прямо сейчас!`
+    } else {
+      isPassed = true
+      countdownLabel = `⚠️ Истекло (${Math.abs(minutesLeft)} мин назад)`
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -92,9 +112,16 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
             )}
 
             {task.dueTime && !isDone && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] font-medium text-amber-400">
+              <span className={cn(
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium transition-all shadow-xs",
+                isPassed
+                  ? "bg-red-500/10 border-red-500/20 text-red-400"
+                  : minutesLeft <= 15
+                  ? "bg-amber-500/15 border-amber-500/30 text-amber-300 animate-pulse"
+                  : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+              )}>
                 <Clock className="w-3 h-3" />
-                Уведомление в {task.dueTime}
+                {task.dueTime} ({countdownLabel})
               </span>
             )}
 
@@ -118,6 +145,23 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
                 AI
               </span>
             )}
+          </div>
+        )}
+
+        {/* Reminder Countdown Bar */}
+        {!compact && task.dueTime && !isDone && minutesLeft > 0 && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(5, Math.min(100, (1 - minutesLeft / 720) * 100))}%` }}
+                transition={{ duration: 0.6, delay: index * 0.04 }}
+              />
+            </div>
+            <span className="text-[10px] font-mono font-medium text-amber-400 shrink-0">
+              {minutesLeft} мин
+            </span>
           </div>
         )}
 

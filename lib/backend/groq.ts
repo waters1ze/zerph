@@ -78,36 +78,30 @@ ${existingItemsContext}
 
   prompt += `\n\n## Intent Detection & Actions
 
-### action = "create" (по умолчанию, если создается новый элемент)
-### action = "update" (если редактируется существующий элемент, укажи targetId)
-### action = "delete" (если удаляется конкретная задача/цель, укажи targetId или targetTitle)
-### action = "delete_all" (если пользователь просит удалить ВСЕ задачи / очистить список)
-### action = "completion" (если пользователь говорит, что сделано)
-
-## Dynamic Priority Rules
-- "urgent": срочно, прямо сейчас, как можно скорее, ASAP, немедленно, критично, дедлайн сегодня
-- "high":   очень важно, важно, проект, клиенту, начальнику, отчет, экзамен, обязательно
-- "low":    когда будет время, потом, если получится, не к спеху, хобби, почитать
-- "medium": standard routine without explicit urgency
+IMPORTANT MULTI-ITEM INSTRUCTION:
+- If the user input mentions MULTIPLE tasks, goals, notes, or actions (e.g. "купить хлеб и еще через 2 часа позвонить маме" or "создай задачу А и заметку Б"), extract ALL of them into the "items" array in JSON!
 
 Always respond with ONLY valid JSON (no markdown fences):
 {
-  "action": "create" | "update" | "delete" | "delete_all" | "completion",
-  "targetId": "ID элемента если action update/delete" | null,
-  "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
-  "title": "Краткое описание (максимум 60 символов)",
-  "summary": "1-2 предложения для задач/целей. Полный Markdown-документ для заметок.",
-  "priority": "urgent" | "high" | "medium" | "low",
-  "dueDate": "YYYY-MM-DD" | null,
-  "dueTime": "HH:MM" | null,
-  "targetTitle": "для типа completion или delete: название задачи" | null,
-  "projectId": null,
-  "goalId": null,
-  "tags": ["тег1", "тег2"],
-  "subtasks": ["подзадача 1", "подзадача 2"],
-  "milestones": ["этап 1", "этап 2"],
-  "motivation": "только для целей" | null,
-  "rawText": "исходный текст пользователя"
+  "items": [
+    {
+      "action": "create" | "update" | "delete" | "delete_all" | "completion",
+      "targetId": "ID элемента если action update/delete" | null,
+      "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
+      "title": "Краткое описание (максимум 60 символов)",
+      "summary": "1-2 предложения для задач/целей. Полный Markdown-документ для заметок.",
+      "priority": "urgent" | "high" | "medium" | "low",
+      "dueDate": "YYYY-MM-DD" | null,
+      "dueTime": "HH:MM" | null,
+      "targetTitle": "для типа completion или delete: название задачи" | null,
+      "projectId": null,
+      "goalId": null,
+      "tags": ["тег1", "тег2"],
+      "subtasks": ["подзадача 1", "подзадача 2"],
+      "milestones": ["этап 1", "этап 2"],
+      "motivation": "только для целей" | null
+    }
+  ]
 }
 
 Default priority is "medium". Output ONLY pure JSON.`
@@ -169,13 +163,14 @@ export async function transcribeAudioWithGroq(
 
 /**
  * Parse intent from text using Groq LLM with multi-key fallback rotation
+ * Can extract 1 or multiple items from a single voice/text message
  */
 export async function parseIntentWithGroq(
   text: string,
   apiKey?: string,
   model?: string,
   existingItemsContext?: string
-): Promise<ParsedItem> {
+): Promise<ParsedItem[]> {
   const keys = getGroqKeys(apiKey)
   if (keys.length === 0) throw new Error('Groq API Key missing.')
 
@@ -207,27 +202,29 @@ export async function parseIntentWithGroq(
 
       try {
         const p = JSON.parse(raw)
-        return {
-          action: p.action || (p.type === 'completion' ? 'completion' : 'create'),
-          targetId: p.targetId || null,
-          type: p.type || 'task',
-          title: p.title || text.slice(0, 50),
-          summary: p.summary || text,
-          priority: p.priority || 'medium',
-          dueDate: p.dueDate || null,
-          dueTime: p.dueTime || null,
-          targetTitle: p.targetTitle || null,
-          projectId: p.projectId || null,
-          goalId: p.goalId || null,
-          tags: Array.isArray(p.tags) ? p.tags : [],
-          subtasks: Array.isArray(p.subtasks) ? p.subtasks : [],
-          milestones: Array.isArray(p.milestones) ? p.milestones : [],
-          motivation: p.motivation || null,
+        const rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
+
+        return rawItems.map((item: any) => ({
+          action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
+          targetId: item.targetId || null,
+          type: item.type || 'task',
+          title: item.title || text.slice(0, 50),
+          summary: item.summary || text,
+          priority: item.priority || 'medium',
+          dueDate: item.dueDate || null,
+          dueTime: item.dueTime || null,
+          targetTitle: item.targetTitle || null,
+          projectId: item.projectId || null,
+          goalId: item.goalId || null,
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
+          milestones: Array.isArray(item.milestones) ? item.milestones : [],
+          motivation: item.motivation || null,
           rawText: text,
           originalText: text,
-        }
+        }))
       } catch {
-        return {
+        return [{
           type: 'task',
           title: text.slice(0, 50),
           summary: text,
@@ -235,7 +232,7 @@ export async function parseIntentWithGroq(
           tags: ['voice-input'],
           rawText: text,
           originalText: text,
-        }
+        }]
       }
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err))
