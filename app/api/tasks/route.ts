@@ -11,7 +11,7 @@ import {
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
-  createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage,
+  createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage, syncFriendBirthdays,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { verifyUserAuth } from '@/lib/backend/auth'
@@ -46,6 +46,9 @@ function getOwnerChatId(req: NextRequest): string | null {
 export async function GET(req: NextRequest) {
   try {
     const ownerChatId = getOwnerChatId(req)
+    if (ownerChatId) {
+      await syncFriendBirthdays(ownerChatId)
+    }
     const [tasks, goals, notes, friends] = await Promise.all([
       getAllTasks(ownerChatId),
       getAllGoals(ownerChatId),

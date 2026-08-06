@@ -615,6 +615,86 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
   }
 }
 
+export async function syncFriendBirthdays(ownerChatId: number | bigint | string): Promise<number> {
+  try {
+    const cid = BigInt(ownerChatId)
+
+    // 1. Get all friends of this user
+    const friendships = await prisma.friendship.findMany({
+      where: { OR: [{ userChatId: cid }, { friendChatId: cid }] },
+    })
+
+    const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
+    if (friendChatIds.length === 0) return 0
+
+    // 2. Find friend profile records that have birthday set
+    const friendChats = await prisma.telegramChat.findMany({
+      where: {
+        chatId: { in: friendChatIds },
+        birthday: { not: null },
+      },
+    })
+
+    if (friendChats.length === 0) return 0
+
+    const currentYear = new Date().getFullYear()
+    let createdCount = 0
+
+    for (const friend of friendChats) {
+      if (!friend.birthday) continue
+
+      const parts = friend.birthday.split('-')
+      let monthStr = ''
+      let dayStr = ''
+
+      if (parts.length === 3) {
+        monthStr = parts[1]
+        dayStr = parts[2]
+      } else if (parts.length === 2) {
+        monthStr = parts[0]
+        dayStr = parts[1]
+      } else {
+        continue
+      }
+
+      const friendName = friend.firstName ? `${friend.firstName}${friend.lastName ? ' ' + friend.lastName : ''}` : (friend.username ? `@${friend.username}` : `Друг #${friend.chatId}`)
+      const taskTitle = `🎂 День рождения: ${friendName}`
+      const targetDueDate = `${currentYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`
+
+      const existing = await prisma.task.findFirst({
+        where: {
+          ownerChatId: cid,
+          title: taskTitle,
+          dueDate: targetDueDate,
+        },
+      })
+
+      if (!existing) {
+        await prisma.task.create({
+          data: {
+            title: taskTitle,
+            description: `Не забудь поздравить ${friendName} с Днём рождения! 🎉`,
+            priority: 'urgent',
+            status: 'todo',
+            dueDate: targetDueDate,
+            dueTime: '09:00',
+            tags: ['день рождения', 'друзья'],
+            isShared: true,
+            assignees: [String(cid), String(friend.chatId)],
+            ownerChatId: cid,
+          },
+        })
+        createdCount++
+      }
+    }
+
+    return createdCount
+  } catch (err) {
+    console.error('Failed to sync friend birthdays:', err)
+    return 0
+  }
+}
+
 // ── Reminders — find tasks due right now ──────────────────────────────────────
 
 export function getMskDateTime() {

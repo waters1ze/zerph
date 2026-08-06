@@ -71,6 +71,7 @@ model TelegramChat {
   firstName              String?
   lastName               String?
   username               String?
+  birthday               String?   // YYYY-MM-DD or MM-DD
   reminderIntervalMinutes Int       @default(5)
   reminderRepeatCount    Int       @default(3)
   plan                   String    @default("free") // "free" | "premium"
