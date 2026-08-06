@@ -14,6 +14,7 @@ import {
   createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
+import { verifyUserAuth } from '@/lib/backend/auth'
 
 startReminderScheduler()
 
@@ -32,7 +33,14 @@ function serialize(obj: unknown): unknown {
 
 function getOwnerChatId(req: NextRequest): string | null {
   const { searchParams } = new URL(req.url)
-  return req.headers.get('x-chat-id') || searchParams.get('chatId') || null
+  const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId')
+  const token = req.headers.get('x-auth-token') || searchParams.get('token')
+  if (!chatId) return null
+  if (!verifyUserAuth(chatId, token)) {
+    // If invalid token, return null so unauthenticated user sees zero private tasks!
+    return null
+  }
+  return chatId
 }
 
 export async function GET(req: NextRequest) {

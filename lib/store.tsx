@@ -181,6 +181,12 @@ export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
     const urlParams = new URLSearchParams(window.location.search)
     const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
+    const qToken = urlParams.get('token')
+
+    if (qToken) {
+      try { localStorage.setItem('zerf_auth_token', qToken) } catch {}
+    }
+
     if (qChatId) {
       try { localStorage.setItem('zerf_chat_id', qChatId) } catch {}
       return qChatId
@@ -305,8 +311,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Sync from backend DB on mount (with user isolation)
   useEffect(() => {
     const chatId = getTgChatId()
+    const token = typeof window !== 'undefined' ? localStorage.getItem('zerf_auth_token') : null
     const headers: Record<string, string> = {}
     if (chatId) headers['x-chat-id'] = chatId
+    if (token) headers['x-auth-token'] = token
 
     fetch('/api/tasks', { headers })
       .then(r => r.json())
