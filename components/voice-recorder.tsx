@@ -131,6 +131,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
       const fd = new FormData()
       fd.append('file', blob, `voice.${ext}`)
       fd.append('apiKey', GROQ_API_KEY)
+      fd.append('duration', String(duration || 15))
 
       const res = await fetch('/api/voice', { 
         method: 'POST', 

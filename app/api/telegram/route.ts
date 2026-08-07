@@ -598,7 +598,7 @@ function miniAppKeyboard(chatId?: number) {
   }
 }
 
-async function processVoice(chatId: number, fileId: string) {
+async function processVoice(chatId: number, fileId: string, duration: number = 15) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
     await send(chatId, 'Groq API key не настроен.')
@@ -639,8 +639,7 @@ async function processVoice(chatId: number, fileId: string) {
       await send(chatId, 'Не удалось распознать речь. Попробуй ещё раз.')
       return
     }
-
-    await incrementUserUsage(chatId, 'voice', 15)
+    await incrementUserUsage(chatId, 'voice', duration)
 
     const context = await getExistingItemsContext(chatId)
     const items = await parseIntentWithGroq(transcript, key, undefined, context)
@@ -777,7 +776,8 @@ async function handleGroupAddCommand(msg: any) {
             const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
             const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
             targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
-            await incrementUserUsage(senderId, 'voice', 15)
+            const duration = targetVoice.duration || 15
+            await incrementUserUsage(senderId, 'voice', duration)
           }
         } catch (err) {
           await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
@@ -1039,7 +1039,7 @@ export async function POST(req: NextRequest) {
       }
     } else if (!isGroup) {
       if (voice) {
-        await processVoice(chatId, voice.file_id)
+        await processVoice(chatId, voice.file_id, voice.duration || 15)
       } else if (text.trim()) {
         await processText(chatId, text)
       }

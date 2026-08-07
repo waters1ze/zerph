@@ -67,28 +67,45 @@ export async function POST(req: NextRequest) {
       systemContent += `\n\n## User Workspace Context:\n${JSON.stringify(clientContext, null, 2)}`
     }
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${groqApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [{ role: 'system', content: systemContent }, ...messages],
-        temperature: mode === 'enhance' ? 0.8 : 0.7,
-        max_tokens: mode === 'enhance' ? 2048 : 1024,
-        stream: false,
-      }),
-    })
+    const fallbackModels = [GROQ_CHAT_MODEL, 'llama-3.1-8b-instant', 'llama3-8b-8192']
+    let lastResponse = null
+    let content = ''
 
-    if (!res.ok) {
-      const err = await res.text()
-      return NextResponse.json({ error: `Groq API error: ${err}` }, { status: res.status })
+    for (const currentModel of fallbackModels) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: currentModel,
+            messages: [{ role: 'system', content: systemContent }, ...messages],
+            temperature: mode === 'enhance' ? 0.8 : 0.7,
+            max_tokens: mode === 'enhance' ? 2048 : 1024,
+            stream: false,
+          }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          content = data.choices?.[0]?.message?.content || 'No response from AI.'
+          break
+        }
+        
+        const errText = await res.text()
+        lastResponse = { status: res.status, text: errText, model: currentModel }
+        console.warn(`Groq Chat model ${currentModel} failed: ${res.status} ${errText}`)
+      } catch (e) {
+        lastResponse = { status: 500, text: String(e), model: currentModel }
+        console.warn(`Groq Chat model ${currentModel} exception: ${String(e)}`)
+      }
     }
 
-    const data = await res.json()
-    const content = data.choices?.[0]?.message?.content || 'No response from AI.'
+    if (!content && lastResponse) {
+      return NextResponse.json({ error: `Groq API error on all fallback models. Last error from ${lastResponse.model}: ${lastResponse.text}` }, { status: lastResponse.status })
+    }
 
     if (ownerChatId) {
       await incrementUserUsage(ownerChatId, 'chat')
