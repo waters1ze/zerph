@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb } from 'lucide-react'
@@ -21,7 +21,7 @@ export function TodayView() {
 
   // Fetch daily context on mount
   useEffect(() => {
-    fetch('/api/daily-context')
+    fetch('/api/daily-context', { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(d => { if (d.formattedDate) setContext(d) })
       .catch(() => {})
