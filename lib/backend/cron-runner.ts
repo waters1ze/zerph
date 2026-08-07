@@ -108,14 +108,38 @@ export async function runReminderCheck() {
         const nextSentCount = sentCount + 1
         const isFinal = nextSentCount >= repeatCount || actualDiffMin <= 0
 
-        await prisma.task.update({
-          where: { id: task.id },
-          data: {
-            remindersSentCount: nextSentCount,
-            reminderSent: isFinal,
-            ...(isFinal ? { status: 'done', completedAt: new Date() } : {}),
-          },
-        })
+        if (isFinal && task.repeat) {
+          // Advance the date for recurring tasks
+          let nextDate = new Date(task.dueDate || todayStr)
+          if (task.repeat === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
+          else if (task.repeat === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1)
+          else if (task.repeat === 'weekly') nextDate.setDate(nextDate.getDate() + 7)
+          else if (task.repeat === 'daily') nextDate.setDate(nextDate.getDate() + 1)
+          
+          const nextYearStr = nextDate.getFullYear()
+          const nextMonthStr = String(nextDate.getMonth() + 1).padStart(2, '0')
+          const nextDayStr = String(nextDate.getDate()).padStart(2, '0')
+          const nextDateStr = `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
+
+          await prisma.task.update({
+            where: { id: task.id },
+            data: {
+              dueDate: nextDateStr,
+              remindersSentCount: 0,
+              reminderSent: false,
+              status: 'todo',
+            },
+          })
+        } else {
+          await prisma.task.update({
+            where: { id: task.id },
+            data: {
+              remindersSentCount: nextSentCount,
+              reminderSent: isFinal,
+              ...(isFinal ? { status: 'done', completedAt: new Date() } : {}),
+            },
+          })
+        }
       }
     }
   } catch (err) {
