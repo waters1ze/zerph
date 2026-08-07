@@ -53,7 +53,7 @@ export async function runReminderCheck() {
       if (task.reminderSent) continue
       if (task.dueDate && task.dueDate !== todayStr) continue
 
-      const [dueH, dueM] = task.dueTime.split(':').map(n => parseInt(n, 10))
+      const [dueH, dueM] = task.dueTime.split(':').map((n: string) => parseInt(n, 10))
       if (isNaN(dueH) || isNaN(dueM)) continue
       const targetTotalMin = dueH * 60 + dueM
 
