@@ -114,7 +114,15 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   const monthName = RU_MONTHS[date.getMonth()]
   const year = date.getFullYear()
 
-  const dayTasks = state.tasks.filter(t => t.dueDate === dateStr)
+  const dayTasks = state.tasks.filter(t => {
+    if (t.dueDate === dateStr) return true
+    if (t.repeat === 'yearly' && t.status !== 'done' && t.dueDate) {
+      const [ty, tm, td] = t.dueDate.split('-').map(Number)
+      const [sy, sm, sd] = dateStr.split('-').map(Number)
+      if (sy >= ty && sm === tm && sd === td) return true
+    }
+    return false
+  })
   const dayNotes = state.notes.filter(n => n.dueDate === dateStr)
   const activeTasks = dayTasks.filter(t => t.status !== 'done')
   const doneTasks = dayTasks.filter(t => t.status === 'done')
@@ -250,8 +258,26 @@ export function CalendarView() {
   // Group tasks by date
   const tasksByDate = state.tasks.reduce((acc, t) => {
     if (t.dueDate) {
-      if (!acc[t.dueDate]) acc[t.dueDate] = []
-      acc[t.dueDate].push(t)
+      if (t.repeat === 'yearly' && t.status !== 'done') {
+        const [ty, tm, td] = t.dueDate.split('-').map(Number)
+        // Only project into the future/current viewed year, not past
+        if (year >= ty) {
+          const projectedDate = `${year}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`
+          if (!acc[projectedDate]) acc[projectedDate] = []
+          acc[projectedDate].push(t)
+          // Also include the original date just in case
+          if (projectedDate !== t.dueDate) {
+            if (!acc[t.dueDate]) acc[t.dueDate] = []
+            acc[t.dueDate].push(t)
+          }
+        } else {
+          if (!acc[t.dueDate]) acc[t.dueDate] = []
+          acc[t.dueDate].push(t)
+        }
+      } else {
+        if (!acc[t.dueDate]) acc[t.dueDate] = []
+        acc[t.dueDate].push(t)
+      }
     }
     return acc
   }, {} as Record<string, Task[]>)
@@ -267,6 +293,9 @@ export function CalendarView() {
     const hasTasks = state.tasks.some(t => {
       if (!t.dueDate) return false
       const [ty, tm] = t.dueDate.split('-').map(Number)
+      if (t.repeat === 'yearly' && t.status !== 'done' && year >= ty) {
+        return tm - 1 === m
+      }
       return ty === year && tm - 1 === m
     })
     return { month: i, label: RU_MONTHS[i].slice(0, 3), hasTasks }

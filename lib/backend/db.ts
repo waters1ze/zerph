@@ -156,6 +156,41 @@ export async function updateTask(id: string, data: Partial<{
   remindersSentCount: number
   completedAt: Date
 }>) {
+  if (data.status === 'done') {
+    const existing = await prisma.task.findUnique({ where: { id } })
+    if (existing && existing.status !== 'done' && existing.repeat) {
+      let nextDate = new Date(existing.dueDate || new Date().toISOString().slice(0, 10))
+      if (existing.repeat === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
+      else if (existing.repeat === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1)
+      else if (existing.repeat === 'weekly') nextDate.setDate(nextDate.getDate() + 7)
+      else if (existing.repeat === 'daily') nextDate.setDate(nextDate.getDate() + 1)
+      
+      const nextYearStr = nextDate.getFullYear()
+      const nextMonthStr = String(nextDate.getMonth() + 1).padStart(2, '0')
+      const nextDayStr = String(nextDate.getDate()).padStart(2, '0')
+      const nextDateStr = `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
+
+      await prisma.task.create({
+        data: {
+          title: existing.title,
+          description: existing.description,
+          priority: existing.priority,
+          status: 'todo',
+          dueDate: nextDateStr,
+          dueTime: existing.dueTime,
+          repeat: existing.repeat,
+          reminderOffsetMinutes: existing.reminderOffsetMinutes,
+          tags: existing.tags,
+          assignees: existing.assignees,
+          isShared: existing.isShared,
+          ownerChatId: existing.ownerChatId,
+          projectId: existing.projectId
+        }
+      })
+      // Clear repeat flag on the completed instance so it doesn't get processed again
+      data = { ...data, repeat: null } as any
+    }
+  }
   return prisma.task.update({ where: { id }, data })
 }
 
