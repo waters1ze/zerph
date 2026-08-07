@@ -160,33 +160,36 @@ export async function transcribeAudioWithGroq(
   const ext = filename.split('.').pop() || 'webm'
   const mimeType = ext === 'webm' ? 'audio/webm' : ext === 'ogg' ? 'audio/ogg' : 'audio/mpeg'
 
+  const models = [GROQ_WHISPER_MODEL, 'distil-whisper-large-v3-en', 'whisper-large-v3-turbo']
   let lastError: Error | null = null
 
-  for (const key of keys) {
-    try {
-      const formData = new FormData()
-      formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename)
-      formData.append('model', GROQ_WHISPER_MODEL)
-      formData.append('response_format', 'json')
+  for (const m of models) {
+    for (const key of keys) {
+      try {
+        const formData = new FormData()
+        formData.append('file', new Blob([audioBuffer], { type: mimeType }), filename)
+        formData.append('model', m)
+        formData.append('response_format', 'json')
 
-      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${key}` },
-        body: formData,
-      })
+        const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}` },
+          body: formData,
+        })
 
-      if (!res.ok) {
-        throw new Error(`Whisper Error (${res.status}): ${await res.text()}`)
+        if (!res.ok) {
+          throw new Error(`Whisper Error (${res.status}): ${await res.text()}`)
+        }
+        const data = await res.json()
+        return data.text || ''
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err : new Error(String(err))
+        console.warn(`Groq Key failed for model ${m}, trying next... Error: ${lastError.message}`)
       }
-      const data = await res.json()
-      return data.text || ''
-    } catch (err: unknown) {
-      lastError = err instanceof Error ? err : new Error(String(err))
-      console.warn(`Groq Key failed, trying next key... Error: ${lastError.message}`)
     }
   }
 
-  throw lastError || new Error('All Groq API keys failed.')
+  throw lastError || new Error('All Groq API keys and models failed.')
 }
 
 /**
@@ -202,16 +205,18 @@ export async function parseIntentWithGroq(
   const keys = getGroqKeys(apiKey)
   if (keys.length === 0) throw new Error('Groq API Key missing.')
 
+  const models = [model || GROQ_CHAT_MODEL, 'llama-3.1-8b-instant', 'llama3-8b-8192']
   const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext)
   let lastError: Error | null = null
 
-  for (const key of keys) {
+  for (const m of models) {
+    for (const key of keys) {
     try {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: model || GROQ_CHAT_MODEL,
+          model: m,
           messages: [
             { role: 'system', content: dynamicSystemPrompt },
             { role: 'user', content: text },
@@ -280,11 +285,12 @@ export async function parseIntentWithGroq(
       }
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err))
-      console.warn(`Groq Key failed, trying next key... Error: ${lastError.message}`)
+      console.warn(`Groq Key/Model ${m} failed, trying next... Error: ${lastError.message}`)
     }
   }
+}
 
-  throw lastError || new Error('All Groq API keys failed.')
+  throw lastError || new Error('All Groq API keys and models failed.')
 }
 
 /**

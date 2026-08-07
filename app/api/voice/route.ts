@@ -69,8 +69,12 @@ export async function POST(req: NextRequest) {
       results.push(savedResult)
     }
 
+    const clientDuration = Number(formData.get('duration')) || 15
+    const maxDuration = file ? Math.ceil(file.size / 4000) : 15 // Roughly 4KB/s WebM
+    const actualDuration = file ? Math.min(clientDuration, maxDuration) : 0
+
     if (ownerChatId && file) {
-      await incrementUserUsage(ownerChatId, 'voice', 15) // estimate ~15s per voice clip
+      await incrementUserUsage(ownerChatId, 'voice', actualDuration)
     }
 
     return NextResponse.json({
