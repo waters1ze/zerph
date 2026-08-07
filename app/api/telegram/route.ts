@@ -969,6 +969,26 @@ export async function POST(req: NextRequest) {
     // Register user details (updates name automatically on every message!)
     await registerChatId(senderId, firstName, username, lastName).catch(() => {})
 
+    // Auto-fetch birthday from user's Telegram profile if they enabled it
+    try {
+      const dbChat = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(senderId) }, select: { birthday: true } })
+      if (dbChat && !dbChat.birthday) {
+        const chatInfo = await tgApi('getChat', { chat_id: senderId })
+        if (chatInfo?.result?.birthdate) {
+          const bd = chatInfo.result.birthdate
+          const mm = String(bd.month).padStart(2, '0')
+          const dd = String(bd.day).padStart(2, '0')
+          const birthdayStr = bd.year ? `${bd.year}-${mm}-${dd}` : `${mm}-${dd}`
+          await prisma.telegramChat.update({
+            where: { chatId: BigInt(senderId) },
+            data: { birthday: birthdayStr }
+          })
+        }
+      }
+    } catch (e) {
+      // ignore silently to not interrupt message processing
+    }
+
     // Track every group message sender → builds complete member list over time
     if (isGroup && senderId && senderId !== chatId) {
       trackGroupMember(chatId, senderId).catch(() => {})
