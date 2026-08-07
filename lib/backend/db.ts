@@ -856,6 +856,28 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
           },
         })
         createdCount++
+      } else {
+        let needsUpdate = false
+        const updates: any = {}
+        
+        if (existing.dueDate && existing.dueDate < targetDueDate) {
+          updates.dueDate = targetDueDate
+          updates.status = 'todo'
+          updates.reminderSent = false
+          updates.remindersSentCount = 0
+          needsUpdate = true
+        }
+        if (existing.repeat !== 'yearly') {
+          updates.repeat = 'yearly'
+          needsUpdate = true
+        }
+
+        if (needsUpdate) {
+          await prisma.task.update({
+            where: { id: existing.id },
+            data: updates,
+          })
+        }
       }
     }
 
