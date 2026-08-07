@@ -575,13 +575,34 @@ export async function saveParsedItemToDb(
       ? `📩 Отправить ${item.recipientName}: ${item.summary}`
       : item.summary
 
+    let finalDueDate = item.dueDate || new Date().toISOString().slice(0, 10)
+    const finalRepeat = item.repeat || ((item.title || item.rawText || '').toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null)
+
+    if (finalRepeat === 'yearly' && finalDueDate) {
+      const parts = finalDueDate.split('-')
+      if (parts.length === 3) {
+        const currentYear = new Date().getFullYear()
+        let targetYear = parseInt(parts[0], 10)
+        
+        if (targetYear <= currentYear) {
+           const thisYearDate = new Date(`${currentYear}-${parts[1]}-${parts[2]}T00:00:00`)
+           if (thisYearDate.getTime() < Date.now()) {
+             targetYear = currentYear + 1
+           } else {
+             targetYear = currentYear
+           }
+        }
+        finalDueDate = `${targetYear}-${parts[1]}-${parts[2]}`
+      }
+    }
+
     await createTask({
       title: item.title,
       description: desc,
       priority: item.priority || 'medium',
-      dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+      dueDate: finalDueDate,
       dueTime: item.dueTime || undefined,
-      repeat: item.repeat || ((item.title || item.rawText || '').toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+      repeat: finalRepeat,
       reminderOffsetMinutes: item.reminderOffsetMinutes || 0,
       tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
       aiGenerated: true,
