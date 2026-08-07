@@ -145,6 +145,7 @@ export async function updateTask(id: string, data: Partial<{
   dueDate: string
   dueTime: string
   reminderSent: boolean
+  remindersSentCount: number
   completedAt: Date
 }>) {
   return prisma.task.update({ where: { id }, data })
@@ -423,6 +424,14 @@ export async function saveParsedItemToDb(
   // Delete specific task action
   if (item.action === 'delete') {
     if (item.targetId) {
+      const taskToDelete = await prisma.task.findUnique({ where: { id: item.targetId } })
+      if (taskToDelete && taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
+         const friendId = taskToDelete.assignees[1]
+         await prisma.telegramChat.update({
+           where: { chatId: BigInt(friendId) },
+           data: { birthday: null }
+         }).catch(() => {})
+      }
       await deleteTask(item.targetId)
       await deleteGoal(item.targetId)
       await deleteNote(item.targetId)
@@ -439,6 +448,14 @@ export async function saveParsedItemToDb(
         }
       }
       if (best) {
+        const taskToDelete = await prisma.task.findUnique({ where: { id: best.id } })
+        if (taskToDelete && taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
+           const friendId = taskToDelete.assignees[1]
+           await prisma.telegramChat.update({
+             where: { chatId: BigInt(friendId) },
+             data: { birthday: null }
+           }).catch(() => {})
+        }
         await deleteTask(best.id)
         return { item, updatedItem: true }
       }
@@ -786,13 +803,18 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
       const friendName = friend.firstName ? `${friend.firstName}${friend.lastName ? ' ' + friend.lastName : ''}` : (friend.username ? `@${friend.username}` : `Друг #${friend.chatId}`)
       const taskTitle = `🎂 День рождения: ${friendName}`
-      const targetDueDate = `${currentYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`
+      
+      const thisYearDate = new Date(`${currentYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}T00:00:00`)
+      let targetYear = currentYear
+      if (thisYearDate.getTime() < Date.now()) {
+        targetYear = currentYear + 1
+      }
+      const targetDueDate = `${targetYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`
 
       const existing = await prisma.task.findFirst({
         where: {
           ownerChatId: cid,
           title: taskTitle,
-          dueDate: targetDueDate,
         },
       })
 
@@ -805,6 +827,7 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
             status: 'todo',
             dueDate: targetDueDate,
             dueTime: '09:00',
+            repeat: 'yearly',
             tags: ['день рождения', 'друзья'],
             isShared: true,
             assignees: [String(cid), String(friend.chatId)],
