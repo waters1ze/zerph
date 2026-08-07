@@ -68,7 +68,10 @@ export function SettingsView() {
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage()
   const [saved, setSaved] = useState(false)
-  const [usage, setUsage] = useState<any>(null)
+
+  // Initialize usage from localStorage to prevent "Free" flickering
+  const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
+  const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
   const [loadingPay, setLoadingPay] = useState(false)
   const [inputChatId, setInputChatId] = useState('')
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
@@ -81,7 +84,10 @@ export function SettingsView() {
   const fetchSubscription = () => {
     fetch('/api/subscription', { headers: getAuthHeaders() })
       .then(r => r.json())
-      .then(data => setUsage(data))
+      .then(data => {
+        setUsage(data)
+        try { localStorage.setItem('zerf-usage', JSON.stringify(data)) } catch {}
+      })
       .catch(() => {})
   }
 
