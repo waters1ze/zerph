@@ -228,8 +228,19 @@ export function getAuthHeaders(): Record<string, string> {
   return headers
 }
 
+function initAppState(initialState: AppState): AppState {
+  if (typeof window === 'undefined') return initialState
+  try {
+    const saved = localStorage.getItem('zerf-settings')
+    if (saved) {
+      return { ...initialState, settings: { ...initialState.settings, ...JSON.parse(saved) } }
+    }
+  } catch {}
+  return initialState
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
+  const [state, dispatch] = useReducer(reducer, INITIAL_STATE, initAppState)
 
   const enhancedDispatch: React.Dispatch<Action> = useCallback((action: Action) => {
     // Perform state change locally immediately
@@ -306,17 +317,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('zerf-settings', JSON.stringify(state.settings))
     } catch {}
   }, [state.settings])
-
-  // Load settings from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('zerf-settings')
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<UserSettings>
-        dispatch({ type: 'UPDATE_SETTINGS', updates: parsed })
-      }
-    } catch {}
-  }, [])
 
   // Sync from backend DB on mount (with user isolation)
   useEffect(() => {
