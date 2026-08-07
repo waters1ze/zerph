@@ -38,6 +38,12 @@ export type DbTask = {
 
 export async function getAllTasks(ownerChatId?: number | bigint | string | null) {
   try {
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "repeat" TEXT;`)
+    } catch (e) {
+      // ignore if it fails or already exists
+    }
+    
     let allTasks: any[] = []
     
     if (ownerChatId !== undefined && ownerChatId !== null) {
