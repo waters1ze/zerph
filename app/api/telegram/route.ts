@@ -760,6 +760,16 @@ async function handleGroupAddCommand(msg: any) {
       // 3. Transcribe audio if needed
       let targetText = targetTextDirect
       if (targetVoice) {
+        const limits = await getUserUsageAndLimits(senderId)
+        if (!limits.canSendVoice) {
+          await safeEditOrSend(groupChatId, statusMsgId,
+            limits.plan === 'premium'
+              ? '❌ Достигнут дневной лимит записи голоса (10 минут). Сброс наступит завтра!'
+              : '❌ Достигнут лимит голосовых сообщений (2 в день). Оформите подписку Zerf Premium за 99 руб!'
+          )
+          return
+        }
+
         try {
           const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
           const fileData = await fileRes.json()
@@ -768,6 +778,7 @@ async function handleGroupAddCommand(msg: any) {
             const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
             const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
             targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
+            await incrementUserUsage(senderId, 'voice', 15)
           }
         } catch (err) {
           await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
@@ -808,25 +819,8 @@ async function handleGroupAddCommand(msg: any) {
         try { await saveParsedItemToDb(item, senderId) } catch {}
       }
 
-      // 6. Build final status card text (plain text for guaranteed delivery)
-      let card = `Групповая задача создана в Zerf\n\n`
-      card += `Участники: ${senderName}`
-      if (replySenderName && replySenderId !== senderId) {
-        card += `, ${replySenderName}`
-      }
-      card += `\n\n`
-
-      items.forEach((item, idx) => {
-        const prefix = items.length > 1 ? `${idx + 1}. ` : ''
-        card += `${prefix}Задача: ${item.title}\n`
-        if (item.dueDate) card += `Дата: ${item.dueDate}\n`
-        if (item.dueTime) card += `Время: ${item.dueTime}\n`
-        card += `\n`
-      })
-      card += `Синхронизировано для ${allAssignees.length} участников.`
-
       // 7. Update status message in Telegram group chat!
-      await safeEditOrSend(groupChatId, statusMsgId, card, {
+      await safeEditOrSend(groupChatId, statusMsgId, `✅ Групповая задача успешно создана!`, {
         reply_markup: miniAppKeyboard(senderId),
       })
     } catch (err: any) {
