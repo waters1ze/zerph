@@ -24,6 +24,18 @@ export function TasksView() {
     .filter(t => filterStatus === 'all' || t.status === filterStatus)
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
     .filter(t => {
+      if (t.title.includes('День рождения:')) {
+        if (t.dueDate) {
+          const due = new Date(t.dueDate)
+          const now = new Date()
+          now.setHours(0, 0, 0, 0)
+          const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
+          if (diffDays > 7) return false
+        }
+      }
+      return true
+    })
+    .filter(t => {
       if (!state.searchQuery) return true
       return t.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
         t.tags.some(tag => tag.includes(state.searchQuery.toLowerCase()))

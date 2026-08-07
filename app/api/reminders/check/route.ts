@@ -76,31 +76,11 @@ export async function GET() {
       }
 
       // Advance recurring tasks or mark as done
-      if (task.repeat) {
-        let nextDate = new Date(task.dueDate || todayStr)
-        if (task.repeat === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
-        else if (task.repeat === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1)
-        else if (task.repeat === 'weekly') nextDate.setDate(nextDate.getDate() + 7)
-        else if (task.repeat === 'daily') nextDate.setDate(nextDate.getDate() + 1)
-        
-        const nextYearStr = nextDate.getFullYear()
-        const nextMonthStr = String(nextDate.getMonth() + 1).padStart(2, '0')
-        const nextDayStr = String(nextDate.getDate()).padStart(2, '0')
-        const nextDateStr = `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
-
-        await updateTask(task.id, {
-          dueDate: nextDateStr,
-          remindersSentCount: 0,
-          reminderSent: false,
-          status: 'todo',
-        })
-      } else {
-        await updateTask(task.id, {
-          status: 'done',
-          reminderSent: true,
-          completedAt: new Date(),
-        })
-      }
+      await updateTask(task.id, {
+        status: 'done',
+        reminderSent: true,
+        completedAt: new Date(),
+      })
     }
 
     return NextResponse.json({
