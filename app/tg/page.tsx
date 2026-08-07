@@ -342,12 +342,34 @@ export default function TelegramApp() {
             {/* TASKS */}
             {tab === 'tasks' && (
               <div className="space-y-1.5">
-                {tasks.length === 0 ? (
+                {tasks.filter(t => {
+                  if (t.title.includes('День рождения:')) {
+                    if (t.dueDate) {
+                      const due = new Date(t.dueDate)
+                      const now = new Date()
+                      now.setHours(0, 0, 0, 0)
+                      const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
+                      if (diffDays > 7) return false
+                    }
+                  }
+                  return true
+                }).length === 0 ? (
                   <div className="text-center py-14">
                     <CheckSquare className="w-10 h-10 text-primary/30 mx-auto mb-2" />
                     <p className="text-[13px] text-muted-foreground">{t.noTasks}</p>
                   </div>
-                ) : tasks.map(task => (
+                ) : tasks.filter(t => {
+                  if (t.title.includes('День рождения:')) {
+                    if (t.dueDate) {
+                      const due = new Date(t.dueDate)
+                      const now = new Date()
+                      now.setHours(0, 0, 0, 0)
+                      const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
+                      if (diffDays > 7) return false
+                    }
+                  }
+                  return true
+                }).map(task => (
                   <div
                     key={task.id}
                     className="flex items-start gap-3 p-3.5 rounded-xl bg-card border border-border"

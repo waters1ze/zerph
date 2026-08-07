@@ -62,23 +62,6 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       })
     }
 
-    // If fetching for UI (ownerChatId provided), hide birthdays that are > 7 days away
-    if (ownerChatId !== undefined && ownerChatId !== null) {
-      const now = new Date()
-      now.setHours(0, 0, 0, 0)
-      
-      allTasks = allTasks.filter(t => {
-        if (t.title.includes('День рождения:') || (t.tags && t.tags.includes('день рождения'))) {
-          if (t.dueDate) {
-            const due = new Date(t.dueDate)
-            const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
-            if (diffDays > 7) return false
-          }
-        }
-        return true
-      })
-    }
-
     return allTasks
   } catch (err) {
     console.error('getAllTasks error:', err)
