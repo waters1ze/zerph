@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckSquare, Target, FileText, Plus, Check, Clock, AlertCircle, Sparkles, RefreshCw, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getAuthHeaders } from '@/lib/store'
 
 interface Task { id: string; title: string; status: string; priority: string; dueDate?: string; description?: string }
 interface Goal { id: string; title: string; progress: number; status: string; deadline?: string; color?: string }
@@ -100,9 +101,7 @@ export default function TelegramApp() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const chatId = getTgChatId()
-      const headers: Record<string, string> = {}
-      if (chatId) headers['x-chat-id'] = chatId
+      const headers = getAuthHeaders()
 
       const [taskRes, usageRes] = await Promise.all([
         fetch('/api/tasks', { headers }),
@@ -126,10 +125,11 @@ export default function TelegramApp() {
     }
     setLoadingPay(true)
     try {
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
       const res = await fetch('/api/subscription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-chat-id': chatId },
-        body: JSON.stringify({ ownerChatId: chatId }),
+        headers,
+        body: JSON.stringify({ ownerChatId: getTgChatId() }),
       })
       const data = await res.json()
       if (data.paymentUrl) {
@@ -154,9 +154,7 @@ export default function TelegramApp() {
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light')
 
     try {
-      const chatId = getTgChatId()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (chatId) headers['x-chat-id'] = chatId
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 
       await fetch('/api/tasks', {
         method: 'PATCH',
@@ -170,14 +168,12 @@ export default function TelegramApp() {
     if (!newTaskTitle.trim() || adding) return
     setAdding(true)
     try {
-      const chatId = getTgChatId()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (chatId) headers['x-chat-id'] = chatId
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ title: newTaskTitle, priority: 'medium', dueDate: today, ownerChatId: chatId }),
+        body: JSON.stringify({ title: newTaskTitle, priority: 'medium', dueDate: today, ownerChatId: getTgChatId() }),
       })
       const data = await res.json()
       if (data.task) setTasks(prev => [data.task, ...prev])

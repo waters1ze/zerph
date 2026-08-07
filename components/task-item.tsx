@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { TaskCheckbox } from './task-checkbox'
 import { PriorityBadge } from './priority-badge'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import type { Task } from '@/lib/types'
 import { CalendarDays, Users, Sparkles, ChevronRight, Trash2, Clock } from 'lucide-react'
 import { format, isToday, isPast, parseISO } from 'date-fns'
@@ -99,7 +99,7 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
               onClick={(e) => {
                 e.stopPropagation()
                 dispatch({ type: 'DELETE_TASK', id: task.id })
-                fetch(`/api/tasks?id=${task.id}`, { method: 'DELETE' })
+                fetch(`/api/tasks?id=${task.id}`, { method: 'DELETE', headers: getAuthHeaders() })
               }}
               className="p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
               title="Delete task"

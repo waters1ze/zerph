@@ -316,7 +316,6 @@ async function handleAdminCommand(chatId: number, args: string[]) {
 
   // Check if caller is admin
   if (!ADMIN_CHAT_IDS.includes(String(chatId))) {
-    await send(chatId, '❌ У тебя нет прав администратора.')
     return
   }
 

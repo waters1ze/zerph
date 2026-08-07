@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { useSettings, useApp, getTgChatId } from '@/lib/store'
+import { useSettings, useApp, getTgChatId, getAuthHeaders } from '@/lib/store'
 import { useLanguage } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
@@ -79,11 +79,7 @@ export function SettingsView() {
   }
 
   const fetchSubscription = () => {
-    const cid = getTgChatId()
-    const headers: Record<string, string> = {}
-    if (cid) headers['x-chat-id'] = cid
-
-    fetch('/api/subscription', { headers })
+    fetch('/api/subscription', { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => setUsage(data))
       .catch(() => {})
@@ -97,8 +93,7 @@ export function SettingsView() {
     setLoadingPay(true)
     try {
       const cid = getTgChatId()
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (cid) headers['x-chat-id'] = cid
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 
       const res = await fetch('/api/subscription', {
         method: 'POST',
