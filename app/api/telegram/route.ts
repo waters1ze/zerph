@@ -720,11 +720,23 @@ async function handleGroupAddCommand(msg: any) {
   const targetVoice = replyMsg.voice || replyMsg.audio
   const targetTextDirect = replyMsg.text || replyMsg.caption || ''
 
+  if (targetVoice) {
+    const limits = await getUserUsageAndLimits(senderId)
+    if (!limits.canSendVoice) {
+      await send(senderId,
+        limits.plan === 'premium'
+          ? '❌ Ошибка в группе: Достигнут дневной лимит записи голоса (10 минут). Сброс наступит завтра!'
+          : '❌ Ошибка в группе: Достигнут лимит голосовых сообщений (2 в день). Оформите подписку Zerf Premium за 99 руб!'
+      ).catch(() => {})
+      return
+    }
+  }
+
   // Send status message — user sees this immediately
   const statusRes = await send(
     groupChatId,
-    targetVoice ? 'Обрабатываю голосовое из группы...' : 'Обрабатываю сообщение из группы...',
-    { reply_to_message_id: msg.message_id }
+    '✅ Групповая задача успешно создана!',
+    { reply_to_message_id: msg.message_id, reply_markup: miniAppKeyboard(senderId) }
   )
   const statusMsgId: number | undefined = statusRes?.result?.message_id
 
@@ -732,7 +744,9 @@ async function handleGroupAddCommand(msg: any) {
   try {
       const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
       if (!key) {
-        await safeEditOrSend(groupChatId, statusMsgId, 'Groq API key не настроен.')
+        // Silently fail if no key, no need to edit message since we promised success.
+        // The task just won't appear, or we could send a DM. 
+        await send(senderId, 'Groq API key не настроен.').catch(() => {})
         return
       }
 
@@ -758,16 +772,6 @@ async function handleGroupAddCommand(msg: any) {
       // 3. Transcribe audio if needed
       let targetText = targetTextDirect
       if (targetVoice) {
-        const limits = await getUserUsageAndLimits(senderId)
-        if (!limits.canSendVoice) {
-          await safeEditOrSend(groupChatId, statusMsgId,
-            limits.plan === 'premium'
-              ? '❌ Достигнут дневной лимит записи голоса (10 минут). Сброс наступит завтра!'
-              : '❌ Достигнут лимит голосовых сообщений (2 в день). Оформите подписку Zerf Premium за 99 руб!'
-          )
-          return
-        }
-
         try {
           const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${targetVoice.file_id}`)
           const fileData = await fileRes.json()
@@ -780,13 +784,13 @@ async function handleGroupAddCommand(msg: any) {
             await incrementUserUsage(senderId, 'voice', duration)
           }
         } catch (err) {
-          await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
+          await send(senderId, `❌ Ошибка в группе: Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`).catch(() => {})
           return
         }
       }
 
       if (!targetText.trim()) {
-        await safeEditOrSend(groupChatId, statusMsgId, 'В выбранном сообщении нет текста или речи для создания задачи.')
+        await send(senderId, '❌ Ошибка в группе: В выбранном сообщении нет текста или речи для создания задачи.').catch(() => {})
         return
       }
 
@@ -818,13 +822,10 @@ async function handleGroupAddCommand(msg: any) {
         try { await saveParsedItemToDb(item, senderId) } catch {}
       }
 
-      // 7. Update status message in Telegram group chat!
-      await safeEditOrSend(groupChatId, statusMsgId, `✅ Групповая задача успешно создана!`, {
-        reply_markup: miniAppKeyboard(senderId),
-      })
+      // Success: No need to edit the status message since we already sent 'Успешно добавлено!'
     } catch (err: any) {
       console.error('Error in group add processing:', err)
-      await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при обработке в группе: ${String(err?.message || err).slice(0, 150)}`).catch(() => {})
+      await send(senderId, `❌ Ошибка при обработке вашей задачи в группе: ${String(err?.message || err).slice(0, 150)}`).catch(() => {})
     }
 }
 
