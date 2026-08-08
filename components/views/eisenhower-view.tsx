@@ -1,18 +1,18 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { LayoutGrid, AlertTriangle, Star, Clock, Coffee, Sparkles } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, isBirthdayVisible } from '@/lib/utils'
 
 export function EisenhowerView() {
   const { state } = useApp()
   const today = new Date().toISOString().slice(0, 10)
 
-  // Categorize active tasks into 4 Eisenhower quadrants
-  const activeTasks = state.tasks.filter(t => t.status !== 'done')
+  // Categorize active tasks into 4 Eisenhower quadrants (Birthdays only 2 days before)
+  const activeTasks = state.tasks.filter(t => t.status !== 'done' && isBirthdayVisible(t, 2))
 
   const q1 = activeTasks.filter(t => {
     const isUrgent = t.priority === 'urgent' || (t.dueDate && t.dueDate <= today)

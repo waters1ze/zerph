@@ -5,17 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function isBirthdayVisible(task: { title: string; dueDate?: string }): boolean {
+export function isBirthdayVisible(task: { title: string; dueDate?: string }, maxDays = 7): boolean {
   if (!task.dueDate) return true
   const title = (task.title || '').toLowerCase()
-  if (title.includes('день рождения')) {
+  if (title.includes('день рождения') || title.includes('др ') || title.includes('др:') || title.endsWith('др')) {
     if (task.dueDate && task.dueDate.includes('-')) {
       const [year, month, day] = task.dueDate.split('-').map(Number)
       const due = new Date(year, month - 1, day)
       const now = new Date()
       now.setHours(0, 0, 0, 0)
       const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
-      return diffDays <= 7
+      return diffDays <= maxDays
     }
   }
   return true
