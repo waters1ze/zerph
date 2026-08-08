@@ -20,6 +20,8 @@ model Task {
   tags         String[]
   assignees    String[]
   isShared     Boolean   @default(false)
+  visibility   String    @default("private") // "private" | "public"
+  linkedNoteIds String[] // IDs of linked notes shown in reminders
   projectId    String?
   goalId       String?
   createdAt    DateTime  @default(now())
@@ -30,12 +32,12 @@ model Task {
   source       String?
   subtasks     Json?
   repeat       String?   // 'yearly' | 'monthly' | 'weekly' | 'daily'
-  reminderOffsetMinutes Int @default(0) // minutes before event to send reminder (e.g. 5, 15, 60)
-  ownerChatId  BigInt?   // Telegram chatId of the user who created this task
-  authorChatId BigInt?   // Telegram chatId of person who assigned this task (may differ from owner)
-  completedBy  String?   // Name/ChatId of person who completed this task
-  parentTaskId String?   // For subtask tree (references another Task.id)
-  projectDbId  String?   // References ProjectDB.id
+  reminderOffsetMinutes Int @default(0)
+  ownerChatId  BigInt?
+  authorChatId BigInt?
+  completedBy  String?
+  parentTaskId String?
+  projectDbId  String?
   remindersSentCount Int   @default(0)
 }
 
@@ -49,9 +51,10 @@ model Goal {
   progress    Int      @default(0)
   color       String   @default("#2d7a4f")
   milestones  Json?
+  visibility  String   @default("private") // "private" | "public"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  ownerChatId BigInt?  // Telegram chatId of the user
+  ownerChatId BigInt?
 }
 
 model Note {
@@ -61,15 +64,16 @@ model Note {
   originalText String?  @db.Text
   type         String   @default("note")
   tags         String[]
-  dueDate      String?  // Optional linked date (YYYY-MM-DD)
-  dueTime      String?  // Optional linked time (HH:MM)
+  dueDate      String?
+  dueTime      String?
   projectId    String?
   goalId       String?
+  visibility   String   @default("private") // "private" | "public"
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   aiGenerated  Boolean  @default(false)
   pinned       Boolean  @default(false)
-  ownerChatId  BigInt?  // Telegram chatId of the user
+  ownerChatId  BigInt?
 }
 
 model TelegramChat {
@@ -137,4 +141,11 @@ model Habit {
   ownerChatId     BigInt?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// Dynamic configuration key-value store (e.g. subscription price)
+model Config {
+  key       String @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
