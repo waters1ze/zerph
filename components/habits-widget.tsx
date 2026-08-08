@@ -58,7 +58,7 @@ export function HabitsWidget() {
 
   const toggleHabit = async (habit: Habit) => {
     const isCompletedToday = habit.lastCompletedAt === todayStr
-    const newCompletedAt = isCompletedToday ? null : todayStr
+    const newCompletedAt = isCompletedToday ? undefined : todayStr
     
     // basic streak logic for optimistic UI
     let newStreak = habit.streak
