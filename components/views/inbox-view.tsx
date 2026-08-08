@@ -21,7 +21,7 @@ export function InboxView() {
           <div className="flex items-center gap-2 mb-2.5">
             <Users className="w-3.5 h-3.5 text-primary" />
             <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-              Shared with you — {sharedWithMe.length}
+              🤝 Поручения и совместные задачи — {sharedWithMe.length}
             </h2>
           </div>
           <div className="space-y-0.5">
@@ -35,7 +35,7 @@ export function InboxView() {
         <div className="flex items-center gap-2 mb-2.5">
           <Inbox className="w-3.5 h-3.5 text-muted-foreground" />
           <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Uncategorized — {uncategorized.length}
+            📥 Входящие задачи — {uncategorized.length}
           </h2>
         </div>
         {uncategorized.length === 0 ? (
@@ -45,8 +45,8 @@ export function InboxView() {
             className="flex flex-col items-center gap-2 py-12 text-center"
           >
             <Inbox className="w-10 h-10 text-muted-foreground/20" />
-            <p className="text-sm font-medium text-muted-foreground">Inbox is clear</p>
-            <p className="text-xs text-muted-foreground/60">All tasks are assigned to projects or goals</p>
+            <p className="text-sm font-medium text-muted-foreground">Входящие чисты</p>
+            <p className="text-xs text-muted-foreground/60">Все задачи привязаны к проектам или выполнены</p>
           </motion.div>
         ) : (
           <div className="space-y-0.5">

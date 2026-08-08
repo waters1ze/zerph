@@ -55,6 +55,7 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
           where: {
             OR: [
               { ownerChatId: cid },
+              { authorChatId: cid },
               { assignees: { has: strId } }
             ]
           },
