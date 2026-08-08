@@ -1,0 +1,1 @@
+const { PrismaClient } = require("@prisma/client"); const prisma = new PrismaClient(); async function m() { console.log(await prisma.telegramChat.findMany({ select: { chatId: true, firstName: true, birthday: true } })); } m().finally(() => { prisma.$disconnect() });

@@ -6,7 +6,7 @@
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
 
 export interface ParsedItem {
-  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion'
+  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion' | 'delegate'
   action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion'
   targetId?: string | null
   title: string
@@ -109,7 +109,7 @@ Always respond with ONLY valid JSON:
     {
       "action": "create" | "update" | "delete" | "delete_all" | "completion",
       "targetId": "ID элемента если action update/delete" | null,
-      "type": "task" | "goal" | "note" | "project" | "reminder" | "completion",
+      "type": "task" | "goal" | "note" | "project" | "reminder" | "completion" | "delegate",
       "title": "Понятное, информативное название с сутью действия",
       "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями)",
       "priority": "urgent" | "high" | "medium" | "low",

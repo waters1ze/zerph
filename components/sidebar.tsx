@@ -7,24 +7,30 @@ import { useApp } from '@/lib/store'
 import type { View } from '@/lib/types'
 import { ChevronRight, Circle, User } from 'lucide-react'
 
+import {
+  Sun, Inbox, CheckSquare, FileText, Calendar,
+  Target, BarChart2, Users, Settings, FolderOpen
+} from 'lucide-react'
+
 interface NavItem {
   id: View
   label: string
-  icon: string
+  icon: React.ElementType
   badge?: number
   section: string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',     icon: '📌', section: 'workspace' },
-  { id: 'inbox',    label: 'Входящие',    icon: '🕯️', section: 'workspace' },
-  { id: 'tasks',    label: 'Задачи',      icon: '📰', section: 'workspace' },
-  { id: 'notes',    label: 'Заметки',     icon: '📜', section: 'workspace' },
-  { id: 'calendar', label: 'Календарь',   icon: '📅', section: 'planning' },
-  { id: 'goals',    label: 'Цели',        icon: '⚔️', section: 'planning' },
-  { id: 'stats',    label: 'Аналитика',   icon: '💎', section: 'аналитика' },
-  { id: 'friends',  label: 'Команда',     icon: '🥂', section: 'совместная работа' },
-  { id: 'settings', label: 'Настройки',   icon: '⏳', section: 'аккаунт' },
+  { id: 'today',    label: 'Сегодня',     icon: Sun,         section: 'workspace' },
+  { id: 'inbox',    label: 'Входящие',    icon: Inbox,        section: 'workspace' },
+  { id: 'tasks',    label: 'Задачи',      icon: CheckSquare, section: 'workspace' },
+  { id: 'notes',    label: 'Заметки',     icon: FileText,    section: 'workspace' },
+  { id: 'calendar', label: 'Календарь',   icon: Calendar,    section: 'planning' },
+  { id: 'goals',    label: 'Цели',        icon: Target,      section: 'planning' },
+  { id: 'projects', label: 'Проекты',     icon: FolderOpen,  section: 'planning' },
+  { id: 'stats',    label: 'Аналитика',   icon: BarChart2,   section: 'аналитика' },
+  { id: 'friends',  label: 'Команда',     icon: Users,       section: 'совместная работа' },
+  { id: 'settings', label: 'Настройки',   icon: Settings,    section: 'аккаунт' },
 ]
 
 const SECTIONS = [
@@ -138,7 +144,10 @@ export function Sidebar() {
                           : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
                       )}
                     >
-                      <span className="text-base leading-none shrink-0 mono-emoji">{item.icon}</span>
+                      <item.icon className={cn(
+                        'w-[15px] h-[15px] shrink-0 transition-colors',
+                        isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
+                      )} strokeWidth={isActive ? 2.5 : 2} />
                       <span className="flex-1 text-left">{item.label}</span>
                       {badge !== undefined && badge > 0 && (
                         <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">

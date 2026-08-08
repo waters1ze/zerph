@@ -356,6 +356,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {})
 
+    if (chatId) {
+      fetch(`/api/birthdays?chatId=${chatId}`, { headers }).catch(() => {})
+    }
+
     // Auto-check Telegram reminders every 15 seconds
     const interval = setInterval(() => {
       fetch('/api/reminders/check').catch(() => {})
