@@ -729,6 +729,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             status: 'todo',
             dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
             dueTime: item.dueTime || null,
+            repeat: item.repeat || null,
             tags: item.tags || [],
             ownerChatId: friend.chatId,
             authorChatId: BigInt(chatId),
