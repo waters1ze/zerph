@@ -417,6 +417,31 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   await send(chatId, `❓ Неизвестная команда. /admin — список команд`)
 }
 
+async function handleRefCommand(chatId: number) {
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Zerph_bot'
+  const refLink = `https://t.me/${botUsername}?start=ref_${chatId}`
+
+  const user = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+  const count = (user as any)?.referralCount || 0
+  const bonusDays = count * 3
+
+  let msg = `🎁 *Реферальная программа Zerf AI*\n\n`
+  msg += `Приглашай друзей и получай *+3 дня Zerf Premium* за каждого приведённого друга! Твой друг тоже получит +3 дня Premium!\n\n`
+  msg += `🔗 *Твоя реферальная ссылка:*\n\`${refLink}\`\n\n`
+  msg += `📊 Приглашено друзей: *${count}*\n`
+  msg += `⭐ Заработано Premium: *${bonusDays} дней*`
+
+  await send(chatId, msg, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '📲 Поделиться ссылкой с другом', url: `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent('Присоединяйся к Zerf AI! Получи 3 дня Premium по моей ссылке 🚀')}` }
+        ]
+      ]
+    }
+  })
+}
+
 async function handleWeeklyReport(chatId: number, senderId: number) {
   try {
     const limits = await getUserUsageAndLimits(chatId)
@@ -1200,8 +1225,56 @@ export async function POST(req: NextRequest) {
             console.error('Failed to process deep link invite:', e)
           }
         }
+      } else if (cmd === '/start' && param?.startsWith('ref_')) {
+        await handleStart(chatId, firstName)
+        const referrerId = Number(param.replace('ref_', ''))
+        if (!isNaN(referrerId) && referrerId !== chatId) {
+          try {
+            const existingUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+            if (existingUser && !(existingUser as any).referredBy) {
+              const now = new Date()
+              const currentExp = existingUser.subscriptionExpiry && new Date(existingUser.subscriptionExpiry) > now
+                ? new Date(existingUser.subscriptionExpiry)
+                : now
+              const newExpiry = new Date(currentExp.getTime() + 3 * 24 * 60 * 60 * 1000)
+
+              await (prisma.telegramChat as any).update({
+                where: { chatId: BigInt(chatId) },
+                data: {
+                  referredBy: BigInt(referrerId),
+                  plan: 'premium',
+                  subscriptionExpiry: newExpiry,
+                },
+              })
+
+              const referrer = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(referrerId) } })
+              if (referrer) {
+                const refExp = referrer.subscriptionExpiry && new Date(referrer.subscriptionExpiry) > now
+                  ? new Date(referrer.subscriptionExpiry)
+                  : now
+                const referrerNewExpiry = new Date(refExp.getTime() + 3 * 24 * 60 * 60 * 1000)
+
+                await (prisma.telegramChat as any).update({
+                  where: { chatId: BigInt(referrerId) },
+                  data: {
+                    plan: 'premium',
+                    subscriptionExpiry: referrerNewExpiry,
+                    referralCount: { increment: 1 },
+                  },
+                })
+
+                await send(referrerId, `🎉 Твой друг *${escMd(firstName)}* присоединился по твоей реферальной ссылке!\nВам обоим начислено *+3 дня Zerf Premium*! ⭐`)
+                await send(chatId, `🎁 Добро пожаловать! Вы получили *+3 дня Zerf Premium* по реферальному приглашению от *${escMd(referrer.firstName || 'друга')}*! 🚀`)
+              }
+            }
+          } catch (e) {
+            console.error('Failed to process referral:', e)
+          }
+        }
       } else if (cmd === '/start' || cmd === '/help') {
         await handleStart(chatId, firstName)
+      } else if (cmd === '/ref' || cmd === '/referral') {
+        await handleRefCommand(chatId)
       } else if (cmd === '/settings' || cmd === '/reminders') {
         await handleSettings(chatId)
       } else if (cmd === '/language' || cmd === '/lang') {

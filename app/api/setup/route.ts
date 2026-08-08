@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
         commands: [
           { command: 'start',    description: '🚀 Открыть приложение Zerf AI' },
           { command: 'today',    description: '📅 Задачи на сегодня' },
+          { command: 'ref',      description: '🎁 Реферальная ссылка (+3 дня Premium)' },
           { command: 'invite',   description: '🤝 Пригласить друга в команду' },
           { command: 'report',   description: '📊 Недельный AI-отчёт' },
           { command: 'goals',    description: '🎯 Активные цели' },
