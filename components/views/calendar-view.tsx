@@ -116,10 +116,16 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
 
   const dayTasks = state.tasks.filter(t => {
     if (t.dueDate === dateStr) return true
-    if (t.repeat === 'yearly' && t.status !== 'done' && t.dueDate) {
-      const [ty, tm, td] = t.dueDate.split('-').map(Number)
-      const [sy, sm, sd] = dateStr.split('-').map(Number)
-      if (sy >= ty && sm === tm && sd === td) return true
+    if (t.dueDate && t.dueDate.includes('-')) {
+      const isYearly = t.repeat === 'yearly' ||
+                       t.title?.toLowerCase().includes('день рождения') ||
+                       t.title?.toLowerCase().includes('др') ||
+                       t.tags?.includes('день рождения')
+      if (isYearly) {
+        const [, tm, td] = t.dueDate.split('-').map(Number)
+        const [, sm, sd] = dateStr.split('-').map(Number)
+        if (sm === tm && sd === td) return true
+      }
     }
     return false
   })
@@ -257,22 +263,18 @@ export function CalendarView() {
 
   // Group tasks by date
   const tasksByDate = state.tasks.reduce((acc, t) => {
-    if (t.dueDate) {
-      if (t.repeat === 'yearly' && t.status !== 'done') {
-        const [ty, tm, td] = t.dueDate.split('-').map(Number)
-        // Only project into the future/current viewed year, not past
-        if (year >= ty) {
+    if (t.dueDate && t.dueDate.includes('-')) {
+      const isYearly = t.repeat === 'yearly' ||
+                       t.title?.toLowerCase().includes('день рождения') ||
+                       t.title?.toLowerCase().includes('др') ||
+                       t.tags?.includes('день рождения')
+
+      if (isYearly) {
+        const [, tm, td] = t.dueDate.split('-').map(Number)
+        if (!isNaN(tm) && !isNaN(td)) {
           const projectedDate = `${year}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`
           if (!acc[projectedDate]) acc[projectedDate] = []
           acc[projectedDate].push(t)
-          // Also include the original date just in case
-          if (projectedDate !== t.dueDate) {
-            if (!acc[t.dueDate]) acc[t.dueDate] = []
-            acc[t.dueDate].push(t)
-          }
-        } else {
-          if (!acc[t.dueDate]) acc[t.dueDate] = []
-          acc[t.dueDate].push(t)
         }
       } else {
         if (!acc[t.dueDate]) acc[t.dueDate] = []
@@ -291,9 +293,13 @@ export function CalendarView() {
     const d = new Date(year, i, 1)
     const m = i
     const hasTasks = state.tasks.some(t => {
-      if (!t.dueDate) return false
+      if (!t.dueDate || !t.dueDate.includes('-')) return false
       const [ty, tm] = t.dueDate.split('-').map(Number)
-      if (t.repeat === 'yearly' && t.status !== 'done' && year >= ty) {
+      const isYearly = t.repeat === 'yearly' ||
+                       t.title?.toLowerCase().includes('день рождения') ||
+                       t.title?.toLowerCase().includes('др') ||
+                       t.tags?.includes('день рождения')
+      if (isYearly) {
         return tm - 1 === m
       }
       return ty === year && tm - 1 === m
