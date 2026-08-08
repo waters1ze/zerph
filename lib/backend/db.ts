@@ -841,13 +841,22 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
           ? ([chat.firstName, chat.lastName].filter(Boolean).join(' ') || (chat.username ? `@${chat.username}` : `Участник #${fidStr.slice(-4)}`))
           : `Участник #${fidStr.slice(-4)}`
 
+        let status: 'online' | 'away' | 'offline' = 'offline'
+        if (chat && (chat as any).lastActiveAt) {
+          const diffMs = Date.now() - new Date((chat as any).lastActiveAt).getTime()
+          const diffMins = diffMs / 60000
+          if (diffMins <= 5) status = 'online'
+          else if (diffMins <= 30) status = 'away'
+          else status = 'offline'
+        }
+
         return {
           id: fidStr,
           name,
           email: chat?.username ? `@${chat.username}` : '',
           chatId: fidStr,
           username: chat?.username || '',
-          status: 'online' as const,
+          status,
           addedAt: new Date().toISOString(),
         }
       })
@@ -858,6 +867,17 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
     console.error('Error in getFriends:', err)
     return []
   }
+}
+
+export async function touchUserLastActive(chatId: number | bigint | string) {
+  try {
+    const cid = BigInt(chatId)
+    await (prisma.telegramChat as any).upsert({
+      where: { chatId: cid },
+      update: { lastActiveAt: new Date() },
+      create: { chatId: cid, lastActiveAt: new Date() },
+    })
+  } catch {}
 }
 
 export async function syncFriendBirthdays(ownerChatId: number | bigint | string): Promise<number> {

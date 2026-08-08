@@ -87,6 +87,7 @@ model TelegramChat {
   notesCountToday        Int       @default(0)
   chatMessagesToday      Int       @default(0)
   lastResetDate          String?   // YYYY-MM-DD
+  lastActiveAt           DateTime? @default(now())
   addedAt                DateTime  @default(now())
 }
 
@@ -95,7 +96,7 @@ model Friendship {
   userChatId   BigInt
   friendChatId BigInt
   status       String   @default("accepted") // "pending" | "accepted" | "declined"
-  allowTasks   Boolean  @default(true)       // Whether user allows tasks from this friend
+  allowTasks   Boolean  @default(false)      // Default OFF: user must explicitly enable tasks from this friend
   createdAt    DateTime @default(now())
 
   @@unique([userChatId, friendChatId])

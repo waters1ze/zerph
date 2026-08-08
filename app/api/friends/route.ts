@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
         })
         return {
           ...f,
-          allowTasks: (friendship as any)?.allowTasks ?? true,
+          allowTasks: (friendship as any)?.allowTasks ?? false,
         }
       })
     )
