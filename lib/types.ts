@@ -29,6 +29,7 @@ export interface Task {
   targetContact?: string       // Telegram username or ChatID of the contact to message (e.g. "@artem")
   recipientName?: string       // Name of the recipient (e.g. "Артем")
   authorChatId?: string
+  ownerChatId?: string
   completedBy?: string
   parentTaskId?: string
   projectId?: string

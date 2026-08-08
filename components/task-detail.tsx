@@ -142,6 +142,23 @@ export function TaskDetail() {
             />
           </div>
 
+          {/* Author */}
+          {task.authorChatId && String(task.authorChatId) !== String(task.ownerChatId) && (
+            <div className="flex flex-col gap-1.5 col-span-2">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">АВТОР (ПОРУЧИЛ ЗАДАЧУ)</p>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border border-border">
+                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                  <span className="text-[9px] font-bold text-primary">
+                    {(state.friends.find(f => f.chatId === String(task.authorChatId))?.name || 'Вы')[0].toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-xs text-foreground font-medium">
+                  {state.friends.find(f => f.chatId === String(task.authorChatId))?.name || 'Вы'}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Due date */}
           <div className="flex flex-col gap-1.5">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ДАТА</p>
