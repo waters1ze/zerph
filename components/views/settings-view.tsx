@@ -79,6 +79,7 @@ export function SettingsView() {
 
   const [adminUsers, setAdminUsers] = useState<any[]>([])
   const [adminSearch, setAdminSearch] = useState('')
+  const [userBirthday, setUserBirthday] = useState('')
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
 
   useEffect(() => {
@@ -90,7 +91,25 @@ export function SettingsView() {
         })
         .catch(() => {})
     }
-  }, [isAdmin])
+    if (currentChatId) {
+      fetch(`/api/telegram/user?chatId=${currentChatId}`)
+        .then(r => r.json())
+        .then(d => { if (d.birthday) setUserBirthday(d.birthday) })
+        .catch(() => {})
+    }
+  }, [isAdmin, currentChatId])
+
+  const handleUserBirthdayChange = async (val: string) => {
+    setUserBirthday(val)
+    if (!currentChatId) return
+    try {
+      await fetch(`/api/telegram/user?chatId=${currentChatId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ birthday: val }),
+      })
+    } catch {}
+  }
 
   const handleAdminAction = async (targetId: string, action: string, days = 30) => {
     try {
@@ -435,6 +454,15 @@ export function SettingsView() {
             onChange={e => update({ name: e.target.value })}
             placeholder="Ваше имя"
             className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44"
+          />
+        </Row>
+
+        <Row label="🎂 Мой День рождения" description="Ваши друзья в Zerf AI автоматически увидят напоминание в своём календаре">
+          <input
+            type="date"
+            value={userBirthday}
+            onChange={e => handleUserBirthdayChange(e.target.value)}
+            className="h-8 px-2.5 rounded-lg bg-muted/50 border border-border text-[12px] text-foreground outline-none focus:border-primary/50 transition-colors w-40 cursor-pointer"
           />
         </Row>
 
