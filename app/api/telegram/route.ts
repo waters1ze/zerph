@@ -595,7 +595,8 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
         matchedFriend = f
         break
       }
-      if ((fn.length >= 3 && token.includes(fn)) || (ln.length >= 3 && token.includes(ln))) {
+      if ((fn.length >= 3 && (token.includes(fn) || token.startsWith(fn.slice(0, 3)) || fn.startsWith(token.slice(0, 3)))) ||
+          (ln.length >= 3 && (token.includes(ln) || token.startsWith(ln.slice(0, 3)) || ln.startsWith(token.slice(0, 3))))) {
         matchedFriend = f
         break
       }
