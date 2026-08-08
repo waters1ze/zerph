@@ -68,9 +68,24 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       })
     }
 
-    return allTasks.map(t => {
+    const seen = new Set<string>()
+    const uniqueTasks = allTasks.filter(t => {
+      const lower = (t.title || '').toLowerCase()
+      if (lower.includes('день рождения') || lower.includes('др')) {
+        const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
+        if (seen.has(normKey)) return false
+        seen.add(normKey)
+      }
+      return true
+    })
+
+    return uniqueTasks.map(t => {
       if (t.title && t.title.includes('День рождения')) {
-        return { ...t, dueTime: '00:00' }
+        return {
+          ...t,
+          title: t.title.startsWith('🎂') ? t.title : `🎂 ${t.title}`,
+          dueTime: '00:00',
+        }
       }
       return t
     })
@@ -940,7 +955,11 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
       const existing = await prisma.task.findFirst({
         where: {
           ownerChatId: cid,
-          title: taskTitle,
+          OR: [
+            { title: taskTitle },
+            { title: `День рождения: ${friendName}` },
+            { title: { contains: friendName, mode: 'insensitive' } },
+          ],
         },
       })
 
@@ -990,19 +1009,29 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
       }
     }
 
-    // Force all existing birthday tasks (manual + auto) in DB to 00:00, yearly repeat, and 🎂 prefix
+    // Force all existing birthday tasks (manual + auto) in DB to 00:00, yearly repeat, and 🎂 prefix + DEDUPLICATE
     try {
       const allBdayTasks = await prisma.task.findMany({
         where: {
+          ownerChatId: cid,
           OR: [
             { title: { contains: 'День рождения', mode: 'insensitive' } },
             { title: { contains: 'ДР', mode: 'insensitive' } },
             { tags: { has: 'день рождения' } },
           ],
         },
+        orderBy: { createdAt: 'desc' },
       })
 
+      const seen = new Set<string>()
       for (const t of allBdayTasks) {
+        const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
+        if (seen.has(normKey)) {
+          await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+          continue
+        }
+        seen.add(normKey)
+
         let newTitle = t.title.trim()
         if (!newTitle.startsWith('🎂')) {
           newTitle = `🎂 ${newTitle}`
