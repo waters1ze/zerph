@@ -68,7 +68,12 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       })
     }
 
-    return allTasks
+    return allTasks.map(t => {
+      if (t.title && t.title.includes('День рождения')) {
+        return { ...t, dueTime: '00:00' }
+      }
+      return t
+    })
   } catch (err) {
     console.error('getAllTasks error:', err)
     return []
@@ -909,6 +914,10 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
         let needsUpdate = false
         const updates: any = {}
         
+        if (existing.dueTime !== '00:00') {
+          updates.dueTime = '00:00'
+          needsUpdate = true
+        }
         if (existing.dueDate && existing.dueDate < targetDueDate) {
           updates.dueDate = targetDueDate
           updates.status = 'todo'
@@ -929,6 +938,20 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
         }
       }
     }
+
+    // Force all existing birthday tasks in DB to 00:00
+    try {
+      await prisma.task.updateMany({
+        where: {
+          OR: [
+            { title: { contains: 'День рождения' } },
+            { tags: { has: 'день рождения' } },
+          ],
+          dueTime: { not: '00:00' },
+        },
+        data: { dueTime: '00:00' },
+      })
+    } catch {}
 
     return createdCount
   } catch (err) {
