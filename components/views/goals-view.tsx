@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -116,6 +116,22 @@ function GoalCard({ goal, index }: { goal: Goal; index: number }) {
               Выполнено задач: {doneTasks.length}/{relatedTasks.length}
             </span>
           )}
+          <button
+            onClick={() => dispatch({
+              type: 'UPDATE_GOAL',
+              id: goal.id,
+              updates: { visibility: goal.visibility === 'public' ? 'private' : 'public' }
+            })}
+            className={cn(
+              "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-sans cursor-pointer transition-colors",
+              goal.visibility === 'public' 
+                ? "bg-primary/20 text-primary hover:bg-primary/30" 
+                : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+            title="Изменить видимость"
+          >
+            {goal.visibility === 'public' ? '👁 Видна всем' : '🔒 Приватная'}
+          </button>
         </div>
 
         {/* Expand toggle for Milestones */}
@@ -186,6 +202,7 @@ export function GoalsView() {
       createdAt: now,
       updatedAt: now,
       color: '#2d7a4f',
+      visibility: 'private',
     }
 
     dispatch({ type: 'ADD_GOAL', goal: newGoal })
@@ -202,7 +219,13 @@ export function GoalsView() {
           <p className="text-xs text-muted-foreground mt-0.5 font-sans">Отслеживайте прогресс ваших главных стремлений</p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => {
+            if (state.settings.userPlan === 'free' && state.goals.filter(g => g.status !== 'completed').length >= 1) {
+              alert('В бесплатной версии доступна максимум 1 активная долгосрочная цель. Пожалуйста, приобретите Premium через бота.')
+              return
+            }
+            setShowCreate(true)
+          }}
           className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-bold hover:opacity-90 transition-opacity font-sans"
         >
           <Plus className="w-3.5 h-3.5" />

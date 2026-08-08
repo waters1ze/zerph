@@ -93,17 +93,15 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
 
       {/* Actions */}
       <div className="flex items-center gap-1">
-        {/* New Task */}
-        {['today', 'inbox', 'tasks'].includes(state.currentView) && (
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={onNewTask}
-            className="flex items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Задача</span>
-          </motion.button>
-        )}
+        {/* New Task - Global */}
+        <motion.button
+          whileTap={{ scale: 0.94 }}
+          onClick={onNewTask}
+          className="flex items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity"
+        >
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">Задача</span>
+        </motion.button>
 
         {/* Voice */}
         <motion.button

@@ -142,6 +142,33 @@ export function TaskDetail() {
             />
           </div>
 
+          {/* Visibility */}
+          <div className="flex flex-col gap-1.5 col-span-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ВИДИМОСТЬ</p>
+            <div 
+              className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 border border-border cursor-pointer hover:bg-muted/60 transition-colors"
+              onClick={() => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { isShared: !task.isShared } })}
+            >
+              <div className="flex flex-col">
+                <span className="text-xs text-foreground font-medium">
+                  {task.isShared ? 'Видна всем' : 'Только мне'}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {task.isShared ? 'Доступна для просмотра вашей команде' : 'Приватная задача'}
+                </span>
+              </div>
+              <div className={cn(
+                "w-10 h-6 rounded-full p-1 flex items-center transition-colors duration-200 ease-in-out",
+                task.isShared ? "bg-primary" : "bg-muted-foreground/30"
+              )}>
+                <div className={cn(
+                  "w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ease-in-out",
+                  task.isShared ? "translate-x-4" : "translate-x-0"
+                )} />
+              </div>
+            </div>
+          </div>
+
           {/* Author */}
           {task.authorChatId && String(task.authorChatId) !== String(task.ownerChatId) && (
             <div className="flex flex-col gap-1.5 col-span-2">
@@ -169,17 +196,31 @@ export function TaskDetail() {
           </div>
 
           {/* Due Time */}
-          <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
-              ⏰ ВРЕМЯ НАПОМИНАНИЯ
-            </p>
-            <input
-              type="time"
-              value={task.dueTime ?? ''}
-              onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
-              className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-pointer"
-            />
-          </div>
+          {state.settings.userPlan === 'premium' ? (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
+                ⏰ ВРЕМЯ НАПОМИНАНИЯ
+              </p>
+              <input
+                type="time"
+                value={task.dueTime ?? ''}
+                onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
+                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-pointer"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5 opacity-60" onClick={() => alert('Точное время напоминания доступно только в Premium версии. Пожалуйста, приобретите Premium через бота.')}>
+              <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
+                ⏰ ВРЕМЯ (PREMIUM)
+              </p>
+              <input
+                type="time"
+                disabled
+                value={task.dueTime ?? ''}
+                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-not-allowed pointer-events-none"
+              />
+            </div>
+          )}
         </div>
 
         {/* Live Notification Countdown */}

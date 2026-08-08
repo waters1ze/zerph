@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
         chatId: Number(chat.chatId),
         name: chat.firstName || 'Telegram Пользователь',
         birthday: chat.birthday || null,
+        plan: chat.plan || 'free',
       })
     }
 

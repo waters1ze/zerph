@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   integrations: { telegram: false, aiApiKey: '', aiModel: 'llama-3.3-70b-versatile', groqApiKey: '', telegramBotToken: '' },
   weekStartsOn: 1,
   focusModeEnabled: false,
+  userPlan: 'free',
 }
 
 // ─── State & Actions ──────────────────────────────────────────────────────────
@@ -377,6 +378,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             type: 'UPDATE_SETTINGS',
             updates: {
               name: user.name,
+              userPlan: user.plan || 'free',
             },
           })
         }

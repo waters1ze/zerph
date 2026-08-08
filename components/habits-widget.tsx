@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Check, MoreVertical, Flame } from 'lucide-react'
+import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Habit } from '@/lib/types'
@@ -12,6 +13,7 @@ export function HabitsWidget() {
   const [isAdding, setIsAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newIcon, setNewIcon] = useState('💧')
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   const todayStr = new Date().toISOString().slice(0, 10)
 
@@ -108,7 +110,13 @@ export function HabitsWidget() {
           Привычки
         </h3>
         <button
-          onClick={() => setIsAdding(!isAdding)}
+          onClick={() => {
+            if (state.settings.userPlan === 'free' && state.habits.length >= 3) {
+              alert('В бесплатной версии доступно максимум 3 привычки. Пожалуйста, приобретите Premium через бота.')
+              return
+            }
+            setIsAdding(!isAdding)
+          }}
           className="w-6 h-6 flex items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -122,25 +130,48 @@ export function HabitsWidget() {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleAdd}
-            className="flex gap-2 mb-2 overflow-hidden"
+            className="flex flex-col gap-2 mb-2"
           >
-            <input
-              value={newIcon}
-              onChange={e => setNewIcon(e.target.value)}
-              className="w-10 h-10 rounded-xl bg-card border border-border text-center text-lg outline-none focus:border-primary shrink-0"
-              placeholder="💧"
-              maxLength={2}
-            />
-            <input
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              placeholder="Название привычки..."
-              className="flex-1 h-10 px-3 rounded-xl bg-card border border-border text-[13px] outline-none focus:border-primary"
-              autoFocus
-            />
-            <button type="submit" className="h-10 px-4 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium">
-              Добавить
-            </button>
+            <div className="flex gap-2 relative">
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(p => !p)}
+                className="w-10 h-10 rounded-xl bg-card border border-border flex items-center justify-center text-lg hover:border-primary transition-colors shrink-0"
+              >
+                {newIcon}
+              </button>
+              
+              <AnimatePresence>
+                {showEmojiPicker && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="absolute top-12 left-0 z-50 shadow-2xl"
+                  >
+                    <EmojiPicker
+                      theme={state.settings.theme === 'dark' ? Theme.DARK : Theme.LIGHT}
+                      onEmojiClick={(emojiData: EmojiClickData) => {
+                        setNewIcon(emojiData.emoji)
+                        setShowEmojiPicker(false)
+                      }}
+                      lazyLoadEmojis={true}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <input
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                placeholder="Название привычки..."
+                className="flex-1 h-10 px-3 rounded-xl bg-card border border-border text-[13px] outline-none focus:border-primary"
+                autoFocus
+              />
+              <button type="submit" className="h-10 px-4 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium">
+                Добавить
+              </button>
+            </div>
           </motion.form>
         )}
       </AnimatePresence>
