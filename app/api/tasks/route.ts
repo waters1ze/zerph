@@ -12,6 +12,7 @@ import {
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
   createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage, syncFriendBirthdays,
+  touchUserLastActive,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { verifyUserAuth } from '@/lib/backend/auth'
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
     const ownerChatId = getOwnerChatId(req)
     if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     
+    await touchUserLastActive(ownerChatId)
     await syncFriendBirthdays(ownerChatId)
     const [tasks, goals, notes, friends] = await Promise.all([
       getAllTasks(ownerChatId),
