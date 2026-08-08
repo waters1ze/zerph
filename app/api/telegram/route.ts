@@ -15,7 +15,7 @@ import {
   getAllTasks, getAllGoals, getAllNotes,
   registerChatId, getExistingItemsContext,
   getUserUsageAndLimits, incrementUserUsage,
-  autoAddFriends, checkGroupOrUserHasPremium,
+  autoAddFriends, checkGroupOrUserHasPremium, getFriends,
 } from '@/lib/backend/db'
 import { getUserAuthToken } from '@/lib/backend/auth'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
@@ -537,6 +537,104 @@ async function handleWeeklyReport(chatId: number, senderId: number) {
   }
 }
 
+const NAME_ALIASES: Record<string, string[]> = {
+  владимир: ['вова', 'володя', 'вовчик', 'влад'],
+  дмитрий: ['дима', 'димка', 'димон'],
+  александр: ['саша', 'шура', 'саня', 'алекс'],
+  алексей: ['лёша', 'леша', 'алёша', 'леха', 'лёха'],
+  евгений: ['женя', 'жека'],
+  иван: ['ваня', 'ватек'],
+  сергей: ['серёжа', 'сережа', 'серый'],
+  павел: ['паша', 'пашок'],
+  михаил: ['миша', 'мишаня'],
+  николай: ['коля', 'колян'],
+  андрей: ['ндрюша', 'андрюха'],
+  максим: ['макс'],
+  артем: ['артём', 'тёма', 'тема'],
+  валерия: ['лера'],
+  анастасия: ['настя'],
+  ольга: ['оля'],
+  екатерина: ['катя'],
+  мария: ['маша'],
+  дарья: ['даша'],
+  татьяна: ['таня'],
+  анна: ['аня'],
+  юлия: ['юля'],
+}
+
+async function findFriendByName(userChatId: number | bigint, recipientName: string) {
+  const cid = BigInt(userChatId)
+  const friendships = await prisma.friendship.findMany({
+    where: { OR: [{ userChatId: cid }, { friendChatId: cid }] }
+  })
+  const friendIds = friendships.map((f: any) => f.userChatId === cid ? f.friendChatId : f.userChatId)
+  if (friendIds.length === 0) return { friend: null, friendship: null }
+
+  const friendChats = await prisma.telegramChat.findMany({
+    where: { chatId: { in: friendIds } }
+  })
+
+  const rawQuery = recipientName.toLowerCase().trim().replace('@', '')
+  const queryTokens = rawQuery.split(/\s+/).filter(Boolean)
+
+  let matchedFriend: any = null
+
+  for (const f of friendChats) {
+    const fn = (f.firstName || '').toLowerCase()
+    const ln = (f.lastName || '').toLowerCase()
+    const un = (f.username || '').toLowerCase()
+    const fullName = `${fn} ${ln}`.trim()
+
+    if (fullName.includes(rawQuery) || fn.includes(rawQuery) || ln.includes(rawQuery) || (un && un.includes(rawQuery))) {
+      matchedFriend = f
+      break
+    }
+
+    for (const token of queryTokens) {
+      if (fn.includes(token) || ln.includes(token) || (un && un.includes(token))) {
+        matchedFriend = f
+        break
+      }
+
+      for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
+        if (aliases.includes(token) && (fn.includes(canonical) || fullName.includes(canonical))) {
+          matchedFriend = f
+          break
+        }
+        if (canonical === token && aliases.some(a => fn.includes(a) || fullName.includes(a))) {
+          matchedFriend = f
+          break
+        }
+      }
+      if (matchedFriend) break
+    }
+    if (matchedFriend) break
+  }
+
+  if (!matchedFriend && friendChats.length > 0) {
+    for (const f of friendChats) {
+      const fn = (f.firstName || '').toLowerCase()
+      const ln = (f.lastName || '').toLowerCase()
+      for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
+        if (aliases.some(a => rawQuery.includes(a)) && (fn.includes(canonical) || ln.includes(canonical))) {
+          matchedFriend = f
+          break
+        }
+      }
+      if (matchedFriend) break
+    }
+  }
+
+  if (!matchedFriend) return { friend: null, friendship: null }
+
+  const friendship = friendships.find((f: any) =>
+    (f.userChatId === matchedFriend.chatId && f.friendChatId === cid) ||
+    (f.friendChatId === matchedFriend.chatId && f.userChatId === cid)
+  )
+
+  return { friend: matchedFriend, friendship }
+}
+
 async function processText(chatId: number, text: string) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
@@ -566,7 +664,9 @@ async function processText(chatId: number, text: string) {
   try {
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
     const context = await getExistingItemsContext(chatId)
-    const items = await parseIntentWithGroq(text, key, undefined, context)
+    const friends = await getFriends(chatId)
+    const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
+    const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext)
 
     await saveAndRespondParsedItems(chatId, items)
   } catch (err: unknown) {
@@ -588,24 +688,20 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       return
     }
 
+    // Fallback detection if delegation keywords are used in prompt text
+    if (item.type !== 'delegate' && item.rawText) {
+      const lower = item.rawText.toLowerCase()
+      const match = lower.match(/(?:дай задачу|поручи|отправь задачу|передай задачу|создай задачу для|назначь)\s+([а-яА-Яa-zA-Z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+через)/i)
+      if (match && match[1]) {
+        item.type = 'delegate'
+        item.recipientName = match[1].trim()
+      }
+    }
+
     if (item.type === 'delegate' && item.recipientName) {
-      const friendships = await prisma.friendship.findMany({ 
-        where: { OR: [{ userChatId: BigInt(chatId) }, { friendChatId: BigInt(chatId) }] } 
-      })
-      const friendIds = friendships.map((f: any) => f.userChatId === BigInt(chatId) ? f.friendChatId : f.userChatId)
-      
-      const friend = await prisma.telegramChat.findFirst({
-        where: { 
-          chatId: { in: friendIds }, 
-          firstName: { contains: item.recipientName, mode: 'insensitive' } 
-        }
-      })
+      const { friend, friendship } = await findFriendByName(chatId, item.recipientName)
 
       if (friend) {
-        const friendship = friendships.find((f: any) => 
-          (f.userChatId === friend.chatId && f.friendChatId === BigInt(chatId)) ||
-          (f.friendChatId === friend.chatId && f.userChatId === BigInt(chatId))
-        )
         if (friendship && (friendship as any).allowTasks === false) {
           msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение поручений.\n\n`
           continue
@@ -626,10 +722,11 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             isShared: true,
           } as any
         })
+
         const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
         const senderName = sender?.firstName || 'Пользователь'
         
-        await send(Number(friend.chatId), `🤝 *${senderName}* поручил(а) тебе задачу:\n\n*${item.title}*`, {
+        await send(Number(friend.chatId), `🤝 *${senderName}* поручил(а) тебе задачу:\n\n*${item.title}*${item.dueTime ? `\n⏰ Время: ${item.dueTime}` : ''}`, {
           reply_markup: {
             inline_keyboard: [
               [
@@ -639,9 +736,9 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             ]
           }
         })
-        msg += `Задача '${item.title}' отправлена ${friend.firstName || item.recipientName}\n\n`
+        msg += `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!\n\n`
       } else {
-        msg += `Друг '${item.recipientName}' не найден. Добавь её через /invite @username\n\n`
+        msg += `⚠️ Команда не отправлена: друг '${escMd(item.recipientName)}' не найден в контактах. Добавь её через /invite @username\n\n`
       }
       continue
     }
