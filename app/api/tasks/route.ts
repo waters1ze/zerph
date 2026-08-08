@@ -7,12 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getAllTasks, getAllGoals, getAllNotes, getFriends,
+  getAllTasks, getAllGoals, getAllNotes, getFriends, getAllHabits,
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
   createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage, syncFriendBirthdays,
-  touchUserLastActive,
+  touchUserLastActive, createHabit, updateHabit, deleteHabit,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { verifyUserAuth } from '@/lib/backend/auth'
@@ -52,13 +52,14 @@ export async function GET(req: NextRequest) {
     
     await touchUserLastActive(ownerChatId)
     await syncFriendBirthdays(ownerChatId)
-    const [tasks, goals, notes, friends] = await Promise.all([
+    const [tasks, goals, notes, friends, habits] = await Promise.all([
       getAllTasks(ownerChatId),
       getAllGoals(ownerChatId),
       getAllNotes(ownerChatId),
       getFriends(ownerChatId),
+      getAllHabits(ownerChatId),
     ])
-    return NextResponse.json(serialize({ tasks, goals, notes, friends }))
+    return NextResponse.json(serialize({ tasks, goals, notes, friends, habits }))
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -114,6 +115,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(serialize({ success: true, note }))
     }
 
+    if (body.itemType === 'habit' || body.type === 'habit') {
+      const habit = await createHabit({
+        title: body.title || 'Новая привычка',
+        icon: body.icon,
+        frequency: body.frequency || 'daily',
+        ownerChatId: ownerChatId,
+      })
+      return NextResponse.json(serialize({ success: true, habit }))
+    }
+
     const task = await createTask({
       title: body.title || 'Untitled Task',
       description: body.description,
@@ -150,6 +161,13 @@ export async function PATCH(req: NextRequest) {
       const { id, itemType, type, ...updates } = body
       const note = await updateNote(id, updates)
       return NextResponse.json(serialize({ success: true, note }))
+    }
+
+    // Update habit by ID
+    if (body.id && (body.itemType === 'habit' || body.type === 'habit')) {
+      const { id, itemType, type, ...updates } = body
+      const habit = await updateHabit(id, updates)
+      return NextResponse.json(serialize({ success: true, habit }))
     }
 
     // Fuzzy completion by title
@@ -192,6 +210,7 @@ export async function DELETE(req: NextRequest) {
 
     if (type === 'note') await deleteNote(id)
     else if (type === 'goal') await deleteGoal(id)
+    else if (type === 'habit') await deleteHabit(id)
     else await deleteTask(id)
 
     return NextResponse.json({ success: true })

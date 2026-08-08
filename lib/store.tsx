@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
 import type {
   Task, Goal, Project, Note, Friend, ChatMessage,
-  UserSettings, View, Priority, TaskStatus, GoalStatus,
+  UserSettings, View, Priority, TaskStatus, GoalStatus, Habit
 } from './types'
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ const SEED_GOALS: Goal[] = []
 const SEED_PROJECTS: Project[] = []
 const SEED_NOTES: Note[] = []
 const SEED_FRIENDS: Friend[] = []
+const SEED_HABITS: Habit[] = []
 
 const SEED_CHAT: ChatMessage[] = [
   {
@@ -42,6 +43,7 @@ interface AppState {
   projects: Project[]
   notes: Note[]
   friends: Friend[]
+  habits: Habit[]
   chat: ChatMessage[]
   settings: UserSettings
   currentView: View
@@ -74,6 +76,9 @@ type Action =
   | { type: 'DELETE_GOAL'; id: string }
   | { type: 'ADD_PROJECT'; project: Project }
   | { type: 'UPDATE_PROJECT'; id: string; updates: Partial<Project> }
+  | { type: 'ADD_HABIT'; habit: Habit }
+  | { type: 'UPDATE_HABIT'; id: string; updates: Partial<Habit> }
+  | { type: 'DELETE_HABIT'; id: string }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
   | { type: 'UPDATE_SETTINGS'; updates: Partial<UserSettings> }
   | { type: 'ADD_FRIEND'; friend: Friend }
@@ -142,6 +147,12 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, projects: [action.project, ...state.projects] }
     case 'UPDATE_PROJECT':
       return { ...state, projects: state.projects.map(p => p.id === action.id ? { ...p, ...action.updates, updatedAt: new Date().toISOString() } : p) }
+    case 'ADD_HABIT':
+      return { ...state, habits: [action.habit, ...state.habits] }
+    case 'UPDATE_HABIT':
+      return { ...state, habits: state.habits.map(h => h.id === action.id ? { ...h, ...action.updates, updatedAt: new Date().toISOString() } : h) }
+    case 'DELETE_HABIT':
+      return { ...state, habits: state.habits.filter(h => h.id !== action.id) }
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chat: [...state.chat, action.message] }
     case 'UPDATE_SETTINGS': {
@@ -165,6 +176,7 @@ const INITIAL_STATE: AppState = {
   projects: SEED_PROJECTS,
   notes: SEED_NOTES,
   friends: SEED_FRIENDS,
+  habits: SEED_HABITS,
   chat: SEED_CHAT,
   settings: DEFAULT_SETTINGS,
   currentView: 'today',
@@ -340,7 +352,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetch('/api/tasks', { headers })
       .then(r => r.json())
       .then(data => {
-        if (data.tasks || data.goals || data.notes || data.friends) {
+        if (data.tasks || data.goals || data.notes || data.friends || data.habits) {
           dispatch({
             type: 'LOAD_STATE',
             state: {
@@ -348,6 +360,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               goals: data.goals || [],
               notes: data.notes || [],
               friends: data.friends || [],
+              habits: data.habits || [],
             },
           })
         }
@@ -374,11 +387,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetch(`/api/birthdays?chatId=${chatId}`, { headers }).catch(() => {})
     }
 
-    // Auto-check Telegram reminders every 15 seconds
+    // Check Telegram reminders
     const interval = setInterval(() => {
       fetch('/api/reminders/check').catch(() => {})
     }, 15000)
     fetch('/api/reminders/check').catch(() => {})
+
+    // Hydrate currentView safely on client mount
+    try {
+      const savedView = localStorage.getItem('zerf_current_view') as View | null
+      if (savedView && savedView !== state.currentView) {
+        dispatch({ type: 'SET_VIEW', view: savedView })
+      }
+    } catch {}
 
     return () => clearInterval(interval)
   }, [])

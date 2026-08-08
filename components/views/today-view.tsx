@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
+import { HabitsWidget } from '@/components/habits-widget'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles } from 'lucide-react'
 import { parseISO, isToday } from 'date-fns'
@@ -116,6 +117,9 @@ export function TodayView() {
           </div>
         </motion.div>
       )}
+
+      {/* Habits Widget */}
+      <HabitsWidget />
 
       {/* Active goals quick view */}
       {state.goals.length > 0 && (

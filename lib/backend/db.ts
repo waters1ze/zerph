@@ -256,6 +256,56 @@ export async function deleteTask(id: string) {
   }
 }
 
+// ── Habits ────────────────────────────────────────────────────────────────────
+
+export async function getAllHabits(ownerChatId?: number | bigint | string | null) {
+  try {
+    if (!ownerChatId) return []
+    const cid = BigInt(ownerChatId)
+    return await prisma.habit.findMany({
+      where: { ownerChatId: cid },
+      orderBy: { createdAt: 'desc' },
+    })
+  } catch (err) {
+    console.error('getAllHabits error:', err)
+    return []
+  }
+}
+
+export async function createHabit(data: {
+  title: string
+  icon?: string
+  frequency?: string
+  ownerChatId?: number | bigint | string | null
+}) {
+  return prisma.habit.create({
+    data: {
+      title: data.title,
+      icon: data.icon,
+      frequency: data.frequency || 'daily',
+      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
+    },
+  })
+}
+
+export async function updateHabit(id: string, data: Partial<{
+  title: string
+  icon: string
+  streak: number
+  lastCompletedAt: string | null
+  frequency: string
+}>) {
+  return prisma.habit.update({ where: { id }, data })
+}
+
+export async function deleteHabit(id: string) {
+  try {
+    return await prisma.habit.delete({ where: { id } })
+  } catch {
+    return { count: 0 }
+  }
+}
+
 /**
  * Find the best matching non-done task by title similarity
  */

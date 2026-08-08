@@ -163,3 +163,15 @@ export interface UserSettings {
 }
 
 export type StatPeriod = '7d' | '30d' | '90d' | '1y'
+
+export interface Habit {
+  id: string
+  title: string
+  icon?: string
+  streak: number
+  lastCompletedAt?: string
+  frequency: string
+  ownerChatId?: string
+  createdAt: string
+  updatedAt: string
+}
