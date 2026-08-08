@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
         users: users.map(u => ({
           ...u,
           chatId: u.chatId.toString(),
+          username: u.username ? `@${u.username.replace(/^@/, '')}` : null,
           subscriptionExpiry: u.subscriptionExpiry?.toISOString() ?? null,
         }))
       })
