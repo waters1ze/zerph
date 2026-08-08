@@ -896,7 +896,7 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
             priority: 'urgent',
             status: 'todo',
             dueDate: targetDueDate,
-            dueTime: '09:00',
+            dueTime: '00:00',
             repeat: 'yearly',
             tags: ['день рождения', 'друзья'],
             isShared: true,

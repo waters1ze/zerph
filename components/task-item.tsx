@@ -27,7 +27,10 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
       : format(parseISO(task.dueDate), 'MMM d')
     : null
 
+  const isTaskDueToday = !task.dueDate || isToday(parseISO(task.dueDate))
+
   let countdownLabel: string | null = null
+  let timeUntilText: string | null = null
   let minutesLeft = 0
   let isPassed = false
   if (task.dueTime && !isDone) {
@@ -44,16 +47,26 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
     minutesLeft = Math.round(diffMs / 60000)
 
     if (minutesLeft > 0) {
-      if (minutesLeft > 120) {
+      if (minutesLeft < 60) {
+        timeUntilText = `${minutesLeft} мин`
+      } else if (minutesLeft < 1440) {
         const hours = Math.floor(minutesLeft / 60)
         const mins = minutesLeft % 60
-        countdownLabel = `⏳ Осталось: ${hours} ч ${mins} мин`
+        timeUntilText = `${hours} ч ${mins} мин`
       } else {
-        countdownLabel = `⏳ Осталось: ${minutesLeft} мин`
+        const days = Math.floor(minutesLeft / 1440)
+        const remMins = minutesLeft % 1440
+        const hours = Math.floor(remMins / 60)
+        const mins = remMins % 60
+        timeUntilText = `${days} д ${hours} ч ${mins} мин`
+      }
+
+      if (isTaskDueToday || minutesLeft <= 1440) {
+        countdownLabel = `⌛ Осталось: ${timeUntilText}`
       }
     } else if (minutesLeft >= -5 && minutesLeft <= 0) {
       countdownLabel = `🔔 Напоминание прямо сейчас!`
-    } else {
+    } else if (isTaskDueToday) {
       isPassed = true
       countdownLabel = `⚠️ Истекло (${Math.abs(minutesLeft)} мин назад)`
     }
@@ -133,7 +146,7 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
                   : "bg-amber-500/10 border-amber-500/20 text-amber-400"
               )}>
                 <Clock className="w-3 h-3" />
-                {task.dueTime} ({countdownLabel})
+                {task.dueTime} {countdownLabel ? `(${countdownLabel})` : ''}
               </span>
             )}
 
@@ -160,19 +173,19 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
           </div>
         )}
 
-        {/* Reminder Countdown Bar */}
-        {!compact && task.dueTime && !isDone && minutesLeft > 0 && (
+        {/* Reminder Countdown Bar - Only for today's tasks within 24h */}
+        {!compact && task.dueTime && !isDone && isTaskDueToday && minutesLeft > 0 && minutesLeft <= 1440 && (
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
               <motion.div
                 className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400"
                 initial={{ width: 0 }}
-                animate={{ width: `${Math.max(5, Math.min(100, (1 - minutesLeft / 720) * 100))}%` }}
+                animate={{ width: `${Math.max(5, Math.min(100, (1 - minutesLeft / 1440) * 100))}%` }}
                 transition={{ duration: 0.6, delay: index * 0.04 }}
               />
             </div>
             <span className="text-[10px] font-mono font-medium text-amber-400 shrink-0">
-              {minutesLeft} мин
+              {timeUntilText}
             </span>
           </div>
         )}
