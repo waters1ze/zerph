@@ -83,6 +83,9 @@ type Action =
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_VIEW':
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('zerf_current_view', action.view) } catch {}
+      }
       return { ...state, currentView: action.view, selectedTaskId: null, isDetailOpen: false }
     case 'SELECT_TASK':
       return { ...state, selectedTaskId: action.id, isDetailOpen: action.id !== null }
@@ -230,13 +233,24 @@ export function getAuthHeaders(): Record<string, string> {
 
 function initAppState(initialState: AppState): AppState {
   if (typeof window === 'undefined') return initialState
+  let savedSettings = {}
+  let savedView: View | null = null
+
   try {
     const saved = localStorage.getItem('zerf-settings')
-    if (saved) {
-      return { ...initialState, settings: { ...initialState.settings, ...JSON.parse(saved) } }
-    }
+    if (saved) savedSettings = JSON.parse(saved)
   } catch {}
-  return initialState
+
+  try {
+    const viewStr = localStorage.getItem('zerf_current_view') as View | null
+    if (viewStr) savedView = viewStr
+  } catch {}
+
+  return {
+    ...initialState,
+    settings: { ...initialState.settings, ...savedSettings },
+    ...(savedView ? { currentView: savedView } : {})
+  }
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
