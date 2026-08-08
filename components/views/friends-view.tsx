@@ -23,6 +23,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
   const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
   const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.name || '').toLowerCase().includes('zerph')
   const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? (isBot ? true : false))
+  const [birthday, setBirthday] = useState(friend.birthday || '')
   const [updating, setUpdating] = useState(false)
 
   const toggleAllowTasks = async () => {
@@ -37,6 +38,17 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
       })
     } catch {}
     finally { setUpdating(false) }
+  }
+
+  const handleBirthdayChange = async (val: string) => {
+    setBirthday(val)
+    try {
+      await fetch('/api/friends', {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friendId: friend.id, birthday: val }),
+      })
+    } catch {}
   }
 
   return (
@@ -91,6 +103,19 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
                 allowTasks ? 'translate-x-3.5' : 'translate-x-0'
               )} />
             </button>
+          </div>
+
+          {/* Birthday Date Input */}
+          <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/40">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+              🎂 День рождения
+            </span>
+            <input
+              type="date"
+              value={birthday}
+              onChange={e => handleBirthdayChange(e.target.value)}
+              className="px-2 py-1 rounded-lg bg-muted/50 border border-border text-[11px] text-foreground outline-none focus:border-primary cursor-pointer"
+            />
           </div>
 
           {/* Status & shared tasks */}

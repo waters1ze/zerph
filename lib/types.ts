@@ -119,6 +119,7 @@ export interface Friend {
   status: 'online' | 'offline' | 'away'
   addedAt: string
   allowTasks?: boolean
+  birthday?: string | null
 }
 
 export interface SharedTask extends Task {
