@@ -1087,8 +1087,8 @@ async function handleGroupAddCommand(msg: any) {
   // Send status message — user sees this immediately
   const statusRes = await send(
     groupChatId,
-    '✅ Групповая задача успешно создана!',
-    { reply_to_message_id: msg.message_id, reply_markup: miniAppKeyboard(senderId) }
+    '⏳ Обрабатываю групповую задачу...',
+    { reply_to_message_id: msg.message_id }
   )
   const statusMsgId: number | undefined = statusRes?.result?.message_id
 
@@ -1096,9 +1096,7 @@ async function handleGroupAddCommand(msg: any) {
   try {
       const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
       if (!key) {
-        // Silently fail if no key, no need to edit message since we promised success.
-        // The task just won't appear, or we could send a DM. 
-        await send(senderId, 'Groq API key не настроен.').catch(() => {})
+        await safeEditOrSend(groupChatId, statusMsgId, '❌ Groq API key не настроен.')
         return
       }
 
@@ -1136,13 +1134,13 @@ async function handleGroupAddCommand(msg: any) {
             await incrementUserUsage(senderId, 'voice', duration)
           }
         } catch (err) {
-          await send(senderId, `❌ Ошибка в группе: Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`).catch(() => {})
+          await safeEditOrSend(groupChatId, statusMsgId, `❌ Ошибка в группе: Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
           return
         }
       }
 
       if (!targetText.trim()) {
-        await send(senderId, '❌ Ошибка в группе: В выбранном сообщении нет текста или речи для создания задачи.').catch(() => {})
+        await safeEditOrSend(groupChatId, statusMsgId, '❌ Ошибка в группе: В выбранном сообщении нет текста или речи для создания задачи.')
         return
       }
 
@@ -1167,14 +1165,22 @@ async function handleGroupAddCommand(msg: any) {
       }
 
       // 5. Save task ONCE for creator (senderId) with all assignees — NO DUPLICATES!
+      let groupMsg = '✅ *Групповая задача создана:*\n\n'
       for (const item of items) {
         item.isShared = true
         item.assignees = allAssignees
         item.type = 'task' // Force task type in group processing (never note!)
-        try { await saveParsedItemToDb(item, senderId) } catch {}
+        try { 
+          await saveParsedItemToDb(item, senderId) 
+          const prefix = item.priority === 'urgent' ? '🔴 ' : item.priority === 'high' ? '🟠 ' : item.priority === 'low' ? '🟢 ' : '🟡 '
+          groupMsg += `${prefix}*${escMd(item.title)}*\n`
+          if (item.dueDate) groupMsg += `📅 Дедлайн: ${item.dueDate}${item.dueTime ? ` ${item.dueTime}` : ''}\n`
+          if (item.summary && item.summary !== item.title) groupMsg += `📝 ${escMd(item.summary)}\n`
+          groupMsg += `👥 Участников: ${allAssignees.length}\n`
+        } catch {}
       }
 
-      // Success: No need to edit the status message since we already sent 'Успешно добавлено!'
+      await safeEditOrSend(groupChatId, statusMsgId, groupMsg, { reply_markup: miniAppKeyboard(senderId) })
     } catch (err: any) {
       console.error('Error in group add processing:', err)
       await send(senderId, `❌ Ошибка при обработке вашей задачи в группе: ${String(err?.message || err).slice(0, 150)}`).catch(() => {})
