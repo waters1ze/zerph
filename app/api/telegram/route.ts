@@ -595,6 +595,10 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
         matchedFriend = f
         break
       }
+      if ((fn.length >= 3 && token.includes(fn)) || (ln.length >= 3 && token.includes(ln))) {
+        matchedFriend = f
+        break
+      }
 
       for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
         if (aliases.includes(token) && (fn.includes(canonical) || fullName.includes(canonical))) {
@@ -688,8 +692,8 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       return
     }
 
-    // Fallback detection if delegation keywords are used in prompt text
-    if (item.type !== 'delegate' && item.rawText) {
+    // Fallback detection if delegation keywords are used in prompt text or if LLM missed recipientName
+    if ((item.type !== 'delegate' || !item.recipientName) && item.rawText) {
       const lower = item.rawText.toLowerCase()
       const match = lower.match(/(?:дай задачу|поручи|отправь задачу|передай задачу|создай задачу для|назначь)\s+([а-яА-Яa-zA-Z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+через)/i)
       if (match && match[1]) {
@@ -973,6 +977,7 @@ async function handleStart(chatId: number, firstName: string) {
     `2️⃣ *Умное редактирование* ✏️ — "измени время цели на 12:00".\n` +
     `3️⃣ *Авто-уведомления* ⏰ — настрой интервалы через /settings.\n` +
     `4️⃣ *Единый профиль* 🌐 — данные видны и в боте, и на веб-сайте!\n\n` +
+    `⚠️ *Важно для работы в команде:* Пожалуйста, перейдите в профиль на сайте (или отправьте боту сообщение "Меня зовут Имя Фамилия"), чтобы друзья легко находили вас при поручении задач!\n\n` +
     `Жми кнопки ниже, чтобы открыть Mini App или перейти на полный сайт:`,
     { reply_markup: miniAppKeyboard(chatId) }
   )
@@ -1469,7 +1474,19 @@ export async function POST(req: NextRequest) {
       if (voice) {
         await processVoice(chatId, voice.file_id, voice.duration || 15)
       } else if (text.trim()) {
-        await processText(chatId, text)
+        const lowerText = text.trim().toLowerCase()
+        if (lowerText.startsWith('меня зовут ')) {
+          const newName = text.trim().slice(11).trim()
+          const [fn, ...lnArr] = newName.split(' ')
+          const ln = lnArr.join(' ') || null
+          await prisma.telegramChat.update({
+            where: { chatId: BigInt(chatId) },
+            data: { firstName: fn, lastName: ln }
+          })
+          await send(chatId, `✅ Отлично! Теперь я знаю вас как *${newName}*. Это имя будет использоваться при работе в команде!`)
+        } else {
+          await processText(chatId, text)
+        }
       }
     // In groups: respond to @mention or reply to bot message
     } else if (isGroup) {
