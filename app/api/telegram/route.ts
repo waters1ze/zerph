@@ -1251,29 +1251,35 @@ export async function POST(req: NextRequest) {
       } else if (data.startsWith('friend_accept_')) {
         const inviterId = BigInt(data.replace('friend_accept_', ''))
         await autoAddFriends(Number(inviterId), chatId)
-        await send(chatId, `🎉 *Приглашение принято!* Теперь вы друзья в Zerf AI.`)
-        await send(Number(inviterId), `🎉 Пользователь принял ваше приглашение! Теперь вы друзья в Zerf AI.`)
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: '✅ Успешно принято!' })
+        await safeEditOrSend(chatId, cb.message.message_id, `✅ *Приглашение успешно принято!* Теперь вы друзья и в одной команде Zerf AI.`)
+        await send(Number(inviterId), `🎉 *Пользователь принял ваше приглашение!* Теперь вы друзья в Zerf AI.`)
       } else if (data.startsWith('friend_decline_')) {
         const inviterId = BigInt(data.replace('friend_decline_', ''))
         await prisma.friendship.deleteMany({
           where: { userChatId: inviterId, friendChatId: BigInt(chatId) }
         })
-        await send(chatId, `❌ *Приглашение отклонено.*`)
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отклонено' })
+        await safeEditOrSend(chatId, cb.message.message_id, `❌ *Приглашение отклонено.*`)
       } else if (data.startsWith('delegate_accept_')) {
         const taskId = data.replace('delegate_accept_', '')
         const task = await prisma.task.update({ where: { id: taskId }, data: { status: 'inprogress' } })
-        await safeEditOrSend(chatId, cb.message.message_id, `✅ Вы приняли задачу: ${task.title}`)
-        if (task.assignees.length > 0) {
-          await send(Number(task.assignees[0]), `✅ ${cb.from.first_name || 'Пользователь'} принял(а) задачу '${task.title}'`)
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: '✅ Успешно!' })
+        await safeEditOrSend(chatId, cb.message.message_id, `✅ *Успешно! Задача принята:* ${task.title}`)
+        const authorId = task.authorChatId ? Number(task.authorChatId) : task.assignees.length > 0 ? Number(task.assignees[0]) : null
+        if (authorId) {
+          await send(authorId, `✅ *${cb.from.first_name || 'Пользователь'}* принял(а) порученную задачу *«${task.title}»*!`)
         }
       } else if (data.startsWith('delegate_decline_')) {
         const taskId = data.replace('delegate_decline_', '')
         const task = await prisma.task.findUnique({ where: { id: taskId } })
         if (task) {
           await prisma.task.delete({ where: { id: taskId } })
-          await safeEditOrSend(chatId, cb.message.message_id, `❌ Вы отклонили задачу: ${task.title}`)
-          if (task.assignees.length > 0) {
-            await send(Number(task.assignees[0]), `❌ ${cb.from.first_name || 'Пользователь'} отклонил(а) задачу '${task.title}'`)
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отклонено' })
+          await safeEditOrSend(chatId, cb.message.message_id, `❌ *Вы отклонили задачу:* ${task.title}`)
+          const authorId = task.authorChatId ? Number(task.authorChatId) : task.assignees.length > 0 ? Number(task.assignees[0]) : null
+          if (authorId) {
+            await send(authorId, `❌ *${cb.from.first_name || 'Пользователь'}* отклонил(а) порученную задачу *«${task.title}»*`)
           }
         }
       } else if (data.startsWith('alarm_android_')) {
