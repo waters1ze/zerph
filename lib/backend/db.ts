@@ -847,6 +847,9 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               notesCountToday: 0,
               chatMessagesToday: 0,
               lastResetDate: null,
+              lastActiveAt: new Date(),
+              referredBy: null,
+              referralCount: 0,
               addedAt: new Date(),
             }
           }
