@@ -1180,10 +1180,10 @@ async function handleGroupAddCommand(msg: any) {
         } catch {}
       }
 
-      await safeEditOrSend(groupChatId, statusMsgId, groupMsg, { reply_markup: miniAppKeyboard(senderId) })
+      await safeEditOrSend(groupChatId, statusMsgId, groupMsg)
     } catch (err: any) {
       console.error('Error in group add processing:', err)
-      await send(senderId, `❌ Ошибка при обработке вашей задачи в группе: ${String(err?.message || err).slice(0, 150)}`).catch(() => {})
+      await safeEditOrSend(groupChatId, statusMsgId, `❌ Ошибка при обработке вашей задачи: ${String(err?.message || err).slice(0, 150)}`)
     }
 }
 
