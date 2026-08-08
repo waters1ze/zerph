@@ -114,6 +114,8 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   const monthName = RU_MONTHS[date.getMonth()]
   const year = date.getFullYear()
 
+  const realTodayYMD = toYMD(new Date())
+
   const dayTasks = state.tasks.filter(t => {
     if (t.dueDate === dateStr) return true
     if (t.dueDate && t.dueDate.includes('-')) {
@@ -124,7 +126,7 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
       if (isYearly) {
         const [, tm, td] = t.dueDate.split('-').map(Number)
         const [, sm, sd] = dateStr.split('-').map(Number)
-        if (sm === tm && sd === td) return true
+        if (sm === tm && sd === td && dateStr >= realTodayYMD) return true
       }
     }
     return false
@@ -261,6 +263,8 @@ export function CalendarView() {
     cells.push(d)
   }
 
+  const realTodayYMD = toYMD(new Date())
+
   // Group tasks by date
   const tasksByDate = state.tasks.reduce((acc, t) => {
     if (t.dueDate && t.dueDate.includes('-')) {
@@ -273,8 +277,10 @@ export function CalendarView() {
         const [, tm, td] = t.dueDate.split('-').map(Number)
         if (!isNaN(tm) && !isNaN(td)) {
           const projectedDate = `${year}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`
-          if (!acc[projectedDate]) acc[projectedDate] = []
-          acc[projectedDate].push(t)
+          if (projectedDate >= realTodayYMD) {
+            if (!acc[projectedDate]) acc[projectedDate] = []
+            acc[projectedDate].push(t)
+          }
         }
       } else {
         if (!acc[t.dueDate]) acc[t.dueDate] = []
@@ -294,13 +300,14 @@ export function CalendarView() {
     const m = i
     const hasTasks = state.tasks.some(t => {
       if (!t.dueDate || !t.dueDate.includes('-')) return false
-      const [ty, tm] = t.dueDate.split('-').map(Number)
+      const [ty, tm, td] = t.dueDate.split('-').map(Number)
       const isYearly = t.repeat === 'yearly' ||
                        t.title?.toLowerCase().includes('день рождения') ||
                        t.title?.toLowerCase().includes('др') ||
                        t.tags?.includes('день рождения')
       if (isYearly) {
-        return tm - 1 === m
+        const projectedDate = `${year}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`
+        return tm - 1 === m && projectedDate >= realTodayYMD
       }
       return ty === year && tm - 1 === m
     })
