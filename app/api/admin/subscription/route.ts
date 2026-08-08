@@ -33,12 +33,16 @@ export async function GET(req: NextRequest) {
         select: {
           chatId: true,
           firstName: true,
+          lastName: true,
+          username: true,
           plan: true,
           subscriptionExpiry: true,
           voiceCountToday: true,
           notesCountToday: true,
           chatMessagesToday: true,
           lastResetDate: true,
+          lastActiveAt: true,
+          addedAt: true,
         },
         orderBy: { addedAt: 'desc' },
       })
