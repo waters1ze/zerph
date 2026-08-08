@@ -69,6 +69,7 @@ export interface Goal {
   createdAt: string
   updatedAt: string
   color?: string
+  visibility?: 'private' | 'public'
 }
 
 export interface Milestone {
@@ -108,6 +109,7 @@ export interface Note {
   updatedAt: string
   aiGenerated?: boolean
   pinned?: boolean
+  visibility?: 'private' | 'public'
 }
 
 export interface Friend {
@@ -160,6 +162,7 @@ export interface UserSettings {
   }
   weekStartsOn: 0 | 1
   focusModeEnabled: boolean
+  userPlan: 'free' | 'premium'
 }
 
 export type StatPeriod = '7d' | '30d' | '90d' | '1y'

@@ -11,7 +11,7 @@ import remarkGfm from 'remark-gfm'
 import {
   FileText, Plus, Folder, Pin, Tag, Edit3, Save,
   Trash2, Search, Calendar as CalendarIcon,
-  ChevronLeft, BookOpen, Users, Sparkles, Loader2
+  ChevronLeft, BookOpen, Users, Sparkles, Loader2, Check, X
 } from 'lucide-react'
 import type { Note, NoteType } from '@/lib/types'
 
@@ -26,7 +26,7 @@ const CATEGORIES = [
 
 export function NotesView() {
   const { state, dispatch } = useApp()
-  const { notes } = state
+  const { notes, tasks } = state
 
   const [selectedFolder, setSelectedFolder] = useState('all')
   const [selectedId, setSelectedId] = useState<string | null>(notes[0]?.id || null)
@@ -40,7 +40,9 @@ export function NotesView() {
   const [editContent, setEditContent] = useState('')
   const [editType, setEditType] = useState<NoteType>('note')
   const [editDueDate, setEditDueDate] = useState<string>('')
+  const [editTaskIds, setEditTaskIds] = useState<string[]>([])
   const [editTags, setEditTags] = useState<string[]>([])
+  const [editVisibility, setEditVisibility] = useState<'private' | 'public'>('private')
   const [newTagInput, setNewTagInput] = useState('')
 
   const activeNote = notes.find(n => n.id === selectedId) || notes[0] || null
@@ -51,7 +53,9 @@ export function NotesView() {
       setEditContent(activeNote.content)
       setEditType(activeNote.type || 'note')
       setEditDueDate(activeNote.dueDate || '')
+      setEditTaskIds(activeNote.taskIds || [])
       setEditTags(activeNote.tags || [])
+      setEditVisibility(activeNote.visibility || 'private')
     }
   }, [selectedId, activeNote])
 
@@ -101,7 +105,9 @@ export function NotesView() {
         content: editContent,
         type: editType,
         dueDate: editDueDate || undefined,
+        taskIds: editTaskIds,
         tags: editTags,
+        visibility: editVisibility,
         updatedAt: new Date().toISOString(),
       },
     })
@@ -126,6 +132,8 @@ export function NotesView() {
 Текст заметки:
 ${editTitle}
 ${editContent}`
+      const tgWindow = window as any
+      const ownerChatId = tgWindow?.Telegram?.WebApp?.initDataUnsafe?.user?.id || null
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -133,10 +141,15 @@ ${editContent}`
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
           apiKey,
+          ownerChatId,
         }),
       })
 
       const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка запроса к ИИ')
+      }
+
       if (data.content) {
         const jsonMatch = data.content.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
@@ -380,7 +393,13 @@ ${editContent}`
                 </button>
 
                 <button
-                  onClick={handleAiClassify}
+                  onClick={() => {
+                    if (state.settings.userPlan === 'free') {
+                      alert('AI Сортировка доступна только в Premium версии. Пожалуйста, приобретите Premium через бота.')
+                      return
+                    }
+                    handleAiClassify()
+                  }}
                   disabled={isAiProcessing}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-[12px] font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
                   title="Определить папку и привязать дату с помощью AI"
@@ -458,24 +477,65 @@ ${editContent}`
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-primary font-medium shrink-0">
-                    <CalendarIcon className="w-4 h-4" />
-                    <span>Дата:</span>
+                <div className="flex items-center gap-2 border-l border-border/60 pl-3 ml-1">
+                  <div className="flex items-center gap-1.5 text-amber-500 font-medium shrink-0">
+                    <Check className="w-4 h-4" />
+                    <span>Задачи:</span>
                   </div>
 
                   {isEditing ? (
-                    <input
-                      type="date"
-                      value={editDueDate}
-                      onChange={e => setEditDueDate(e.target.value)}
-                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-[12px] text-foreground outline-none focus:border-primary/50"
-                    />
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {editTaskIds.map(tId => (
+                        <span key={tId} className="px-1.5 py-0.5 rounded bg-muted text-[10px] flex items-center gap-1">
+                          {tasks.find(t => t.id === tId)?.title?.slice(0, 15) || 'Задача'}
+                          <span className="cursor-pointer text-destructive font-bold ml-1 hover:text-red-500" onClick={() => setEditTaskIds(p => p.filter(id => id !== tId))}>×</span>
+                        </span>
+                      ))}
+                      <select
+                        className="h-7 px-2 w-28 rounded-lg bg-muted/60 border border-border text-[11px] text-foreground outline-none focus:border-primary/50"
+                        onChange={e => {
+                          if (e.target.value && !editTaskIds.includes(e.target.value)) {
+                            setEditTaskIds(p => [...p, e.target.value])
+                          }
+                          e.target.value = ''
+                        }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>+ Добавить</option>
+                        {tasks.filter(t => !editTaskIds.includes(t.id)).map(t => (
+                          <option key={t.id} value={t.id}>{t.title.slice(0,30)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {activeNote.taskIds?.length ? (
+                        activeNote.taskIds.map(tId => (
+                          <span key={tId} className="px-1.5 py-0.5 rounded bg-muted/50 text-[11px] border border-border/50">
+                            {tasks.find(t => t.id === tId)?.title || 'Задача'}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="font-semibold text-muted-foreground/60">Нет задач</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 border-l border-border/60 pl-3 ml-1">
+                  <span className="text-muted-foreground font-medium">Видимость:</span>
+                  {isEditing ? (
+                    <select
+                      value={editVisibility}
+                      onChange={e => setEditVisibility(e.target.value as 'private' | 'public')}
+                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none"
+                    >
+                      <option value="private">Приватная</option>
+                      <option value="public">Видна всем</option>
+                    </select>
                   ) : (
                     <span className="font-semibold text-foreground">
-                      {activeNote.dueDate
-                        ? format(parseISO(activeNote.dueDate), 'd MMMM yyyy (EEEE)', { locale: ru })
-                        : 'Без даты'}
+                      {activeNote.visibility === 'public' ? 'Видна всем' : 'Приватная'}
                     </span>
                   )}
                 </div>

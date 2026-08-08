@@ -210,9 +210,11 @@ function ProjectModal({
       >
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-[16px] font-bold">{project ? 'Редактировать проект' : 'Новый проект'}</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -308,8 +310,8 @@ function ProjectModal({
   )
 }
 
-function ProjectDetail({ project, onBack, onEdit, onRefresh }: {
-  project: Project; onBack: () => void; onEdit: () => void; onRefresh: () => void
+function ProjectDetail({ project, onBack, onEdit, onRefresh, onDelete }: {
+  project: Project; onBack: () => void; onEdit: () => void; onRefresh: () => void; onDelete: () => void
 }) {
   const done = project.tasks.filter(t => t.status === 'done').length
   const total = project.tasks.length
@@ -330,10 +332,16 @@ function ProjectDetail({ project, onBack, onEdit, onRefresh }: {
           <h2 className="text-[16px] font-bold text-foreground truncate">{project.title}</h2>
           {project.description && <p className="text-[12px] text-muted-foreground">{project.description}</p>}
         </div>
-        <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-[12px] text-muted-foreground transition-colors">
-          <Edit3 className="w-3.5 h-3.5" />
-          Изменить
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-[12px] text-destructive transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Удалить</span>
+          </button>
+          <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-[12px] text-muted-foreground transition-colors">
+            <Edit3 className="w-3.5 h-3.5" />
+            Изменить
+          </button>
+        </div>
       </div>
 
       {/* Members */}
@@ -403,6 +411,7 @@ function ProjectDetail({ project, onBack, onEdit, onRefresh }: {
 }
 
 export function ProjectsView() {
+  const { state } = useApp()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Project | null>(null)
@@ -430,12 +439,23 @@ export function ProjectsView() {
     setShowModal(false)
     setEditProject(null)
     await loadProjects()
-    setSelected(null)
+    if (selected && !projects.find(p => p.id === selected.id)) {
+      setSelected(null)
+    }
   }
 
   const handleEditCurrent = () => {
     setEditProject(selected)
     setShowModal(true)
+  }
+
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm('Точно удалить проект?')) return
+    try {
+      await fetch('/api/projects?id=' + id, { method: 'DELETE', headers: getAuthHeaders() })
+      setSelected(null)
+      loadProjects()
+    } catch {}
   }
 
   return (
@@ -447,6 +467,19 @@ export function ProjectsView() {
             <h1 className="text-[20px] font-bold text-foreground">Проекты</h1>
             <p className="text-[13px] text-muted-foreground mt-0.5">{projects.length} активных проектов</p>
           </div>
+          <button
+            onClick={() => {
+              if (state.settings.userPlan === 'free' && projects.length >= 3) {
+                alert('В бесплатной версии доступно максимум 3 проекта. Пожалуйста, приобретите Premium через бота.')
+                return
+              }
+              setShowModal(true)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-medium hover:brightness-110 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Создать проект</span>
+          </button>
         </div>
       )}
 
@@ -468,6 +501,7 @@ export function ProjectsView() {
           onBack={() => setSelected(null)}
           onEdit={handleEditCurrent}
           onRefresh={loadProjects}
+          onDelete={() => handleDeleteProject(selected.id)}
         />
       ) : (
         <>
@@ -489,7 +523,7 @@ export function ProjectsView() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {projects.map((p, i) => (
                 <motion.div
                   key={p.id}

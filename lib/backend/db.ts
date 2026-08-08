@@ -694,7 +694,7 @@ export async function saveParsedItemToDb(
       ? item.summary
       : `# ${item.title}\n\n${item.summary}`
 
-    await createNote({
+    const createdNote = await createNote({
       title: item.title,
       content: mdContent,
       originalText: item.rawText,
@@ -713,9 +713,11 @@ export async function saveParsedItemToDb(
     const noteText = `${item.title} ${item.summary} ${item.rawText || ''}`
     const timeMatch = noteText.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/)
     const naturalMatch = noteText.match(/в\s+([01]?\d|2[0-3]):([0-5]\d)/i)
-    const extractedTime = (naturalMatch || timeMatch)
+    const regexTime = (naturalMatch || timeMatch)
       ? `${((naturalMatch || timeMatch)![1]).padStart(2, '0')}:${(naturalMatch || timeMatch)![2]}`
       : null
+    
+    const extractedTime = item.dueTime || regexTime
 
     if (extractedTime) {
       const today = new Date().toISOString().slice(0, 10)
@@ -726,7 +728,7 @@ export async function saveParsedItemToDb(
         extractedTime
       ).catch(() => `Напоминание: «${item.title}» в ${extractedTime}. Готовься! 🎯`)
 
-      await createTask({
+      const createdTask = await createTask({
         title: `⏰ ${item.title}`,
         description: context,
         priority: item.priority || 'medium',
@@ -737,6 +739,11 @@ export async function saveParsedItemToDb(
         source: item.rawText,
         ownerChatId: ownerChatId || null,
       })
+      
+      // Link the task to the note
+      if (createdNote && createdTask) {
+        await linkNoteToTask(createdTask.id, createdNote.id).catch(() => {})
+      }
     }
   } else {
     // Task, reminder, or default
