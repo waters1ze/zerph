@@ -196,6 +196,7 @@ export async function createTask(data: {
       aiGenerated: processed.aiGenerated || false,
       source: processed.source || null,
       ownerChatId: processed.ownerChatId ? BigInt(processed.ownerChatId) : null,
+      authorChatId: (processed as any).authorChatId ? BigInt((processed as any).authorChatId) : (processed.ownerChatId ? BigInt(processed.ownerChatId) : null),
     },
   })
 }
