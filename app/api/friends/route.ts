@@ -43,21 +43,33 @@ export async function PATCH(req: NextRequest) {
   if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { friendId, allowTasks } = await req.json()
+    const { friendId, allowTasks, birthday } = await req.json()
     if (!friendId) return NextResponse.json({ error: 'friendId required' }, { status: 400 })
 
     const targetCid = BigInt(friendId)
-    await (prisma.friendship as any).updateMany({
-      where: {
-        OR: [
-          { userChatId: chatId, friendChatId: targetCid },
-          { userChatId: targetCid, friendChatId: chatId },
-        ],
-      },
-      data: { allowTasks: Boolean(allowTasks) },
-    })
 
-    return NextResponse.json({ ok: true, allowTasks })
+    if (allowTasks !== undefined) {
+      await (prisma.friendship as any).updateMany({
+        where: {
+          OR: [
+            { userChatId: chatId, friendChatId: targetCid },
+            { userChatId: targetCid, friendChatId: chatId },
+          ],
+        },
+        data: { allowTasks: Boolean(allowTasks) },
+      })
+    }
+
+    if (birthday !== undefined) {
+      await prisma.telegramChat.update({
+        where: { chatId: targetCid },
+        data: { birthday: birthday || null },
+      })
+      const { syncFriendBirthdays } = await import('@/lib/backend/db')
+      await syncFriendBirthdays(chatId)
+    }
+
+    return NextResponse.json({ ok: true, allowTasks, birthday })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
