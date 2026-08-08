@@ -608,7 +608,13 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 
   for (const item of items) {
-    if (item.type === 'task' && item.dueTime) {
+    if (
+      item.type === 'task' &&
+      item.dueTime &&
+      item.dueTime !== '00:00' &&
+      item.action !== 'delete' &&
+      item.action !== 'completion'
+    ) {
       await send(chatId, `⏰ Поставить будильник на ${item.dueTime}?`, {
         reply_markup: {
           inline_keyboard: [
