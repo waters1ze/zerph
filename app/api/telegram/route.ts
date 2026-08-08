@@ -686,7 +686,10 @@ async function processText(chatId: number, text: string) {
 }
 
 async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], transcript?: string) {
-  if (!items || items.length === 0) return
+  if (!items || items.length === 0) {
+    await send(chatId, `🤔 Я не совсем понял команду. Попробуйте сформулировать иначе.`, { reply_markup: miniAppKeyboard(chatId) })
+    return
+  }
 
   let msg = items.length > 1 ? `Обработано элементов: ${items.length}\n\n` : ''
 

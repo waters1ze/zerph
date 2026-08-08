@@ -266,6 +266,8 @@ export async function parseIntentWithGroq(
         let rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
 
         rawItems = rawItems.filter((item: any) => {
+          if (item.action === 'set_my_birthday') return true
+          if (item.action === 'delete_all') return true
           const t = (item.title || '').toLowerCase()
           return item.title && !t.includes('неизвестное сообщение') && !t.includes('нечитаемое сообщение') && !t.includes('неизвестный текст')
         })

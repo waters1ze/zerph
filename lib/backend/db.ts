@@ -579,6 +579,8 @@ export async function saveParsedItemToDb(
       // Auto sync so the user's task list (and potentially others) knows
       // Note: the friend will only see it when *they* sync, but this is fine
       item.title = `День рождения сохранен: ${item.dueDate}`
+    } else {
+      item.title = `Не удалось сохранить дату. Пожалуйста, напишите дату в формате ДД.ММ.ГГГГ.`
     }
     return { item, updatedItem: true }
   }
