@@ -5,25 +5,13 @@ import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { Inbox, Users, Bell } from 'lucide-react'
 
+import { isBirthdayVisible } from '@/lib/utils'
+
 export function InboxView() {
   const { state } = useApp()
 
-  const isBirthdayVisible = (t: any) => {
-    if (t.title.includes('День рождения:')) {
-      if (t.dueDate && t.dueDate.includes('-')) {
-        const [year, month, day] = t.dueDate.split('-').map(Number)
-        const due = new Date(year, month - 1, day)
-        const now = new Date()
-        now.setHours(0, 0, 0, 0)
-        const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
-        if (diffDays > 7) return false
-      }
-    }
-    return true
-  }
-
-  const uncategorized = state.tasks.filter(t => !t.projectId && !t.goalId).filter(isBirthdayVisible)
-  const sharedWithMe = state.tasks.filter(t => t.isShared).filter(isBirthdayVisible)
+  const uncategorized = state.tasks.filter(t => !t.projectId && !t.goalId && isBirthdayVisible(t))
+  const sharedWithMe = state.tasks.filter(t => t.isShared && isBirthdayVisible(t))
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
