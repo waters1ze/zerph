@@ -30,7 +30,7 @@ export interface ParsedItem {
   reminderOffsetMinutes?: number | null
 }
 
-export function getDynamicSystemPrompt(existingItemsContext?: string): string {
+export function getDynamicSystemPrompt(existingItemsContext?: string, friendsContext?: string): string {
   const now = new Date()
   const formatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Moscow',
@@ -79,6 +79,25 @@ ${existingItemsContext}
 - Если пользователь просит ИЗМЕНИТЬ время, дату или название существующего элемента (например: "давай в 12:00 лучше", "поменяй время"):
   - Установи "action": "update", "targetId": "<ID элемента>" и укажи обновленные поля.`
   }
+
+  if (friendsContext) {
+    prompt += `\n\n══════════════════════════════════════════
+👥 КОНТАКТЫ И УЧАСТНИКИ КОМАНДЫ ПОЛЬЗОВАТЕЛЯ:
+${friendsContext}
+══════════════════════════════════════════`
+  }
+
+  prompt += `\n\n══════════════════════════════════════════
+🤝 ПРАВИЛА ДЕЛЕГИРОВАНИЯ И ПОРУЧЕНИЯ ЗАДАЧ (HIGHEST PRIORITY)
+══════════════════════════════════════════
+Если пользователь поручает задачу другому человеку (например: "дай задачу Вове", "поручи Вове Долгих...", "создай задачу для Владимира", "отправь задачу Маше", "передай задачу X"):
+- ОБЯЗАТЕЛЬНО установи:
+  1. "type": "delegate"
+  2. "recipientName": "имя получателя" (например: "Вова", "Владимир", "Вова Долгих", "Маша")
+  3. "title": "Суть поручаемого действия" (например: "Прорекламировать программу")
+  4. "summary": "Подробное описание поручения"
+  5. "dueDate" / "dueTime": вычисленные дата и время, если они указаны (например "через 1 минуту")
+══════════════════════════════════════════`
 
   prompt += `\n\n══════════════════════════════════════════
 📝 ТРЕБОВАНИЯ К ДЕТАЛИЗАЦИИ И ПОДРОБНОСТИ ОПИСАНИЙ (HIGHEST PRIORITY)
@@ -200,13 +219,14 @@ export async function parseIntentWithGroq(
   text: string,
   apiKey?: string,
   model?: string,
-  existingItemsContext?: string
+  existingItemsContext?: string,
+  friendsContext?: string
 ): Promise<ParsedItem[]> {
   const keys = getGroqKeys(apiKey)
   if (keys.length === 0) throw new Error('Groq API Key missing.')
 
   const models = [model || GROQ_CHAT_MODEL, 'llama-3.1-8b-instant', 'llama3-8b-8192']
-  const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext)
+  const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext, friendsContext)
   let lastError: Error | null = null
 
   for (const m of models) {
