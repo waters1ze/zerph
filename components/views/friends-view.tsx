@@ -21,7 +21,8 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
   const sharedTasks = state.tasks.filter(t => t.assignees.includes(friend.id))
   const doneTasks = sharedTasks.filter(t => t.status === 'done')
   const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
-  const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? false)
+  const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.name || '').toLowerCase().includes('zerph')
+  const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? (isBot ? true : false))
   const [updating, setUpdating] = useState(false)
 
   const toggleAllowTasks = async () => {

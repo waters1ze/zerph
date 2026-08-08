@@ -25,9 +25,10 @@ export async function GET(req: NextRequest) {
             ],
           },
         })
+        const isBot = (f.username || '').toLowerCase().includes('bot') || (f.name || '').toLowerCase().includes('zerph')
         return {
           ...f,
-          allowTasks: (friendship as any)?.allowTasks ?? false,
+          allowTasks: (friendship as any)?.allowTasks ?? (isBot ? true : false),
         }
       })
     )
