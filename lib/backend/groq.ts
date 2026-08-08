@@ -7,7 +7,7 @@ import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from
 
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion' | 'delegate'
-  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion'
+  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday'
   targetId?: string | null
   title: string
   summary: string
