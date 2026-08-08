@@ -73,6 +73,7 @@ export function SettingsView() {
   const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
   const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
   const [loadingPay, setLoadingPay] = useState(false)
+  const [copiedRef, setCopiedRef] = useState(false)
   const [inputChatId, setInputChatId] = useState('')
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
@@ -206,6 +207,44 @@ export function SettingsView() {
           </div>
         </div>
       </Section>
+
+      {/* Referral Program */}
+      <Section title="Реферальная программа">
+        <div className="p-5 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[14px] font-bold text-foreground flex items-center gap-2">
+                <span>🎁</span> Приглашай друзей — получай +3 дня Premium
+              </p>
+              <p className="text-[12px] text-muted-foreground mt-1">
+                Поделись ссылкой с другом. Когда друг присоединится к Zerf AI, вы оба получите по +3 дня Zerf Premium!
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/50 border border-border">
+            <input
+              type="text"
+              readOnly
+              value={`https://t.me/Zerph_bot?start=ref_${currentChatId || ''}`}
+              className="bg-transparent text-[12px] text-foreground font-mono flex-1 outline-none px-2"
+            />
+            <button
+              onClick={() => {
+                const link = `https://t.me/Zerph_bot?start=ref_${currentChatId || ''}`
+                navigator.clipboard.writeText(link)
+                setCopiedRef(true)
+                setTimeout(() => setCopiedRef(false), 2000)
+              }}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+            >
+              {copiedRef ? <Check className="w-3.5 h-3.5" /> : <Link className="w-3.5 h-3.5" />}
+              {copiedRef ? 'Скопировано!' : 'Копировать'}
+            </button>
+          </div>
+        </div>
+      </Section>
+
       {/* Appearance */}
       <Section title="Appearance">
         <Row label="Theme" description="Choose your preferred color scheme">

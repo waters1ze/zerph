@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
-import { cn } from '@/lib/utils'
+import { cn, isBirthdayVisible } from '@/lib/utils'
 import type { StatPeriod } from '@/lib/types'
 import {
   CheckCircle2, Clock, AlertCircle, TrendingUp,
@@ -124,7 +124,7 @@ export function StatsView() {
   tomorrowDate.setDate(tomorrowDate.getDate() + 1)
   const tomorrow = tomorrowDate.toISOString().slice(0, 10)
 
-  const activeTasks = tasks.filter(t => t.status !== 'done')
+  const activeTasks = tasks.filter(t => t.status !== 'done' && isBirthdayVisible(t, 2))
   const q1 = activeTasks.filter(t => t.priority === 'urgent' || (t.priority === 'high' && t.dueDate && t.dueDate <= tomorrow))
   const q2 = activeTasks.filter(t => (!t.dueDate || t.dueDate > tomorrow) && (t.priority === 'high' || t.priority === 'medium'))
   const q3 = activeTasks.filter(t => (t.priority === 'medium' || t.priority === 'low') && t.dueDate && t.dueDate <= tomorrow)

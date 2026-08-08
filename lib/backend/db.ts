@@ -862,7 +862,12 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
       })
     )
 
-    return results
+    return results.filter(f => {
+      const uname = (f.username || '').toLowerCase()
+      const name = (f.name || '').toLowerCase()
+      if (uname.includes('bot') || uname === 'groupanonymousbot' || name === 'group') return false
+      return true
+    })
   } catch (err) {
     console.error('Error in getFriends:', err)
     return []
