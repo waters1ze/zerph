@@ -14,25 +14,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const friends = await getFriends(chatId)
-    // Enrich with allowTasks setting from Friendship DB table
-    const enriched = await Promise.all(
-      friends.map(async (f: any) => {
-        const friendship = await prisma.friendship.findFirst({
-          where: {
-            OR: [
-              { userChatId: chatId, friendChatId: BigInt(f.id) },
-              { userChatId: BigInt(f.id), friendChatId: chatId },
-            ],
-          },
-        })
-        const isBot = (f.username || '').toLowerCase().includes('bot') || (f.name || '').toLowerCase().includes('zerph')
-        return {
-          ...f,
-          allowTasks: (friendship as any)?.allowTasks ?? (isBot ? true : false),
-        }
-      })
-    )
-    return NextResponse.json({ friends: enriched })
+    return NextResponse.json({ friends })
   } catch (err) {
     return NextResponse.json({ friends: [], error: String(err) })
   }
