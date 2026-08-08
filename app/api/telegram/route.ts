@@ -417,6 +417,50 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   await send(chatId, `❓ Неизвестная команда. /admin — список команд`)
 }
 
+async function handleWeeklyReport(chatId: number, senderId: number) {
+  try {
+    const limits = await getUserUsageAndLimits(chatId)
+    const isPremium = limits.plan === 'premium'
+    
+    await send(chatId, 'Генерирую недельный отчет, подождите немного...')
+    await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
+    
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/weekly-report?chatId=${chatId}`)
+    const data = await res.json()
+    
+    if (data.error) {
+      await send(chatId, '❌ Ошибка при генерации отчета.')
+      return
+    }
+    
+    const { stats, aiAnalysis } = data
+    
+    let msg = `📊 *Ваш еженедельный отчет:*\n\n`
+    msg += `✅ Выполнено задач: *${stats.tasksCompleted}*\n`
+    msg += `📝 Создано задач: *${stats.tasksCreated}*\n`
+    msg += `📌 Создано заметок: *${stats.notesCreated}*\n`
+    msg += `🎯 Обновлено целей: *${stats.goalsUpdated}*\n`
+    msg += `🌟 Самый продуктивный день: *${stats.mostProductiveDay}*\n\n`
+    
+    if (isPremium) {
+      msg += `🧠 *Анализ ИИ:*\n${aiAnalysis}`
+    } else {
+      msg += `🔒 *Анализ ИИ доступен только для Premium-пользователей.*\nОформите подписку, чтобы получать советы от AI!`
+    }
+    
+    const replyMarkup = isPremium ? miniAppKeyboard(chatId) : {
+      inline_keyboard: [
+        [{ text: '⭐ Оформить Premium (99 ₽)', callback_data: 'cmd_subscribe' }],
+        ...miniAppKeyboard(chatId).inline_keyboard
+      ]
+    }
+    
+    await send(chatId, msg, { reply_markup: replyMarkup })
+  } catch (err) {
+    await send(chatId, '❌ Ошибка при получении отчета.')
+  }
+}
+
 async function processText(chatId: number, text: string) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
@@ -468,6 +512,54 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       return
     }
 
+    if (item.type === 'delegate' && item.recipientName) {
+      const friends = await prisma.friendship.findMany({ 
+        where: { OR: [{ userChatId: BigInt(chatId) }, { friendChatId: BigInt(chatId) }] } 
+      })
+      const friendIds = friends.map((f: any) => f.userChatId === BigInt(chatId) ? f.friendChatId : f.userChatId)
+      
+      const friend = await prisma.telegramChat.findFirst({
+        where: { 
+          chatId: { in: friendIds }, 
+          firstName: { contains: item.recipientName, mode: 'insensitive' } 
+        }
+      })
+
+      if (friend) {
+        const newTask = await prisma.task.create({
+          data: {
+            title: item.title,
+            description: item.summary || '',
+            priority: item.priority || 'medium',
+            status: 'todo',
+            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueTime: item.dueTime || null,
+            tags: item.tags || [],
+            ownerChatId: friend.chatId,
+            assignees: [String(chatId)],
+            isShared: true,
+          }
+        })
+        const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+        const senderName = sender?.firstName || 'Пользователь'
+        
+        await send(Number(friend.chatId), `[${senderName}] поручил тебе задачу: ${item.title}`, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
+                { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
+              ]
+            ]
+          }
+        })
+        msg += `Задача '${item.title}' отправлена ${friend.firstName || item.recipientName}\n\n`
+      } else {
+        msg += `Друг '${item.recipientName}' не найден. Добавь её через /invite @username\n\n`
+      }
+      continue
+    }
+
     const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
 
     if (item.action === 'delete' || item.type === 'completion') {
@@ -504,6 +596,21 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
   }
 
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+
+  for (const item of items) {
+    if (item.type === 'task' && item.dueTime) {
+      await send(chatId, `⏰ Поставить будильник на ${item.dueTime}?`, {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✓ Да (Android)', callback_data: `alarm_android_${item.dueTime}` },
+              { text: 'Да (iOS инструкция)', callback_data: `alarm_ios_${item.dueTime}` }
+            ]
+          ]
+        }
+      })
+    }
+  }
 }
 
 /** Get bot's own Telegram user ID */
@@ -948,6 +1055,36 @@ export async function POST(req: NextRequest) {
           where: { userChatId: inviterId, friendChatId: BigInt(chatId) }
         })
         await send(chatId, `❌ *Приглашение отклонено.*`)
+      } else if (data.startsWith('delegate_accept_')) {
+        const taskId = data.replace('delegate_accept_', '')
+        const task = await prisma.task.update({ where: { id: taskId }, data: { status: 'inprogress' } })
+        await safeEditOrSend(chatId, cb.message.message_id, `✅ Вы приняли задачу: ${task.title}`)
+        if (task.assignees.length > 0) {
+          await send(Number(task.assignees[0]), `✅ ${cb.from.first_name || 'Пользователь'} принял(а) задачу '${task.title}'`)
+        }
+      } else if (data.startsWith('delegate_decline_')) {
+        const taskId = data.replace('delegate_decline_', '')
+        const task = await prisma.task.findUnique({ where: { id: taskId } })
+        if (task) {
+          await prisma.task.delete({ where: { id: taskId } })
+          await safeEditOrSend(chatId, cb.message.message_id, `❌ Вы отклонили задачу: ${task.title}`)
+          if (task.assignees.length > 0) {
+            await send(Number(task.assignees[0]), `❌ ${cb.from.first_name || 'Пользователь'} отклонил(а) задачу '${task.title}'`)
+          }
+        }
+      } else if (data.startsWith('alarm_android_')) {
+        const time = data.replace('alarm_android_', '')
+        const [h, m] = time.split(':')
+        await send(chatId, '⏰ Открыть настройки будильника', {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '⏰ Открыть настройки будильника', url: `intent:#Intent;action=android.intent.action.SET_ALARM;extra.android.intent.extra.alarm.HOUR=${h};extra.android.intent.extra.alarm.MINUTES=${m};extra.android.intent.extra.alarm.SKIP_UI=false;end` }]
+            ]
+          }
+        })
+      } else if (data.startsWith('alarm_ios_')) {
+        const time = data.replace('alarm_ios_', '')
+        await send(chatId, `На iPhone: Откройте приложение Часы → Будильник → + → установите время ${time}. К сожалению, iOS не поддерживает автоматическую установку будильников через сторонние приложения.`)
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id })
@@ -1051,18 +1188,35 @@ export async function POST(req: NextRequest) {
         await handleGoals(chatId)
       } else if (cmd === '/notes') {
         await handleNotes(chatId)
+      } else if (cmd === '/report') {
+        await handleWeeklyReport(chatId, senderId)
       } else if (cmd === '/premium' || cmd === '/subscribe' || cmd === '/buy') {
         await handleSubscribe(chatId)
+      } else if (cmd === '/report') {
+        await handleWeeklyReport(senderId, chatId)
       } else if (cmd === '/admin') {
         await handleAdminCommand(chatId, parts.slice(1))
       } else if (!isGroup) {
-        await send(chatId, 'Попробуй /settings, /today, /invite, /buy или /help')
+        await send(chatId, 'Попробуй /settings, /today, /invite, /report, /buy или /help')
       }
     } else if (!isGroup) {
       if (voice) {
         await processVoice(chatId, voice.file_id, voice.duration || 15)
       } else if (text.trim()) {
         await processText(chatId, text)
+      }
+    // In groups: respond to @mention or reply to bot message
+    } else if (isGroup) {
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Zerph_bot'
+      const isMentioned = text.toLowerCase().includes(`@${botUsername.toLowerCase()}`)
+      const isReplyToBot = msg.reply_to_message?.from?.is_bot === true
+      if (isMentioned || isReplyToBot) {
+        const cleanText = text.replace(new RegExp(`@${botUsername}`, 'gi'), '').trim()
+        if (voice) {
+          await processVoice(senderId, voice.file_id, voice.duration || 15)
+        } else if (cleanText) {
+          await processText(senderId, cleanText)
+        }
       }
     }
 
@@ -1076,7 +1230,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
+
 // ── GET /api/telegram — health check ─────────────────────────────────────────
+
 
 export async function GET() {
   return NextResponse.json({

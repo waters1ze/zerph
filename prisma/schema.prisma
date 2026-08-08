@@ -32,6 +32,9 @@ model Task {
   repeat       String?   // 'yearly' | 'monthly' | 'weekly' | 'daily'
   reminderOffsetMinutes Int @default(0) // minutes before event to send reminder (e.g. 5, 15, 60)
   ownerChatId  BigInt?   // Telegram chatId of the user who created this task
+  authorChatId BigInt?   // Telegram chatId of person who assigned this task (may differ from owner)
+  parentTaskId String?   // For subtask tree (references another Task.id)
+  projectDbId  String?   // References ProjectDB.id
   remindersSentCount Int   @default(0)
 }
 
@@ -94,6 +97,19 @@ model Friendship {
   createdAt    DateTime @default(now())
 
   @@unique([userChatId, friendChatId])
+}
+
+// Full collaborative project model
+model ProjectDB {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  ownerChatId BigInt
+  memberIds   BigInt[] // Array of chatIds of all members
+  color       String   @default("#6366f1")
+  status      String   @default("active") // "active" | "completed" | "archived"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // Tracks every user ever seen in each Telegram group chat

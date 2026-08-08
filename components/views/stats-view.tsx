@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { StatPeriod } from '@/lib/types'
 import {
   CheckCircle2, Clock, AlertCircle, TrendingUp,
-  Target, Flame, Award, BarChart3, Users
+  Target, Flame, Award, BarChart3, Users, LayoutGrid
 } from 'lucide-react'
 
 function dayKey(d: Date) {
@@ -119,6 +119,17 @@ export function StatsView() {
     { label: 'Низкие', count: tasks.filter(t => t.priority === 'low').length, pct: total ? Math.round((tasks.filter(t => t.priority === 'low').length / total) * 100) : 0, color: 'var(--priority-low)' },
   ]
 
+  const todayDate = new Date()
+  const tomorrowDate = new Date(todayDate)
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const tomorrow = tomorrowDate.toISOString().slice(0, 10)
+
+  const activeTasks = tasks.filter(t => t.status !== 'done')
+  const q1 = activeTasks.filter(t => t.priority === 'urgent' || (t.priority === 'high' && t.dueDate && t.dueDate <= tomorrow))
+  const q2 = activeTasks.filter(t => (!t.dueDate || t.dueDate > tomorrow) && (t.priority === 'high' || t.priority === 'medium'))
+  const q3 = activeTasks.filter(t => (t.priority === 'medium' || t.priority === 'low') && t.dueDate && t.dueDate <= tomorrow)
+  const q4 = activeTasks.filter(t => t.priority === 'low' && (!t.dueDate || t.dueDate > tomorrow))
+
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       {/* Header & Period selector */}
@@ -142,6 +153,56 @@ export function StatsView() {
               {p.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Eisenhower Matrix */}
+      <div className="p-4 rounded-2xl bg-card border border-border">
+        <div className="flex items-center gap-2 mb-4">
+          <LayoutGrid className="w-4 h-4 text-primary" />
+          <p className="text-[13px] font-bold text-foreground">Матрица Эйзенхауэра</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Q1 */}
+          <div className="p-3 rounded-xl bg-[var(--priority-urgent)]/10 border border-[var(--priority-urgent)]/20">
+            <h3 className="text-[12px] font-bold text-[var(--priority-urgent)] mb-2">Срочно + Важно</h3>
+            <div className="space-y-1">
+              {q1.slice(0, 4).map(t => (
+                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
+              ))}
+              {q1.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
+            </div>
+          </div>
+          {/* Q2 */}
+          <div className="p-3 rounded-xl bg-[var(--status-done)]/10 border border-[var(--status-done)]/20">
+            <h3 className="text-[12px] font-bold text-[var(--status-done)] mb-2">Важно + Несрочно</h3>
+            <div className="space-y-1">
+              {q2.slice(0, 4).map(t => (
+                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
+              ))}
+              {q2.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
+            </div>
+          </div>
+          {/* Q3 */}
+          <div className="p-3 rounded-xl bg-[var(--priority-medium)]/10 border border-[var(--priority-medium)]/20">
+            <h3 className="text-[12px] font-bold text-[var(--priority-medium)] mb-2">Срочно + Неважно</h3>
+            <div className="space-y-1">
+              {q3.slice(0, 4).map(t => (
+                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
+              ))}
+              {q3.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
+            </div>
+          </div>
+          {/* Q4 */}
+          <div className="p-3 rounded-xl bg-muted/40 border border-border">
+            <h3 className="text-[12px] font-bold text-muted-foreground mb-2">Несрочно + Неважно</h3>
+            <div className="space-y-1">
+              {q4.slice(0, 4).map(t => (
+                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
+              ))}
+              {q4.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
+            </div>
+          </div>
         </div>
       </div>
 

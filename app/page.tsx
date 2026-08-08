@@ -21,6 +21,8 @@ import { StatsView }    from '@/components/views/stats-view'
 import { FriendsView }  from '@/components/views/friends-view'
 import { SettingsView } from '@/components/views/settings-view'
 
+import { ProjectsView } from '@/components/views/projects-view'
+
 function AppShell() {
   const { state } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
@@ -55,9 +57,11 @@ function AppShell() {
     stats:    <StatsView />,
     friends:  <FriendsView />,
     settings: <SettingsView />,
+    projects: <ProjectsView />,
   }
 
   const isFullHeight = state.currentView === 'notes'
+
 
   return (
     <div className="app-shell flex h-screen bg-background overflow-hidden relative">
