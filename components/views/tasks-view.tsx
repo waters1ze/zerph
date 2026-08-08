@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { cn } from '@/lib/utils'
+import { cn, isBirthdayVisible } from '@/lib/utils'
 import type { Priority, TaskStatus } from '@/lib/types'
 import { CheckSquare } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
@@ -23,19 +23,7 @@ export function TasksView() {
   const filtered = state.tasks
     .filter(t => filterStatus === 'all' || t.status === filterStatus)
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
-    .filter(t => {
-      if (t.title.includes('День рождения:')) {
-        if (t.dueDate && t.dueDate.includes('-')) {
-          const [year, month, day] = t.dueDate.split('-').map(Number)
-          const due = new Date(year, month - 1, day)
-          const now = new Date()
-          now.setHours(0, 0, 0, 0)
-          const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
-          if (diffDays > 7) return false
-        }
-      }
-      return true
-    })
+    .filter(isBirthdayVisible)
     .filter(t => {
       if (!state.searchQuery) return true
       return t.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
