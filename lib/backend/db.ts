@@ -118,6 +118,30 @@ export async function getAllNotes(ownerChatId?: number | bigint | string | null)
   }
 }
 
+function processBirthdayTaskData<T extends { title: string; dueTime?: string | null; repeat?: string | null; tags?: string[] }>(data: T): T {
+  const lower = (data.title || '').toLowerCase()
+  const isBirthday = lower.includes('день рождения') || lower.includes('др ') || lower.includes('др:') || lower.endsWith('др')
+
+  if (isBirthday) {
+    let title = data.title.trim()
+    if (!title.startsWith('🎂')) {
+      title = `🎂 ${title}`
+    }
+    const tags = data.tags ? [...data.tags] : []
+    if (!tags.includes('день рождения')) {
+      tags.push('день рождения')
+    }
+    return {
+      ...data,
+      title,
+      dueTime: '00:00',
+      repeat: 'yearly',
+      tags,
+    }
+  }
+  return data
+}
+
 export async function createTask(data: {
   title: string
   description?: string
@@ -136,24 +160,26 @@ export async function createTask(data: {
   reminderOffsetMinutes?: number | null
   ownerChatId?: number | bigint | string | null   // Telegram chatId of the creator
 }) {
+  const processed = processBirthdayTaskData(data)
+
   return prisma.task.create({
     data: {
-      title: data.title,
-      description: data.description || '',
-      priority: data.priority || 'medium',
-      status: data.status || 'todo',
-      dueDate: data.dueDate || new Date().toISOString().slice(0, 10),
-      dueTime: data.dueTime || null,
-      repeat: data.repeat || null,
-      reminderOffsetMinutes: data.reminderOffsetMinutes || 0,
-      tags: data.tags || [],
-      assignees: data.assignees || [],
-      isShared: data.isShared || false,
-      subtasks: data.subtasks || [],
-      rawText: data.rawText || null,
-      aiGenerated: data.aiGenerated || false,
-      source: data.source || null,
-      ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
+      title: processed.title,
+      description: processed.description || '',
+      priority: processed.priority || 'medium',
+      status: processed.status || 'todo',
+      dueDate: processed.dueDate || new Date().toISOString().slice(0, 10),
+      dueTime: processed.dueTime || null,
+      repeat: processed.repeat || null,
+      reminderOffsetMinutes: processed.reminderOffsetMinutes || 0,
+      tags: processed.tags || [],
+      assignees: processed.assignees || [],
+      isShared: processed.isShared || false,
+      subtasks: processed.subtasks || [],
+      rawText: processed.rawText || null,
+      aiGenerated: processed.aiGenerated || false,
+      source: processed.source || null,
+      ownerChatId: processed.ownerChatId ? BigInt(processed.ownerChatId) : null,
     },
   })
 }
@@ -939,18 +965,40 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
       }
     }
 
-    // Force all existing birthday tasks in DB to 00:00
+    // Force all existing birthday tasks (manual + auto) in DB to 00:00, yearly repeat, and 🎂 prefix
     try {
-      await prisma.task.updateMany({
+      const allBdayTasks = await prisma.task.findMany({
         where: {
           OR: [
-            { title: { contains: 'День рождения' } },
+            { title: { contains: 'День рождения', mode: 'insensitive' } },
+            { title: { contains: 'ДР', mode: 'insensitive' } },
             { tags: { has: 'день рождения' } },
           ],
-          dueTime: { not: '00:00' },
         },
-        data: { dueTime: '00:00' },
       })
+
+      for (const t of allBdayTasks) {
+        let newTitle = t.title.trim()
+        if (!newTitle.startsWith('🎂')) {
+          newTitle = `🎂 ${newTitle}`
+        }
+        let tags = t.tags || []
+        if (!tags.includes('день рождения')) {
+          tags = [...tags, 'день рождения']
+        }
+
+        if (newTitle !== t.title || t.dueTime !== '00:00' || t.repeat !== 'yearly') {
+          await prisma.task.update({
+            where: { id: t.id },
+            data: {
+              title: newTitle,
+              dueTime: '00:00',
+              repeat: 'yearly',
+              tags,
+            },
+          })
+        }
+      }
     } catch {}
 
     return createdCount
