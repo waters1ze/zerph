@@ -601,11 +601,17 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
       }
 
       for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
-        if (aliases.includes(token) && (fn.includes(canonical) || fullName.includes(canonical))) {
+        const tokenMatchesAlias = aliases.some(a => token.includes(a) || (a.length >= 3 && token.startsWith(a.slice(0, 3))))
+        const tokenMatchesCanonical = token.includes(canonical) || (canonical.length >= 4 && token.startsWith(canonical.slice(0, 4)))
+        
+        const fnMatchesCanonical = fn.includes(canonical) || fullName.includes(canonical) || (canonical.length >= 4 && fn.startsWith(canonical.slice(0, 4)))
+        const fnMatchesAlias = aliases.some(a => fn.includes(a) || fullName.includes(a) || (a.length >= 3 && fn.startsWith(a.slice(0, 3))))
+
+        if (tokenMatchesAlias && fnMatchesCanonical) {
           matchedFriend = f
           break
         }
-        if (canonical === token && aliases.some(a => fn.includes(a) || fullName.includes(a))) {
+        if (tokenMatchesCanonical && fnMatchesAlias) {
           matchedFriend = f
           break
         }
@@ -1310,7 +1316,7 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      await tgApi('answerCallbackQuery', { callback_query_id: cb.id })
+      await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Успешно' }).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 
