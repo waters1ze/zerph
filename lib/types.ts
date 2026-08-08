@@ -8,6 +8,7 @@ export type View =
   | 'tasks'
   | 'goals'
   | 'projects'
+  | 'eisenhower'
   | 'notes'
   | 'calendar'
   | 'chat'
@@ -27,6 +28,9 @@ export interface Task {
   reminderSent?: boolean       // true after TG notification sent
   targetContact?: string       // Telegram username or ChatID of the contact to message (e.g. "@artem")
   recipientName?: string       // Name of the recipient (e.g. "Артем")
+  authorChatId?: string
+  completedBy?: string
+  parentTaskId?: string
   projectId?: string
   goalId?: string
   tags: string[]
@@ -114,6 +118,7 @@ export interface Friend {
   avatar?: string
   status: 'online' | 'offline' | 'away'
   addedAt: string
+  allowTasks?: boolean
 }
 
 export interface SharedTask extends Task {

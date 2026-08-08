@@ -22,6 +22,7 @@ import { FriendsView }  from '@/components/views/friends-view'
 import { SettingsView } from '@/components/views/settings-view'
 
 import { ProjectsView } from '@/components/views/projects-view'
+import { EisenhowerView } from '@/components/views/eisenhower-view'
 
 function AppShell() {
   const { state } = useApp()
@@ -48,16 +49,17 @@ function AppShell() {
   }, [state.currentView])
 
   const VIEW_MAP: Record<string, React.ReactNode> = {
-    today:    <TodayView />,
-    inbox:    <InboxView />,
-    tasks:    <TasksView />,
-    goals:    <GoalsView />,
-    notes:    <NotesView />,
-    calendar: <CalendarView />,
-    stats:    <StatsView />,
-    friends:  <FriendsView />,
-    settings: <SettingsView />,
-    projects: <ProjectsView />,
+    today:      <TodayView />,
+    inbox:      <InboxView />,
+    tasks:      <TasksView />,
+    goals:      <GoalsView />,
+    notes:      <NotesView />,
+    calendar:   <CalendarView />,
+    stats:      <StatsView />,
+    friends:    <FriendsView />,
+    settings:   <SettingsView />,
+    projects:   <ProjectsView />,
+    eisenhower: <EisenhowerView />,
   }
 
   const isFullHeight = state.currentView === 'notes'

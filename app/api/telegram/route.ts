@@ -513,10 +513,10 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
     }
 
     if (item.type === 'delegate' && item.recipientName) {
-      const friends = await prisma.friendship.findMany({ 
+      const friendships = await prisma.friendship.findMany({ 
         where: { OR: [{ userChatId: BigInt(chatId) }, { friendChatId: BigInt(chatId) }] } 
       })
-      const friendIds = friends.map((f: any) => f.userChatId === BigInt(chatId) ? f.friendChatId : f.userChatId)
+      const friendIds = friendships.map((f: any) => f.userChatId === BigInt(chatId) ? f.friendChatId : f.userChatId)
       
       const friend = await prisma.telegramChat.findFirst({
         where: { 
@@ -526,6 +526,15 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       })
 
       if (friend) {
+        const friendship = friendships.find((f: any) => 
+          (f.userChatId === friend.chatId && f.friendChatId === BigInt(chatId)) ||
+          (f.friendChatId === friend.chatId && f.userChatId === BigInt(chatId))
+        )
+        if (friendship && (friendship as any).allowTasks === false) {
+          msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение поручений.\n\n`
+          continue
+        }
+
         const newTask = await prisma.task.create({
           data: {
             title: item.title,
@@ -536,14 +545,15 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             dueTime: item.dueTime || null,
             tags: item.tags || [],
             ownerChatId: friend.chatId,
+            authorChatId: BigInt(chatId),
             assignees: [String(chatId)],
             isShared: true,
-          }
+          } as any
         })
         const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
         const senderName = sender?.firstName || 'Пользователь'
         
-        await send(Number(friend.chatId), `[${senderName}] поручил тебе задачу: ${item.title}`, {
+        await send(Number(friend.chatId), `🤝 *${senderName}* поручил(а) тебе задачу:\n\n*${item.title}*`, {
           reply_markup: {
             inline_keyboard: [
               [

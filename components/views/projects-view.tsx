@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FolderOpen, Plus, ChevronLeft, MoreHorizontal, Users, CheckCircle2,
-  Circle, Clock, X, Edit3, Trash2, ArrowRight, GitBranch, Loader2, AlertCircle
+  Circle, Clock, X, Edit3, Trash2, ArrowRight, GitBranch, Loader2, AlertCircle, Check
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getAuthHeaders } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 
 interface ProjectMember { chatId: string; name: string }
 interface ProjectTask {
@@ -43,9 +43,45 @@ function MemberAvatar({ member, size = 7 }: { member: ProjectMember; size?: numb
   )
 }
 
+function SubtaskNode({ task, allTasks, depth = 0 }: { task: ProjectTask; allTasks: ProjectTask[]; depth?: number }) {
+  const children = allTasks.filter(t => t.parentTaskId === task.id)
+  const authorTag = task.authorChatId ? `Автор: #${String(task.authorChatId).slice(-4)}` : null
+
+  return (
+    <div className="space-y-1">
+      <div
+        className={cn(
+          'flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-muted/40 group transition-colors',
+          depth > 0 && 'border-l-2 border-primary/30 pl-3 ml-3'
+        )}
+      >
+        <StatusIcon status={task.status} className="w-4 h-4 shrink-0" />
+        <span className={cn('text-[13px] flex-1 font-medium', task.status === 'done' && 'line-through text-muted-foreground')}>
+          {task.title}
+        </span>
+        {authorTag && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-mono">
+            {authorTag}
+          </span>
+        )}
+        {task.dueDate && (
+          <span className="text-[11px] text-muted-foreground">{task.dueDate}</span>
+        )}
+      </div>
+
+      {children.length > 0 && (
+        <div className="space-y-1">
+          {children.map(child => (
+            <SubtaskNode key={child.id} task={child} allTasks={allTasks} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TaskTree({ tasks, projectId }: { tasks: ProjectTask[]; projectId: string }) {
   const rootTasks = tasks.filter(t => !t.parentTaskId)
-  const getChildren = (parentId: string) => tasks.filter(t => t.parentTaskId === parentId)
 
   if (tasks.length === 0) {
     return (
@@ -59,21 +95,7 @@ function TaskTree({ tasks, projectId }: { tasks: ProjectTask[]; projectId: strin
   return (
     <div className="space-y-1">
       {rootTasks.map(task => (
-        <div key={task.id}>
-          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-muted/40 group transition-colors">
-            <StatusIcon status={task.status} className="w-4 h-4 shrink-0" />
-            <span className={cn('text-[13px] flex-1', task.status === 'done' && 'line-through text-muted-foreground')}>{task.title}</span>
-            {task.dueDate && (
-              <span className="text-[11px] text-muted-foreground hidden group-hover:block">{task.dueDate}</span>
-            )}
-          </div>
-          {getChildren(task.id).map(child => (
-            <div key={child.id} className="flex items-center gap-2.5 px-3 py-2 ml-6 rounded-xl hover:bg-muted/30 border-l-2 border-border ml-5 transition-colors">
-              <StatusIcon status={child.status} className="w-3.5 h-3.5 shrink-0" />
-              <span className={cn('text-[12px] flex-1 text-muted-foreground', child.status === 'done' && 'line-through')}>{child.title}</span>
-            </div>
-          ))}
-        </div>
+        <SubtaskNode key={task.id} task={task} allTasks={tasks} depth={0} />
       ))}
     </div>
   )
@@ -142,6 +164,7 @@ function ProjectModal({
   onClose: () => void
   onSave: () => void
 }) {
+  const { state } = useApp()
   const [title, setTitle] = useState(project?.title || '')
   const [description, setDescription] = useState(project?.description || '')
   const [color, setColor] = useState(project?.color || COLORS[0])
@@ -230,37 +253,38 @@ function ProjectModal({
           </div>
 
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground mb-1.5 block">Участники (по @username)</label>
-            <div className="flex gap-2">
-              <input
-                value={memberInput}
-                onChange={e => setMemberInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && memberInput.trim()) {
-                    setMembers(m => [...m, memberInput.trim()])
-                    setMemberInput('')
-                  }
-                }}
-                placeholder="@username и Enter..."
-                className="flex-1 h-9 px-3 rounded-xl bg-muted/60 border border-border text-[13px] focus:outline-none focus:border-primary/50"
-              />
-              <button
-                onClick={() => { if (memberInput.trim()) { setMembers(m => [...m, memberInput.trim()]); setMemberInput('') } }}
-                className="w-9 h-9 flex items-center justify-center rounded-xl bg-primary/15 hover:bg-primary/25 text-primary transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-            {members.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {members.map((m, i) => (
-                  <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-[11px] text-foreground/70">
-                    {m}
-                    <button onClick={() => setMembers(prev => prev.filter((_, j) => j !== i))}>
-                      <X className="w-2.5 h-2.5" />
+            <label className="text-[12px] font-medium text-muted-foreground mb-1.5 block">Участники из вашей команды</label>
+            {state.friends.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground/60 italic">У вас пока нет людей в команде. Добавьте их в разделе «Команда».</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {state.friends.map((friend: any) => {
+                  const identifier = friend.username ? `@${friend.username.replace('@','')}` : friend.name
+                  const isSelected = members.includes(identifier) || members.includes(friend.name)
+                  return (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setMembers(prev => prev.filter(m => m !== identifier && m !== friend.name))
+                        } else {
+                          setMembers(prev => [...prev, identifier])
+                        }
+                      }}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[12px] font-medium transition-all',
+                        isSelected
+                          ? 'bg-primary/20 border-primary text-primary'
+                          : 'bg-muted/50 border-border/60 text-muted-foreground hover:bg-muted'
+                      )}
+                    >
+                      <Users className="w-3 h-3" />
+                      {friend.name}
+                      {isSelected && <Check className="w-3 h-3 ml-0.5 text-primary" />}
                     </button>
-                  </span>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

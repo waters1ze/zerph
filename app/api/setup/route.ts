@@ -32,30 +32,46 @@ export async function GET(req: NextRequest) {
     })
     const webhookData = await webhookRes.json()
 
-    // 2. Set Bot Commands Menu
-    const commandsRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
+    // 2. Set Private Commands Menu
+    const privateCommandsRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         commands: [
+          { command: 'start',    description: '🚀 Открыть приложение Zerf AI' },
           { command: 'today',    description: '📅 Задачи на сегодня' },
+          { command: 'invite',   description: '🤝 Пригласить друга в команду' },
+          { command: 'report',   description: '📊 Недельный AI-отчёт' },
           { command: 'goals',    description: '🎯 Активные цели' },
-          { command: 'notes',    description: '📌 Последние заметки' },
-          { command: 'buy',      description: '⭐ Оформить подписку Zerf Premium (99 ₽)' },
-          { command: 'settings', description: '⚙️ Настройки интервалов и повторов' },
-          { command: 'admin',    description: '👑 Панель администратора' },
-          { command: 'language', description: '🌐 Выбрать язык интерфейса' },
-          { command: 'help',     description: '❓ Инструкция и возможности' },
+          { command: 'notes',    description: '📌 Заметки' },
+          { command: 'buy',      description: '⭐ Оформить Zerf Premium (99 ₽)' },
+          { command: 'settings', description: '⚙️ Настройки' },
+          { command: 'help',     description: '❓ Команды и инструкции' },
         ],
+        scope: { type: 'all_private_chats' },
       }),
     })
-    const commandsData = await commandsRes.json()
+    const privateCommandsData = await privateCommandsRes.json()
+
+    // 3. Set Group Commands Menu (ONLY /add)
+    const groupCommandsRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commands: [
+          { command: 'add', description: '📌 Добавить задачу из этого сообщения в Zerf AI' },
+        ],
+        scope: { type: 'all_group_chats' },
+      }),
+    })
+    const groupCommandsData = await groupCommandsRes.json()
 
     return NextResponse.json({
-      success: webhookData.ok && commandsData.ok,
+      success: webhookData.ok && privateCommandsData.ok && groupCommandsData.ok,
       webhookUrl,
       webhookResult: webhookData,
-      commandsResult: commandsData,
+      privateCommandsResult: privateCommandsData,
+      groupCommandsResult: groupCommandsData,
     })
   } catch (err: unknown) {
     return NextResponse.json(

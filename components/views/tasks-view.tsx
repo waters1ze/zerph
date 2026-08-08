@@ -25,8 +25,9 @@ export function TasksView() {
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
     .filter(t => {
       if (t.title.includes('День рождения:')) {
-        if (t.dueDate) {
-          const due = new Date(t.dueDate)
+        if (t.dueDate && t.dueDate.includes('-')) {
+          const [year, month, day] = t.dueDate.split('-').map(Number)
+          const due = new Date(year, month - 1, day)
           const now = new Date()
           now.setHours(0, 0, 0, 0)
           const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)

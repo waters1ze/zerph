@@ -9,7 +9,7 @@ import { ChevronRight, Circle, User } from 'lucide-react'
 
 import {
   Sun, Inbox, CheckSquare, FileText, Calendar,
-  Target, BarChart2, Users, Settings, FolderOpen
+  Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid
 } from 'lucide-react'
 
 interface NavItem {
@@ -21,16 +21,17 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'today',    label: 'Сегодня',     icon: Sun,         section: 'workspace' },
-  { id: 'inbox',    label: 'Входящие',    icon: Inbox,        section: 'workspace' },
-  { id: 'tasks',    label: 'Задачи',      icon: CheckSquare, section: 'workspace' },
-  { id: 'notes',    label: 'Заметки',     icon: FileText,    section: 'workspace' },
-  { id: 'calendar', label: 'Календарь',   icon: Calendar,    section: 'planning' },
-  { id: 'goals',    label: 'Цели',        icon: Target,      section: 'planning' },
-  { id: 'projects', label: 'Проекты',     icon: FolderOpen,  section: 'planning' },
-  { id: 'stats',    label: 'Аналитика',   icon: BarChart2,   section: 'аналитика' },
-  { id: 'friends',  label: 'Команда',     icon: Users,       section: 'совместная работа' },
-  { id: 'settings', label: 'Настройки',   icon: Settings,    section: 'аккаунт' },
+  { id: 'today',      label: 'Сегодня',     icon: Sun,         section: 'workspace' },
+  { id: 'inbox',      label: 'Входящие',    icon: Inbox,        section: 'workspace' },
+  { id: 'tasks',      label: 'Задачи',      icon: CheckSquare, section: 'workspace' },
+  { id: 'notes',      label: 'Заметки',     icon: FileText,    section: 'workspace' },
+  { id: 'calendar',   label: 'Календарь',   icon: Calendar,    section: 'planning' },
+  { id: 'goals',      label: 'Цели',        icon: Target,      section: 'planning' },
+  { id: 'projects',   label: 'Проекты',     icon: FolderOpen,  section: 'planning' },
+  { id: 'eisenhower', label: 'Эйзенхауэр', icon: LayoutGrid,  section: 'planning' },
+  { id: 'stats',      label: 'Аналитика',   icon: BarChart2,   section: 'аналитика' },
+  { id: 'friends',    label: 'Команда',     icon: Users,       section: 'совместная работа' },
+  { id: 'settings',   label: 'Настройки',   icon: Settings,    section: 'аккаунт' },
 ]
 
 const SECTIONS = [

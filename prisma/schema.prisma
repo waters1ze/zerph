@@ -33,6 +33,7 @@ model Task {
   reminderOffsetMinutes Int @default(0) // minutes before event to send reminder (e.g. 5, 15, 60)
   ownerChatId  BigInt?   // Telegram chatId of the user who created this task
   authorChatId BigInt?   // Telegram chatId of person who assigned this task (may differ from owner)
+  completedBy  String?   // Name/ChatId of person who completed this task
   parentTaskId String?   // For subtask tree (references another Task.id)
   projectDbId  String?   // References ProjectDB.id
   remindersSentCount Int   @default(0)
@@ -94,6 +95,7 @@ model Friendship {
   userChatId   BigInt
   friendChatId BigInt
   status       String   @default("accepted") // "pending" | "accepted" | "declined"
+  allowTasks   Boolean  @default(true)       // Whether user allows tasks from this friend
   createdAt    DateTime @default(now())
 
   @@unique([userChatId, friendChatId])

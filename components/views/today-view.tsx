@@ -28,7 +28,10 @@ export function TodayView() {
       .catch(() => {})
   }, [])
 
-  const todayTasks = state.tasks.filter(t => t.dueDate === today || isToday(parseISO(t.createdAt)))
+  const todayTasks = state.tasks.filter(t => {
+    if (t.dueDate) return t.dueDate === today
+    return isToday(parseISO(t.createdAt))
+  })
   const doneTasks = todayTasks.filter(t => t.status === 'done')
   const activeTasks = todayTasks.filter(t => t.status !== 'done')
   const overdueTasks = state.tasks.filter(t => t.status === 'overdue')

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import {
   Users, UserPlus, Trash2, CheckSquare, Circle,
@@ -21,6 +21,22 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
   const sharedTasks = state.tasks.filter(t => t.assignees.includes(friend.id))
   const doneTasks = sharedTasks.filter(t => t.status === 'done')
   const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
+  const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? true)
+  const [updating, setUpdating] = useState(false)
+
+  const toggleAllowTasks = async () => {
+    const next = !allowTasks
+    setAllowTasks(next)
+    setUpdating(true)
+    try {
+      await fetch('/api/friends', {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friendId: friend.id, allowTasks: next }),
+      })
+    } catch {}
+    finally { setUpdating(false) }
+  }
 
   return (
     <motion.div
@@ -58,8 +74,26 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
             </button>
           </div>
 
+          {/* Task permission toggle */}
+          <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/40">
+            <span className="text-[11px] text-muted-foreground">Разрешить задачи от этого человека</span>
+            <button
+              onClick={toggleAllowTasks}
+              disabled={updating}
+              className={cn(
+                'w-8 h-4.5 rounded-full relative transition-colors p-0.5',
+                allowTasks ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+              )}
+            >
+              <div className={cn(
+                'w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                allowTasks ? 'translate-x-3.5' : 'translate-x-0'
+              )} />
+            </button>
+          </div>
+
           {/* Status & shared tasks */}
-          <div className="flex items-center gap-3 mt-2.5">
+          <div className="flex items-center gap-3 mt-2">
             <span className={cn('flex items-center gap-1 text-[11px] font-medium', friend.status === 'online' ? 'text-[var(--status-done)]' : 'text-muted-foreground')}>
               <span className={cn('w-1.5 h-1.5 rounded-full', sc.dot)} />
               {sc.label}
