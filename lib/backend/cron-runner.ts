@@ -102,7 +102,24 @@ export async function runReminderCheck() {
               `📍 *Срок:* ${task.dueTime}\n` +
               `✨ _Отправлено из Zerf AI_`
 
-          await sendTelegramMessage(ownerChatId, text)
+          // Check for linked notes
+          const linkedNoteIds = (task as any).linkedNoteIds as string[] || []
+          let linkedNotesText = ''
+          if (linkedNoteIds.length > 0) {
+            try {
+              const notes = await prisma.note.findMany({
+                where: { id: { in: linkedNoteIds } },
+                select: { id: true, title: true }
+              })
+              if (notes.length > 0) {
+                linkedNotesText = `\n\n📎 *Связанные заметки:*\n` + notes.map((n: any) => `• ${n.title}`).join('\n')
+              }
+            } catch {}
+          }
+
+          const finalText = text + linkedNotesText
+          await sendTelegramMessage(ownerChatId, finalText)
+
         }
 
         const nextSentCount = sentCount + 1

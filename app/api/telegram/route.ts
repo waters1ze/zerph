@@ -16,6 +16,7 @@ import {
   registerChatId, getExistingItemsContext,
   getUserUsageAndLimits, incrementUserUsage,
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
+  getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
 } from '@/lib/backend/db'
 import { getUserAuthToken } from '@/lib/backend/auth'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
@@ -331,7 +332,9 @@ async function handleAdminCommand(chatId: number, args: string[]) {
       `• \`/admin revoke <chatId>\` — забрать Premium\n` +
       `• \`/admin status <chatId>\` — подробно о пользователе\n` +
       `• \`/admin reset <chatId>\` — сбросить дневные лимиты\n` +
-      `• \`/admin list\` — список всех зарегистрированных людей`
+      `• \`/admin list\` — список всех зарегистрированных людей\n` +
+      `• \`/admin price <руб>\` — изменить цену подписки (сейчас: будет показано)\n` +
+      `• \`/admin stats\` — статистика пользователей и выгода`
     )
     return
   }
@@ -460,6 +463,43 @@ async function handleAdminCommand(chatId: number, args: string[]) {
     if (users.length > 15) {
       msg += `\n💡 Ищи конкретного человека: \`/admin search <имя>\``
     }
+
+    await send(chatId, msg)
+    return
+  }
+
+  if (subCmd === 'price') {
+    const priceStr = targetQuery
+    const price = parseInt(priceStr || '', 10)
+    if (isNaN(price) || price <= 0) {
+      const current = await getConfig('subscription_price') || '99'
+      await send(chatId, `💰 *Цена подписки*\n\nТекущая цена: *${current} руб/мес*\n\nЧтобы изменить: \`/admin price <число>\``)
+      return
+    }
+    await setConfig('subscription_price', String(price))
+    await send(chatId, `✅ *Цена подписки изменена!*\n\nНовая цена: *${price} руб/мес*\n\n_Изменение сохранено в базе данных._`)
+    return
+  }
+
+  if (subCmd === 'stats') {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const data = await res.json()
+    const users: any[] = data.users || []
+    const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
+    const price = parseInt(await getConfig('subscription_price') || '99', 10)
+    const monthlyRevenue = premiums.length * price
+    const today = new Date().toLocaleDateString('ru-RU')
+
+    let msg = `📊 *Статистика Zerf AI (${today})*\n\n`
+    msg += `👥 Всего пользователей: *${users.length}*\n`
+    msg += `✨ Premium подписчиков: *${premiums.length}*\n`
+    msg += `🆓 Бесплатных: *${users.length - premiums.length}*\n\n`
+    msg += `💰 *Финансы:*\n`
+    msg += `• Цена подписки: ${price} руб/мес\n`
+    msg += `• Потенциальный доход/мес: *${monthlyRevenue} руб*\n`
+    msg += `• При 10% конверсии: *${Math.round(users.length * 0.1) * price} руб/мес*\n`
+    msg += `• При 20% конверсии: *${Math.round(users.length * 0.2) * price} руб/мес*\n\n`
+    msg += `📈 _Чем больше пользователей, тем выше потенциал!_`
 
     await send(chatId, msg)
     return
@@ -1160,7 +1200,8 @@ async function handleGroupAddCommand(msg: any) {
           rawText: targetText,
         }]
       } else {
-        // Enforce exactly ONE item in groups to prevent duplication
+        // In GROUP context: limit to ONE task per /add to prevent duplication
+        // (In private chat voice messages, multiple items ARE allowed — see saveAndRespondParsedItems)
         items = [items[0]]
       }
 
@@ -1233,6 +1274,153 @@ async function handleInviteCommand(chatId: number, senderName: string, param?: s
   )
 
   await send(chatId, `✉️ Приглашение отправлено пользователю *@${cleanUsername}*! Ждём подтверждения.`)
+}
+
+// ── Send Task Command ──────────────────────────────────────────────────────────
+
+async function handleSendCommand(senderChatId: number, senderName: string, targetUsername: string, taskText: string) {
+  const cleanUsername = targetUsername.replace('@', '').trim()
+
+  // Find target user
+  let targetUser = await prisma.telegramChat.findFirst({
+    where: { username: { equals: cleanUsername, mode: 'insensitive' } }
+  })
+  if (!targetUser && !isNaN(Number(cleanUsername))) {
+    targetUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(cleanUsername) } })
+  }
+
+  if (!targetUser) {
+    await send(senderChatId, `🔍 Пользователь *@${cleanUsername}* не найден в Zerf.\nПопроси его запустить бота: @zerph_bot`)
+    return
+  }
+
+  const targetId = Number(targetUser.chatId)
+
+  // Parse task with AI
+  const key = process.env.GROQ_API_KEY || ''
+  const items = key ? await parseIntentWithGroq(taskText, key) : []
+  const item = items[0] || {
+    title: taskText.slice(0, 80),
+    summary: taskText,
+    priority: 'medium',
+    dueDate: new Date().toISOString().slice(0, 10),
+    tags: [],
+  }
+
+  // Save task to recipient
+  const newTask = await prisma.task.create({
+    data: {
+      title: item.title || taskText.slice(0, 80),
+      description: item.summary || taskText,
+      priority: item.priority || 'medium',
+      status: 'todo',
+      dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+      dueTime: item.dueTime || null,
+      tags: item.tags || [],
+      ownerChatId: BigInt(targetId),
+      authorChatId: BigInt(senderChatId),
+      assignees: [String(senderChatId)],
+      isShared: true,
+    } as any
+  })
+
+  // Notify recipient
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+  let notifyMsg = `📨 *${escMd(senderName)}* мгновенно передал(а) тебе задачу!\n\n`
+  notifyMsg += `📌 *${escMd(item.title || taskText)}*\n`
+  if (item.summary && item.summary !== item.title) notifyMsg += `📝 ${escMd(item.summary)}\n`
+  if (item.dueDate) notifyMsg += `📅 Срок: ${item.dueDate}${item.dueTime ? ` ${item.dueTime}` : ''}\n`
+
+  await send(targetId, notifyMsg, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Принять', callback_data: `delegate_accept_${newTask.id}` },
+          { text: '❌ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
+        ]
+      ]
+    }
+  })
+
+  await send(senderChatId, `✅ Задача *«${escMd(item.title || taskText)}»* мгновенно отправлена *${escMd(targetUser.firstName || cleanUsername)}*!`)
+}
+
+// ── Schedule Command ───────────────────────────────────────────────────────────
+
+async function handleScheduleCommand(chatId: number, targetUsername: string) {
+  const cleanUsername = targetUsername.replace('@', '').trim()
+
+  let targetUser = await prisma.telegramChat.findFirst({
+    where: { username: { equals: cleanUsername, mode: 'insensitive' } }
+  })
+  if (!targetUser && !isNaN(Number(cleanUsername))) {
+    targetUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(cleanUsername) } })
+  }
+
+  if (!targetUser) {
+    await send(chatId, `🔍 Пользователь *@${cleanUsername}* не найден в Zerf.`)
+    return
+  }
+
+  const { tasks, goals } = await getPublicItemsByUser(targetUser.chatId)
+  const name = escMd(targetUser.firstName || cleanUsername)
+
+  if (tasks.length === 0 && goals.length === 0) {
+    await send(chatId, `📅 *Расписание ${name}*\n\nПользователь не поделился ни одной задачей. Попроси его использовать /public!`)
+    return
+  }
+
+  let msg = `📅 *Публичное расписание ${name}*\n\n`
+
+  if (tasks.length > 0) {
+    msg += `📌 *Задачи:*\n`
+    tasks.slice(0, 10).forEach((t: any) => {
+      const priority = t.priority === 'urgent' ? '🔴' : t.priority === 'high' ? '🟠' : t.priority === 'low' ? '🟢' : '🟡'
+      const date = t.dueDate ? ` · ${t.dueDate}` : ''
+      const time = t.dueTime ? ` ${t.dueTime}` : ''
+      msg += `${priority} ${escMd(t.title)}${date}${time}\n`
+    })
+  }
+
+  if (goals.length > 0) {
+    msg += `\n🎯 *Цели:*\n`
+    goals.slice(0, 5).forEach((g: any) => {
+      const dl = g.deadline ? ` · ${g.deadline}` : ''
+      msg += `• ${escMd(g.title)} — ${g.progress}%${dl}\n`
+    })
+  }
+
+  msg += `\n_Чтобы договориться о времени — напишите @${cleanUsername} напрямую_`
+  await send(chatId, msg)
+}
+
+// ── Public/Share Command ───────────────────────────────────────────────────────
+
+async function handlePublicCommand(chatId: number, taskId?: string) {
+  if (taskId) {
+    // Make specific task public
+    const ok = await setItemVisibility(taskId, 'task', 'public')
+    if (ok) {
+      await send(chatId, `🔓 *Задача открыта!*\n\nТеперь другие могут видеть её через \`/schedule @твой_юзернейм\`\n\nЧтобы скрыть: \`/private ${taskId}\``)
+    } else {
+      await send(chatId, `❌ Задача не найдена. Укажи корректный ID.`)
+    }
+  } else {
+    // Show last N tasks and ask which to make public
+    const tasks = await prisma.task.findMany({
+      where: { ownerChatId: BigInt(chatId), status: { not: 'done' } },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    })
+    if (tasks.length === 0) {
+      await send(chatId, `📌 У тебя нет активных задач. Создай задачи, затем поделись ими.`)
+      return
+    }
+    let msg = `🔓 *Открыть задачу для всех?*\n\nВыбери задачу, чтобы поделиться ею:\n\n`
+    tasks.forEach((t: any, i: number) => msg += `${i + 1}. ${escMd(t.title)} (\`${t.id}\`)\n`)
+    msg += `\nИспользуй: \`/public <id>\` чтобы сделать задачу видимой.`
+    await send(chatId, msg)
+  }
 }
 
 // ── Main webhook handler ──────────────────────────────────────────────────────
@@ -1509,9 +1697,48 @@ export async function POST(req: NextRequest) {
         await handleWeeklyReport(senderId, chatId)
       } else if (cmd === '/admin') {
         await handleAdminCommand(chatId, parts.slice(1))
+      } else if (cmd === '/send') {
+        // /send @username текст задачи
+        const target = parts[1] // @username or chatId
+        const taskText = parts.slice(2).join(' ')
+        if (!target || !taskText) {
+          await send(chatId, `📨 *Мгновенная передача задачи*\n\nИспользование: \`/send @username текст задачи\`\n\nПример: \`/send @vasya купить молоко до 18:00\``)
+        } else {
+          await handleSendCommand(chatId, firstName, target, taskText)
+        }
+      } else if (cmd === '/schedule') {
+        // /schedule @username — показать публичное расписание
+        const target = parts[1]
+        if (!target) {
+          await send(chatId, `📅 *Просмотр расписания*\n\nИспользование: \`/schedule @username\`\n\nПоказывает задачи, которыми пользователь поделился публично.`)
+        } else {
+          await handleScheduleCommand(chatId, target)
+        }
+      } else if (cmd === '/public' || cmd === '/share') {
+        // /public — поделиться последней задачей / /public taskId
+        const targetId = parts[1]
+        await handlePublicCommand(chatId, targetId)
+      } else if (cmd === '/private') {
+        const targetId = parts[1]
+        if (!targetId) {
+          await send(chatId, `🔒 Укажи ID задачи: \`/private <taskId>\``)
+        } else {
+          const ok = await setItemVisibility(targetId, 'task', 'private')
+          await send(chatId, ok ? `🔒 Задача скрыта от других пользователей.` : `❌ Задача не найдена.`)
+        }
+      } else if (cmd === '/link') {
+        // /link taskId noteId
+        const taskId = parts[1], noteId = parts[2]
+        if (!taskId || !noteId) {
+          await send(chatId, `📎 *Привязка заметки к задаче*\n\nИспользование: \`/link <taskId> <noteId>\``)
+        } else {
+          const ok = await linkNoteToTask(taskId, noteId)
+          await send(chatId, ok ? `✅ Заметка привязана к задаче! При следующем напоминании она будет показана.` : `❌ Задача или заметка не найдена.`)
+        }
       } else if (!isGroup) {
         await send(chatId, 'Попробуй /settings, /today, /invite, /report, /buy или /help')
       }
+
     } else if (!isGroup) {
       if (voice) {
         await processVoice(chatId, voice.file_id, voice.duration || 15)

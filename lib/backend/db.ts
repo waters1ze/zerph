@@ -704,6 +704,11 @@ export async function saveParsedItemToDb(
       ownerChatId,
     })
 
+    // Track note usage (so daily limits are enforced per-note)
+    if (ownerChatId) {
+      await incrementUserUsage(ownerChatId, 'note').catch(() => {})
+    }
+
     // ── Auto-reminder: if note content contains a time, create a companion task ──
     const noteText = `${item.title} ${item.summary} ${item.rawText || ''}`
     const timeMatch = noteText.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/)
@@ -1253,7 +1258,9 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
 
   if (!ownerChatId) return defaultLimits
 
-  if (String(ownerChatId) === '6136950061') {
+  // Owner bypass: unlimited everything
+  const ownerChatIdEnv = process.env.OWNER_CHAT_ID || '6136950061'
+  if (String(ownerChatId) === ownerChatIdEnv) {
     return {
       plan: 'premium',
       subscriptionExpiry: null,
@@ -1406,3 +1413,111 @@ export async function activateUserSubscription(ownerChatId: number | bigint | st
     return false
   }
 }
+
+// ── Visibility ─────────────────────────────────────────────────────────────────
+
+/** Return public tasks/goals for a user (for /schedule command) */
+export async function getPublicItemsByUser(chatId: number | bigint | string) {
+  try {
+    const cid = BigInt(chatId)
+    const [tasks, goals, notes] = await Promise.all([
+      prisma.task.findMany({
+        where: { ownerChatId: cid, visibility: 'public', status: { not: 'done' } },
+        orderBy: { dueDate: 'asc' }
+      }),
+      prisma.goal.findMany({
+        where: { ownerChatId: cid, visibility: 'public' },
+        orderBy: { deadline: 'asc' }
+      }),
+      prisma.note.findMany({
+        where: { ownerChatId: cid, visibility: 'public' },
+        orderBy: { createdAt: 'desc' }
+      }),
+    ])
+    return { tasks, goals, notes }
+  } catch {
+    return { tasks: [], goals: [], notes: [] }
+  }
+}
+
+/** Set visibility of a task / goal / note */
+export async function setItemVisibility(
+  id: string,
+  type: 'task' | 'goal' | 'note',
+  visibility: 'public' | 'private'
+) {
+  try {
+    if (type === 'task') {
+      await prisma.task.update({ where: { id }, data: { visibility } })
+    } else if (type === 'goal') {
+      await prisma.goal.update({ where: { id }, data: { visibility } })
+    } else {
+      await prisma.note.update({ where: { id }, data: { visibility } })
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ── Note-Task Linking ──────────────────────────────────────────────────────────
+
+/** Link a note to a task */
+export async function linkNoteToTask(taskId: string, noteId: string) {
+  try {
+    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!task) return false
+    const current = (task as any).linkedNoteIds as string[] || []
+    if (current.includes(noteId)) return true
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { linkedNoteIds: [...current, noteId] } as any
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Unlink a note from a task */
+export async function unlinkNoteFromTask(taskId: string, noteId: string) {
+  try {
+    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!task) return false
+    const current = (task as any).linkedNoteIds as string[] || []
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { linkedNoteIds: current.filter(id => id !== noteId) } as any
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ── Config ─────────────────────────────────────────────────────────────────────
+
+/** Get a configuration value by key */
+export async function getConfig(key: string): Promise<string | null> {
+  try {
+    const config = await prisma.config.findUnique({ where: { key } })
+    return config?.value ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Set a configuration value */
+export async function setConfig(key: string, value: string): Promise<boolean> {
+  try {
+    await prisma.config.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value }
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
