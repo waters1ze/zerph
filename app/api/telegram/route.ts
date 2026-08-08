@@ -312,39 +312,81 @@ async function handleSubscribe(chatId: number) {
 
 async function handleAdminCommand(chatId: number, args: string[]) {
   const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061').split(',').map(s => s.trim()).filter(Boolean)
+  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061,5078516086').split(',').map(s => s.trim()).filter(Boolean)
 
-  // Check if caller is admin
+  // Check if caller is authorized admin
   if (!ADMIN_CHAT_IDS.includes(String(chatId))) {
+    await send(chatId, `⛔ *Доступ ограничен.* Раздел администрирования доступен только владельцу системы.`)
     return
   }
 
-  const [subCmd, targetChatId, daysStr] = args
+  const [subCmd, targetQuery] = args
 
   if (!subCmd) {
     await send(chatId,
-      `🔧 *Admin Panel Zerf*\n\n` +
-      `Доступные команды:\n` +
+      `🛡️ *Панель Администратора Zerf AI*\n\n` +
+      `Команды управления:\n` +
+      `• \`/admin search <имя/@username/ID>\` — быстрый поиск пользователя\n` +
       `• \`/admin grant <chatId> [дни]\` — выдать Premium\n` +
       `• \`/admin revoke <chatId>\` — забрать Premium\n` +
-      `• \`/admin status <chatId>\` — статус пользователя\n` +
+      `• \`/admin status <chatId>\` — подробно о пользователе\n` +
       `• \`/admin reset <chatId>\` — сбросить дневные лимиты\n` +
-      `• \`/admin list\` — список всех пользователей`
+      `• \`/admin list\` — список всех зарегистрированных людей`
     )
     return
   }
 
+  if (subCmd === 'search' || subCmd === 'find') {
+    const q = args.slice(1).join(' ').trim()
+    if (!q) { await send(chatId, '⚠️ Укажи запрос: `/admin search <имя или @username или ID>`'); return }
+    
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const data = await res.json()
+    const allUsers: any[] = data.users || []
+    
+    const matched = allUsers.filter(u => {
+      const name = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase()
+      const uname = (u.username || '').toLowerCase()
+      const cid = String(u.chatId)
+      const queryLower = q.toLowerCase().replace('@', '')
+      return name.includes(queryLower) || uname.includes(queryLower) || cid === queryLower
+    })
+
+    if (matched.length === 0) {
+      await send(chatId, `🔍 Пользователь по запросу «${escMd(q)}» не найден.`)
+      return
+    }
+
+    let msg = `🔍 *Результаты поиска (${matched.length}):*\n\n`
+    matched.slice(0, 10).forEach(u => {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Без имени'
+      const uname = u.username ? `@${u.username}` : 'нет username'
+      const isPrem = u.plan === 'premium'
+      const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : '—'
+      msg += `👤 *${escMd(name)}* (${uname})\n`
+      msg += `  ID: \`${u.chatId}\`\n`
+      msg += `  Тариф: ${isPrem ? '✨ Premium' : '🆓 Free'} (до ${exp})\n`
+      msg += `  Быстрые команды:\n`
+      msg += `  • \`/admin grant ${u.chatId} 30\`\n`
+      msg += `  • \`/admin revoke ${u.chatId}\`\n\n`
+    })
+
+    await send(chatId, msg)
+    return
+  }
+
   if (subCmd === 'grant') {
-    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin grant <chatId> [дни]'); return }
+    const targetChatId = targetQuery
+    const daysStr = args[2]
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: `/admin grant <chatId> [дни]`'); return }
     const days = parseInt(daysStr || '30', 10)
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ADMIN_SECRET}` },
       body: JSON.stringify({ chatId: targetChatId, action: 'grant', days }),
     })
     const data = await res.json()
     await send(chatId, data.message || data.error || '✅ Готово')
-    // Notify the target user
     try {
       await send(parseInt(targetChatId),
         `🎉 *Поздравляем! Тебе выдана подписка Zerf Premium на ${days} дней!*\n\n` +
@@ -355,8 +397,9 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   if (subCmd === 'revoke') {
-    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin revoke <chatId>'); return }
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription`, {
+    const targetChatId = targetQuery
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: `/admin revoke <chatId>`'); return }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ADMIN_SECRET}` },
       body: JSON.stringify({ chatId: targetChatId, action: 'revoke' }),
@@ -370,8 +413,9 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   if (subCmd === 'status') {
-    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin status <chatId>'); return }
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription?chatId=${targetChatId}&secret=${ADMIN_SECRET}`)
+    const targetChatId = targetQuery
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: `/admin status <chatId>`'); return }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?chatId=${targetChatId}&secret=${ADMIN_SECRET}`)
     const data = await res.json()
     const exp = data.subscriptionExpiry ? new Date(data.subscriptionExpiry).toLocaleDateString('ru-RU') : 'нет'
     await send(chatId,
@@ -386,8 +430,9 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   if (subCmd === 'reset') {
-    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: /admin reset <chatId>'); return }
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription`, {
+    const targetChatId = targetQuery
+    if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: `/admin reset <chatId>`'); return }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ADMIN_SECRET}` },
       body: JSON.stringify({ chatId: targetChatId, action: 'reset_usage' }),
@@ -398,23 +443,29 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   if (subCmd === 'list') {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?secret=${ADMIN_SECRET}`)
     const data = await res.json()
-    const users = data.users || []
+    const users: any[] = data.users || []
     const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
     let msg = `👥 *Всего пользователей: ${users.length}*\n✨ Premium: ${premiums.length}\n\n`
-    premiums.slice(0, 15).forEach((u: { chatId: string; firstName?: string; subscriptionExpiry?: string }) => {
-      const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : '?'
-      msg += `• \`${u.chatId}\` ${u.firstName || ''} — до ${exp}\n`
+    
+    users.slice(0, 15).forEach((u: any) => {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Без имени'
+      const uname = u.username ? `@${u.username}` : ''
+      const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : '—'
+      const isPrem = u.plan === 'premium'
+      msg += `• \`${u.chatId}\` *${escMd(name)}* ${uname} — ${isPrem ? `✨ до ${exp}` : '🆓 Free'}\n`
     })
-    if (users.length > premiums.length) {
-      msg += `\n🆓 Free: ${users.length - premiums.length} чел.`
+
+    if (users.length > 15) {
+      msg += `\n💡 Ищи конкретного человека: \`/admin search <имя>\``
     }
+
     await send(chatId, msg)
     return
   }
 
-  await send(chatId, `❓ Неизвестная команда. /admin — список команд`)
+  await send(chatId, `❓ Неизвестная команда. Введи /admin для списка всех команд.`)
 }
 
 async function handleRefCommand(chatId: number) {

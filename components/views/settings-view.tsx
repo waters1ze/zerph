@@ -77,6 +77,38 @@ export function SettingsView() {
   const [inputChatId, setInputChatId] = useState('')
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
+  const [adminUsers, setAdminUsers] = useState<any[]>([])
+  const [adminSearch, setAdminSearch] = useState('')
+  const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetch('/api/admin/subscription?secret=zerph-admin-2024')
+        .then(r => r.json())
+        .then(data => {
+          if (data.users) setAdminUsers(data.users)
+        })
+        .catch(() => {})
+    }
+  }, [isAdmin])
+
+  const handleAdminAction = async (targetId: string, action: string, days = 30) => {
+    try {
+      const res = await fetch('/api/admin/subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer zerph-admin-2024' },
+        body: JSON.stringify({ chatId: targetId, action, days }),
+      })
+      const data = await res.json()
+      alert(data.message || data.error || 'Готово')
+      const r = await fetch('/api/admin/subscription?secret=zerph-admin-2024')
+      const d = await r.json()
+      if (d.users) setAdminUsers(d.users)
+    } catch (e) {
+      alert('Ошибка')
+    }
+  }
+
   const save = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -244,6 +276,82 @@ export function SettingsView() {
           </div>
         </div>
       </Section>
+
+      {/* Admin Panel (Visible ONLY to system admin) */}
+      {isAdmin && (
+        <Section title="🛡️ Панель Администратора">
+          <div className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[13px] font-bold text-foreground">Поиск и управление людьми</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Всего зарегистрировано в системе: {adminUsers.length} чел.</p>
+              </div>
+            </div>
+
+            <input
+              type="text"
+              placeholder="🔍 Поиск по имени, @username или Chat ID..."
+              value={adminSearch}
+              onChange={e => setAdminSearch(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-muted/50 border border-border text-[12px] text-foreground outline-none focus:border-primary"
+            />
+
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {adminUsers
+                .filter(u => {
+                  if (!adminSearch.trim()) return true
+                  const q = adminSearch.toLowerCase().replace('@', '')
+                  const name = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase()
+                  const uname = (u.username || '').toLowerCase()
+                  const cid = String(u.chatId)
+                  return name.includes(q) || uname.includes(q) || cid.includes(q)
+                })
+                .map(u => {
+                  const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Без имени'
+                  const isPrem = u.plan === 'premium'
+                  const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : null
+
+                  return (
+                    <div key={u.chatId} className="p-3 rounded-xl bg-muted/30 border border-border/60 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-bold text-foreground truncate">
+                          {name} {u.username ? `@${u.username}` : ''}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          ID: {u.chatId} | {isPrem ? `✨ Premium (до ${exp})` : '🆓 Free'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isPrem ? (
+                          <button
+                            onClick={() => handleAdminAction(u.chatId, 'revoke')}
+                            className="px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive text-[11px] font-semibold hover:bg-destructive/20 transition-colors"
+                          >
+                            Забрать
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleAdminAction(u.chatId, 'grant', 30)}
+                            className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                          >
+                            +30 дн. Premium
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleAdminAction(u.chatId, 'reset_usage')}
+                          className="px-2.5 py-1 rounded-lg bg-muted border border-border text-[11px] text-foreground hover:bg-card transition-colors"
+                        >
+                          Сброс
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* Appearance */}
       <Section title="Appearance">
