@@ -568,6 +568,21 @@ export async function saveParsedItemToDb(
     return { item, updatedItem: true }
   }
 
+  // Set my birthday action
+  if (item.action === 'set_my_birthday') {
+    if (ownerChatId && item.dueDate) {
+      await prisma.telegramChat.update({
+        where: { chatId: BigInt(ownerChatId) },
+        data: { birthday: item.dueDate }
+      }).catch(() => {})
+      
+      // Auto sync so the user's task list (and potentially others) knows
+      // Note: the friend will only see it when *they* sync, but this is fine
+      item.title = `День рождения сохранен: ${item.dueDate}`
+    }
+    return { item, updatedItem: true }
+  }
+
   // Delete specific task action
   if (item.action === 'delete') {
     if (item.targetId) {

@@ -783,6 +783,11 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       continue
     }
 
+    if (item.action === 'set_my_birthday') {
+      msg += `🎂 ${escMd(item.title)}\n\n`
+      continue
+    }
+
     const typeLabel = TYPE_RU[item.type] || item.type
     const actionWord = updatedItem || item.action === 'update' ? 'изменена' : 'создана'
     const prefix = items.length > 1 ? `${idx + 1}. ` : ''
