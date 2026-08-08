@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const ok = await setConfig(String(key), String(value))
   if (ok) {
-    return NextResponse.json({ message: Config 'key' set to 'value' })
+    return NextResponse.json({ message: `Config '${key}' set to '${value}'` })
   } else {
     return NextResponse.json({ error: 'Failed to save config' }, { status: 500 })
   }
