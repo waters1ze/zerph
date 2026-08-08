@@ -878,6 +878,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
           username: chat?.username || '',
           status,
           addedAt: new Date().toISOString(),
+          birthday: chat?.birthday || null,
         }
       })
     )
