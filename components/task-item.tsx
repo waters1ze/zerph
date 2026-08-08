@@ -158,9 +158,9 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
             )}
 
             {task.isShared && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1 text-[11px] text-primary/80 font-medium bg-primary/10 px-2 py-0.5 rounded-md">
                 <Users className="w-3 h-3" />
-                Shared
+                🤝 Порученная задача
               </span>
             )}
 

@@ -702,8 +702,11 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       const { friend, friendship } = await findFriendByName(chatId, item.recipientName)
 
       if (friend) {
-        if (friendship && (friendship as any).allowTasks === false) {
-          msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение поручений.\n\n`
+        const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.firstName || '').toLowerCase().includes('bot')
+        const isAllowed = friendship ? (friendship as any).allowTasks !== false : true
+
+        if (!isAllowed) {
+          msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение поручений от вас.\n\n`
           continue
         }
 
@@ -725,10 +728,22 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 
         const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
         const senderName = sender?.firstName || 'Пользователь'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
         
-        await send(Number(friend.chatId), `🤝 *${senderName}* поручил(а) тебе задачу:\n\n*${item.title}*${item.dueTime ? `\n⏰ Время: ${item.dueTime}` : ''}`, {
+        let notifyMsg = `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
+        notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
+        if (item.summary) {
+          notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
+        }
+        if (item.dueTime) {
+          notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+        }
+        notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
+
+        await send(Number(friend.chatId), notifyMsg, {
           reply_markup: {
             inline_keyboard: [
+              [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
               [
                 { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
                 { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
