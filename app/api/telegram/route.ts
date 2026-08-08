@@ -702,7 +702,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
     // Fallback detection if delegation keywords are used in prompt text or if LLM missed recipientName
     if ((item.type !== 'delegate' || !item.recipientName) && item.rawText) {
       const lower = item.rawText.toLowerCase()
-      const match = lower.match(/(?:дай задачу|поручи|отправь задачу|передай задачу|создай задачу для|назначь)\s+([а-яА-Яa-zA-Z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+через)/i)
+      const match = lower.match(/(?:дай задачу|поручи|отправь задачу|передай задачу|создай задачу для|назначь|кинь|скинь|напиши|передай)\s+([а-яА-Яa-zA-Z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+через)/i)
       if (match && match[1]) {
         item.type = 'delegate'
         item.recipientName = match[1].trim()
