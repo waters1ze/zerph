@@ -1094,7 +1094,15 @@ export async function POST(req: NextRequest) {
         })
       } else if (data.startsWith('alarm_ios_')) {
         const time = data.replace('alarm_ios_', '')
-        await send(chatId, `На iPhone: Откройте приложение Часы → Будильник → + → установите время ${time}. К сожалению, iOS не поддерживает автоматическую установку будильников через сторонние приложения.`)
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+        const icsUrl = `${appUrl}/api/alarm/ics?time=${encodeURIComponent(time)}`
+        await send(chatId, `📱 *1-Tap Будильник для iPhone (iOS):*\n\nНажми на кнопку ниже, чтобы мгновенно добавить напоминание с звуковым сигналом в Календарь iPhone на *${time}*!`, {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: `⏰ Добавить сигнал на iPhone (${time})`, url: icsUrl }]
+            ]
+          }
+        })
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id })
