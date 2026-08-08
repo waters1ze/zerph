@@ -829,6 +829,11 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
     const results = await Promise.all(
       friendIds.map(async fid => {
         const fidStr = String(fid)
+        const friendship = friendships.find(f => 
+          (f.userChatId === cid && f.friendChatId === fid) || 
+          (f.userChatId === fid && f.friendChatId === cid)
+        )
+
         let chat = chatMap.get(fidStr)
 
         if (!chat || (!chat.firstName && !chat.username)) {
@@ -870,6 +875,8 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
           else status = 'offline'
         }
 
+        const isBot = (chat?.username || '').toLowerCase().includes('bot') || name.toLowerCase().includes('zerph')
+        
         return {
           id: fidStr,
           name,
@@ -879,6 +886,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
           status,
           addedAt: new Date().toISOString(),
           birthday: chat?.birthday || null,
+          allowTasks: (friendship as any)?.allowTasks ?? (isBot ? true : false),
         }
       })
     )
