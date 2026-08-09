@@ -754,7 +754,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       }
     }
 
-    if (item.type === 'delegate' && item.recipientName) {
+    if (item.recipientName) {
       const { friend, friendship } = await findFriendByName(chatId, item.recipientName)
 
       if (friend) {
@@ -762,53 +762,78 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         const isAllowed = friendship ? (friendship as any).allowTasks !== false : true
 
         if (!isAllowed) {
-          msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение поручений от вас.\n\n`
+          msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение элементов от вас.\n\n`
           continue
         }
-
-        const newTask = await prisma.task.create({
-          data: {
-            title: item.title,
-            description: item.summary || '',
-            priority: item.priority || 'medium',
-            status: 'todo',
-            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
-            dueTime: item.dueTime || null,
-            repeat: item.repeat || null,
-            tags: item.tags || [],
-            ownerChatId: friend.chatId,
-            authorChatId: BigInt(chatId),
-            assignees: [String(chatId)],
-            isShared: true,
-          } as any
-        })
 
         const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
         const senderName = sender?.firstName || 'Пользователь'
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
-        
-        let notifyMsg = `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
-        notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
-        if (item.summary) {
-          notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
-        }
-        if (item.dueTime) {
-          notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
-        }
-        notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
 
-        await send(Number(friend.chatId), notifyMsg, {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
-              [
-                { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
-                { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
-              ]
-            ]
+        if (item.type === 'delegate' || item.type === 'task') {
+          const newTask = await prisma.task.create({
+            data: {
+              title: item.title,
+              description: item.summary || '',
+              priority: item.priority || 'medium',
+              status: 'todo',
+              dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+              dueTime: item.dueTime || null,
+              repeat: item.repeat || null,
+              tags: item.tags || [],
+              ownerChatId: friend.chatId,
+              authorChatId: BigInt(chatId),
+              assignees: [String(chatId)],
+              isShared: true,
+            } as any
+          })
+
+          let notifyMsg = `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
+          notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
+          if (item.summary) {
+            notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
           }
-        })
-        msg += `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!\n\n`
+          if (item.dueTime) {
+            notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+          }
+          notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
+
+          await send(Number(friend.chatId), notifyMsg, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
+                [
+                  { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
+                  { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
+                ]
+              ]
+            }
+          })
+          msg += `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!\n\n`
+        } else {
+          // Note or Goal
+          await saveParsedItemToDb(item, friend.chatId, chatId)
+          
+          const typeName = item.type === 'note' ? 'заметку' : (item.type === 'goal' ? 'цель' : 'элемент')
+          let notifyMsg = `🤝 *${escMd(senderName)}* создал(а) для тебя ${typeName}!\n\n`
+          notifyMsg += `📌 *Название:* ${escMd(item.title)}\n`
+          if (item.summary) {
+            notifyMsg += `📝 *Текст:* ${escMd(item.summary)}\n`
+          }
+          if (item.dueTime) {
+            notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+          }
+          notifyMsg += `\n_Сохранено в твоем аккаунте на сайте Zerf AI_`
+
+          await send(Number(friend.chatId), notifyMsg, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }]
+              ]
+            }
+          })
+          msg += `🤝 ${typeName.charAt(0).toUpperCase() + typeName.slice(1)} *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!\n\n`
+        }
       } else {
         msg += `⚠️ Команда не отправлена: друг '${escMd(item.recipientName)}' не найден в контактах. Добавь её через /invite @username\n\n`
       }

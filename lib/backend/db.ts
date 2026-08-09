@@ -553,7 +553,8 @@ export async function getExistingItemsContext(ownerChatId?: number | bigint | st
 
 export async function saveParsedItemToDb(
   item: ParsedItem,
-  ownerChatId?: number | bigint | string | null
+  ownerChatId?: number | bigint | string | null,
+  authorChatId?: number | bigint | string | null
 ): Promise<{
   item: ParsedItem
   completedTask?: DbTask | null

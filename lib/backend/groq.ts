@@ -138,7 +138,7 @@ Always respond with ONLY valid JSON:
       "repeat": "yearly" | "monthly" | "weekly" | "daily" | null,
       "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
       "targetTitle": "для типа completion или delete: название задачи" | null,
-      "recipientName": "строка с именем друга, кому отправляется задача (только для type: delegate)" | null,
+      "recipientName": "строка с именем друга, кому отправляется элемент (задача, заметка, цель). Обязательно укажи, если пользователь просит создать что-то для ДРУГОГО человека (например: 'Лера', 'Мама'). Иначе null",
       "projectId": null,
       "goalId": null,
       "tags": ["тег1", "тег2"],
