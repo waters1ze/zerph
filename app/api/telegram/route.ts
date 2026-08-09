@@ -255,7 +255,7 @@ async function handleLanguage(chatId: number) {
 
 const TYPE_RU: Record<string, string> = {
   task: 'Задача', goal: 'Цель', note: 'Заметка',
-  project: 'Проект', reminder: 'Напоминание', completion: 'Выполнено',
+  project: 'Проект', reminder: 'Напоминание', completion: 'Выполнено', delegate: 'Поручение'
 }
 
 async function handleSubscribe(chatId: number) {
@@ -600,6 +600,7 @@ const NAME_ALIASES: Record<string, string[]> = {
   татьяна: ['таня'],
   анна: ['аня'],
   юлия: ['юля'],
+  кирилл: ['кирюха', 'киря', 'кир'],
 }
 
 async function findFriendByName(userChatId: number | bigint, recipientName: string) {
@@ -617,7 +618,8 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
   const rawQuery = recipientName.toLowerCase().trim().replace('@', '')
   const queryTokens = rawQuery.split(/\s+/).filter(Boolean)
 
-  let matchedFriend: any = null
+  let bestFriend: any = null
+  let bestScore = -1
 
   for (const f of friendChats) {
     const fn = (f.firstName || '').toLowerCase()
@@ -626,18 +628,18 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
     const fullName = `${fn} ${ln}`.trim()
 
     if (fullName.includes(rawQuery) || fn.includes(rawQuery) || ln.includes(rawQuery) || (un && un.includes(rawQuery))) {
-      matchedFriend = f
+      bestFriend = f
       break
     }
 
     for (const token of queryTokens) {
       if (fn.includes(token) || ln.includes(token) || (un && un.includes(token))) {
-        matchedFriend = f
+        bestFriend = f
         break
       }
       if ((fn.length >= 3 && (token.includes(fn) || token.startsWith(fn.slice(0, 3)) || fn.startsWith(token.slice(0, 3)))) ||
           (ln.length >= 3 && (token.includes(ln) || token.startsWith(ln.slice(0, 3)) || ln.startsWith(token.slice(0, 3))))) {
-        matchedFriend = f
+        bestFriend = f
         break
       }
 
@@ -649,41 +651,41 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
         const fnMatchesAlias = aliases.some(a => fn.includes(a) || fullName.includes(a) || (a.length >= 3 && fn.startsWith(a.slice(0, 3))))
 
         if (tokenMatchesAlias && fnMatchesCanonical) {
-          matchedFriend = f
+          bestFriend = f
           break
         }
         if (tokenMatchesCanonical && fnMatchesAlias) {
-          matchedFriend = f
+          bestFriend = f
           break
         }
       }
-      if (matchedFriend) break
+      if (bestFriend) break
     }
-    if (matchedFriend) break
+    if (bestFriend) break
   }
 
-  if (!matchedFriend && friendChats.length > 0) {
+  if (!bestFriend && friendChats.length > 0) {
     for (const f of friendChats) {
       const fn = (f.firstName || '').toLowerCase()
       const ln = (f.lastName || '').toLowerCase()
       for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
         if (aliases.some(a => rawQuery.includes(a)) && (fn.includes(canonical) || ln.includes(canonical))) {
-          matchedFriend = f
+          bestFriend = f
           break
         }
       }
-      if (matchedFriend) break
+      if (bestFriend) break
     }
   }
 
-  if (!matchedFriend) return { friend: null, friendship: null }
+  if (!bestFriend) return { friend: null, friendship: null }
 
   const friendship = friendships.find((f: any) =>
-    (f.userChatId === matchedFriend.chatId && f.friendChatId === cid) ||
-    (f.friendChatId === matchedFriend.chatId && f.userChatId === cid)
+    (f.userChatId === bestFriend.chatId && f.friendChatId === cid) ||
+    (f.friendChatId === bestFriend.chatId && f.userChatId === cid)
   )
 
-  return { friend: matchedFriend, friendship }
+  return { friend: bestFriend, friendship }
 }
 
 async function processText(chatId: number, text: string) {

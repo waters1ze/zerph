@@ -28,6 +28,7 @@ export interface ParsedItem {
   assignees?: string[]
   repeat?: string | null
   reminderOffsetMinutes?: number | null
+  tasksToCreate?: { title: string; dueDate: string | null; dueTime: string | null }[]
 }
 
 export function getDynamicSystemPrompt(existingItemsContext?: string, friendsContext?: string): string {
@@ -137,12 +138,14 @@ Always respond with ONLY valid JSON:
       "repeat": "yearly" | "monthly" | "weekly" | "daily" | null,
       "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
       "targetTitle": "для типа completion или delete: название задачи" | null,
+      "recipientName": "строка с именем друга, кому отправляется задача (только для type: delegate)" | null,
       "projectId": null,
       "goalId": null,
       "tags": ["тег1", "тег2"],
       "subtasks": ["конкретный шаг 1", "конкретный шаг 2", "конкретный шаг 3"],
       "milestones": ["этап 1", "этап 2"],
-      "motivation": "только для целей" | null
+      "motivation": "только для целей" | null,
+      "tasksToCreate": [{"title": "название", "dueDate": "YYYY-MM-DD" | null, "dueTime": "HH:MM" | null}] // только для type: note, чтобы создать и сразу привязать задачи
     }
   ]
 }

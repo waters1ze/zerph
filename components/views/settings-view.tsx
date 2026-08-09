@@ -452,6 +452,15 @@ export function SettingsView() {
           <input
             value={settings.name}
             onChange={e => update({ name: e.target.value })}
+            onBlur={e => {
+              if (currentChatId) {
+                fetch('/api/telegram/user', {
+                  method: 'POST',
+                  headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: e.target.value })
+                }).catch(() => {})
+              }
+            }}
             placeholder="Ваше имя"
             className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44"
           />

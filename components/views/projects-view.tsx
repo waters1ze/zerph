@@ -335,11 +335,11 @@ function ProjectDetail({ project, onBack, onEdit, onRefresh, onDelete }: {
         <div className="flex items-center gap-2">
           <button onClick={onDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-[12px] text-destructive transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Удалить</span>
+            <span>Удалить</span>
           </button>
           <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-[12px] text-muted-foreground transition-colors">
             <Edit3 className="w-3.5 h-3.5" />
-            Изменить
+            <span>Изменить</span>
           </button>
         </div>
       </div>

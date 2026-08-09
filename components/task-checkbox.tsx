@@ -28,7 +28,7 @@ export function TaskCheckbox({ checked, onChange, priority = 'medium', size = 18
       type="button"
       onClick={e => { e.stopPropagation(); onChange() }}
       style={{ width: size, height: size }}
-      className="relative flex items-center justify-center shrink-0 group/cb"
+      className="relative flex items-center justify-center shrink-0 group/cb before:absolute before:-inset-3 before:content-['']"
       aria-label={checked ? 'Mark incomplete' : 'Mark complete'}
     >
       <svg

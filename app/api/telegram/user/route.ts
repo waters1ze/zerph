@@ -53,13 +53,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { birthday } = await req.json()
+    const { birthday, name } = await req.json()
     const userCid = BigInt(cid)
+
+    const updateData: any = {}
+    if (birthday !== undefined) updateData.birthday = birthday || null
+    if (name !== undefined) updateData.firstName = name
 
     await prisma.telegramChat.upsert({
       where: { chatId: userCid },
-      update: { birthday: birthday || null },
-      create: { chatId: userCid, birthday: birthday || null },
+      update: updateData,
+      create: { chatId: userCid, ...updateData },
     })
 
     const friendships = await prisma.friendship.findMany({

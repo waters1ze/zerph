@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Check, MoreVertical, Flame } from 'lucide-react'
-import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Habit } from '@/lib/types'
@@ -144,19 +143,26 @@ export function HabitsWidget() {
               <AnimatePresence>
                 {showEmojiPicker && (
                   <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="absolute top-12 left-0 z-50 shadow-2xl"
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    className="absolute top-12 left-0 z-50 bg-popover border border-border shadow-xl rounded-xl p-2 w-64"
                   >
-                    <EmojiPicker
-                      theme={state.settings.theme === 'dark' ? Theme.DARK : Theme.LIGHT}
-                      onEmojiClick={(emojiData: EmojiClickData) => {
-                        setNewIcon(emojiData.emoji)
-                        setShowEmojiPicker(false)
-                      }}
-                      lazyLoadEmojis={true}
-                    />
+                    <div className="grid grid-cols-5 gap-1">
+                      {['💧','🏃‍♂️','🧘‍♀️','📚','💪','🍏','💊','🛌','🔥','🎵','🧠','🌿','✍️','💰','🚫','📅','🏆','🚗','🛒','🍳'].map(emoji => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => {
+                            setNewIcon(emoji)
+                            setShowEmojiPicker(false)
+                          }}
+                          className="flex items-center justify-center text-xl w-10 h-10 rounded-lg hover:bg-accent transition-colors"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
