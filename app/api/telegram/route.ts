@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
-import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem } from '@/lib/backend/groq'
+import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem, generateSmartReschedulePlan } from '@/lib/backend/groq'
 import {
   saveParsedItemToDb,
   getAllTasks, getAllGoals, getAllNotes,
@@ -17,9 +17,10 @@ import {
   getUserUsageAndLimits, incrementUserUsage,
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
+  getUserProductivityStats, completeTask,
 } from '@/lib/backend/db'
 import { getUserAuthToken } from '@/lib/backend/auth'
-import { runReminderCheck } from '@/lib/backend/cron-runner'
+import { runReminderCheck, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
@@ -363,6 +364,166 @@ async function handleProjectFilter(chatId: number, projectName?: string) {
     const due = t.dueTime ? ` _(${t.dueTime})_` : ''
     msg += `${i + 1}. ${statusEmoji} *${escMd(t.title)}*${due}\n`
   })
+
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+}
+
+async function handleStats(chatId: number) {
+  const stats = await getUserProductivityStats(chatId)
+
+  const progressBar = (val: number, max: number = 100, length: number = 8) => {
+    const filled = Math.round((val / (max || 1)) * length)
+    return '▓'.repeat(Math.min(filled, length)) + '░'.repeat(Math.max(0, length - filled))
+  }
+
+  let rating = '🌱 Новичок продуктивности'
+  if (stats.completionRate >= 80 && stats.completedCount >= 10) rating = '⚡ Мастер фокуса и дедлайнов'
+  else if (stats.completionRate >= 60 || stats.completedCount >= 5) rating = '🚀 Продуктивный деятель'
+  else if (stats.completedCount > 0) rating = '🎯 На верном пути'
+
+  let msg = `📊 *Ваша статистика продуктивности в Zerf AI*\n\n`
+  msg += `🏆 *Статус:* ${rating}\n`
+  msg += `🔥 *Текущий стрик:* ${stats.streak} дн. подряд\n`
+  msg += `📈 *Процент выполнения:* ${stats.completionRate}% \`[${progressBar(stats.completionRate)}]\`\n\n`
+
+  msg += `📌 *Всего задач:* ${stats.totalTasks}\n`
+  msg += `✅ *Выполнено:* ${stats.completedCount}\n`
+  msg += `⏳ *В работе:* ${stats.pendingCount}\n\n`
+
+  msg += `📅 *Активность за неделю:*\n`
+  const maxDay = Math.max(...Object.values(stats.weekActivity), 1)
+  Object.entries(stats.weekActivity).forEach(([day, count]) => {
+    msg += `  ${day}: \`${progressBar(count, maxDay, 6)}\` (${count})\n`
+  })
+
+  if (Object.keys(stats.tagCounts).length > 0) {
+    msg += `\n🏷️ *По категориям:*\n`
+    Object.entries(stats.tagCounts).slice(0, 5).forEach(([tag, count]) => {
+      msg += `  • ${tag}: *${count}*\n`
+    })
+  }
+
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+}
+
+async function handleReschedule(chatId: number) {
+  const cid = BigInt(chatId)
+  const now = new Date()
+  const mskFormatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const currentMskTime = mskFormatter.format(now)
+
+  const pendingTasks = await prisma.task.findMany({
+    where: {
+      ownerChatId: cid,
+      status: { notIn: ['done', 'draft'] }
+    },
+    orderBy: { priority: 'asc' },
+    take: 8
+  })
+
+  if (pendingTasks.length === 0) {
+    await send(chatId, `🎉 У вас нет невыполненных задач для перепланирования! Всё закрыто.`, {
+      reply_markup: miniAppKeyboard(chatId)
+    })
+    return
+  }
+
+  await send(chatId, `🧠 *ИИ анализирует ваши задачи и рассчитывает идеальное расписание...*`)
+
+  const { plan, aiAdvice } = await generateSmartReschedulePlan(
+    pendingTasks.map(t => ({
+      id: t.id,
+      title: t.title,
+      priority: t.priority,
+      dueTime: t.dueTime,
+      dueDate: t.dueDate
+    })),
+    currentMskTime
+  )
+
+  const draftTask = await prisma.task.create({
+    data: {
+      title: `[RESCHEDULE_PLAN]`,
+      status: 'draft',
+      ownerChatId: cid,
+      rawText: JSON.stringify(plan),
+      tags: ['draft_reschedule']
+    }
+  })
+
+  let msg = `🧠 *Умное перепланирование от Zerf AI*\n\n`
+  msg += `💡 _${escMd(aiAdvice)}_\n\n`
+  msg += `📋 *Предлагаемый график:*\n`
+
+  plan.forEach((item, idx) => {
+    const when = item.isTomorrow ? 'Завтра' : 'Сегодня'
+    const old = item.oldTime ? ` ~${item.oldTime}~ ➔` : ''
+    msg += `${idx + 1}. *${escMd(item.title)}*\n` +
+      `   ⏰ ${when} в *${item.newTime}*${old} (${escMd(item.reason)})\n`
+  })
+
+  msg += `\nНажмите *«⚡ Применить расписание»*, чтобы обновить все дедлайны в один клик:`
+
+  const replyMarkup = {
+    inline_keyboard: [
+      [
+        { text: '⚡ Применить расписание', callback_data: `apply_resch_${draftTask.id}` },
+        { text: '❌ Отмена', callback_data: `cancel_resch_${draftTask.id}` }
+      ]
+    ]
+  }
+
+  await send(chatId, msg, { reply_markup: replyMarkup })
+}
+
+async function handleFocus(chatId: number, minutesStr?: string) {
+  const mins = parseInt(minutesStr || '25', 10)
+  const validMins = isNaN(mins) || mins <= 0 ? 25 : Math.min(mins, 180)
+
+  startFocusSession(chatId, validMins)
+
+  const endMs = Date.now() + validMins * 60 * 1000
+  const endDate = new Date(endMs + 3 * 60 * 60 * 1000)
+  const endH = String(endDate.getUTCHours()).padStart(2, '0')
+  const endM = String(endDate.getUTCMinutes()).padStart(2, '0')
+
+  let msg = `🔥 *Режим глубокого фокуса запущен!*\n\n` +
+    `⏱️ *Длительность:* ${validMins} минут (до *${endH}:${endM} МСК*)\n\n` +
+    `🧘 Отключите лишние вкладки, включите беззвучный режим и сосредоточьтесь на одной задаче.\n` +
+    `Когда время выйдет, бот пришлет звуковое уведомление с перерывом!`
+
+  const replyMarkup = {
+    inline_keyboard: [
+      [{ text: '⏹️ Завершить досрочно', callback_data: 'stop_focus' }]
+    ]
+  }
+
+  await send(chatId, msg, { reply_markup: replyMarkup })
+}
+
+async function handleSiriSetup(chatId: number) {
+  const appUrl = APP_URL || 'https://zerph.vercel.app'
+  const endpointUrl = `${appUrl}/api/shortcuts`
+
+  let msg = `📱 *Экосистема для Телефона: Siri, Кнопки и Виджеты*\n\n` +
+    `С Zerf AI вы можете создавать задачи мгновенно голосом или через физическую кнопку на телефоне!\n\n` +
+    `🍎 *Для iPhone (Siri и Action Button / Быстрые команды):*\n` +
+    `1. Откройте приложение **Команды** (Shortcuts) на iPhone.\n` +
+    `2. Создайте новую команду:\n` +
+    `   • Действие: **Диктовать текст** (Dictate text)\n` +
+    `   • Действие: **Получить содержимое URL** (Get contents of URL):\n` +
+    `     URL: \`${endpointUrl}\`\n` +
+    `     Метод: **POST**, Тело: **JSON**\n` +
+    `     Ключи: \`chatId\`: \`${chatId}\`, \`text\`: _[Продиктованный текст]_\n` +
+    `   • Действие: **Произнести текст** (Speak Text): _[Ответ от сервера.spokenResponse]_\n` +
+    `3. Привяжите команду к **Action Button** (на iPhone 15/16 Pro) или к **Касанию задней панели** (Back Tap) в Настройках ➔ Универсальный доступ!\n\n` +
+    `🤖 *Для Android (Виджет и Ассистент):*\n` +
+    `1. Установите приложение **HTTP Shortcuts** из Google Play.\n` +
+    `2. Создайте ярлык на рабочий стол с POST запросом на \`${endpointUrl}\` (с вашим Chat ID: \`${chatId}\`).\n` +
+    `3. Теперь запись задачи доступна в 1 касание с экрана блокировки!`
 
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 }
@@ -1341,6 +1502,10 @@ async function handleStart(chatId: number, firstName: string) {
     `/inbox — Входящие задачи от других и неразобранное\n` +
     `/shared — Задачи, порученные друзьям и коллегам\n` +
     `/p <Название> — Фильтр задач по проекту или категории\n` +
+    `/reschedule — Умное ИИ-перепланирование просроченных дел\n` +
+    `/stats — Интерактивная статистика и стрики продуктивности\n` +
+    `/focus [мин] — Режим глубокого фокуса / Помодоро (по умолч. 25 мин)\n` +
+    `/siri (или /phone) — Интеграция с Siri, кнопкой Action Button и виджетами\n` +
     `/goals — Список активных целей\n` +
     `/notes — Твои последние заметки\n` +
     `/report — Еженедельный отчет по продуктивности\n` +
@@ -1973,6 +2138,49 @@ export async function POST(req: NextRequest) {
         })
         await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: `✅ Перенесено на завтра!` })
         await safeEditOrSend(chatId, cb.message.message_id, `📅 *Все незавершенные задачи (${updated.count}) успешно перенесены на завтра (${tomorrowStr})!* Отдыхай 🌙`)
+      } else if (data.startsWith('apply_resch_')) {
+        const draftId = data.replace('apply_resch_', '')
+        const draft = await prisma.task.findUnique({ where: { id: draftId } })
+        if (draft && draft.rawText) {
+          await prisma.task.delete({ where: { id: draftId } }).catch(() => {})
+          const plan: any[] = JSON.parse(draft.rawText)
+          const now = new Date()
+          const todayStr = now.toISOString().slice(0, 10)
+          const tomorrowStr = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+          for (const item of plan) {
+            await prisma.task.update({
+              where: { id: item.id },
+              data: {
+                dueTime: item.newTime,
+                dueDate: item.isTomorrow ? tomorrowStr : todayStr,
+                reminderSent: false,
+                remindersSentCount: 0
+              }
+            }).catch(() => {})
+          }
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: '⚡ Расписание обновлено!' })
+          await safeEditOrSend(chatId, cb.message.message_id, `⚡ *Расписание успешно применено!* Все задачи (${plan.length}) перенесены на новые временные слоты. Продуктивной работы! 🚀`)
+        } else {
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'План уже применен или устарел' })
+        }
+      } else if (data.startsWith('cancel_resch_')) {
+        const draftId = data.replace('cancel_resch_', '')
+        await prisma.task.delete({ where: { id: draftId } }).catch(() => {})
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отменено' })
+        await safeEditOrSend(chatId, cb.message.message_id, `❌ *Перепланирование отменено.*`)
+      } else if (data === 'stop_focus') {
+        stopFocusSession(chatId)
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Фокус остановлен' })
+        await safeEditOrSend(chatId, cb.message.message_id, `⏹️ *Фокус-сессия завершена досрочно.*`)
+      } else if (data === 'start_break_5') {
+        startFocusSession(chatId, 5, 'Перерыв на отдых')
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отдых запущен (5 мин)' })
+        await safeEditOrSend(chatId, cb.message.message_id, `☕ *5-минутный перерыв запущен!*\nОтвлекитесь от экрана, выпейте воды или сделайте легкую разминку. Бот уведомит об окончании.`)
+      } else if (data === 'start_focus_25') {
+        startFocusSession(chatId, 25)
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Фокус запущен (25 мин)' })
+        await safeEditOrSend(chatId, cb.message.message_id, `🔥 *Новая 25-минутная фокус-сессия запущена!*\nСосредоточьтесь на главной задаче.`)
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Успешно' }).catch(() => {})
@@ -2126,6 +2334,14 @@ export async function POST(req: NextRequest) {
         await handleShared(chatId)
       } else if (cmd === '/p' || cmd === '/project') {
         await handleProjectFilter(chatId, parts.slice(1).join(' '))
+      } else if (cmd === '/stats') {
+        await handleStats(chatId)
+      } else if (cmd === '/reschedule') {
+        await handleReschedule(chatId)
+      } else if (cmd === '/focus' || cmd === '/pomodoro') {
+        await handleFocus(chatId, parts[1])
+      } else if (cmd === '/siri' || cmd === '/phone' || cmd === '/shortcuts') {
+        await handleSiriSetup(chatId)
       } else if (cmd === '/goals') {
         await handleGoals(chatId)
       } else if (cmd === '/notes') {

@@ -136,7 +136,7 @@ Always respond with ONLY valid JSON:
       "priority": "urgent" | "high" | "medium" | "low",
       "dueDate": "YYYY-MM-DD" | null,
       "dueTime": "HH:MM" | null,
-      "repeat": "yearly" | "monthly" | "weekly" | "daily" | null,
+      "repeat": "yearly" | "monthly" | "weekly" | "weekdays" | "daily" | null,
       "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
       "targetTitle": "для типа completion или delete: название задачи" | null,
       "recipientName": "строка с именем друга, кому отправляется элемент (задача, заметка, цель). Обязательно укажи, если пользователь просит создать что-то для ДРУГОГО человека (например: 'Лера', 'Мама'). Иначе null",
@@ -153,6 +153,10 @@ Always respond with ONLY valid JSON:
 }
 
 RECURRENCE & ADVANCE REMINDERS RULES:
+- If input mentions "по будням", "каждый рабочий день", "пн-пт", "с понедельника по пятницу", set "repeat": "weekdays"!
+- If input mentions "каждый день", "ежедневно", set "repeat": "daily"!
+- If input mentions "каждую неделю", "по понедельникам", "раз в неделю", set "repeat": "weekly"!
+- If input mentions "каждый месяц", set "repeat": "monthly"!
 - If input mentions a birthday, anniversary, holiday, or yearly event ("день рождения", "др", "праздник", "годовщина"), set "repeat": "yearly"!
 - If input asks to be reminded in advance ("за 5 минут", "за 15 минут", "за 1 час", "за 1 день до..."), calculate and set "reminderOffsetMinutes" (e.g. 5, 15, 60, 1440)!
 - If the user explicitly states THEIR OWN birthday (e.g., "мой др 03.04.2010", "у меня день рождения..."), set "action": "set_my_birthday" and extract the date into "dueDate" (format: YYYY-MM-DD or DD.MM.YYYY translated to YYYY-MM-DD). If year is unknown, use 0020-MM-DD.
@@ -534,5 +538,122 @@ function buildFallbackEveningReview(firstName: string, completedTasks: string[],
 
   return msg
 }
+
+export interface ReschedulePlanItem {
+  id: string
+  title: string
+  oldTime: string | null
+  newTime: string
+  isTomorrow?: boolean
+  reason: string
+}
+
+/**
+ * Generate AI-powered smart rescheduling for overdue/pending tasks
+ */
+export async function generateSmartReschedulePlan(
+  tasks: Array<{ id: string; title: string; priority: string; dueTime: string | null; dueDate: string | null }>,
+  currentMskTime: string,
+  apiKey?: string
+): Promise<{ plan: ReschedulePlanItem[]; aiAdvice: string }> {
+  const key = apiKey || DEFAULT_KEY
+  if (!tasks || tasks.length === 0) {
+    return { plan: [], aiAdvice: 'Нет активных задач для перепланирования.' }
+  }
+
+  const [curH, curM] = currentMskTime.split(':').map(n => parseInt(n, 10))
+  const curTotalMin = (isNaN(curH) ? 14 : curH) * 60 + (isNaN(curM) ? 0 : curM)
+
+  // Fallback heuristic if Groq fails or no key
+  const fallbackPlan: ReschedulePlanItem[] = tasks.map((t, idx) => {
+    const slotMin = curTotalMin + 30 + idx * 45
+    const isTomorrow = slotMin >= 22 * 60 // After 22:00 -> move to tomorrow
+    const normalizedMin = isTomorrow ? 10 * 60 + idx * 45 : slotMin
+    const h = String(Math.floor(normalizedMin / 60) % 24).padStart(2, '0')
+    const m = String(normalizedMin % 60).padStart(2, '0')
+    return {
+      id: t.id,
+      title: t.title,
+      oldTime: t.dueTime,
+      newTime: `${h}:${m}`,
+      isTomorrow,
+      reason: isTomorrow ? 'Перенесено на завтра на утро' : 'Оптимальный интервал на сегодня'
+    }
+  })
+
+  if (!key) {
+    return {
+      plan: fallbackPlan,
+      aiAdvice: 'Задачи равномерно распределены по свободным интервалам с учетом текущего времени.'
+    }
+  }
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — умный AI-тайм-менеджер. Тебе дан список задач и текущее московское время (${currentMskTime}).
+Распредели задачи по реалистичным слотам времени.
+Правила:
+- Срочные задачи (urgent/high) ставь раньше.
+- Между задачами оставляй 30–60 минут.
+- Если времени в сутках уже не хватает (после 22:00), переноси на завтра ("isTomorrow": true, начиная с 10:00).
+- Верни СТРОГИЙ JSON формат:
+{
+  "aiAdvice": "Короткий совет (1-2 предложения) почему такой график оптимален",
+  "plan": [
+    {
+      "id": "ID задачи",
+      "newTime": "HH:MM",
+      "isTomorrow": boolean,
+      "reason": "краткая причина времени"
+    }
+  ]
+}`
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(tasks)
+          }
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!res.ok) throw new Error('Groq reschedule error')
+    const data = await res.json()
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}')
+
+    const plan: ReschedulePlanItem[] = (parsed.plan || []).map((p: any) => {
+      const orig = tasks.find(t => t.id === p.id)
+      return {
+        id: p.id,
+        title: orig?.title || 'Задача',
+        oldTime: orig?.dueTime || null,
+        newTime: p.newTime || '18:00',
+        isTomorrow: !!p.isTomorrow,
+        reason: p.reason || 'Оптимальное время'
+      }
+    })
+
+    return {
+      plan: plan.length > 0 ? plan : fallbackPlan,
+      aiAdvice: parsed.aiAdvice || 'Расписание оптимизировано ИИ.'
+    }
+  } catch (err) {
+    console.error('Smart reschedule error:', err)
+    return {
+      plan: fallbackPlan,
+      aiAdvice: 'Задачи равномерно распределены по свободным интервалам.'
+    }
+  }
+}
+
 
 

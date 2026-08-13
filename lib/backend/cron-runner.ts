@@ -336,6 +336,57 @@ async function runEveningReview() {
   }
 }
 
+// ── Focus / Pomodoro Session Tracking ─────────────────────────────────────────
+
+interface FocusSession {
+  chatId: number
+  expiresAt: number // timestamp ms
+  minutes: number
+  taskTitle?: string
+}
+
+const activeFocusSessions = new Map<number, FocusSession>()
+
+export function startFocusSession(chatId: number, minutes: number, taskTitle?: string) {
+  activeFocusSessions.set(chatId, {
+    chatId,
+    minutes,
+    expiresAt: Date.now() + minutes * 60 * 1000,
+    taskTitle,
+  })
+}
+
+export function stopFocusSession(chatId: number): boolean {
+  return activeFocusSessions.delete(chatId)
+}
+
+export function getFocusSession(chatId: number): FocusSession | undefined {
+  return activeFocusSessions.get(chatId)
+}
+
+async function runFocusCheck() {
+  const now = Date.now()
+  for (const [chatId, session] of Array.from(activeFocusSessions.entries())) {
+    if (now >= session.expiresAt) {
+      activeFocusSessions.delete(chatId)
+      const taskMsg = session.taskTitle ? `\n📌 Задача: *${session.taskTitle}*` : ''
+      const msg = `🔔 *Время фокус-сессии (${session.minutes} мин) истекло!*\n\n` +
+        `🏆 Отличная работа и глубокая концентрация!${taskMsg}\n\n` +
+        `☕ Рекомендуем сделать 5-минутный перерыв для отдыха глаз и разминки.`
+
+      const replyMarkup = {
+        inline_keyboard: [
+          [
+            { text: '☕ Начать отдых (5 мин)', callback_data: 'start_break_5' },
+            { text: '🔥 Новый фокус (25 мин)', callback_data: 'start_focus_25' }
+          ]
+        ]
+      }
+      await sendTelegramMessage(chatId, msg, replyMarkup)
+    }
+  }
+}
+
 // ── Global daemon ─────────────────────────────────────────────────────────────
 
 const globalObj = globalThis as unknown as { __reminderCronStarted?: boolean }
@@ -343,9 +394,10 @@ const globalObj = globalThis as unknown as { __reminderCronStarted?: boolean }
 if (!globalObj.__reminderCronStarted) {
   globalObj.__reminderCronStarted = true
 
-  // Reminders: every 10 seconds
+  // Reminders & Focus check: every 10 seconds
   setInterval(() => {
     runReminderCheck().catch(() => {})
+    runFocusCheck().catch(() => {})
   }, 10_000)
 
   // Morning greeting check: every 30 seconds (fires at 08:00 MSK)
@@ -358,5 +410,5 @@ if (!globalObj.__reminderCronStarted) {
     runEveningReview().catch(() => {})
   }, 30_000)
 
-  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review daemon started.')
+  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review + Focus daemon started.')
 }

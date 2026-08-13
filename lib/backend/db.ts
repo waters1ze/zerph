@@ -203,6 +203,35 @@ export async function createTask(data: {
   })
 }
 
+export function calculateNextRecurrenceDate(currentDueDate: string | null | undefined, repeat: string): string {
+  const baseDate = currentDueDate ? new Date(currentDueDate) : new Date()
+  const nextDate = new Date(baseDate)
+
+  if (repeat === 'yearly') {
+    nextDate.setFullYear(nextDate.getFullYear() + 1)
+  } else if (repeat === 'monthly') {
+    nextDate.setMonth(nextDate.getMonth() + 1)
+  } else if (repeat === 'weekly') {
+    nextDate.setDate(nextDate.getDate() + 7)
+  } else if (repeat === 'weekdays') {
+    const day = nextDate.getDay() // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    if (day === 5) {
+      nextDate.setDate(nextDate.getDate() + 3) // Friday -> Monday
+    } else if (day === 6) {
+      nextDate.setDate(nextDate.getDate() + 2) // Saturday -> Monday
+    } else {
+      nextDate.setDate(nextDate.getDate() + 1) // Sun-Thu -> next day
+    }
+  } else if (repeat === 'daily') {
+    nextDate.setDate(nextDate.getDate() + 1)
+  }
+
+  const nextYearStr = nextDate.getFullYear()
+  const nextMonthStr = String(nextDate.getMonth() + 1).padStart(2, '0')
+  const nextDayStr = String(nextDate.getDate()).padStart(2, '0')
+  return `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
+}
+
 export async function updateTask(id: string, data: Partial<{
   status: string
   priority: string
@@ -215,16 +244,7 @@ export async function updateTask(id: string, data: Partial<{
   if (data.status === 'done') {
     const existing = await prisma.task.findUnique({ where: { id } })
     if (existing && existing.status !== 'done' && existing.repeat) {
-      let nextDate = new Date(existing.dueDate || new Date().toISOString().slice(0, 10))
-      if (existing.repeat === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
-      else if (existing.repeat === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1)
-      else if (existing.repeat === 'weekly') nextDate.setDate(nextDate.getDate() + 7)
-      else if (existing.repeat === 'daily') nextDate.setDate(nextDate.getDate() + 1)
-      
-      const nextYearStr = nextDate.getFullYear()
-      const nextMonthStr = String(nextDate.getMonth() + 1).padStart(2, '0')
-      const nextDayStr = String(nextDate.getDate()).padStart(2, '0')
-      const nextDateStr = `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
+      const nextDateStr = calculateNextRecurrenceDate(existing.dueDate, existing.repeat)
 
       await prisma.task.create({
         data: {
@@ -240,7 +260,8 @@ export async function updateTask(id: string, data: Partial<{
           assignees: existing.assignees,
           isShared: existing.isShared,
           ownerChatId: existing.ownerChatId,
-          projectId: existing.projectId
+          authorChatId: existing.authorChatId,
+          projectId: existing.projectId,
         }
       })
       // Clear repeat flag on the completed instance so it doesn't get processed again
@@ -248,6 +269,84 @@ export async function updateTask(id: string, data: Partial<{
     }
   }
   return prisma.task.update({ where: { id }, data })
+}
+
+export async function completeTask(id: string) {
+  return updateTask(id, {
+    status: 'done',
+    completedAt: new Date(),
+    reminderSent: true,
+  })
+}
+
+export async function getUserProductivityStats(ownerChatId: number | bigint | string) {
+  const cid = BigInt(ownerChatId)
+  const allTasks = await prisma.task.findMany({
+    where: {
+      ownerChatId: cid,
+      status: { not: 'draft' },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const totalTasks = allTasks.length
+  const completedTasks = allTasks.filter(t => t.status === 'done')
+  const completedCount = completedTasks.length
+  const pendingCount = totalTasks - completedCount
+  const completionRate = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0
+
+  const tagCounts: Record<string, number> = {}
+  allTasks.forEach(t => {
+    if (Array.isArray(t.tags) && t.tags.length > 0) {
+      t.tags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1
+      })
+    } else {
+      tagCounts['Общее'] = (tagCounts['Общее'] || 0) + 1
+    }
+  })
+
+  const completedDates = new Set<string>()
+  completedTasks.forEach(t => {
+    if (t.completedAt) {
+      completedDates.add(new Date(t.completedAt).toISOString().slice(0, 10))
+    } else if (t.dueDate) {
+      completedDates.add(t.dueDate)
+    }
+  })
+
+  let streak = 0
+  const now = new Date()
+  for (let d = 0; d < 30; d++) {
+    const checkDate = new Date(now.getTime() - d * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    if (completedDates.has(checkDate)) {
+      streak++
+    } else if (d > 0) {
+      break
+    }
+  }
+
+  const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+  const weekActivity: Record<string, number> = { 'Пн': 0, 'Вт': 0, 'Ср': 0, 'Чт': 0, 'Пт': 0, 'Сб': 0, 'Вс': 0 }
+
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  completedTasks.forEach(t => {
+    if (t.completedAt && new Date(t.completedAt) >= sevenDaysAgo) {
+      const dayIdx = (new Date(t.completedAt).getDay() + 6) % 7
+      const dayName = weekDays[dayIdx]
+      if (dayName) weekActivity[dayName] = (weekActivity[dayName] || 0) + 1
+    }
+  })
+
+  return {
+    totalTasks,
+    completedCount,
+    pendingCount,
+    completionRate,
+    streak,
+    tagCounts,
+    weekActivity,
+  }
 }
 
 export async function deleteTask(id: string) {
