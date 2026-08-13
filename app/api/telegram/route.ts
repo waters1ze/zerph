@@ -22,6 +22,7 @@ import { getUserAuthToken } from '@/lib/backend/auth'
 import { runReminderCheck } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
+import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)
 export const maxDuration = 60
@@ -203,6 +204,167 @@ async function handleNotes(chatId: number) {
     })
   }
   await send(chatId, msg)
+}
+
+async function handleInbox(chatId: number) {
+  const cid = BigInt(chatId)
+  const tasks = await prisma.task.findMany({
+    where: {
+      ownerChatId: cid,
+      status: { notIn: ['done', 'draft'] }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10
+  })
+
+  if (tasks.length === 0) {
+    await send(chatId, `📥 *Входящие пусты!*\n\nВсе задачи разобраны или выполнены 🎉`, {
+      reply_markup: miniAppKeyboard(chatId)
+    })
+    return
+  }
+
+  let msg = `📥 *Входящие задачи (${tasks.length}):*\n\n`
+  const keyboard: any[] = []
+
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i]
+    const pEmoji = P_EMOJI[t.priority] || '⚪'
+    const due = t.dueTime ? ` _(до ${t.dueTime})_` : ''
+    let authorNote = ''
+    if (t.authorChatId && t.authorChatId !== cid) {
+      try {
+        const author = await prisma.telegramChat.findUnique({ where: { chatId: t.authorChatId } })
+        if (author) authorNote = ` · _от ${author.firstName || 'друга'}_`
+      } catch {}
+    }
+
+    msg += `${i + 1}. ${pEmoji} *${escMd(t.title)}*${due}${authorNote}\n`
+    if (t.description) msg += `   └ _${escMd(t.description.slice(0, 60))}_\n`
+
+    if (i < 3) {
+      keyboard.push([
+        { text: `✓ Выполнить: ${t.title.slice(0, 24)}`, callback_data: `rem_done_${t.id}` }
+      ])
+    }
+  }
+
+  keyboard.push([{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${MINIAPP_URL}?chatId=${chatId}` } }])
+
+  await send(chatId, msg, {
+    reply_markup: { inline_keyboard: keyboard }
+  })
+}
+
+async function handleShared(chatId: number) {
+  const cid = BigInt(chatId)
+  const sharedTasks = await prisma.task.findMany({
+    where: {
+      authorChatId: cid,
+      ownerChatId: { not: cid }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10
+  })
+
+  if (sharedTasks.length === 0) {
+    await send(chatId,
+      `🤝 *Порученные задачи*\n\n` +
+      `Вы пока никому не поручали задачи.\n` +
+      `Чтобы поручить задачу, напишите или надиктуйте:\n` +
+      `_«Поручи Вове сделать презентацию к 18:00»_`,
+      { reply_markup: miniAppKeyboard(chatId) }
+    )
+    return
+  }
+
+  let msg = `🤝 *Задачи, порученные другим (${sharedTasks.length}):*\n\n`
+  for (let i = 0; i < sharedTasks.length; i++) {
+    const t = sharedTasks[i]
+    let recipientName = 'Друг'
+    if (t.ownerChatId) {
+      try {
+        const friend = await prisma.telegramChat.findUnique({ where: { chatId: t.ownerChatId } })
+        if (friend) recipientName = friend.firstName || friend.username || 'Друг'
+      } catch {}
+    }
+
+    const statusEmoji = t.status === 'done' ? '✅' : t.status === 'inprogress' ? '🚀' : '⏳'
+    const statusText = t.status === 'done' ? 'выполнена' : t.status === 'inprogress' ? 'в процессе' : 'ожидает'
+    const due = t.dueDate ? ` · ${t.dueDate}` : ''
+    const time = t.dueTime ? ` в ${t.dueTime}` : ''
+
+    msg += `${i + 1}. ${statusEmoji} *${escMd(t.title)}*\n` +
+      `   └ 👤 Кому: *${escMd(recipientName)}* (${statusText})${due}${time}\n`
+  }
+
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+}
+
+async function handleProjectFilter(chatId: number, projectName?: string) {
+  const cid = BigInt(chatId)
+  const allTasks = await getAllTasks(chatId)
+
+  if (!projectName) {
+    const tagSet = new Set<string>()
+    allTasks.forEach((t: any) => {
+      if (Array.isArray(t.tags)) t.tags.forEach((tag: string) => tagSet.add(tag))
+    })
+
+    let projectDbList: any[] = []
+    try {
+      projectDbList = await prisma.projectDB.findMany({
+        where: {
+          OR: [
+            { ownerChatId: cid },
+            { memberIds: { has: cid } }
+          ]
+        }
+      })
+    } catch {}
+
+    let msg = `📁 *Фильтр по проектам и категориям*\n\n`
+    if (projectDbList.length === 0 && tagSet.size === 0) {
+      msg += `У вас пока нет проектов. Создайте задачу с тегом или проект через приложение!\n` +
+        `Пример команды: \`/p Работа\` или \`/p Дом\``
+    } else {
+      if (projectDbList.length > 0) {
+        msg += `🏢 *Командные проекты:*\n`
+        projectDbList.forEach((p: any) => msg += `• \`/p ${p.title}\`\n`)
+        msg += `\n`
+      }
+      if (tagSet.size > 0) {
+        msg += `🏷️ *Категории / Теги:*\n`
+        Array.from(tagSet).slice(0, 10).forEach(tag => msg += `• \`/p ${tag}\`\n`)
+      }
+      msg += `\n_Используйте: \`/p НазваниеПроекта\` для просмотра задач._`
+    }
+
+    await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+    return
+  }
+
+  const query = projectName.toLowerCase().trim()
+  const matchingTasks = allTasks.filter((t: any) => {
+    const titleMatch = (t.title || '').toLowerCase().includes(query)
+    const tagMatch = Array.isArray(t.tags) && t.tags.some((tag: string) => tag.toLowerCase().includes(query))
+    const descMatch = (t.description || '').toLowerCase().includes(query)
+    return titleMatch || tagMatch || descMatch
+  })
+
+  if (matchingTasks.length === 0) {
+    await send(chatId, `📁 По проекту/тегу *«${escMd(projectName)}»* задач не найдено.\nПопробуйте \`/p\` для списка категорий.`)
+    return
+  }
+
+  let msg = `📁 *Задачи по проекту «${escMd(projectName)}» (${matchingTasks.length}):*\n\n`
+  matchingTasks.slice(0, 10).forEach((t: any, i: number) => {
+    const statusEmoji = t.status === 'done' ? '✅' : '⏳'
+    const due = t.dueTime ? ` _(${t.dueTime})_` : ''
+    msg += `${i + 1}. ${statusEmoji} *${escMd(t.title)}*${due}\n`
+  })
+
+  await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 }
 
 async function handleSettings(chatId: number) {
@@ -1146,6 +1308,10 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
     const items = await parseIntentWithGroq(transcript, key, undefined, context)
 
     await saveAndRespondParsedItems(chatId, items, transcript)
+
+    // Send natural voice reply
+    const spokenText = createSpokenSummary(items)
+    sendVoiceResponse(chatId, spokenText).catch(() => {})
   } catch (err: unknown) {
     await send(chatId, `Ошибка: ${String(err).slice(0, 200)}`)
   }
@@ -1172,6 +1338,9 @@ async function handleStart(chatId: number, firstName: string) {
     `⚠️ *Важно:* Отправь боту сообщение *Меня зовут Имя Фамилия*, чтобы друзья легко находили тебя при поручении задач!\n\n` +
     `⚙️ *Доступные команды:*\n` +
     `/today — Твои задачи и цели на сегодня\n` +
+    `/inbox — Входящие задачи от других и неразобранное\n` +
+    `/shared — Задачи, порученные друзьям и коллегам\n` +
+    `/p <Название> — Фильтр задач по проекту или категории\n` +
     `/goals — Список активных целей\n` +
     `/notes — Твои последние заметки\n` +
     `/report — Еженедельный отчет по продуктивности\n` +
@@ -1746,6 +1915,64 @@ export async function POST(req: NextRequest) {
             ]
           }
         })
+      } else if (data.startsWith('rem_done_')) {
+        const taskId = data.replace('rem_done_', '')
+        const task = await prisma.task.findUnique({ where: { id: taskId } })
+        if (task) {
+          await prisma.task.update({
+            where: { id: taskId },
+            data: { status: 'done', completedAt: new Date(), reminderSent: true }
+          })
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: '✅ Задача выполнена!' })
+          await safeEditOrSend(chatId, cb.message.message_id, `✅ *Задача выполнена:* ~${escMd(task.title)}~ 🎉`)
+        } else {
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Задача не найдена' })
+        }
+      } else if (data.startsWith('rem_snooze_')) {
+        const parts = data.replace('rem_snooze_', '').split('_')
+        const taskId = parts[0]
+        const mins = parseInt(parts[1] || '15', 10)
+
+        const task = await prisma.task.findUnique({ where: { id: taskId } })
+        if (task) {
+          const now = new Date()
+          const mskTime = new Date(now.getTime() + (3 * 60 + mins) * 60 * 1000)
+          const newDueH = String(mskTime.getUTCHours()).padStart(2, '0')
+          const newDueM = String(mskTime.getUTCMinutes()).padStart(2, '0')
+          const newDueTime = `${newDueH}:${newDueM}`
+
+          await prisma.task.update({
+            where: { id: taskId },
+            data: {
+              dueTime: newDueTime,
+              reminderSent: false,
+              remindersSentCount: 0
+            }
+          })
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: `⏳ Отложено на ${mins} мин` })
+          await safeEditOrSend(chatId, cb.message.message_id, `⏳ *Напоминание отложено на ${mins} мин (до ${newDueTime}):*\n📌 ${escMd(task.title)}`)
+        } else {
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Задача не найдена' })
+        }
+      } else if (data === 'postpone_today') {
+        const cid = BigInt(chatId)
+        const now = new Date()
+        const tomorrow = new Date(now.getTime() + (24 + 3) * 60 * 60 * 1000)
+        const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+
+        const updated = await prisma.task.updateMany({
+          where: {
+            ownerChatId: cid,
+            status: { notIn: ['done', 'draft'] },
+          },
+          data: {
+            dueDate: tomorrowStr,
+            reminderSent: false,
+            remindersSentCount: 0
+          }
+        })
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: `✅ Перенесено на завтра!` })
+        await safeEditOrSend(chatId, cb.message.message_id, `📅 *Все незавершенные задачи (${updated.count}) успешно перенесены на завтра (${tomorrowStr})!* Отдыхай 🌙`)
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Успешно' }).catch(() => {})
@@ -1893,6 +2120,12 @@ export async function POST(req: NextRequest) {
         await handleLanguage(chatId)
       } else if (cmd === '/today') {
         await handleToday(chatId)
+      } else if (cmd === '/inbox') {
+        await handleInbox(chatId)
+      } else if (cmd === '/shared' || cmd === '/delegated') {
+        await handleShared(chatId)
+      } else if (cmd === '/p' || cmd === '/project') {
+        await handleProjectFilter(chatId, parts.slice(1).join(' '))
       } else if (cmd === '/goals') {
         await handleGoals(chatId)
       } else if (cmd === '/notes') {

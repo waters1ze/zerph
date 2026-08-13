@@ -8,33 +8,39 @@
  */
 
 import { getAllTasks, updateTask, getAllNotes } from './db'
-import { generateMorningGreeting } from './groq'
+import { generateMorningGreeting, generateEveningReview } from './groq'
 import { prisma } from './prisma'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
 
-async function sendTelegramMessage(chatId: number, text: string) {
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: any) {
   try {
+    const payload: Record<string, any> = {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown'
+    }
+    if (replyMarkup) payload.reply_markup = replyMarkup
+
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+      body: JSON.stringify(payload),
     })
     const data = await res.json()
     if (!data.ok) {
       // Retry without Markdown formatting in case entity parsing failed
+      payload.parse_mode = undefined
       await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text }),
+        body: JSON.stringify(payload),
       })
     }
   } catch (err) {
     console.error('Telegram send error:', err)
   }
 }
-
-// ── Reminder check — per-task owner only ─────────────────────────────────────
 
 // ── Reminder check — per-task owner with configurable multi-stage intervals ──
 
@@ -58,7 +64,7 @@ export async function runReminderCheck() {
 
     for (const task of tasks) {
       if (!task.dueTime) continue
-      if (task.status === 'done') continue
+      if (task.status === 'done' || task.status === 'draft') continue
       if (task.reminderSent) continue
       if (task.dueDate && task.dueDate !== todayStr) continue
 
@@ -127,8 +133,17 @@ export async function runReminderCheck() {
           }
 
           const finalText = text + linkedNotesText
-          await sendTelegramMessage(ownerChatId, finalText)
+          const replyMarkup = {
+            inline_keyboard: [
+              [
+                { text: '✅ Выполнено', callback_data: `rem_done_${task.id}` },
+                { text: '⏳ +15 мин', callback_data: `rem_snooze_${task.id}_15` },
+                { text: '⏳ +1 час', callback_data: `rem_snooze_${task.id}_60` },
+              ]
+            ]
+          }
 
+          await sendTelegramMessage(ownerChatId, finalText, replyMarkup)
         }
 
         const nextSentCount = sentCount + 1
@@ -156,7 +171,6 @@ export async function runReminderCheck() {
 
 // ── Morning greeting — 08:00 MSK to all users ────────────────────────────────
 
-// Track which date we've already sent the morning greeting (in-memory, resets on server restart)
 let morningGreetingSentDate = ''
 
 async function runMorningGreeting() {
@@ -179,11 +193,9 @@ async function runMorningGreeting() {
     if (morningGreetingSentDate === todayStr) return
     morningGreetingSentDate = todayStr
 
-    // Get all registered users
     const chats = await prisma.telegramChat.findMany()
     if (!chats.length) return
 
-    // Get context data for personalization (shared pool — tasks & notes)
     const allTasks = await getAllTasks()
     const allNotes = await getAllNotes()
 
@@ -201,18 +213,15 @@ async function runMorningGreeting() {
       .filter(t => t.status !== 'done' && t.dueDate === todayStr)
       .map(t => t.title)
 
-    // Send personalized greeting to each user
     for (const chat of chats) {
       try {
         const chatId = Number(chat.chatId)
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 
-        // Per-user: filter tasks where they're the owner (if ownerChatId set)
-        const userTasks = allTasks
-          .filter(t => {
-            const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
-            return !ownerId || Number(ownerId) === chatId
-          })
+        const userTasks = allTasks.filter(t => {
+          const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
+          return !ownerId || Number(ownerId) === chatId
+        })
 
         const userPending = userTasks
           .filter(t => t.status !== 'done' && t.dueDate === todayStr)
@@ -234,7 +243,6 @@ async function runMorningGreeting() {
           await sendTelegramMessage(chatId, greeting)
         }
 
-        // Small delay between users to avoid rate limiting
         await new Promise(r => setTimeout(r, 300))
       } catch (userErr) {
         console.error('Morning greeting error for user:', userErr)
@@ -244,6 +252,87 @@ async function runMorningGreeting() {
     console.log(`[Zerf Cron] Morning greeting sent to ${chats.length} users at ${todayStr} 08:00 MSK`)
   } catch (err) {
     console.error('Morning greeting cron error:', err)
+  }
+}
+
+// ── Evening Review — 21:00 MSK to all users ──────────────────────────────────
+
+let eveningReviewSentDate = ''
+
+async function runEveningReview() {
+  try {
+    const now = new Date()
+    const mskFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+    const parts = mskFormatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+
+    const hour = getPart('hour')
+    const minute = getPart('minute')
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+
+    // Fire at 21:00 MSK, once per day
+    if (hour !== '21' || minute !== '00') return
+    if (eveningReviewSentDate === todayStr) return
+    eveningReviewSentDate = todayStr
+
+    const chats = await prisma.telegramChat.findMany()
+    if (!chats.length) return
+
+    const allTasks = await getAllTasks()
+
+    for (const chat of chats) {
+      try {
+        const chatId = Number(chat.chatId)
+        const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
+
+        const userTasks = allTasks.filter(t => {
+          const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
+          return !ownerId || Number(ownerId) === chatId
+        })
+
+        const completedToday = userTasks
+          .filter(t => t.status === 'done' && (
+            (t.completedAt && new Date(t.completedAt).toISOString().slice(0, 10) === todayStr) ||
+            t.dueDate === todayStr
+          ))
+          .map(t => t.title)
+
+        const pendingToday = userTasks
+          .filter(t => t.status !== 'done' && t.status !== 'draft' && (t.dueDate === todayStr || !t.dueDate))
+          .map(t => t.title)
+
+        // Only send if the user had activity today or has tasks
+        if (completedToday.length === 0 && pendingToday.length === 0) continue
+
+        const reviewText = await generateEveningReview(
+          firstName,
+          completedToday,
+          pendingToday
+        ).catch(() => null)
+
+        if (reviewText) {
+          const replyMarkup = pendingToday.length > 0 ? {
+            inline_keyboard: [
+              [{ text: '📅 Перенести оставшиеся на завтра', callback_data: 'postpone_today' }]
+            ]
+          } : undefined
+
+          await sendTelegramMessage(chatId, reviewText, replyMarkup)
+        }
+
+        await new Promise(r => setTimeout(r, 300))
+      } catch (userErr) {
+        console.error('Evening review error for user:', userErr)
+      }
+    }
+
+    console.log(`[Zerf Cron] Evening review sent to users at ${todayStr} 21:00 MSK`)
+  } catch (err) {
+    console.error('Evening review cron error:', err)
   }
 }
 
@@ -259,10 +348,15 @@ if (!globalObj.__reminderCronStarted) {
     runReminderCheck().catch(() => {})
   }, 10_000)
 
-  // Morning greeting: every 30 seconds check (lightweight, fires only at 08:00)
+  // Morning greeting check: every 30 seconds (fires at 08:00 MSK)
   setInterval(() => {
     runMorningGreeting().catch(() => {})
   }, 30_000)
 
-  console.log('[Zerf Cron] Reminder + Morning Greeting daemon started.')
+  // Evening review check: every 30 seconds (fires at 21:00 MSK)
+  setInterval(() => {
+    runEveningReview().catch(() => {})
+  }, 30_000)
+
+  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review daemon started.')
 }

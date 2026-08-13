@@ -467,3 +467,72 @@ function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks:
   )
 }
 
+/**
+ * Generate personalized evening review at 21:00 MSK
+ */
+export async function generateEveningReview(
+  firstName: string,
+  completedTasks: string[],
+  pendingTasks: string[],
+  apiKey?: string
+): Promise<string> {
+  const key = apiKey || DEFAULT_KEY
+  if (!key) return buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — личный ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня.
+Пиши ТОЛЬКО на русском языке, в Markdown для Telegram.
+Структура:
+1. Тёплое вечернее обращение по имени.
+2. Похвала за закрытые задачи (если есть) или ободрение.
+3. Короткий дружеский совет по отдыху/восстановлению сил на завтра.
+Максимум 120 слов. Тон — тёплый, поддерживающий, уютный.`,
+          },
+          {
+            role: 'user',
+            content: `Имя: ${firstName}\nВыполнено задач сегодня (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'нет'}\nОсталось невыполненных (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'нет'}`,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 300,
+      }),
+    })
+
+    if (!res.ok) throw new Error('Groq error')
+    const data = await res.json()
+    const aiText = data.choices?.[0]?.message?.content?.trim() || ''
+    return aiText || buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
+  } catch {
+    return buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
+  }
+}
+
+function buildFallbackEveningReview(firstName: string, completedTasks: string[], pendingTasks: string[]): string {
+  let msg = `🌙 *Добрый вечер, ${firstName}!*\n\n`
+  if (completedTasks.length > 0) {
+    msg += `🎉 *Выполнено за сегодня (${completedTasks.length}):*\n` +
+      completedTasks.slice(0, 5).map(t => `  ~${t}~`).join('\n') + `\n\n`
+  } else {
+    msg += `Сегодня был спокойный день без закрытых задач.\n\n`
+  }
+
+  if (pendingTasks.length > 0) {
+    msg += `⏳ *Осталось незавершенных (${pendingTasks.length}):*\n` +
+      pendingTasks.slice(0, 5).map(t => `  • ${t}`).join('\n') + `\n\n`
+    msg += `_Отдохни и наберись сил! Если нужно, нажми кнопку ниже, чтобы перенести задачи на завтра._`
+  } else {
+    msg += `✨ *Все задачи закрыты! Идеальный результат! Отличного вечера и отдыха 🛋️*`
+  }
+
+  return msg
+}
+
+
