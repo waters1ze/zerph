@@ -574,6 +574,76 @@ export function SettingsView() {
         </Row>
       </Section>
 
+      {/* Siri & Mobile Voice Ecosystem */}
+      <Section title="🍏 Siri, Action Button & Mobile Shortcuts">
+        <div className="p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white text-lg shadow-md shrink-0">
+              🎙️
+            </div>
+            <div>
+              <h4 className="text-[14px] font-semibold text-foreground">Голосовой ассистент Siri и кнопка телефона</h4>
+              <p className="text-[12px] text-muted-foreground">Создавайте задачи за 1 секунду голосом или через кнопку Action Button на iPhone / Android.</p>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-2 text-[12px]">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Ваш персональный Chat ID:</span>
+              <span className="font-mono font-bold text-foreground bg-card px-2 py-0.5 rounded border border-border">
+                {currentChatId || 'Не привязан (введите выше)'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">API Шлюз для Быстрых команд:</span>
+              <button
+                onClick={() => {
+                  const url = `${typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'}/api/shortcuts`
+                  navigator.clipboard.writeText(url)
+                  alert('✅ URL скопирован в буфер обмена!')
+                }}
+                className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
+              >
+                Скопировать URL 📋
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
+            <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <span>🍎</span> Для iPhone (Siri & Action Button)
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Откройте приложение <b>Команды</b> ➔ <b>+</b></li>
+                <li>Добавьте <b>Диктовать текст</b></li>
+                <li>Добавьте <b>Получить содержимое URL</b>:
+                  <div className="text-[11px] font-mono bg-muted/60 p-1.5 rounded my-1">
+                    POST /api/shortcuts<br/>
+                    Body: {`{"chatId": ${currentChatId || 12345}, "text": [Диктовка]}`}
+                  </div>
+                </li>
+                <li>Добавьте <b>Произнести текст</b> из ответа</li>
+                <li>Назначьте команду на <b>Action Button</b> или <b>Стук по крышке</b>!</li>
+              </ol>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <span>🤖</span> Для Android (Виджет в 1 клик)
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Установите <b>HTTP Shortcuts</b> из Google Play</li>
+                <li>Создайте ярлык с методом <b>POST</b> на шлюз Zerf</li>
+                <li>Укажите ваш Chat ID: <b className="font-mono">{currentChatId || '...'}</b></li>
+                <li>Вынесите виджет на рабочий стол или экран блокировки</li>
+                <li>Нажимайте кнопку и диктуйте мысли в любое время!</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {/* Data & Privacy */}
       <Section title="Data & Privacy">
         <Row label="Export data" description="Download all your tasks, notes and goals as JSON">
