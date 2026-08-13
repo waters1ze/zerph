@@ -24,7 +24,7 @@ export interface Task {
   status: TaskStatus
   dueDate?: string
   dueTime?: string             // HH:MM — for timed reminders e.g. "12:00"
-  repeat?: string | null       // 'yearly' | 'monthly' | 'weekly' | 'daily'
+  repeat?: string | null       // 'yearly' | 'monthly' | 'weekly' | 'weekdays' | 'daily'
   reminderSent?: boolean       // true after TG notification sent
   targetContact?: string       // Telegram username or ChatID of the contact to message (e.g. "@artem")
   recipientName?: string       // Name of the recipient (e.g. "Артем")
@@ -163,6 +163,17 @@ export interface UserSettings {
   weekStartsOn: 0 | 1
   focusModeEnabled: boolean
   userPlan: 'free' | 'premium'
+  focusSettings?: {
+    defaultDurationMinutes: number
+    breakDurationMinutes: number
+  }
+  eveningReview?: {
+    enabled: boolean
+    time: string
+  }
+  voiceSettings?: {
+    ttsResponseEnabled: boolean
+  }
 }
 
 export type StatPeriod = '7d' | '30d' | '90d' | '1y'

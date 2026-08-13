@@ -91,7 +91,6 @@ async function safeEditOrSend(
   extra?: object
 ) {
   if (messageId) {
-    // Try with Markdown
     const r1 = await tgApi('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -100,7 +99,6 @@ async function safeEditOrSend(
       ...extra,
     })
     if (r1?.ok) return r1
-    // Retry without Markdown (special chars in task title may break it)
     const r2 = await tgApi('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -109,12 +107,38 @@ async function safeEditOrSend(
     })
     if (r2?.ok) return r2
   }
-  // Fallback: send as new message (plain, no parse_mode - guaranteed delivery)
   return await tgApi('sendMessage', {
     chat_id: chatId,
     text,
     ...extra,
   })
+}
+
+let commandsRegistered = false
+async function ensureBotCommandsRegistered() {
+  if (commandsRegistered) return
+  commandsRegistered = true
+  try {
+    await tgApi('setMyCommands', {
+      commands: [
+        { command: 'today',      description: '📅 Задачи и цели на сегодня' },
+        { command: 'inbox',      description: '📥 Входящие и неразобранное' },
+        { command: 'shared',     description: '👥 Порученные задачи коллегам' },
+        { command: 'p',          description: '📁 Фильтр по проекту или тегу' },
+        { command: 'reschedule', description: '🧠 ИИ-перепланирование дня' },
+        { command: 'stats',      description: '📊 Аналитика и стрики' },
+        { command: 'focus',      description: '🔥 Режим фокуса / Помодоро' },
+        { command: 'siri',       description: '🍏 Настройка Siri и кнопок телефона' },
+        { command: 'goals',      description: '🎯 Активные цели' },
+        { command: 'notes',      description: '📝 Мои заметки' },
+        { command: 'report',     description: '📈 Недельный AI-отчет' },
+        { command: 'settings',   description: '⚙️ Настройки напоминаний' },
+        { command: 'buy',        description: '⭐ Zerf Premium (99 ₽/мес)' },
+        { command: 'help',       description: '❓ Полное руководство' },
+      ],
+      scope: { type: 'all_private_chats' },
+    })
+  } catch {}
 }
 
 
@@ -408,6 +432,33 @@ async function handleStats(chatId: number) {
 
 async function handleReschedule(chatId: number) {
   const cid = BigInt(chatId)
+  const limits = await getUserUsageAndLimits(chatId)
+
+  // Free plan limit: max 2 reschedules per day
+  if (limits.plan !== 'premium') {
+    const todayReschedule = await prisma.task.count({
+      where: {
+        ownerChatId: cid,
+        tags: { has: 'draft_reschedule' },
+        createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+      }
+    })
+    if (todayReschedule >= 2) {
+      await send(chatId,
+        `🔒 *Дневной лимит бесплатного тарифа исчерпан (2 перепланирования в день).*\n\n` +
+        `⭐ Оформите *Zerf Premium* (99 ₽/мес), чтобы использовать умное ИИ-перепланирование, Siri и фокус-сессии без ограничений!`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '⭐ Оформить Premium (99 ₽)', callback_data: 'cmd_subscribe' }]
+            ]
+          }
+        }
+      )
+      return
+    }
+  }
+
   const now = new Date()
   const mskFormatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Moscow',
@@ -480,8 +531,14 @@ async function handleReschedule(chatId: number) {
 }
 
 async function handleFocus(chatId: number, minutesStr?: string) {
+  const limits = await getUserUsageAndLimits(chatId)
   const mins = parseInt(minutesStr || '25', 10)
-  const validMins = isNaN(mins) || mins <= 0 ? 25 : Math.min(mins, 180)
+  let validMins = isNaN(mins) || mins <= 0 ? 25 : Math.min(mins, 180)
+
+  if (limits.plan !== 'premium' && validMins > 45) {
+    validMins = 45
+    await send(chatId, `⭐ *На бесплатном тарифе длительность фокуса ограничена 45 минутами.* Запускаем на 45 мин.\n_Для сессий до 180 мин оформите /premium._`)
+  }
 
   startFocusSession(chatId, validMins)
 
@@ -610,7 +667,7 @@ const TYPE_RU: Record<string, string> = {
 async function handleSubscribe(chatId: number) {
   const limits = await getUserUsageAndLimits(chatId)
   const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
   const params = new URLSearchParams({
     receiver,
@@ -630,9 +687,11 @@ async function handleSubscribe(chatId: number) {
     await send(chatId,
       `✨ *У тебя уже активна подписка Zerf Premium!*\n\n` +
       `📅 Активна до: *${exp}*\n\n` +
-      `• 🎙 Голос: до 10 минут в день\n` +
-      `• 📌 Заметки: безлимитно\n` +
-      `• 💬 ИИ чат: безлимитно`,
+      `• 🎙 Голос и Siri: до 10 минут в день\n` +
+      `• 🧠 ИИ-перепланирование (/reschedule): безлимитно\n` +
+      `• 🔥 Режим фокуса (/focus): до 180 минут\n` +
+      `• 📊 Полная статистика продуктивности (/stats)\n` +
+      `• 📌 Заметки и ИИ чат: безлимитно`,
       { reply_markup: miniAppKeyboard(chatId) }
     )
     return
@@ -641,13 +700,17 @@ async function handleSubscribe(chatId: number) {
   await send(chatId,
     `⭐ *Zerf Premium — 99 ₽/месяц*\n\n` +
     `🆓 *Сейчас у тебя бесплатный тариф:*\n` +
-    `• 🎙 Голосовые: 2 в день (осталось: ${Math.max(0, 2 - (limits.voice.used || 0))})
-• 📌 Заметки: 2 в день (осталось: ${Math.max(0, 2 - (limits.notes.used || 0))})
-• 💬 ИИ чат: 10 в день (осталось: ${Math.max(0, 10 - (limits.chat.used || 0))})
-\n✨ *С Premium:*\n` +
-    `• 🎙 Голос: неограниченно (до 10 мин/день)
-• 📌 Заметки: безлимитно\n` +
-    `• 💬 ИИ чат: безлимитно\n\n` +
+    `• 🎙 Голосовые и Siri: 2 в день (осталось: ${Math.max(0, 2 - (limits.voice.used || 0))})\n` +
+    `• 🧠 ИИ-перепланирование: 2 в день\n` +
+    `• 🔥 Фокус-сессии: до 45 мин\n` +
+    `• 📌 Заметки: 2 в день (осталось: ${Math.max(0, 2 - (limits.notes.used || 0))})\n` +
+    `• 💬 ИИ чат: 10 в день (осталось: ${Math.max(0, 10 - (limits.chat.used || 0))})\n\n` +
+    `✨ *С Zerf Premium:*\n` +
+    `• 🎙 Голос и Siri: безлимитно (до 10 мин/день)\n` +
+    `• 🧠 ИИ-перепланирование дня: безлимитно\n` +
+    `• 🔥 Глубокий фокус: до 180 минут\n` +
+    `• 📊 Полная аналитика продуктивности и стрики\n` +
+    `• 📌 Заметки и ИИ чат: безлимитно\n\n` +
     `💳 Нажми кнопку ниже, чтобы оплатить через ЮMoney:`,
     {
       reply_markup: {
@@ -1913,6 +1976,7 @@ async function handlePublicCommand(chatId: number, taskId?: string) {
 export async function POST(req: NextRequest) {
   try {
     const update = await req.json()
+    ensureBotCommandsRegistered().catch(() => {})
 
     // Handle Callback Queries (inline buttons)
     if (update.callback_query) {

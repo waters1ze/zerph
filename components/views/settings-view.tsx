@@ -552,10 +552,67 @@ export function SettingsView() {
             onChange={v => update({ notifications: { ...settings.notifications, teamUpdates: v } })}
           />
         </Row>
+        <Row label="🌙 Вечерний итог дня (21:00 MSK)" description="Персональная сводка закрытых задач и перенос оставшихся на завтра">
+          <Toggle
+            checked={settings.eveningReview?.enabled ?? true}
+            onChange={v => update({
+              eveningReview: {
+                enabled: v,
+                time: settings.eveningReview?.time || '21:00'
+              }
+            })}
+          />
+        </Row>
+      </Section>
+
+      {/* Focus & Pomodoro Mode */}
+      <Section title="🔥 Focus Mode & Pomodoro">
+        <Row label="Длительность фокус-сессии" description="Стандартное время непрерывной глубокой работы">
+          <select
+            value={settings.focusSettings?.defaultDurationMinutes || 25}
+            onChange={e => update({
+              focusSettings: {
+                defaultDurationMinutes: Number(e.target.value),
+                breakDurationMinutes: settings.focusSettings?.breakDurationMinutes || 5
+              }
+            })}
+            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+          >
+            <option value={15}>15 минут (Быстрый спринт)</option>
+            <option value={25}>25 минут (Помодоро по умолч.)</option>
+            <option value={45}>45 минут (Глубокий фокус)</option>
+            <option value={60}>60 минут (1 час)</option>
+            <option value={90}>90 минут (Ультра-фокус)</option>
+          </select>
+        </Row>
+        <Row label="Длительность перерыва" description="Время на отдых и разминку после каждого фокуса">
+          <select
+            value={settings.focusSettings?.breakDurationMinutes || 5}
+            onChange={e => update({
+              focusSettings: {
+                defaultDurationMinutes: settings.focusSettings?.defaultDurationMinutes || 25,
+                breakDurationMinutes: Number(e.target.value)
+              }
+            })}
+            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+          >
+            <option value={5}>5 минут (Рекомендуется)</option>
+            <option value={10}>10 минут</option>
+            <option value={15}>15 минут</option>
+          </select>
+        </Row>
       </Section>
 
       {/* AI & Integrations */}
       <Section title="AI & Integrations">
+        <Row label="🎙️ Голосовые ответы бота (TTS)" description="Бот присылает короткие голосовые сообщения в ответ на голосовые">
+          <Toggle
+            checked={settings.voiceSettings?.ttsResponseEnabled ?? true}
+            onChange={v => update({
+              voiceSettings: { ttsResponseEnabled: v }
+            })}
+          />
+        </Row>
         <Row label="AI model" description="Model used for the chat assistant">
           <select
             value={settings.integrations.aiModel}
