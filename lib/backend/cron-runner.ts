@@ -15,11 +15,20 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM
 
 async function sendTelegramMessage(chatId: number, text: string) {
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
     })
+    const data = await res.json()
+    if (!data.ok) {
+      // Retry without Markdown formatting in case entity parsing failed
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text }),
+      })
+    }
   } catch (err) {
     console.error('Telegram send error:', err)
   }

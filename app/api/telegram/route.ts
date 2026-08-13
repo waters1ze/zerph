@@ -823,8 +823,15 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       const senderName = sender?.firstName || 'Пользователь'
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
-      if (matches.length > 1 && !item.isPluralRecipient) {
-        // Disambiguation
+      const allowedMatches = matches.filter(m => m.isAllowed)
+
+      if (allowedMatches.length === 0) {
+        msg += `⚠️ Ни один из найденных пользователей по запросу '${escMd(item.recipientName)}' не разрешил получение задач от вас.\n\n`
+        continue
+      }
+
+      if (allowedMatches.length > 1 && !item.isPluralRecipient) {
+        // Disambiguation among allowed recipients
         const draftTask = await prisma.task.create({
           data: {
             title: `[DRAFT] ${item.title}`,
@@ -838,14 +845,14 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         let amMsg = `🤔 Найдено несколько человек по запросу "${escMd(item.recipientName)}". Кого вы имели в виду?\n`
         
         const inlineKeyboard = []
-        for (const m of matches) {
+        for (const m of allowedMatches) {
           const fn = m.friend.firstName || ''
           const ln = m.friend.lastName || ''
           const un = m.friend.username ? ` (@${m.friend.username})` : ''
           const fullName = `${fn} ${ln}${un}`.trim()
-          inlineKeyboard.push([{ text: fullName, callback_data: `delegate_resolve_${draftTask.id}_${m.friend.chatId}` }])
+          inlineKeyboard.push([{ text: fullName, callback_data: `dr_${draftTask.id}:${m.friend.chatId}` }])
         }
-        inlineKeyboard.push([{ text: '❌ Отмена', callback_data: `delegate_resolve_${draftTask.id}_cancel` }])
+        inlineKeyboard.push([{ text: '❌ Отмена', callback_data: `dr_${draftTask.id}:cancel` }])
 
         await send(chatId, amMsg, {
           reply_markup: { inline_keyboard: inlineKeyboard }
@@ -853,8 +860,10 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         continue
       }
 
-      // Execute for all matches
-      for (const match of matches) {
+      const targets = item.isPluralRecipient ? allowedMatches : allowedMatches.slice(0, 1)
+
+      // Execute for target matches
+      for (const match of targets) {
         const friend = match.friend
         if (!match.isAllowed) {
           msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение элементов от вас.\n\n`
@@ -1633,14 +1642,13 @@ export async function POST(req: NextRequest) {
             await send(authorId, `❌ *${cb.from.first_name || 'Пользователь'}* отклонил(а) порученную задачу *«${task.title}»*`)
           }
         }
-      } else if (data.startsWith('delegate_resolve_')) {
-        const parts = data.replace('delegate_resolve_', '').split('_')
-        const draftId = parts[0]
-        const actionOrId = parts[1] // 'cancel' or friendChatId
+      } else if (data.startsWith('dr_') || data.startsWith('delegate_resolve_')) {
+        const raw = data.startsWith('dr_') ? data.slice(3) : data.slice('delegate_resolve_'.length)
+        const [draftId, actionOrId] = raw.includes(':') ? raw.split(':') : raw.split('_')
 
         const draftTask = await prisma.task.findUnique({ where: { id: draftId } })
         if (draftTask && draftTask.rawText) {
-          await prisma.task.delete({ where: { id: draftId } })
+          await prisma.task.delete({ where: { id: draftId } }).catch(() => {})
           
           if (actionOrId === 'cancel') {
             await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отменено' })
@@ -1714,6 +1722,8 @@ export async function POST(req: NextRequest) {
               }
             }
           }
+        } else {
+          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Выбор уже сделан или отменён' })
         }
       } else if (data.startsWith('alarm_android_')) {
         const time = data.replace('alarm_android_', '')

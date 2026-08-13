@@ -53,6 +53,7 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
         const strId = String(ownerChatId)
         allTasks = await prisma.task.findMany({
           where: {
+            status: { not: 'draft' },
             OR: [
               { ownerChatId: cid },
               { authorChatId: cid },
@@ -65,6 +66,7 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
     } else {
       // If no ownerChatId is provided (e.g. cron job), return all tasks
       allTasks = await prisma.task.findMany({
+        where: { status: { not: 'draft' } },
         orderBy: { createdAt: 'desc' }
       })
     }
@@ -310,7 +312,7 @@ export async function deleteHabit(id: string) {
  * Find the best matching non-done task by title similarity
  */
 export async function completeTaskByTitle(targetTitle: string, ownerChatId?: number | bigint | string | null): Promise<DbTask | null> {
-  const whereClause: Record<string, unknown> = { status: { not: 'done' } }
+  const whereClause: Record<string, unknown> = { status: { notIn: ['done', 'draft'] } }
   if (ownerChatId) {
     whereClause.OR = [{ ownerChatId: BigInt(ownerChatId) }, { ownerChatId: null }]
   }
@@ -1202,7 +1204,7 @@ export async function getTasksDueNow(): Promise<DbTask[]> {
 
   const allActiveTasks = await prisma.task.findMany({
     where: {
-      status: { not: 'done' },
+      status: { notIn: ['done', 'draft'] },
     },
   })
 
