@@ -15,6 +15,7 @@ export interface ParsedItem {
   dueDate?: string | null
   dueTime?: string | null       // HH:MM — extracted from "at 12:00", "в 15:30" etc.
   recipientName?: string | null // Extracted name if sending a message to a contact e.g. "Артем", "Мама"
+  isPluralRecipient?: boolean   // True if sending to multiple people e.g. "Артемам"
   targetTitle?: string          // for 'completion' type — the task being marked done
   projectId?: string | null
   goalId?: string | null
@@ -139,6 +140,7 @@ Always respond with ONLY valid JSON:
       "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
       "targetTitle": "для типа completion или delete: название задачи" | null,
       "recipientName": "строка с именем друга, кому отправляется элемент (задача, заметка, цель). Обязательно укажи, если пользователь просит создать что-то для ДРУГОГО человека (например: 'Лера', 'Мама'). Иначе null",
+      "isPluralRecipient": "true, если пользователь обращается ко множеству людей (например, 'артемам', 'друзьям'), и false, если к одному ('артему'). По умолчанию false",
       "projectId": null,
       "goalId": null,
       "tags": ["тег1", "тег2"],

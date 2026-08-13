@@ -603,23 +603,62 @@ const NAME_ALIASES: Record<string, string[]> = {
   кирилл: ['кирюха', 'киря', 'кир'],
 }
 
-async function findFriendByName(userChatId: number | bigint, recipientName: string) {
+export interface FriendMatch {
+  friend: any; // TelegramChat
+  isAllowed: boolean;
+  reason?: string;
+}
+
+async function findFriendMatches(userChatId: number | bigint, recipientName: string): Promise<FriendMatch[]> {
   const cid = BigInt(userChatId)
+  
+  // 1. Get all friendships
   const friendships = await prisma.friendship.findMany({
     where: { OR: [{ userChatId: cid }, { friendChatId: cid }] }
   })
-  const friendIds = friendships.map((f: any) => f.userChatId === cid ? f.friendChatId : f.userChatId)
-  if (friendIds.length === 0) return { friend: null, friendship: null }
+  const friendIds = new Set<bigint>()
+  friendships.forEach((f: any) => friendIds.add(f.userChatId === cid ? f.friendChatId : f.userChatId))
+
+  // 2. Get all group members (shared groups)
+  const userGroups = await prisma.groupMembership.findMany({
+    where: { memberChatId: cid }
+  })
+  const groupChatIds = userGroups.map((g: any) => g.groupChatId)
+  const sharedGroupMembers = await prisma.groupMembership.findMany({
+    where: { groupChatId: { in: groupChatIds } }
+  })
+  sharedGroupMembers.forEach((m: any) => {
+    if (m.memberChatId !== cid) friendIds.add(m.memberChatId)
+  })
+
+  // 3. Get all project members (shared projects)
+  try {
+    const userProjects = await prisma.projectDB.findMany({
+      where: {
+        OR: [
+          { ownerChatId: cid },
+          { memberIds: { has: cid } }
+        ]
+      }
+    })
+    userProjects.forEach((p: any) => {
+      if (p.ownerChatId !== cid) friendIds.add(p.ownerChatId)
+      p.memberIds.forEach((mId: bigint) => {
+        if (mId !== cid) friendIds.add(mId)
+      })
+    })
+  } catch (e) {}
+
+  if (friendIds.size === 0) return []
 
   const friendChats = await prisma.telegramChat.findMany({
-    where: { chatId: { in: friendIds } }
+    where: { chatId: { in: Array.from(friendIds) } }
   })
 
   const rawQuery = recipientName.toLowerCase().trim().replace('@', '')
   const queryTokens = rawQuery.split(/\s+/).filter(Boolean)
 
-  let bestFriend: any = null
-  let bestScore = -1
+  const matchedChats = new Set<any>()
 
   for (const f of friendChats) {
     const fn = (f.firstName || '').toLowerCase()
@@ -627,65 +666,83 @@ async function findFriendByName(userChatId: number | bigint, recipientName: stri
     const un = (f.username || '').toLowerCase()
     const fullName = `${fn} ${ln}`.trim()
 
+    let isMatch = false
     if (fullName.includes(rawQuery) || fn.includes(rawQuery) || ln.includes(rawQuery) || (un && un.includes(rawQuery))) {
-      bestFriend = f
-      break
+      isMatch = true
+    } else {
+      for (const token of queryTokens) {
+        if (fn.includes(token) || ln.includes(token) || (un && un.includes(token))) {
+          isMatch = true; break
+        }
+        if ((fn.length >= 3 && (token.includes(fn) || token.startsWith(fn.slice(0, 3)) || fn.startsWith(token.slice(0, 3)))) ||
+            (ln.length >= 3 && (token.includes(ln) || token.startsWith(ln.slice(0, 3)) || ln.startsWith(token.slice(0, 3))))) {
+          isMatch = true; break
+        }
+
+        for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
+          const tokenMatchesAlias = aliases.some(a => token.includes(a) || (a.length >= 3 && token.startsWith(a.slice(0, 3))))
+          const tokenMatchesCanonical = token.includes(canonical) || (canonical.length >= 4 && token.startsWith(canonical.slice(0, 4)))
+          
+          const fnMatchesCanonical = fn.includes(canonical) || fullName.includes(canonical) || (canonical.length >= 4 && fn.startsWith(canonical.slice(0, 4)))
+          const fnMatchesAlias = aliases.some(a => fn.includes(a) || fullName.includes(a) || (a.length >= 3 && fn.startsWith(a.slice(0, 3))))
+
+          if ((tokenMatchesAlias && fnMatchesCanonical) || (tokenMatchesCanonical && fnMatchesAlias)) {
+            isMatch = true; break
+          }
+        }
+        if (isMatch) break
+      }
     }
 
-    for (const token of queryTokens) {
-      if (fn.includes(token) || ln.includes(token) || (un && un.includes(token))) {
-        bestFriend = f
-        break
-      }
-      if ((fn.length >= 3 && (token.includes(fn) || token.startsWith(fn.slice(0, 3)) || fn.startsWith(token.slice(0, 3)))) ||
-          (ln.length >= 3 && (token.includes(ln) || token.startsWith(ln.slice(0, 3)) || ln.startsWith(token.slice(0, 3))))) {
-        bestFriend = f
-        break
-      }
-
-      for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
-        const tokenMatchesAlias = aliases.some(a => token.includes(a) || (a.length >= 3 && token.startsWith(a.slice(0, 3))))
-        const tokenMatchesCanonical = token.includes(canonical) || (canonical.length >= 4 && token.startsWith(canonical.slice(0, 4)))
-        
-        const fnMatchesCanonical = fn.includes(canonical) || fullName.includes(canonical) || (canonical.length >= 4 && fn.startsWith(canonical.slice(0, 4)))
-        const fnMatchesAlias = aliases.some(a => fn.includes(a) || fullName.includes(a) || (a.length >= 3 && fn.startsWith(a.slice(0, 3))))
-
-        if (tokenMatchesAlias && fnMatchesCanonical) {
-          bestFriend = f
-          break
-        }
-        if (tokenMatchesCanonical && fnMatchesAlias) {
-          bestFriend = f
-          break
-        }
-      }
-      if (bestFriend) break
-    }
-    if (bestFriend) break
-  }
-
-  if (!bestFriend && friendChats.length > 0) {
-    for (const f of friendChats) {
-      const fn = (f.firstName || '').toLowerCase()
-      const ln = (f.lastName || '').toLowerCase()
+    if (!isMatch) {
       for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
         if (aliases.some(a => rawQuery.includes(a)) && (fn.includes(canonical) || ln.includes(canonical))) {
-          bestFriend = f
-          break
+          isMatch = true; break
         }
       }
-      if (bestFriend) break
     }
+
+    if (isMatch) matchedChats.add(f)
   }
 
-  if (!bestFriend) return { friend: null, friendship: null }
+  const results: FriendMatch[] = []
+  for (const friend of Array.from(matchedChats)) {
+    const fId = friend.chatId
+    let isAllowed = false
+    let reason = ''
 
-  const friendship = friendships.find((f: any) =>
-    (f.userChatId === bestFriend.chatId && f.friendChatId === cid) ||
-    (f.friendChatId === bestFriend.chatId && f.userChatId === cid)
-  )
+    try {
+      const sharedProj = await prisma.projectDB.findFirst({
+        where: {
+          OR: [
+            { ownerChatId: cid, memberIds: { has: fId } },
+            { ownerChatId: fId, memberIds: { has: cid } },
+            { AND: [{ memberIds: { has: cid } }, { memberIds: { has: fId } }] }
+          ]
+        }
+      })
+      if (sharedProj) { isAllowed = true; reason = 'project' }
+    } catch {}
 
-  return { friend: bestFriend, friendship }
+    if (!isAllowed) {
+      const sharedGroup = await prisma.groupMembership.findFirst({
+        where: { memberChatId: fId, groupChatId: { in: groupChatIds } }
+      })
+      if (sharedGroup) { isAllowed = true; reason = 'group' }
+    }
+
+    if (!isAllowed) {
+      const fs = friendships.find((f: any) =>
+        (f.userChatId === fId && f.friendChatId === cid) ||
+        (f.friendChatId === fId && f.userChatId === cid)
+      )
+      if (fs && fs.allowTasks) { isAllowed = true; reason = 'friendship' }
+    }
+
+    results.push({ friend, isAllowed, reason })
+  }
+
+  return results
 }
 
 async function processText(chatId: number, text: string) {
@@ -755,20 +812,54 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
     }
 
     if (item.recipientName) {
-      const { friend, friendship } = await findFriendByName(chatId, item.recipientName)
+      const matches = await findFriendMatches(chatId, item.recipientName)
 
-      if (friend) {
-        const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.firstName || '').toLowerCase().includes('bot')
-        const isAllowed = friendship ? (friendship as any).allowTasks !== false : true
+      if (matches.length === 0) {
+        msg += `⚠️ Пользователь '${escMd(item.recipientName)}' не найден среди ваших друзей или команд, либо он запретил отправлять ему задачи.\n\n`
+        continue
+      }
 
-        if (!isAllowed) {
+      const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+      const senderName = sender?.firstName || 'Пользователь'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+
+      if (matches.length > 1 && !item.isPluralRecipient) {
+        // Disambiguation
+        const draftTask = await prisma.task.create({
+          data: {
+            title: `[DRAFT] ${item.title}`,
+            status: 'draft',
+            ownerChatId: BigInt(chatId),
+            rawText: JSON.stringify(item),
+            tags: ['draft_delegation']
+          }
+        })
+
+        let amMsg = `🤔 Найдено несколько человек по запросу "${escMd(item.recipientName)}". Кого вы имели в виду?\n`
+        
+        const inlineKeyboard = []
+        for (const m of matches) {
+          const fn = m.friend.firstName || ''
+          const ln = m.friend.lastName || ''
+          const un = m.friend.username ? ` (@${m.friend.username})` : ''
+          const fullName = `${fn} ${ln}${un}`.trim()
+          inlineKeyboard.push([{ text: fullName, callback_data: `delegate_resolve_${draftTask.id}_${m.friend.chatId}` }])
+        }
+        inlineKeyboard.push([{ text: '❌ Отмена', callback_data: `delegate_resolve_${draftTask.id}_cancel` }])
+
+        await send(chatId, amMsg, {
+          reply_markup: { inline_keyboard: inlineKeyboard }
+        })
+        continue
+      }
+
+      // Execute for all matches
+      for (const match of matches) {
+        const friend = match.friend
+        if (!match.isAllowed) {
           msg += `⚠️ ${friend.firstName || item.recipientName} отключил(а) получение элементов от вас.\n\n`
           continue
         }
-
-        const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
-        const senderName = sender?.firstName || 'Пользователь'
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
         if (item.type === 'delegate' || item.type === 'task') {
           const newTask = await prisma.task.create({
@@ -834,8 +925,6 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           })
           msg += `🤝 ${typeName.charAt(0).toUpperCase() + typeName.slice(1)} *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!\n\n`
         }
-      } else {
-        msg += `⚠️ Команда не отправлена: друг '${escMd(item.recipientName)}' не найден в контактах. Добавь её через /invite @username\n\n`
       }
       continue
     }
@@ -1542,6 +1631,88 @@ export async function POST(req: NextRequest) {
           const authorId = task.authorChatId ? Number(task.authorChatId) : task.assignees.length > 0 ? Number(task.assignees[0]) : null
           if (authorId) {
             await send(authorId, `❌ *${cb.from.first_name || 'Пользователь'}* отклонил(а) порученную задачу *«${task.title}»*`)
+          }
+        }
+      } else if (data.startsWith('delegate_resolve_')) {
+        const parts = data.replace('delegate_resolve_', '').split('_')
+        const draftId = parts[0]
+        const actionOrId = parts[1] // 'cancel' or friendChatId
+
+        const draftTask = await prisma.task.findUnique({ where: { id: draftId } })
+        if (draftTask && draftTask.rawText) {
+          await prisma.task.delete({ where: { id: draftId } })
+          
+          if (actionOrId === 'cancel') {
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отменено' })
+            await safeEditOrSend(chatId, cb.message.message_id, `❌ *Отправка отменена.*`)
+          } else {
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отправляю...' })
+            
+            const friendChatId = Number(actionOrId)
+            const item = JSON.parse(draftTask.rawText)
+            
+            const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+            const senderName = sender?.firstName || 'Пользователь'
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+            const friend = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(friendChatId) } })
+            
+            if (friend) {
+              if (item.type === 'delegate' || item.type === 'task') {
+                const newTask = await prisma.task.create({
+                  data: {
+                    title: item.title,
+                    description: item.summary || '',
+                    priority: item.priority || 'medium',
+                    status: 'todo',
+                    dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                    dueTime: item.dueTime || null,
+                    repeat: item.repeat || null,
+                    tags: item.tags || [],
+                    ownerChatId: friend.chatId,
+                    authorChatId: BigInt(chatId),
+                    assignees: [String(chatId)],
+                    isShared: true,
+                  } as any
+                })
+      
+                let notifyMsg = `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
+                notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
+                if (item.summary) notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
+                if (item.dueTime) notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+                notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
+      
+                await send(Number(friend.chatId), notifyMsg, {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
+                      [
+                        { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
+                        { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
+                      ]
+                    ]
+                  }
+                })
+                await safeEditOrSend(chatId, cb.message.message_id, `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || 'другу')}*!\n\n`)
+              } else {
+                await saveParsedItemToDb(item, friend.chatId, chatId)
+                
+                const typeName = item.type === 'note' ? 'заметку' : (item.type === 'goal' ? 'цель' : 'элемент')
+                let notifyMsg = `🤝 *${escMd(senderName)}* создал(а) для тебя ${typeName}!\n\n`
+                notifyMsg += `📌 *Название:* ${escMd(item.title)}\n`
+                if (item.summary) notifyMsg += `📝 *Текст:* ${escMd(item.summary)}\n`
+                if (item.dueTime) notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+                notifyMsg += `\n_Сохранено в твоем аккаунте на сайте Zerf AI_`
+      
+                await send(Number(friend.chatId), notifyMsg, {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }]
+                    ]
+                  }
+                })
+                await safeEditOrSend(chatId, cb.message.message_id, `🤝 ${typeName.charAt(0).toUpperCase() + typeName.slice(1)} *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || 'другу')}*!\n\n`)
+              }
+            }
           }
         }
       } else if (data.startsWith('alarm_android_')) {
