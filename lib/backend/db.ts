@@ -657,12 +657,13 @@ export async function registerChatId(
     const cid = BigInt(chatId)
     const existing = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
 
-    const updateData: { firstName?: string; username?: string; lastName?: string } = {}
-    if (firstName) updateData.firstName = firstName
-    if (username) updateData.username = username
-    if (lastName) updateData.lastName = lastName
-
     if (existing) {
+      // Preserve custom user firstName and lastName; only update username or fill empty names
+      const updateData: { firstName?: string; username?: string; lastName?: string } = {}
+      if (username && username !== existing.username) updateData.username = username
+      if (!existing.firstName && firstName) updateData.firstName = firstName
+      if (!existing.lastName && lastName) updateData.lastName = lastName
+
       if (Object.keys(updateData).length > 0) {
         await prisma.telegramChat.update({
           where: { chatId: cid },
@@ -1359,6 +1360,42 @@ export function parseBirthday(input: string | null | undefined): { month: number
       return {
         month, day,
         iso: `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      }
+    }
+  }
+
+  // 4. Natural text in Russian: "3 апреля", "3 апреля 2010", "15 мая", "20 декабря 1995"
+  const ruMonths: Record<string, number> = {
+    январ: 1, янв: 1,
+    феврал: 2, фев: 2,
+    март: 3, мар: 3,
+    апрел: 4, апр: 4,
+    ма: 5, май: 5,
+    июн: 6, июнь: 6,
+    июл: 7, июль: 7,
+    август: 8, авг: 8,
+    сентябр: 9, сен: 9,
+    октябр: 10, окт: 10,
+    ноябр: 11, ноя: 11,
+    декабр: 12, дек: 12,
+  }
+  const textMatch = cleaned.toLowerCase().match(/(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?/)
+  if (textMatch) {
+    const day = parseInt(textMatch[1], 10)
+    const monthWord = textMatch[2]
+    const year = textMatch[3] ? parseInt(textMatch[3], 10) : undefined
+    for (const [prefix, mNum] of Object.entries(ruMonths)) {
+      if (monthWord.startsWith(prefix)) {
+        if (mNum >= 1 && mNum <= 12 && day >= 1 && day <= 31) {
+          return {
+            year,
+            month: mNum,
+            day,
+            iso: year
+              ? `${year}-${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              : `${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          }
+        }
       }
     }
   }

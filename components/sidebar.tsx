@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { cn, isBirthdayVisible, isBirthdayTask } from '@/lib/utils'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import type { View } from '@/lib/types'
 import { ChevronRight, Circle, User } from 'lucide-react'
 
@@ -68,26 +68,47 @@ export function Sidebar() {
     }
     checkAdmin()
 
-    if (typeof window !== 'undefined') {
-      const tgWindow = window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; last_name?: string; username?: string; photo_url?: string } } } } }
-      const u = tgWindow.Telegram?.WebApp?.initDataUnsafe?.user
-      if (u) {
-        const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.first_name || 'Пользователь'
-        setTgUser({
-          name: fullName,
-          username: u.username ? `@${u.username}` : 'Telegram',
-          photoUrl: u.photo_url,
-        })
-        dispatch({
-          type: 'UPDATE_SETTINGS',
-          updates: {
+    // Fetch real profile from DB
+    const fetchUserProfile = async () => {
+      try {
+        const headers = getAuthHeaders()
+        if (Object.keys(headers).length > 0) {
+          const res = await fetch('/api/telegram/user', { headers })
+          const data = await res.json()
+          if (data.connected && data.name) {
+            setTgUser({
+              name: data.name,
+              username: data.username || 'Telegram',
+              photoUrl: undefined,
+            })
+            dispatch({
+              type: 'UPDATE_SETTINGS',
+              updates: {
+                name: data.name,
+                integrations: { ...settings.integrations, telegram: true },
+              },
+            })
+            return
+          }
+        }
+      } catch {}
+
+      // Fallback to Telegram WebApp context
+      if (typeof window !== 'undefined') {
+        const tgWindow = window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; last_name?: string; username?: string; photo_url?: string } } } } }
+        const u = tgWindow.Telegram?.WebApp?.initDataUnsafe?.user
+        if (u) {
+          const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.first_name || 'Пользователь'
+          setTgUser({
             name: fullName,
-            avatar: u.photo_url || '',
-            integrations: { ...settings.integrations, telegram: true },
-          },
-        })
+            username: u.username ? `@${u.username}` : 'Telegram',
+            photoUrl: u.photo_url,
+          })
+        }
       }
     }
+
+    fetchUserProfile()
   }, [dispatch])
 
   const navItems: NavItem[] = isAdmin
@@ -109,8 +130,17 @@ export function Sidebar() {
 
   return (
     <aside className="flex flex-col h-full bg-card text-card-foreground border-r border-border select-none w-full font-sans">
+      {/* Brand Header with Logo */}
+      <div className="px-4 pt-3.5 pb-1 flex items-center gap-2.5">
+        <img src="/logo.png" alt="Zerf AI" className="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-border/50" />
+        <div className="flex items-center gap-1.5">
+          <span className="font-extrabold text-base tracking-tight text-foreground font-sans">Zerf</span>
+          <span className="text-[10px] font-extrabold tracking-widest text-primary px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20">AI</span>
+        </div>
+      </div>
+
       {/* Dynamic User Profile Card */}
-      <div className="mx-3 mt-4 mb-3 px-3.5 py-3 rounded-xl bg-muted/50 border border-border/60 flex items-center gap-3">
+      <div className="mx-3 mt-2.5 mb-3 px-3.5 py-2.5 rounded-xl bg-muted/50 border border-border/60 flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary">
           {tgUser?.photoUrl ? (
             <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
