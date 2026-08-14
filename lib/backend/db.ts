@@ -1093,6 +1093,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               lastActiveAt: new Date(),
               referredBy: null,
               referralCount: 0,
+              isAdmin: false,
               addedAt: new Date(),
             }
           }

@@ -95,6 +95,7 @@ model TelegramChat {
   lastActiveAt           DateTime? @default(now())
   referredBy             BigInt?   // ChatID of referrer who invited this user
   referralCount          Int       @default(0) // Number of friends invited via referral
+  isAdmin                Boolean   @default(false) // Admin privilege
   addedAt                DateTime  @default(now())
 }
 

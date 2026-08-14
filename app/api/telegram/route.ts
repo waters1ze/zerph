@@ -747,27 +747,41 @@ async function handleSubscribe(chatId: number) {
 async function handleAdminCommand(chatId: number, args: string[]) {
   const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
   const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061,5078516086').split(',').map(s => s.trim()).filter(Boolean)
+  const cid = BigInt(chatId)
 
-  // Check if caller is authorized admin
-  if (!ADMIN_CHAT_IDS.includes(String(chatId))) {
-    await send(chatId, `⛔ *Доступ ограничен.* Раздел администрирования доступен только владельцу системы.`)
+  let isAuthorized = ADMIN_CHAT_IDS.includes(String(chatId))
+  if (!isAuthorized) {
+    const u = await prisma.telegramChat.findUnique({ where: { chatId: cid }, select: { isAdmin: true } })
+    if (u?.isAdmin) isAuthorized = true
+  }
+
+  if (!isAuthorized) {
+    await send(chatId, `⛔ *Доступ ограничен.* Раздел администрирования доступен только администраторам системы.`)
     return
   }
 
   const [subCmd, targetQuery] = args
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
   if (!subCmd) {
     await send(chatId,
-      `🛡️ *Панель Администратора Zerf AI*\n\n` +
-      `Команды управления:\n` +
-      `• \`/admin search <имя/@username/ID>\` — быстрый поиск пользователя\n` +
+      `👑 *Панель Администратора Zerf AI*\n\n` +
+      `💻 *Веб-интерфейс:* Вам доступна полноценная графическая панель админа на сайте!\n\n` +
+      `Команды быстрого управления:\n` +
       `• \`/admin grant <chatId> [дни]\` — выдать Premium\n` +
       `• \`/admin revoke <chatId>\` — забрать Premium\n` +
-      `• \`/admin status <chatId>\` — подробно о пользователе\n` +
+      `• \`/admin role <chatId> <on/off>\` — назначить/снять админа\n` +
+      `• \`/admin search <имя/@username/ID>\` — поиск пользователя\n` +
       `• \`/admin reset <chatId>\` — сбросить дневные лимиты\n` +
-      `• \`/admin list\` — список всех зарегистрированных людей\n` +
-      `• \`/admin price <руб>\` — изменить цену подписки (сейчас: будет показано)\n` +
-      `• \`/admin stats\` — статистика пользователей и выгода`
+      `• \`/admin stats\` — общая статистика системы`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '👑 Открыть Веб Админ-панель', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
+            [{ text: '🌐 Полный сайт', url: `${appUrl}/?chatId=${chatId}` }]
+          ]
+        }
+      }
     )
     return
   }

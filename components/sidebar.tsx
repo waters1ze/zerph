@@ -9,7 +9,7 @@ import { ChevronRight, Circle, User } from 'lucide-react'
 
 import {
   Sun, Inbox, CheckSquare, FileText, Calendar,
-  Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid
+  Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Crown
 } from 'lucide-react'
 
 interface NavItem {
@@ -20,7 +20,7 @@ interface NavItem {
   section: string
 }
 
-const NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { id: 'today',      label: 'Сегодня',     icon: Sun,         section: 'workspace' },
   { id: 'inbox',      label: 'Входящие',    icon: Inbox,        section: 'workspace' },
   { id: 'tasks',      label: 'Задачи',      icon: CheckSquare, section: 'workspace' },
@@ -47,8 +47,27 @@ export function Sidebar() {
   const { currentView, tasks, notes, settings } = state
 
   const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
+    // Check if user is Admin
+    const checkAdmin = async () => {
+      try {
+        const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
+        const res = await fetch(`/api/admin/check?chatId=${qChatId}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(qChatId ? { 'x-chat-id': qChatId } : {})
+          }
+        })
+        const data = await res.json()
+        if (data.isAdmin) {
+          setIsAdmin(true)
+        }
+      } catch {}
+    }
+    checkAdmin()
+
     if (typeof window !== 'undefined') {
       const tgWindow = window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; last_name?: string; username?: string; photo_url?: string } } } } }
       const u = tgWindow.Telegram?.WebApp?.initDataUnsafe?.user
@@ -70,6 +89,10 @@ export function Sidebar() {
       }
     }
   }, [dispatch])
+
+  const navItems: NavItem[] = isAdmin
+    ? [...BASE_NAV_ITEMS, { id: 'admin' as View, label: 'Админ-панель', icon: Crown, section: 'аккаунт' }]
+    : BASE_NAV_ITEMS
 
   const todayCount = tasks.filter(t => {
     const d = t.dueDate
@@ -117,7 +140,7 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
         {SECTIONS.map(section => {
-          const items = NAV_ITEMS.filter(i => i.section === section.id)
+          const items = navItems.filter(i => i.section === section.id)
           if (!items.length) return null
           return (
             <div key={section.id} className="mb-2">

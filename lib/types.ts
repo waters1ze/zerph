@@ -15,6 +15,7 @@ export type View =
   | 'stats'
   | 'friends'
   | 'settings'
+  | 'admin'
 
 export interface Task {
   id: string

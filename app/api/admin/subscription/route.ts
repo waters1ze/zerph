@@ -10,19 +10,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { activateUserSubscription, getUserUsageAndLimits } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
-
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-
-function isAuthorized(req: NextRequest): boolean {
-  const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
-  const querySecret = new URL(req.url).searchParams.get('secret') || ''
-  return token === ADMIN_SECRET || querySecret === ADMIN_SECRET
-}
+import { isCallerAdmin } from '@/lib/backend/admin'
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { isAdmin } = await isCallerAdmin(req)
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized: Admin role required' }, { status: 401 })
   }
 
   const chatId = new URL(req.url).searchParams.get('chatId')
@@ -68,8 +61,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { isAdmin } = await isCallerAdmin(req)
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized: Admin role required' }, { status: 401 })
   }
 
   try {

@@ -23,6 +23,7 @@ import { SettingsView } from '@/components/views/settings-view'
 
 import { ProjectsView } from '@/components/views/projects-view'
 import { EisenhowerView } from '@/components/views/eisenhower-view'
+import { AdminView } from '@/components/views/admin-view'
 
 function AppShell() {
   const { state } = useApp()
@@ -60,6 +61,7 @@ function AppShell() {
     settings:   <SettingsView />,
     projects:   <ProjectsView />,
     eisenhower: <EisenhowerView />,
+    admin:      <AdminView />,
   }
 
   const isFullHeight = state.currentView === 'notes'
