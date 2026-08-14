@@ -760,14 +760,14 @@ export function SettingsView() {
               <span className="text-muted-foreground">API Шлюз для Быстрых команд:</span>
               <button
                 onClick={() => {
-                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'
-                  const url = `${origin}/api/shortcuts`
+                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+                  const url = `${origin}/api/shortcuts?chatId=${currentChatId || 'ВАШ_ID'}&text=`
                   navigator.clipboard.writeText(url)
-                  alert('✅ URL скопирован в буфер обмена!')
+                  alert('✅ Ссылка скопирована в буфер обмена!')
                 }}
                 className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
               >
-                Скопировать URL 📋
+                Скопировать ссылку 📋
               </button>
             </div>
           </div>
@@ -781,12 +781,11 @@ export function SettingsView() {
                 <li>Откройте приложение <b>Команды</b> ➔ <b>+</b></li>
                 <li>Добавьте <b>Диктовать текст</b></li>
                 <li>Добавьте <b>Получить содержимое URL</b>:
-                  <div className="text-[11px] font-mono bg-muted/60 p-1.5 rounded my-1">
-                    POST /api/shortcuts<br/>
-                    Body: {`{"chatId": ${currentChatId || 12345}, "text": [Диктовка]}`}
+                  <div className="text-[11px] font-mono bg-muted/60 p-1.5 rounded my-1 break-all">
+                    URL: https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || '12345'}&text=[Продиктованный текст]
                   </div>
                 </li>
-                <li>Добавьте <b>Произнести текст</b> из ответа</li>
+                <li>Добавьте <b>Произнести текст</b>: выберите <b>[Содержимое URL]</b></li>
                 <li>Назначьте команду на <b>Action Button</b> или <b>Стук по крышке</b>!</li>
               </ol>
             </div>

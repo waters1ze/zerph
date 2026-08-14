@@ -192,15 +192,15 @@ export async function GET(req: NextRequest) {
   // Check today query
   if (isTodayQuery(text)) {
     const spokenResponse = await handleTodaySpeech(chatId)
-    if (format === 'text') {
-      return new NextResponse(spokenResponse, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+    if (format === 'json') {
+      return NextResponse.json({
+        success: true,
+        spokenResponse,
+        result: spokenResponse,
+        text: spokenResponse,
+      })
     }
-    return NextResponse.json({
-      success: true,
-      spokenResponse,
-      result: spokenResponse,
-      text: spokenResponse,
-    })
+    return new NextResponse(spokenResponse, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
   }
 
   const items = await parseIntentWithGroq(text, key)
@@ -218,17 +218,18 @@ export async function GET(req: NextRequest) {
     const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
     tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
   })
-  sendTgNotification(chatId, tgMsg).catch(() => {})
-
-  if (format === 'text') {
-    return new NextResponse(spokenText, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+  if (format === 'json') {
+    return NextResponse.json({
+      success: true,
+      spokenResponse: spokenText,
+      result: spokenText,
+      text: spokenText,
+      items
+    })
   }
 
-  return NextResponse.json({
-    success: true,
-    spokenResponse: spokenText,
-    result: spokenText,
-    text: spokenText,
-    items
+  // Default for Apple Shortcuts is plain text — speak directly without dictionary parsing!
+  return new NextResponse(spokenText, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   })
 }
