@@ -196,6 +196,19 @@ const INITIAL_STATE: AppState = {
 // ─── Context ──────────────────────────────────────────────────────────────────
 const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | null>(null)
 
+function setPermanentCookie(name: string, value: string) {
+  if (typeof document === 'undefined') return
+  const date = new Date()
+  date.setTime(date.getTime() + 10 * 365 * 24 * 60 * 60 * 1000) // 10 years
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${date.toUTCString()};path=/;SameSite=Lax`
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[]\/+^])/g, '\\$1') + '=([^;]*)'))
+  return matches ? decodeURIComponent(matches[1]) : null
+}
+
 export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
     const urlParams = new URLSearchParams(window.location.search)
@@ -203,35 +216,59 @@ export function getTgChatId(): string | null {
     const qToken = urlParams.get('token')
 
     if (qToken) {
-      try { localStorage.setItem('zerf_auth_token', qToken) } catch {}
+      try {
+        localStorage.setItem('zerf_auth_token', qToken)
+        setPermanentCookie('zerf_auth_token', qToken)
+      } catch {}
     }
 
+    // 1. Explicit query parameter from bot button (?chatId=...)
     if (qChatId) {
-      try { localStorage.setItem('zerf_chat_id', qChatId) } catch {}
+      try {
+        localStorage.setItem('zerf_chat_id', qChatId)
+        setPermanentCookie('zerf_chat_id', qChatId)
+      } catch {}
       return qChatId
     }
 
+    // 2. Telegram WebApp session
     const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
     if (u?.id) {
       const tgId = String(u.id)
-      try { localStorage.setItem('zerf_chat_id', tgId) } catch {}
+      try {
+        localStorage.setItem('zerf_chat_id', tgId)
+        setPermanentCookie('zerf_chat_id', tgId)
+      } catch {}
       return tgId
     }
 
+    // 3. Saved localStorage on this device
     try {
       const savedChatId = localStorage.getItem('zerf_chat_id')
-      if (savedChatId) return savedChatId
+      if (savedChatId) {
+        setPermanentCookie('zerf_chat_id', savedChatId)
+        return savedChatId
+      }
     } catch {}
 
+    // 4. Saved cookie on this device
+    const cookieChatId = getCookie('zerf_chat_id')
+    if (cookieChatId) {
+      try { localStorage.setItem('zerf_chat_id', cookieChatId) } catch {}
+      return cookieChatId
+    }
+
+    // 5. Fallback persistent guest identifier on this device
     try {
-      let guestId = localStorage.getItem('zerf_guest_id')
+      let guestId = localStorage.getItem('zerf_guest_id') || getCookie('zerf_guest_id')
       if (!guestId) {
         guestId = String(Math.floor(100000000 + Math.random() * 899999999))
         localStorage.setItem('zerf_guest_id', guestId)
+        setPermanentCookie('zerf_guest_id', guestId)
       }
       return guestId
     } catch {}
-}
+  }
   return null
 }
 

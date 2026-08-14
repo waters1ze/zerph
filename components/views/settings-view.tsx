@@ -74,7 +74,6 @@ export function SettingsView() {
   const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
   const [loadingPay, setLoadingPay] = useState(false)
   const [copiedRef, setCopiedRef] = useState(false)
-  const [inputChatId, setInputChatId] = useState('')
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
   const [adminUsers, setAdminUsers] = useState<any[]>([])
@@ -543,30 +542,39 @@ export function SettingsView() {
           />
         </Row>
 
-        <Row label="Telegram account" description={currentChatId ? `Связанный Chat ID: ${currentChatId}` : "Привяжите Telegram chatId для синхронизации подписки и задач"}>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Ваш Chat ID (напр. 6136950061)"
-              defaultValue={currentChatId || ''}
-              onChange={e => setInputChatId(e.target.value)}
-              className="h-8 px-2.5 rounded-lg bg-muted/50 border border-border text-[12px] text-foreground outline-none focus:border-primary/50 transition-colors w-40"
-            />
-            <button
-              onClick={() => {
-                const targetId = inputChatId || currentChatId || ''
-                if (targetId.trim()) {
-                  localStorage.setItem('zerf_chat_id', targetId.trim())
-                  update({ integrations: { ...settings.integrations, telegram: true } })
-                  fetchSubscription()
-                  alert(`✅ Telegram Chat ID (${targetId.trim()}) успешно привязан к сайту!`)
-                }
-              }}
-              className="h-8 px-3 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-colors shrink-0 shadow-sm"
+        <Row
+          label="Telegram аккаунт"
+          description={
+            currentChatId
+              ? `Профиль навсегда привязан к этому устройству (ID: ${currentChatId})`
+              : 'Привязка происходит автоматически при открытии приложения из бота'
+          }
+        >
+          {currentChatId ? (
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-medium text-[11px] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Синхронизировано
+              </span>
+              <a
+                href="https://t.me/Zerph_bot"
+                target="_blank"
+                rel="noreferrer"
+                className="h-8 px-3 rounded-lg bg-[#229ED9]/15 hover:bg-[#229ED9]/25 text-[#229ED9] border border-[#229ED9]/30 text-[11px] font-medium transition-all flex items-center gap-1"
+              >
+                Бот @Zerph_bot
+              </a>
+            </div>
+          ) : (
+            <a
+              href="https://t.me/Zerph_bot"
+              target="_blank"
+              rel="noreferrer"
+              className="h-8 px-3.5 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-all flex items-center gap-1.5 shadow-sm"
             >
-              Синхронизировать
-            </button>
-          </div>
+              <span>Подключить @Zerph_bot</span>
+            </a>
+          )}
         </Row>
 
         <Row label="Focus mode" description="Hides distractions and shows only today's tasks">
