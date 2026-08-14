@@ -58,7 +58,12 @@ export async function POST(req: NextRequest) {
 
     const updateData: any = {}
     if (birthday !== undefined) updateData.birthday = birthday || null
-    if (name !== undefined) updateData.firstName = name
+    if (name !== undefined) {
+      const trimmed = name.trim()
+      const parts = trimmed.split(/\s+/)
+      updateData.firstName = parts[0] || trimmed
+      updateData.lastName = parts.slice(1).join(' ') || null
+    }
 
     await prisma.telegramChat.upsert({
       where: { chatId: userCid },

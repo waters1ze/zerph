@@ -251,6 +251,7 @@ function initAppState(initialState: AppState): AppState {
   if (typeof window === 'undefined') return initialState
   let savedSettings = {}
   let savedView: View | null = null
+  let cachedData: any = {}
 
   try {
     const saved = localStorage.getItem('zerf-settings')
@@ -262,8 +263,21 @@ function initAppState(initialState: AppState): AppState {
     if (viewStr) savedView = viewStr
   } catch {}
 
+  try {
+    const cachedStateStr = localStorage.getItem('zerf_cached_state')
+    if (cachedStateStr) {
+      cachedData = JSON.parse(cachedStateStr)
+    }
+  } catch {}
+
   return {
     ...initialState,
+    tasks: Array.isArray(cachedData.tasks) && cachedData.tasks.length > 0 ? cachedData.tasks : initialState.tasks,
+    goals: Array.isArray(cachedData.goals) && cachedData.goals.length > 0 ? cachedData.goals : initialState.goals,
+    notes: Array.isArray(cachedData.notes) && cachedData.notes.length > 0 ? cachedData.notes : initialState.notes,
+    projects: Array.isArray(cachedData.projects) && cachedData.projects.length > 0 ? cachedData.projects : initialState.projects,
+    friends: Array.isArray(cachedData.friends) && cachedData.friends.length > 0 ? cachedData.friends : initialState.friends,
+    habits: Array.isArray(cachedData.habits) && cachedData.habits.length > 0 ? cachedData.habits : initialState.habits,
     settings: { ...initialState.settings, ...savedSettings },
     ...(savedView ? { currentView: savedView } : {})
   }
@@ -347,6 +361,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('zerf-settings', JSON.stringify(state.settings))
     } catch {}
   }, [state.settings])
+
+  // Persist all workspace state to cache for instant load on refresh
+  useEffect(() => {
+    try {
+      localStorage.setItem('zerf_cached_state', JSON.stringify({
+        tasks: state.tasks,
+        goals: state.goals,
+        notes: state.notes,
+        projects: state.projects,
+        friends: state.friends,
+        habits: state.habits,
+      }))
+    } catch {}
+  }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
 
   // Sync from backend DB on mount (with user isolation)
   useEffect(() => {

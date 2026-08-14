@@ -2485,6 +2485,21 @@ export async function POST(req: NextRequest) {
         await handleSubscribe(chatId)
       } else if (cmd === '/report') {
         await handleWeeklyReport(senderId, chatId)
+      } else if (cmd === '/name' || cmd === '/setname') {
+        const newName = parts.slice(1).join(' ').trim()
+        if (!newName) {
+          await send(chatId, `👤 *Смена имени*\n\nИспользование: \`/name Ваше Имя Фамилия\`\n\nПример: \`/name Кирилл Перекатнов\``)
+        } else {
+          const nameParts = newName.split(/\s+/)
+          const first = nameParts[0] || newName
+          const last = nameParts.slice(1).join(' ') || null
+          await prisma.telegramChat.upsert({
+            where: { chatId: BigInt(chatId) },
+            update: { firstName: first, lastName: last },
+            create: { chatId: BigInt(chatId), firstName: first, lastName: last },
+          })
+          await send(chatId, `✅ *Ваше имя успешно обновлено на «${newName}»!*\nТеперь в системе, задачах и админке вы отображаетесь именно так.`)
+        }
       } else if (cmd === '/admin') {
         await handleAdminCommand(chatId, parts.slice(1))
       } else if (cmd === '/send') {
