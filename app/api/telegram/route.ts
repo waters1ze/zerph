@@ -1736,8 +1736,8 @@ async function handleStart(chatId: number, firstName: string) {
     ? `🎁 *Вам начислен 1 день бесплатного пробного периода Zerf Premium!* Протестируйте все возможности без ограничений.\n\n`
     : ``
 
-  const nameNotice = (!dbUser?.lastName)
-    ? `\n\n👤 *Как тебя зовут?*\nНапиши прямо сейчас в ответ свои *Имя и Фамилию* (например: \`Артём Смирнов\`), чтобы твои задачи были подписаны твоим именем, а друзья могли находить тебя при совместной работе!`
+  const nameNotice = (!dbUser?.lastName || !dbUser?.birthday)
+    ? `\n\n👤 *Как тебя зовут и когда твой День рождения?*\nНапиши прямо сейчас в ответ свои *Имя, Фамилию и дату рождения* (например: \`Артём Смирнов 15.04.1995\` или \`Кирилл Перекатнов 03.04\`), чтобы твои задачи были подписаны твоим именем, а друзья автоматически видели твой День рождения в календаре!`
     : ``
 
   await send(chatId,
@@ -2943,20 +2943,57 @@ export async function POST(req: NextRequest) {
         await handleCleanupCommand(chatId)
       } else if (cmd === '/report') {
         await handleWeeklyReport(senderId, chatId)
-      } else if (cmd === '/name' || cmd === '/setname') {
-        const newName = parts.slice(1).join(' ').trim()
-        if (!newName) {
-          await send(chatId, `👤 *Смена имени*\n\nИспользование: \`/name Ваше Имя Фамилия\`\n\nПример: \`/name Кирилл Перекатнов\``)
+      } else if (cmd === '/birthday' || cmd === '/bday') {
+        const dateArg = parts.slice(1).join(' ').trim()
+        if (!dateArg) {
+          await send(chatId, `🎂 *Установка Дня рождения*\n\nИспользование: \`/birthday ДД.ММ.ГГГГ\` (или \`/birthday ДД.ММ\`)\n\nПример: \`/birthday 03.04.2010\``)
         } else {
-          const nameParts = newName.split(/\s+/)
-          const first = nameParts[0] || newName
+          const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+          const parsed = parseBirthday(dateArg)
+          if (parsed) {
+            await prisma.telegramChat.upsert({
+              where: { chatId: BigInt(chatId) },
+              update: { birthday: parsed.iso },
+              create: { chatId: BigInt(chatId), birthday: parsed.iso },
+            })
+            await broadcastMyBirthdayToFriends(chatId)
+            await send(chatId, `🎉 *Твой День рождения (${String(parsed.day).padStart(2, '0')}.${String(parsed.month).padStart(2, '0')}${parsed.year ? `.${parsed.year}` : ''}) успешно сохранен!*\nДрузья увидят напоминание в календаре Zerf AI.`)
+          } else {
+            await send(chatId, `⚠️ Не удалось распознать дату. Попробуй в формате \`ДД.ММ.ГГГГ\` (например \`03.04.2010\`).`)
+          }
+        }
+      } else if (cmd === '/name' || cmd === '/setname') {
+        const rawInput = parts.slice(1).join(' ').trim()
+        if (!rawInput) {
+          await send(chatId, `👤 *Смена имени и даты рождения*\n\nИспользование: \`/name Ваше Имя Фамилия [ДД.ММ.ГГГГ]\`\n\nПример: \`/name Кирилл Перекатнов 03.04.2010\``)
+        } else {
+          const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+          const dateMatch = rawInput.match(/\b(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\b/)
+          const parsedBday = dateMatch ? parseBirthday(dateMatch[1]) : null
+          const cleanName = rawInput.replace(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/g, '').trim()
+
+          const nameParts = cleanName.split(/\s+/).filter(Boolean)
+          const first = nameParts[0] || firstName
           const last = nameParts.slice(1).join(' ') || null
+
+          const updateData: any = { firstName: first, lastName: last }
+          if (parsedBday) updateData.birthday = parsedBday.iso
+
           await prisma.telegramChat.upsert({
             where: { chatId: BigInt(chatId) },
-            update: { firstName: first, lastName: last },
-            create: { chatId: BigInt(chatId), firstName: first, lastName: last },
+            update: updateData,
+            create: { chatId: BigInt(chatId), ...updateData },
           })
-          await send(chatId, `✅ *Ваше имя успешно обновлено на «${newName}»!*\nТеперь в системе, задачах и админке вы отображаетесь именно так.`)
+
+          if (parsedBday) {
+            await broadcastMyBirthdayToFriends(chatId)
+          }
+
+          let respText = `✅ *Ваш профиль успешно обновлен!*\n• *Имя:* ${first}${last ? ' ' + last : ''}`
+          if (parsedBday) {
+            respText += `\n• *День рождения:* ${String(parsedBday.day).padStart(2, '0')}.${String(parsedBday.month).padStart(2, '0')}${parsedBday.year ? `.${parsedBday.year}` : ''} 🎉`
+          }
+          await send(chatId, respText)
         }
       } else if (cmd === '/admin') {
         await handleAdminCommand(chatId, parts.slice(1))
@@ -3011,20 +3048,109 @@ export async function POST(req: NextRequest) {
         const trimmed = text.trim()
         const lowerText = trimmed.toLowerCase()
 
-        // Name setting detection: "Меня зовут Артём Смирнов", "Я Артём Смирнов", or "Артём Смирнов" (2 capitalized words)
-        const namePrefixMatch = trimmed.match(/^(?:меня зовут|я|мое имя|моё имя)\s+([А-ЯЁа-яёA-Za-z]+)\s+([А-ЯЁа-яёA-Za-z]+)$/i)
-        const twoCapitalWordsMatch = trimmed.match(/^([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})$/)
+        // 1. Reply to bot message deletion or smart delete ("удали эту заметку", "удали", "удалить", "удали задачу", "удаляй")
+        const isDeleteVerb = /^(?:удали|удалить|удаляй|удали это|удали эту|удали заметку|удали эту заметку|удали задачу|удали эту задачу|стереть|delete|remove)\b/i.test(lowerText)
+        const isStrictDeleteAll = /\b(?:все|всё|весь список|полностью все|все задачи|все заметки)\b/i.test(lowerText)
+
+        if (isDeleteVerb && !isStrictDeleteAll) {
+          // If replying to a bot message
+          if (msg.reply_to_message?.text) {
+            const replyText = msg.reply_to_message.text
+            const titleMatch = replyText.match(/(?:Заметка|Задача|Цель)\s+(?:создана|изменена|обновлена)?:\s*([^\n]+)/i) ||
+                               replyText.match(/(?:📌|📝|🎯|🎂)\s*(?:Задача|Заметка|Цель)?:\s*([^\n]+)/i)
+            const extractedTitle = titleMatch ? titleMatch[1].trim() : ''
+
+            if (extractedTitle) {
+              const deletedNote = await prisma.note.findFirst({
+                where: { ownerChatId: BigInt(chatId), title: { contains: extractedTitle, mode: 'insensitive' } }
+              })
+              const deletedTask = await prisma.task.findFirst({
+                where: { ownerChatId: BigInt(chatId), title: { contains: extractedTitle, mode: 'insensitive' } }
+              })
+
+              if (deletedNote) {
+                await prisma.note.delete({ where: { id: deletedNote.id } })
+                await send(chatId, `🗑 Заметка *«${escMd(deletedNote.title)}»* успешно удалена!`, { reply_markup: miniAppKeyboard(chatId) })
+                return NextResponse.json({ ok: true })
+              } else if (deletedTask) {
+                await prisma.task.delete({ where: { id: deletedTask.id } })
+                await send(chatId, `🗑 Задача *«${escMd(deletedTask.title)}»* успешно удалена!`, { reply_markup: miniAppKeyboard(chatId) })
+                return NextResponse.json({ ok: true })
+              }
+            }
+          }
+
+          // If no reply or title match: delete the MOST RECENT note or task
+          const lastNote = await prisma.note.findFirst({
+            where: { ownerChatId: BigInt(chatId) },
+            orderBy: { createdAt: 'desc' }
+          })
+          const lastTask = await prisma.task.findFirst({
+            where: { ownerChatId: BigInt(chatId) },
+            orderBy: { createdAt: 'desc' }
+          })
+
+          if (lowerText.includes('заметк') && lastNote) {
+            await prisma.note.delete({ where: { id: lastNote.id } })
+            await send(chatId, `🗑 Заметка *«${escMd(lastNote.title)}»* успешно удалена!`, { reply_markup: miniAppKeyboard(chatId) })
+            return NextResponse.json({ ok: true })
+          } else if (lowerText.includes('задач') && lastTask) {
+            await prisma.task.delete({ where: { id: lastTask.id } })
+            await send(chatId, `🗑 Задача *«${escMd(lastTask.title)}»* успешно удалена!`, { reply_markup: miniAppKeyboard(chatId) })
+            return NextResponse.json({ ok: true })
+          } else if (lastNote && (!lastTask || lastNote.createdAt > lastTask.createdAt)) {
+            await prisma.note.delete({ where: { id: lastNote.id } })
+            await send(chatId, `🗑 Последняя заметка *«${escMd(lastNote.title)}»* успешно удалена!`, { reply_markup: miniAppKeyboard(chatId) })
+            return NextResponse.json({ ok: true })
+          } else if (lastTask) {
+            await prisma.task.delete({ where: { id: lastTask.id } })
+            await send(chatId, `🗑 Последняя задача *«${escMd(lastTask.title)}»* успешно удалена!`, { reply_markup: miniAppKeyboard(chatId) })
+            return NextResponse.json({ ok: true })
+          }
+        }
+
+        // 2. Name + Birthday setting detection (e.g. "Артём Смирнов 15.04.1995" or "Меня зовут Кирилл Перекатнов 03.04.2010" or "03.04.2010")
+        const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+        const rawDateMatch = trimmed.match(/\b(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\b/)
+        const parsedBday = rawDateMatch ? parseBirthday(rawDateMatch[1]) : null
+
+        const textWithoutDate = trimmed.replace(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/g, '').replace(/,/g, '').trim()
+        const namePrefixMatch = textWithoutDate.match(/^(?:меня зовут|я|мое имя|моё имя|др|мой др)\s+([А-ЯЁа-яёA-Za-z]+)(?:\s+([А-ЯЁа-яёA-Za-z]+))?$/i)
+        const twoCapitalWordsMatch = textWithoutDate.match(/^([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})$/)
         const isNotTaskVerb = twoCapitalWordsMatch && !/^(Купить|Сделать|Позвонить|Написать|Пойти|Сходить|Напомни|Создай|Удали|Открой|Покажи|Принять|Перенести|Поставить|Записать|Найти|Отправить|Поручить)/i.test(twoCapitalWordsMatch[1])
 
-        if (namePrefixMatch || isNotTaskVerb) {
-          const fn = namePrefixMatch ? namePrefixMatch[1] : twoCapitalWordsMatch![1]
-          const ln = namePrefixMatch ? namePrefixMatch[2] : twoCapitalWordsMatch![2]
+        if ((namePrefixMatch || isNotTaskVerb) && (textWithoutDate.length > 0 || parsedBday)) {
+          const fn = namePrefixMatch ? namePrefixMatch[1] : (twoCapitalWordsMatch ? twoCapitalWordsMatch[1] : firstName)
+          const ln = namePrefixMatch ? (namePrefixMatch[2] || null) : (twoCapitalWordsMatch ? twoCapitalWordsMatch[2] : null)
+
+          const updateData: any = { firstName: fn }
+          if (ln) updateData.lastName = ln
+          if (parsedBday) updateData.birthday = parsedBday.iso
+
           await prisma.telegramChat.upsert({
             where: { chatId: BigInt(chatId) },
-            update: { firstName: fn, lastName: ln },
-            create: { chatId: BigInt(chatId), firstName: fn, lastName: ln },
+            update: updateData,
+            create: { chatId: BigInt(chatId), ...updateData },
           })
-          await send(chatId, `✅ Приятно познакомиться, *${escMd(fn)} ${escMd(ln)}*!\n\nТвоё имя успешно сохранено в Zerf AI. Все задачи сохраняются только в твоем личном списке, а друзья и коллеги смогут легко находить тебя по имени при поручении задач!`, {
+
+          if (parsedBday) {
+            await broadcastMyBirthdayToFriends(chatId)
+          }
+
+          let resp = `✅ Приятно познакомиться, *${escMd(fn)}${ln ? ' ' + escMd(ln) : ''}*!\n\nТвои данные успешно сохранены в Zerf AI.`
+          if (parsedBday) {
+            resp += `\n🎂 *День рождения:* ${String(parsedBday.day).padStart(2, '0')}.${String(parsedBday.month).padStart(2, '0')}${parsedBday.year ? `.${parsedBday.year}` : ''} (друзья автоматически увидят напоминание в календаре!).`
+          }
+          await send(chatId, resp, { reply_markup: miniAppKeyboard(chatId) })
+        } else if (parsedBday && textWithoutDate.length === 0) {
+          // Just a birthday entered: e.g. "03.04.2010"
+          await prisma.telegramChat.upsert({
+            where: { chatId: BigInt(chatId) },
+            update: { birthday: parsedBday.iso },
+            create: { chatId: BigInt(chatId), birthday: parsedBday.iso },
+          })
+          await broadcastMyBirthdayToFriends(chatId)
+          await send(chatId, `🎂 *День рождения (${String(parsedBday.day).padStart(2, '0')}.${String(parsedBday.month).padStart(2, '0')}${parsedBday.year ? `.${parsedBday.year}` : ''}) успешно сохранен!*\nТвои друзья автоматически увидят напоминание в календаре Zerf AI. 🎉`, {
             reply_markup: miniAppKeyboard(chatId)
           })
         } else {

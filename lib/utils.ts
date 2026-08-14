@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function isBirthdayVisible(task: { title: string; dueDate?: string }, maxDays = 7): boolean {
+export function isBirthdayVisible(task: { title: string; dueDate?: string }, maxDays = 365): boolean {
   if (!task.dueDate) return true
   const title = (task.title || '').toLowerCase()
   if (title.includes('день рождения') || title.includes('др ') || title.includes('др:') || title.endsWith('др')) {
@@ -15,7 +15,8 @@ export function isBirthdayVisible(task: { title: string; dueDate?: string }, max
       const now = new Date()
       now.setHours(0, 0, 0, 0)
       const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
-      return diffDays <= maxDays
+      // Visible if within maxDays or if today
+      return diffDays >= 0 && diffDays <= maxDays
     }
   }
   return true

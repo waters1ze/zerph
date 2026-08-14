@@ -63,6 +63,22 @@ export function AdminView() {
   // AI Channel Comments Feedback
   const [feedbackReport, setFeedbackReport] = useState<any | null>(null)
   const [feedbackLoading, setFeedbackLoading] = useState(false)
+  const [isViewerRoot, setIsViewerRoot] = useState<boolean>(false)
+
+  const checkViewerRole = async () => {
+    try {
+      const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
+      const res = await fetch(`/api/admin/check?chatId=${qChatId}`, {
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+          ...(qChatId ? { 'x-chat-id': qChatId } : {})
+        }
+      })
+      const data = await res.json()
+      if (data.isRoot) setIsViewerRoot(true)
+    } catch {}
+  }
 
   const fetchAdminData = async () => {
     setLoading(true)
@@ -110,6 +126,7 @@ export function AdminView() {
   }
 
   useEffect(() => {
+    checkViewerRole()
     fetchAdminData()
     fetchFeedbackReport()
   }, [])
@@ -437,29 +454,37 @@ export function AdminView() {
             <div className="p-4 rounded-xl bg-muted/40 border border-border/60 flex flex-col justify-between">
               <div>
                 <span className="text-xs font-semibold text-foreground">Настроение аудитории</span>
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden flex">
-                    <div
-                      style={{ width: `${feedbackReport.sentimentSummary?.positivePercent || 80}%` }}
-                      className="bg-emerald-500 h-full"
-                      title={`Позитив: ${feedbackReport.sentimentSummary?.positivePercent || 80}%`}
-                    />
-                    <div
-                      style={{ width: `${feedbackReport.sentimentSummary?.neutralPercent || 15}%` }}
-                      className="bg-amber-500 h-full"
-                      title={`Нейтрально: ${feedbackReport.sentimentSummary?.neutralPercent || 15}%`}
-                    />
-                    <div
-                      style={{ width: `${feedbackReport.sentimentSummary?.negativePercent || 5}%` }}
-                      className="bg-rose-500 h-full"
-                      title={`Критика: ${feedbackReport.sentimentSummary?.negativePercent || 5}%`}
-                    />
+                {(feedbackReport.totalAnalyzed || 0) > 0 ? (
+                  <>
+                    <div className="mt-3 flex items-center gap-2">
+                      <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden flex">
+                        <div
+                          style={{ width: `${feedbackReport.sentimentSummary?.positivePercent || 0}%` }}
+                          className="bg-emerald-500 h-full"
+                          title={`Позитив: ${feedbackReport.sentimentSummary?.positivePercent || 0}%`}
+                        />
+                        <div
+                          style={{ width: `${feedbackReport.sentimentSummary?.neutralPercent || 0}%` }}
+                          className="bg-amber-500 h-full"
+                          title={`Нейтрально: ${feedbackReport.sentimentSummary?.neutralPercent || 0}%`}
+                        />
+                        <div
+                          style={{ width: `${feedbackReport.sentimentSummary?.negativePercent || 0}%` }}
+                          className="bg-rose-500 h-full"
+                          title={`Критика: ${feedbackReport.sentimentSummary?.negativePercent || 0}%`}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+                      <span className="text-emerald-500 font-medium">+{feedbackReport.sentimentSummary?.positivePercent || 0}% позитив</span>
+                      <span className="text-rose-500 font-medium">-{feedbackReport.sentimentSummary?.negativePercent || 0}% критика</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-3 py-2 px-3 rounded-lg bg-muted/60 text-[11px] text-muted-foreground">
+                    Нет комментариев за текущую неделю. Сводка формируется еженедельно перед отправкой отчета.
                   </div>
-                </div>
-                <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-                  <span className="text-emerald-500 font-medium">+{feedbackReport.sentimentSummary?.positivePercent || 80}% позитив</span>
-                  <span className="text-rose-500 font-medium">-{feedbackReport.sentimentSummary?.negativePercent || 5}% критика</span>
-                </div>
+                )}
               </div>
               <p className="text-[11px] text-muted-foreground mt-3">
                 Всего комментариев: <strong className="text-foreground">{feedbackReport.totalAnalyzed || 0}</strong>
@@ -641,8 +666,8 @@ export function AdminView() {
                       </button>
                     )}
 
-                    {/* Admin Role Toggle (Non-root) */}
-                    {!u.isRoot && (
+                    {/* Admin Role Toggle (Visible ONLY to root / owner admin) */}
+                    {isViewerRoot && !u.isRoot && (
                       <button
                         onClick={() => handleToggleAdminRole(u)}
                         disabled={isActionRunning}

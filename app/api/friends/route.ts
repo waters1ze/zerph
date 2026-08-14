@@ -227,10 +227,14 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (birthday !== undefined) {
+      const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+      const parsed = parseBirthday(birthday)
+      const normalizedBday = parsed ? parsed.iso : (birthday || null)
       await prisma.telegramChat.update({
         where: { chatId: targetCid },
-        data: { birthday: birthday || null },
+        data: { birthday: normalizedBday },
       })
+      await broadcastMyBirthdayToFriends(targetCid)
       await syncFriendBirthdays(chatId)
     }
 

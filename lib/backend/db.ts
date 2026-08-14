@@ -756,33 +756,41 @@ export async function saveParsedItemToDb(
   completedTask?: DbTask | null
   updatedItem?: boolean
 }> {
-  // Delete all tasks action
+  // Delete all tasks action - STRICT CHECK (prevent accidental deletion from generic "удали")
   const textLower = (item.rawText || item.title || '').toLowerCase().trim()
-  if (item.action === 'delete_all' || textLower.includes('удали все') || textLower.includes('очисти все') || textLower.includes('удали всё') || textLower.includes('очистить все')) {
-    if (ownerChatId) {
+  const isStrictDeleteAll = /\b(?:удали|удалить|очисти|очистить)\s+(?:все|всё)\s*(?:задачи|дела|заметки|список|тодо)?\b/i.test(textLower)
+
+  if (item.action === 'delete_all') {
+    if (isStrictDeleteAll && ownerChatId) {
       await prisma.task.deleteMany({ where: { ownerChatId: BigInt(ownerChatId) } })
+      return { item, updatedItem: true }
+    } else {
+      // If user did NOT explicitly say "удали все", treat it as deleting the single target or most recent item
+      item.action = 'delete'
     }
-    return { item, updatedItem: true }
   }
 
   // Set my birthday action
   if (item.action === 'set_my_birthday') {
-    if (ownerChatId && item.dueDate) {
-      await prisma.telegramChat.update({
-        where: { chatId: BigInt(ownerChatId) },
-        data: { birthday: item.dueDate }
-      }).catch(() => {})
-      
-      // Auto sync so the user's task list (and potentially others) knows
-      // Note: the friend will only see it when *they* sync, but this is fine
-      item.title = `День рождения сохранен: ${item.dueDate}`
+    if (ownerChatId && (item.dueDate || item.rawText)) {
+      const parsed = parseBirthday(item.dueDate || item.rawText)
+      if (parsed) {
+        await prisma.telegramChat.update({
+          where: { chatId: BigInt(ownerChatId) },
+          data: { birthday: parsed.iso }
+        }).catch(() => {})
+        await broadcastMyBirthdayToFriends(ownerChatId)
+        item.title = `День рождения сохранен: ${String(parsed.day).padStart(2, '0')}.${String(parsed.month).padStart(2, '0')}${parsed.year ? `.${parsed.year}` : ''}`
+      } else {
+        item.title = `Не удалось сохранить дату. Пожалуйста, напишите дату в формате ДД.ММ.ГГГГ.`
+      }
     } else {
       item.title = `Не удалось сохранить дату. Пожалуйста, напишите дату в формате ДД.ММ.ГГГГ.`
     }
     return { item, updatedItem: true }
   }
 
-  // Delete specific task action
+  // Delete specific task/note action
   if (item.action === 'delete') {
     if (item.targetId) {
       const taskToDelete = await prisma.task.findUnique({ where: { id: item.targetId } })
@@ -819,6 +827,27 @@ export async function saveParsedItemToDb(
         }
         await deleteTask(best.id)
         return { item, updatedItem: true }
+      } else {
+        // Fallback: Delete most recent note or task if no title match
+        if (ownerChatId) {
+          const lastNote = await prisma.note.findFirst({
+            where: { ownerChatId: BigInt(ownerChatId) },
+            orderBy: { createdAt: 'desc' }
+          })
+          const lastTask = await prisma.task.findFirst({
+            where: { ownerChatId: BigInt(ownerChatId) },
+            orderBy: { createdAt: 'desc' }
+          })
+          if (lastNote && (!lastTask || lastNote.createdAt > lastTask.createdAt)) {
+            await deleteNote(lastNote.id)
+            item.title = `Заметка «${lastNote.title}» удалена`
+            return { item, updatedItem: true }
+          } else if (lastTask) {
+            await deleteTask(lastTask.id)
+            item.title = `Задача «${lastTask.title}» удалена`
+            return { item, updatedItem: true }
+          }
+        }
       }
     }
   }
@@ -1214,6 +1243,75 @@ export async function touchUserLastActive(chatId: number | bigint | string) {
   } catch {}
 }
 
+export function parseBirthday(input: string | null | undefined): { month: number; day: number; year?: number; iso: string } | null {
+  if (!input) return null
+  const cleaned = input.trim()
+
+  // 1. Check YYYY-MM-DD (e.g. 2010-04-03)
+  const isoMatch = cleaned.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10)
+    const month = parseInt(isoMatch[2], 10)
+    const day = parseInt(isoMatch[3], 10)
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return {
+        year, month, day,
+        iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      }
+    }
+  }
+
+  // 2. Check DD.MM.YYYY or DD-MM-YYYY or DD/MM/YYYY (e.g. 03.04.2010 or 03-04-2010)
+  const ruMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+  if (ruMatch) {
+    const day = parseInt(ruMatch[1], 10)
+    const month = parseInt(ruMatch[2], 10)
+    const year = parseInt(ruMatch[3], 10)
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return {
+        year, month, day,
+        iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      }
+    }
+  }
+
+  // 3. Check DD.MM or DD-MM (e.g. 03.04 or 03-04)
+  const shortMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})$/)
+  if (shortMatch) {
+    const n1 = parseInt(shortMatch[1], 10)
+    const n2 = parseInt(shortMatch[2], 10)
+    let day = n1
+    let month = n2
+    if (n1 <= 12 && n2 > 12) {
+      month = n1
+      day = n2
+    }
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return {
+        month, day,
+        iso: `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      }
+    }
+  }
+
+  return null
+}
+
+export async function broadcastMyBirthdayToFriends(myChatId: number | bigint | string): Promise<void> {
+  try {
+    const cid = BigInt(myChatId)
+    const friendships = await prisma.friendship.findMany({
+      where: { OR: [{ userChatId: cid }, { friendChatId: cid }] },
+    })
+    const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
+    for (const friendId of friendChatIds) {
+      await syncFriendBirthdays(friendId)
+    }
+  } catch (err) {
+    console.error('Error broadcasting birthday:', err)
+  }
+}
+
 export async function syncFriendBirthdays(ownerChatId: number | bigint | string): Promise<number> {
   try {
     const cid = BigInt(ownerChatId)
@@ -1241,30 +1339,21 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
     for (const friend of friendChats) {
       if (!friend.birthday) continue
+      const parsed = parseBirthday(friend.birthday)
+      if (!parsed) continue
 
-      const parts = friend.birthday.split('-')
-      let monthStr = ''
-      let dayStr = ''
-
-      if (parts.length === 3) {
-        monthStr = parts[1]
-        dayStr = parts[2]
-      } else if (parts.length === 2) {
-        monthStr = parts[0]
-        dayStr = parts[1]
-      } else {
-        continue
-      }
+      const monthStr = String(parsed.month).padStart(2, '0')
+      const dayStr = String(parsed.day).padStart(2, '0')
 
       const friendName = friend.firstName ? `${friend.firstName}${friend.lastName ? ' ' + friend.lastName : ''}` : (friend.username ? `@${friend.username}` : `Друг #${friend.chatId}`)
       const taskTitle = `🎂 День рождения: ${friendName}`
       
-      const thisYearDate = new Date(`${currentYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}T00:00:00`)
+      const thisYearDate = new Date(`${currentYear}-${monthStr}-${dayStr}T00:00:00`)
       let targetYear = currentYear
       if (thisYearDate.getTime() < Date.now()) {
         targetYear = currentYear + 1
       }
-      const targetDueDate = `${targetYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`
+      const targetDueDate = `${targetYear}-${monthStr}-${dayStr}`
 
       const existing = await prisma.task.findFirst({
         where: {

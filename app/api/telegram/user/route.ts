@@ -70,8 +70,13 @@ export async function POST(req: NextRequest) {
     const { birthday, name } = await req.json()
     const userCid = BigInt(cid)
 
+    const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+
     const updateData: any = {}
-    if (birthday !== undefined) updateData.birthday = birthday || null
+    if (birthday !== undefined) {
+      const parsed = parseBirthday(birthday)
+      updateData.birthday = parsed ? parsed.iso : (birthday || null)
+    }
     if (name !== undefined) {
       const trimmed = name.trim()
       const parts = trimmed.split(/\s+/)
@@ -85,17 +90,11 @@ export async function POST(req: NextRequest) {
       create: { chatId: userCid, ...updateData },
     })
 
-    const friendships = await prisma.friendship.findMany({
-      where: { OR: [{ userChatId: userCid }, { friendChatId: userCid }] },
-    })
-
-    const { syncFriendBirthdays } = await import('@/lib/backend/db')
-    for (const f of friendships) {
-      const friendId = f.userChatId === userCid ? f.friendChatId : f.userChatId
-      await syncFriendBirthdays(friendId)
+    if (updateData.birthday) {
+      await broadcastMyBirthdayToFriends(userCid)
     }
 
-    return NextResponse.json({ success: true, birthday })
+    return NextResponse.json({ success: true, birthday: updateData.birthday || null })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

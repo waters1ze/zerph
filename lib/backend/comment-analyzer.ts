@@ -51,10 +51,10 @@ export async function generateCommentAnalysisReport(limit = 50): Promise<Comment
   if (comments.length === 0) {
     return {
       totalAnalyzed: 0,
-      sentimentSummary: { positivePercent: 100, neutralPercent: 0, negativePercent: 0 },
+      sentimentSummary: { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
       topRequests: ['Пока нет новых комментариев под постами в канале'],
       mainIssuesOrQuestions: [],
-      executiveSummary: 'Подписчики пока не оставили комментариев. Система отслеживает обсуждения в канале @zerph_off в режиме реального времени.',
+      executiveSummary: 'Комментариев за эту неделю пока не поступало. Отчет формируется еженедельно перед отправкой сводки.',
       rawComments: []
     }
   }
