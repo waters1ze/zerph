@@ -2844,14 +2844,14 @@ export async function POST(req: NextRequest) {
           const loginUrl = tokenData.token ? `${APP_URL}/?login_token=${tokenData.token}` : APP_URL
 
           await send(chatId,
-            `🔐 *Безопасный вход в Zerf на компьютере*\n\n` +
+            `🔐 *Безопасный вход в Zerf на устройстве*\n\n` +
             `Нажмите на кнопку ниже, чтобы автоматически войти в свой профиль.\n\n` +
             `⏱ Ссылка действует *10 минут* и только для одного входа.\n` +
             `⚠️ *Никому не пересылайте эту ссылку — она предназначена исключительно для вас.*`,
             {
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: '🔑 Войти в Zerf на ПК', url: loginUrl }],
+                  [{ text: '🔑 Войти в Zerf на устройстве', url: loginUrl }],
                   [{ text: '📱 Открыть в Telegram', web_app: { url: MINIAPP_URL } }],
                 ]
               }

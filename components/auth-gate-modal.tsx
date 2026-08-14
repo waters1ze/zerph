@@ -78,7 +78,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                 </div>
                 <div className="flex items-center gap-2 text-foreground font-medium">
                   <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">3</span>
-                  Нажмите кнопку «🔑 Войти в Zerf на ПК»
+                  Нажмите кнопку «🔑 Войти в Zerf на устройстве»
                 </div>
               </div>
             </div>
