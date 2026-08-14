@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock, AlertCircle, TrendingUp,
   Target, Flame, Award, BarChart3, Users, LayoutGrid
 } from 'lucide-react'
+import { ActivityHeatmap } from '@/components/activity-heatmap'
 
 function dayKey(d: Date) {
   return d.toISOString().slice(0, 10)
@@ -213,6 +214,13 @@ export function StatsView() {
         <StatCard label="Просрочено" value={overdue} sub={overdue > 0 ? 'требует внимания' : 'всё чисто!'} icon={AlertCircle} color="text-[var(--status-overdue)]" delay={0.12} />
         <StatCard label="В процессе" value={inProgress} sub="активных задач" icon={Clock} color="text-[var(--status-inprogress)]" delay={0.18} />
       </div>
+
+      {/* 365-Day Activity Heatmap */}
+      <ActivityHeatmap
+        completedDates={state.tasks.filter(t => t.status === 'done' && t.completedAt).map(t => t.completedAt!)}
+        totalCompleted={done}
+        currentStreak={done > 0 ? Math.max(1, done) : 0}
+      />
 
       {/* Weekly completion graph - REAL DATA */}
       <div className="p-4 rounded-2xl bg-card border border-border">

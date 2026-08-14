@@ -152,5 +152,28 @@ model Habit {
 model Config {
   key       String @id
   value     String
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+// Telegram Channel Automated Polls
+model ChannelPoll {
+  id            String   @id @default(cuid())
+  pollId        String   @unique
+  messageId     Int
+  channelId     String   // e.g. "@zerph_off"
+  question      String
+  options       Json     // array of strings/objects
+  date          String   // YYYY-MM-DD
+  isClosed      Boolean  @default(false)
+  winningOption String?
+  createdAt     DateTime @default(now())
+}
+
+// Anonymized aggregate action logs for AI feature evolution & analytics
+model AppActionLog {
+  id        String   @id @default(cuid())
+  action    String   // 'voice_task' | 'text_task' | 'complete_task' | 'clock_timer' | 'pomodoro' | 'note_created' | 'goal_created'
+  chatId    BigInt?
+  details   String?
+  createdAt DateTime @default(now())
 }

@@ -387,6 +387,70 @@ async function runFocusCheck() {
   }
 }
 
+import {
+  postDailyPollToChannel,
+  closeDailyPollAndNotifyAdmins,
+  postDailyMorningPostToChannel,
+  postDailyEveningPostToChannel,
+  generateAndSendFridayAiProposal
+} from './channel-poster'
+
+let lastChannelPollDate = ''
+let lastMorningPostDate = ''
+let lastClosePollDate = ''
+let lastEveningPostDate = ''
+let lastFridayProposalDate = ''
+
+export async function runChannelAndAiCron() {
+  try {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', weekday: 'short',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+
+    const hour = parseInt(getPart('hour'), 10)
+    const day = getPart('weekday').toLowerCase() // 'fri', 'mon', etc.
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+
+    // 08:00 MSK: Daily poll to @zerph_off
+    if (hour === 8 && lastChannelPollDate !== todayStr) {
+      lastChannelPollDate = todayStr
+      postDailyPollToChannel().catch(() => {})
+    }
+
+    // 09:00 MSK: Morning post to @zerph_off
+    if (hour === 9 && lastMorningPostDate !== todayStr) {
+      lastMorningPostDate = todayStr
+      postDailyMorningPostToChannel().catch(() => {})
+    }
+
+    // 20:00 MSK: Close poll and report winner to Admins & Owner
+    if (hour === 20 && lastClosePollDate !== todayStr) {
+      lastClosePollDate = todayStr
+      closeDailyPollAndNotifyAdmins().catch(() => {})
+    }
+
+    // 21:00 MSK: Evening post to @zerph_off
+    if (hour === 21 && lastEveningPostDate !== todayStr) {
+      lastEveningPostDate = todayStr
+      postDailyEveningPostToChannel().catch(() => {})
+    }
+
+    // Friday 00:00 MSK: AI Autonomous Feature Evolution Proposal
+    if (day === 'fri' && hour === 0 && lastFridayProposalDate !== todayStr) {
+      lastFridayProposalDate = todayStr
+      generateAndSendFridayAiProposal().catch(() => {})
+    }
+  } catch (err) {
+    console.error('Channel cron error:', err)
+  }
+}
+
 // ── Global daemon ─────────────────────────────────────────────────────────────
 
 const globalObj = globalThis as unknown as { __reminderCronStarted?: boolean }
@@ -410,5 +474,10 @@ if (!globalObj.__reminderCronStarted) {
     runEveningReview().catch(() => {})
   }, 30_000)
 
-  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review + Focus daemon started.')
+  // Channel posts, polls & Friday AI proposal: every 30 seconds
+  setInterval(() => {
+    runChannelAndAiCron().catch(() => {})
+  }, 30_000)
+
+  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review + Channel Daemon started.')
 }

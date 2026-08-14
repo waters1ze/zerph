@@ -1576,6 +1576,69 @@ function miniAppKeyboard(chatId?: number) {
   }
 }
 
+async function processPhoto(chatId: number, photoArray: any[]) {
+  if (!photoArray || photoArray.length === 0) return
+  const largest = photoArray[photoArray.length - 1]
+  const fileId = largest.file_id
+
+  try {
+    await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
+    await send(chatId, '📷 Распознаю задачи из фото через Vision AI...')
+
+    const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`)
+    const fileData = await fileRes.json()
+    const filePath = fileData.result?.file_path
+    if (!filePath) throw new Error('Не удалось получить файл изображения')
+
+    const imgRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
+    const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
+
+    const { extractTasksFromImageWithGroq } = await import('@/lib/backend/vision')
+    const extractedTasks = await extractTasksFromImageWithGroq(imgBuffer)
+
+    if (extractedTasks.length === 0) {
+      await send(chatId, '🤔 На изображении не обнаружено явных задач или расписания. Попробуйте отправить более четкое фото или скриншот.')
+      return
+    }
+
+    const { createTask } = await import('@/lib/backend/db')
+    const createdList: string[] = []
+
+    for (const t of extractedTasks) {
+      const created = await createTask({
+        title: t.title,
+        description: t.description || 'Распознано из фото через Vision AI',
+        priority: t.priority || 'medium',
+        dueDate: t.dueDate || new Date().toISOString().slice(0, 10),
+        dueTime: t.dueTime || undefined,
+        tags: ['фото', 'vision-ai'],
+        aiGenerated: true,
+        ownerChatId: BigInt(chatId),
+        subtasks: (t.subtasks || []).map((st, i) => ({
+          id: `st_vis_${i}_${Date.now()}`,
+          title: st,
+          done: false,
+        }))
+      })
+      if (created) {
+        const timePart = t.dueTime ? ` в ${t.dueTime}` : ''
+        const datePart = t.dueDate ? ` (${t.dueDate})` : ''
+        createdList.push(`• *${escMd(t.title)}*${timePart}${datePart}`)
+      }
+    }
+
+    const msg =
+      `🎉 *Успешно распознано и создано задач:* ${createdList.length}\n\n` +
+      createdList.join('\n') +
+      `\n\n_Все задачи добавлены в ваш список дел и синхронизированы с сайтом!_`
+
+    await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+  } catch (err) {
+    console.error('Vision processing error:', err)
+    await send(chatId, `❌ Ошибка при распознавании фото: ${String(err).slice(0, 200)}`)
+  }
+}
+
 async function processVoice(chatId: number, fileId: string, duration: number = 15) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   if (!key) {
@@ -2446,6 +2509,7 @@ export async function POST(req: NextRequest) {
     const lastName: string = msg.from?.last_name || ''
     const text: string = msg.text || ''
     const voice = msg.voice || msg.audio
+    const photo = msg.photo
 
     // Register user details (updates name automatically on every message!)
     await registerChatId(senderId, firstName, username, lastName).catch(() => {})
@@ -2660,7 +2724,9 @@ export async function POST(req: NextRequest) {
       }
 
     } else if (!isGroup) {
-      if (voice) {
+      if (photo && photo.length > 0) {
+        await processPhoto(chatId, photo)
+      } else if (voice) {
         await processVoice(chatId, voice.file_id, voice.duration || 15)
       } else if (text.trim()) {
         const lowerText = text.trim().toLowerCase()
@@ -2684,7 +2750,9 @@ export async function POST(req: NextRequest) {
       const isReplyToBot = msg.reply_to_message?.from?.is_bot === true
       if (isMentioned || isReplyToBot) {
         const cleanText = text.replace(new RegExp(`@${botUsername}`, 'gi'), '').trim()
-        if (voice) {
+        if (photo && photo.length > 0) {
+          await processPhoto(senderId, photo)
+        } else if (voice) {
           await processVoice(senderId, voice.file_id, voice.duration || 15)
         } else if (cleanText) {
           await processText(senderId, cleanText)
