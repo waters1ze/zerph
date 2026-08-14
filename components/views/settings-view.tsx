@@ -78,7 +78,8 @@ export function SettingsView() {
 
   const [adminUsers, setAdminUsers] = useState<any[]>([])
   const [adminSearch, setAdminSearch] = useState('')
-  const [userBirthday, setUserBirthday] = useState('')
+  const cachedBirthday = typeof window !== 'undefined' ? localStorage.getItem('zerf_birthday') || '' : ''
+  const [userBirthday, setUserBirthday] = useState(cachedBirthday)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
 
   useEffect(() => {
@@ -91,20 +92,31 @@ export function SettingsView() {
         .catch(() => {})
     }
     if (currentChatId) {
-      fetch(`/api/telegram/user?chatId=${currentChatId}`)
+      fetch(`/api/telegram/user?chatId=${currentChatId}`, {
+        headers: getAuthHeaders(),
+      })
         .then(r => r.json())
-        .then(d => { if (d.birthday) setUserBirthday(d.birthday) })
+        .then(d => {
+          if (d.birthday) {
+            setUserBirthday(d.birthday)
+            try { localStorage.setItem('zerf_birthday', d.birthday) } catch {}
+          }
+        })
         .catch(() => {})
     }
   }, [isAdmin, currentChatId])
 
   const handleUserBirthdayChange = async (val: string) => {
     setUserBirthday(val)
+    try { localStorage.setItem('zerf_birthday', val) } catch {}
     if (!currentChatId) return
     try {
       await fetch(`/api/telegram/user?chatId=${currentChatId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ birthday: val }),
       })
     } catch {}
@@ -545,34 +557,43 @@ export function SettingsView() {
         <Row
           label="Telegram аккаунт"
           description={
-            currentChatId
-              ? `Профиль навсегда привязан к этому устройству (ID: ${currentChatId})`
-              : 'Привязка происходит автоматически при открытии приложения из бота'
+            currentChatId && !currentChatId.startsWith('guest_')
+              ? `Текущий профиль: ID ${currentChatId}`
+              : 'Гостевой режим. Чтобы подключить свой Telegram аккаунт, откройте бота @Zerph_bot и напишите /login'
           }
         >
-          {currentChatId ? (
+          {currentChatId && !currentChatId.startsWith('guest_') ? (
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-medium text-[11px] flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Синхронизировано
+                Привязан
               </span>
-              <a
-                href="https://t.me/Zerph_bot"
-                target="_blank"
-                rel="noreferrer"
-                className="h-8 px-3 rounded-lg bg-[#229ED9]/15 hover:bg-[#229ED9]/25 text-[#229ED9] border border-[#229ED9]/30 text-[11px] font-medium transition-all flex items-center gap-1"
+              <button
+                onClick={() => {
+                  if (confirm('Выйти из этого аккаунта на этом устройстве?')) {
+                    try {
+                      localStorage.removeItem('zerf_chat_id')
+                      localStorage.removeItem('zerf_auth_token')
+                      localStorage.removeItem('zerf_birthday')
+                      document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+                      document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+                    } catch {}
+                    window.location.reload()
+                  }
+                }}
+                className="h-8 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-[11px] font-medium transition-all flex items-center gap-1"
               >
-                Бот @Zerph_bot
-              </a>
+                Выйти
+              </button>
             </div>
           ) : (
             <a
-              href="https://t.me/Zerph_bot"
+              href="https://t.me/Zerph_bot?start=login"
               target="_blank"
               rel="noreferrer"
               className="h-8 px-3.5 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-all flex items-center gap-1.5 shadow-sm"
             >
-              <span>Подключить @Zerph_bot</span>
+              <span>Войти через @Zerph_bot</span>
             </a>
           )}
         </Row>
