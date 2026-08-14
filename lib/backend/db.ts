@@ -1437,21 +1437,6 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
 
   if (!ownerChatId) return defaultLimits
 
-  // Owner bypass: unlimited everything
-  const ownerChatIdEnv = process.env.OWNER_CHAT_ID || '6136950061'
-  if (String(ownerChatId) === ownerChatIdEnv) {
-    return {
-      plan: 'premium',
-      subscriptionExpiry: null,
-      voice: { used: 0, max: Infinity, secondsUsed: 0, maxSeconds: Infinity },
-      notes: { used: 0, max: Infinity },
-      chat: { used: 0, max: Infinity },
-      canSendVoice: true,
-      canCreateNote: true,
-      canSendChatMessage: true,
-    }
-  }
-
   try {
     const cid = BigInt(ownerChatId)
     const { mskDate } = getMskDateTime()
@@ -1536,32 +1521,47 @@ export async function incrementUserUsage(
     const { mskDate } = getMskDateTime()
 
     const chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
-    if (!chat) return
-
-    const isDifferentDay = chat.lastResetDate !== mskDate
+    const isDifferentDay = !chat || chat.lastResetDate !== mskDate
 
     if (type === 'voice') {
-      await prisma.telegramChat.update({
+      const addedSec = Math.round(seconds) || 0
+      await prisma.telegramChat.upsert({
         where: { chatId: cid },
-        data: {
+        update: {
           voiceCountToday: isDifferentDay ? 1 : { increment: 1 },
-          voiceSecondsToday: isDifferentDay ? Math.round(seconds) : { increment: Math.round(seconds) },
+          voiceSecondsToday: isDifferentDay ? addedSec : { increment: addedSec },
+          lastResetDate: mskDate,
+        },
+        create: {
+          chatId: cid,
+          voiceCountToday: 1,
+          voiceSecondsToday: addedSec,
           lastResetDate: mskDate,
         }
       })
     } else if (type === 'note') {
-      await prisma.telegramChat.update({
+      await prisma.telegramChat.upsert({
         where: { chatId: cid },
-        data: {
+        update: {
           notesCountToday: isDifferentDay ? 1 : { increment: 1 },
+          lastResetDate: mskDate,
+        },
+        create: {
+          chatId: cid,
+          notesCountToday: 1,
           lastResetDate: mskDate,
         }
       })
     } else if (type === 'chat') {
-      await prisma.telegramChat.update({
+      await prisma.telegramChat.upsert({
         where: { chatId: cid },
-        data: {
+        update: {
           chatMessagesToday: isDifferentDay ? 1 : { increment: 1 },
+          lastResetDate: mskDate,
+        },
+        create: {
+          chatId: cid,
+          chatMessagesToday: 1,
           lastResetDate: mskDate,
         }
       })

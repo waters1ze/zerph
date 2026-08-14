@@ -25,12 +25,26 @@ export async function GET(req: NextRequest) {
     })
 
     if (chat) {
+      const now = new Date()
+      let isPremium = chat.plan === 'premium'
+      if (isPremium && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < now) {
+        isPremium = false
+      }
+
+      const fullName = [chat.firstName, chat.lastName].filter(Boolean).join(' ') || chat.firstName || 'Telegram Пользователь'
+
       return NextResponse.json({
         connected: true,
         chatId: Number(chat.chatId),
-        name: chat.firstName || 'Telegram Пользователь',
+        name: fullName,
+        firstName: chat.firstName,
+        lastName: chat.lastName,
+        username: chat.username ? `@${chat.username.replace(/^@/, '')}` : null,
         birthday: chat.birthday || null,
-        plan: chat.plan || 'free',
+        plan: isPremium ? 'premium' : 'free',
+        isPremium,
+        subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
+        isAdmin: Boolean(chat.isAdmin),
       })
     }
 
