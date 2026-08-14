@@ -211,6 +211,18 @@ function getCookie(name: string): string | null {
 
 export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
+    // 1. HIGHEST PRIORITY: Telegram WebApp context (cryptographically bound to active Telegram account)
+    const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
+    if (u?.id) {
+      const tgId = String(u.id)
+      try {
+        localStorage.setItem('zerf_chat_id', tgId)
+        setPermanentCookie('zerf_chat_id', tgId)
+      } catch {}
+      return tgId
+    }
+
+    // 2. Query parameters on first load from bot link (?chatId=...&token=...)
     const urlParams = new URLSearchParams(window.location.search)
     const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
     const qToken = urlParams.get('token')
@@ -222,24 +234,17 @@ export function getTgChatId(): string | null {
       } catch {}
     }
 
-    // 1. Explicit query parameter from bot button (?chatId=...)
     if (qChatId) {
       try {
         localStorage.setItem('zerf_chat_id', qChatId)
         setPermanentCookie('zerf_chat_id', qChatId)
+        // Clean URL immediately so sharing/copying URL does NOT leak chatId or token!
+        if (window.history && window.history.replaceState) {
+          const cleanUrl = window.location.pathname + (window.location.hash || '')
+          window.history.replaceState({}, document.title, cleanUrl)
+        }
       } catch {}
       return qChatId
-    }
-
-    // 2. Telegram WebApp session
-    const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
-    if (u?.id) {
-      const tgId = String(u.id)
-      try {
-        localStorage.setItem('zerf_chat_id', tgId)
-        setPermanentCookie('zerf_chat_id', tgId)
-      } catch {}
-      return tgId
     }
 
     // 3. Saved localStorage on this device

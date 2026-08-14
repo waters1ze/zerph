@@ -1601,7 +1601,7 @@ function miniAppKeyboard(chatId?: number) {
   const query = `?chatId=${chatId}&token=${token}`
   return {
     inline_keyboard: [
-      [{ text: '📱 Open Zerf App', web_app: { url: `${MINIAPP_URL}${query}` } }],
+      [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
       [{ text: '🌐 Open Full Web Site', url: `${APP_URL}${query}` }],
     ],
   }

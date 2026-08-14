@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AppProvider, useApp } from '@/lib/store'
+import { AppProvider, useApp, getTgChatId } from '@/lib/store'
 import { Sidebar } from '@/components/sidebar'
 import { TopBar } from '@/components/topbar'
 import { TaskDetail } from '@/components/task-detail'
@@ -33,13 +33,7 @@ function AppShell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search)
-      const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
-      if (qChatId) {
-        localStorage.setItem('zerf_chat_id', qChatId)
-      }
-    }
+    getTgChatId()
     const handleVoice = () => setVoiceOpen(true)
     window.addEventListener('zerf:open-voice', handleVoice)
     return () => window.removeEventListener('zerf:open-voice', handleVoice)
