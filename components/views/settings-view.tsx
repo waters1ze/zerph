@@ -786,6 +786,11 @@ export function SettingsView() {
                   </div>
                 </li>
                 <li>Добавьте <b>Произнести текст</b>: выберите <b>[Содержимое URL]</b></li>
+                <li className="pt-1 text-foreground font-medium">⏰ <i>Опционально (будильник в Часы):</i>
+                  <p className="text-[11px] font-normal text-muted-foreground mt-0.5">
+                    Добавьте блок <b>«Выбрать из меню»</b> (вопрос: <i>Поставить будильник?</i> ➔ Да / Нет). В ветку «Да» перетащите блок <b>«Создать будильник»</b>.
+                  </p>
+                </li>
                 <li>Назначьте команду на <b>Action Button</b> или <b>Стук по крышке</b>!</li>
               </ol>
             </div>
@@ -796,10 +801,15 @@ export function SettingsView() {
               </p>
               <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                 <li>Установите <b>HTTP Shortcuts</b> из Google Play</li>
-                <li>Создайте ярлык с методом <b>POST</b> на шлюз Zerf</li>
-                <li>Укажите ваш Chat ID: <b className="font-mono">{currentChatId || '...'}</b></li>
-                <li>Вынесите виджет на рабочий стол или экран блокировки</li>
-                <li>Нажимайте кнопку и диктуйте мысли в любое время!</li>
+                <li>Нажмите <b>+</b> ➔ Создайте <b>Обычный ярлык</b></li>
+                <li>В <i>«Переменные»</i> добавьте <b>voice_input</b> с типом <i>Голосовой ввод</i></li>
+                <li>В поле <b>URL</b> укажите ссылку со своей переменной в конце:
+                  <div className="text-[11px] font-mono bg-muted/60 p-1.5 rounded my-1 break-all">
+                    https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || '12345'}&text={'{voice_input}'}
+                  </div>
+                </li>
+                <li>В <i>«Ответ»</i> включите <b>Озвучивать текст (TTS)</b></li>
+                <li>Вынесите виджет на рабочий стол — нажал, надиктовал, задача создана!</li>
               </ol>
             </div>
           </div>
