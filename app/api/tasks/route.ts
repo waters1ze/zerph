@@ -42,10 +42,6 @@ function getOwnerChatId(req: NextRequest): string | null {
   if (!chatId) return null
   const cidStr = String(chatId).trim()
 
-  // Hardcoded blocklist — permanently denied accounts
-  const BLOCKED: string[] = ['713237062']
-  if (BLOCKED.includes(cidStr)) return null
-
   // Protect ROOT_ADMIN_IDS from unauthorized access without token or initData
   if (ROOT_ADMIN_IDS.includes(cidStr)) {
     const validInit = initData && verifyTelegramWebAppData(initData)

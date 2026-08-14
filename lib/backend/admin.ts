@@ -11,9 +11,8 @@ export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061')
   .map(s => s.trim())
   .filter(Boolean)
 
-// Hardcoded explicit blocklist — IDs that have been caught abusing access
-// Add 713237062 to permanently deny admin rights regardless of DB flag
-const BLOCKED_FROM_ADMIN: string[] = ['713237062']
+// Hardcoded explicit blocklist — add IDs here to permanently deny admin rights
+const BLOCKED_FROM_ADMIN: string[] = []
 
 export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolean; callerChatId: string | null; isRoot: boolean }> {
   // 1. Check secret header or query parameter (server-to-server calls only)
@@ -36,8 +35,8 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
 
   const strId = String(rawChatId).trim()
 
-  // 3. Immediately block known abusers
-  if (BLOCKED_FROM_ADMIN.includes(strId)) {
+  // 3. Check blocklist
+  if (BLOCKED_FROM_ADMIN.length > 0 && BLOCKED_FROM_ADMIN.includes(strId)) {
     return { isAdmin: false, callerChatId: strId, isRoot: false }
   }
 
