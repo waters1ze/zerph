@@ -36,12 +36,12 @@ export async function GET(req: NextRequest) {
         const desc = [
           t.description || '',
           t.tags?.length ? `Теги: ${t.tags.join(', ')}` : '',
-          'Создано в Zerf AI — https://zerph.vercel.app'
+          'Создано в Zerf AI — https://zeprh.vercel.app'
         ].filter(Boolean).join('\n')
 
         return [
           'BEGIN:VEVENT',
-          `UID:zerf-${t.id}@zerph.vercel.app`,
+          `UID:zerf-${t.id}@zeprh.vercel.app`,
           `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
           `SUMMARY:${priorityEmoji}${t.title}`,
           `DTSTART:${dtStart}`,

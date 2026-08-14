@@ -60,6 +60,10 @@ export function AdminView() {
   const [broadcastText, setBroadcastText] = useState('')
   const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'premium' | 'free'>('all')
 
+  // AI Channel Comments Feedback
+  const [feedbackReport, setFeedbackReport] = useState<any | null>(null)
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
+
   const fetchAdminData = async () => {
     setLoading(true)
     try {
@@ -85,8 +89,29 @@ export function AdminView() {
     }
   }
 
+  const fetchFeedbackReport = async (notifyAdmins = false) => {
+    setFeedbackLoading(true)
+    try {
+      const res = await fetch('/api/admin/channel/feedback', {
+        method: notifyAdmins ? 'POST' : 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        body: notifyAdmins ? JSON.stringify({ notifyAdmins: true }) : undefined,
+      })
+      const data = await res.json()
+      if (data.ok && data.report) {
+        setFeedbackReport(data.report)
+        if (notifyAdmins) showNotice('success', 'Отчет успешно отправлен всем админам в Telegram!')
+      }
+    } catch {
+      showNotice('error', 'Ошибка загрузки отчета по комментариям')
+    } finally {
+      setFeedbackLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchAdminData()
+    fetchFeedbackReport()
   }, [])
 
   const showNotice = (type: 'success' | 'error', text: string) => {
@@ -372,6 +397,105 @@ export function AdminView() {
           </div>
         </div>
       )}
+
+      {/* AI Channel Feedback & Comments Analytics Card */}
+      <div className="p-5 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+              <MessageSquare className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-foreground">ИИ-Анализ комментариев из канала @zerph_off</h3>
+              <p className="text-[11px] text-muted-foreground">Нейросеть считывает обсуждения подписчиков и формирует выжимку запросов</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchFeedbackReport(false)}
+              disabled={feedbackLoading}
+              className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-medium border border-border flex items-center gap-1.5 transition-all"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', feedbackLoading && 'animate-spin')} />
+              <span>Обновить ИИ</span>
+            </button>
+            <button
+              onClick={() => fetchFeedbackReport(true)}
+              disabled={feedbackLoading}
+              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center gap-1.5 transition-all shadow-sm shadow-blue-500/20"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Отправить админам в TG</span>
+            </button>
+          </div>
+        </div>
+
+        {feedbackReport ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Sentiment breakdown */}
+            <div className="p-4 rounded-xl bg-muted/40 border border-border/60 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-semibold text-foreground">Настроение аудитории</span>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden flex">
+                    <div
+                      style={{ width: `${feedbackReport.sentimentSummary?.positivePercent || 80}%` }}
+                      className="bg-emerald-500 h-full"
+                      title={`Позитив: ${feedbackReport.sentimentSummary?.positivePercent || 80}%`}
+                    />
+                    <div
+                      style={{ width: `${feedbackReport.sentimentSummary?.neutralPercent || 15}%` }}
+                      className="bg-amber-500 h-full"
+                      title={`Нейтрально: ${feedbackReport.sentimentSummary?.neutralPercent || 15}%`}
+                    />
+                    <div
+                      style={{ width: `${feedbackReport.sentimentSummary?.negativePercent || 5}%` }}
+                      className="bg-rose-500 h-full"
+                      title={`Критика: ${feedbackReport.sentimentSummary?.negativePercent || 5}%`}
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+                  <span className="text-emerald-500 font-medium">+{feedbackReport.sentimentSummary?.positivePercent || 80}% позитив</span>
+                  <span className="text-rose-500 font-medium">-{feedbackReport.sentimentSummary?.negativePercent || 5}% критика</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-3">
+                Всего комментариев: <strong className="text-foreground">{feedbackReport.totalAnalyzed || 0}</strong>
+              </p>
+            </div>
+
+            {/* Top feature requests */}
+            <div className="p-4 rounded-xl bg-muted/40 border border-border/60 flex flex-col">
+              <span className="text-xs font-semibold text-foreground mb-2">Топ запросов функций от подписчиков</span>
+              <div className="space-y-1.5 flex-1">
+                {(feedbackReport.topRequests || []).slice(0, 3).map((req: string, idx: number) => (
+                  <div key={idx} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                    <span className="text-primary font-bold">▪</span>
+                    <span className="text-foreground">{req}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Executive AI Summary */}
+            <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-between">
+              <span className="text-xs font-semibold text-primary mb-1">Выжимка от ИИ-Аналитика</span>
+              <p className="text-[11px] text-muted-foreground italic leading-relaxed">
+                "{feedbackReport.executiveSummary}"
+              </p>
+              <div className="mt-2 text-[10px] text-primary/80 font-medium">
+                Анализ обновляется автоматически в реальном времени
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-6 text-center text-xs text-muted-foreground">
+            Загрузка аналитики комментариев...
+          </div>
+        )}
+      </div>
 
       {/* Toolbar: Search & Filter Pills */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">

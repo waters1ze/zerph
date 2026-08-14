@@ -215,7 +215,7 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
       `   <blockquote><b>Фокус дня:</b> [Одна полезная мысль по планированию или концентрации]</blockquote>\n` +
       `4. Техническая и финансовая сводка (СТРОГО В САМОМ КОНЦЕ):\n` +
       `   ▪ <b>Курсы:</b> <code>${ratesStr}</code>\n` +
-      `   ▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zerph.vercel.app">zerph.vercel.app</a>\n\n` +
+      `   ▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>\n\n` +
       `ПРАВИЛА:\n` +
       `- Без цветных эмодзи. Только ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>.\n` +
       `- Текст должен быть цельным, компактным (до 150-200 слов) и читаться за 30 секунд.`
@@ -408,7 +408,7 @@ export async function postWelcomeIntroToChannel(channelId = DEFAULT_CHANNEL): Pr
       `  4. <b>Вечерние инсайты в 21:00</b> — рефлексия и подведение итогов\n` +
       `- В конце блок ссылок:\n` +
       `  ▪ <b>Бот:</b> <a href="https://t.me/Zerph_bot">@Zerph_bot</a>\n` +
-      `  ▪ <b>Веб-версия:</b> <a href="https://zerph.vercel.app">zerph.vercel.app</a>\n` +
+      `  ▪ <b>Веб-версия:</b> <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>\n` +
       `- Напиши готовый HTML пост без лишних вступительных фраз.`
 
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {

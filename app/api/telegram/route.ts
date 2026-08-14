@@ -562,7 +562,7 @@ async function handleFocus(chatId: number, minutesStr?: string) {
 }
 
 async function handleSiriSetup(chatId: number) {
-  const appUrl = APP_URL || 'https://zerph.vercel.app'
+  const appUrl = APP_URL || 'https://zeprh.vercel.app'
   const endpointUrl = `${appUrl}/api/shortcuts`
   const testUrl = `${endpointUrl}?chatId=${chatId}&text=Купить+молоко+в+19:00`
 
@@ -674,7 +674,7 @@ const TYPE_RU: Record<string, string> = {
 async function handleSubscribe(chatId: number) {
   const limits = await getUserUsageAndLimits(chatId)
   const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
   const monthParams = new URLSearchParams({
     receiver,
@@ -768,7 +768,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   const [subCmd, targetQuery] = args
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
   if (!subCmd) {
     await send(chatId,
@@ -1275,7 +1275,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 
       const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
       const senderName = sender?.firstName || 'Пользователь'
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
       const allowedMatches = matches.filter(m => m.isAllowed)
 
@@ -2006,7 +2006,7 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
   })
 
   // Notify recipient
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
   let notifyMsg = `📨 *${escMd(senderName)}* мгновенно передал(а) тебе задачу!\n\n`
   notifyMsg += `📌 *${escMd(item.title || taskText)}*\n`
   if (item.summary && item.summary !== item.title) notifyMsg += `📝 ${escMd(item.summary)}\n`
@@ -2218,7 +2218,7 @@ export async function POST(req: NextRequest) {
             
             const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
             const senderName = sender?.firstName || 'Пользователь'
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
             const friend = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(friendChatId) } })
             
             if (friend) {
@@ -2294,7 +2294,7 @@ export async function POST(req: NextRequest) {
         })
       } else if (data.startsWith('alarm_ios_')) {
         const time = data.replace('alarm_ios_', '')
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
         const icsUrl = `${appUrl}/api/alarm/ics?time=${encodeURIComponent(time)}`
         await send(chatId, `📱 *1-Tap Будильник для iPhone (iOS):*\n\nНажми на кнопку ниже, чтобы мгновенно добавить напоминание с звуковым сигналом в Календарь iPhone на *${time}*!`, {
           reply_markup: {
@@ -2408,7 +2408,7 @@ export async function POST(req: NextRequest) {
         })
         await handleSettings(chatId)
       } else if (data === 'open_calendar_sync') {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
         const webcalUrl = `${appUrl.replace(/^https?:\/\//, 'webcal://')}/api/alarm/ics?chatId=${chatId}`
         const httpsUrl = `${appUrl}/api/alarm/ics?chatId=${chatId}`
 
@@ -2537,6 +2537,19 @@ export async function POST(req: NextRequest) {
     // Track every group message sender → builds complete member list over time
     if (isGroup && senderId && senderId !== chatId) {
       trackGroupMember(chatId, senderId).catch(() => {})
+
+      // Save user comment from channel discussion group for AI sentiment & feature analysis
+      if (text && !text.startsWith('/')) {
+        import('@/lib/backend/comment-analyzer').then(({ recordChannelComment }) => {
+          const channelPostId = msg.reply_to_message?.forward_from_message_id || msg.reply_to_message?.message_id
+          recordChannelComment({
+            channelPostId,
+            chatId: senderId,
+            userName: [firstName, lastName].filter(Boolean).join(' ') || username || 'Подписчик',
+            text,
+          }).catch(() => {})
+        }).catch(() => {})
+      }
     }
 
     if (text.startsWith('/')) {
