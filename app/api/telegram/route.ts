@@ -134,7 +134,6 @@ async function ensureBotCommandsRegistered() {
         { command: 'goals',      description: '🎯 Активные цели' },
         { command: 'notes',      description: '📝 Мои заметки' },
         { command: 'report',     description: '📈 Недельный AI-отчет' },
-        { command: 'stars',      description: '⭐️ Оплата Telegram Stars' },
         { command: 'settings',   description: '⚙️ Настройки напоминаний' },
         { command: 'buy',        description: '⭐ Zerf Premium (99 ₽/мес)' },
         { command: 'help',       description: '❓ Полное руководство' },
@@ -741,14 +740,12 @@ async function handleSubscribe(chatId: number) {
     `• 🔥 Глубокий фокус: до 180 минут\n` +
     `• 📊 Полная аналитика продуктивности и стрики\n` +
     `• 📌 Заметки и ИИ чат: безлимитно\n\n` +
-    `💰 *Выберите удобный способ оплаты:*`,
+    `💰 *Выберите удобный период:*`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '⭐️ Оплатить Telegram Stars (50 ⭐️ / месяц)', callback_data: 'buy_stars_30' }],
-          [{ text: '⭐️ Год за Telegram Stars (450 ⭐️ / год)', callback_data: 'buy_stars_365' }],
-          [{ text: '💳 Карта / ЮMoney — 99 ₽ (1 мес)', url: monthUrl }],
-          [{ text: '⭐ Карта на 1 год (-15%) — 1009 ₽', url: yearUrl }],
+          [{ text: '⭐ 1 год (Скидка 15%) — 1009 ₽', url: yearUrl }],
+          [{ text: '💳 1 месяц — 99 ₽', url: monthUrl }],
           [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
         ]
       }
@@ -2135,47 +2132,7 @@ async function handlePublicCommand(chatId: number, taskId?: string) {
   }
 }
 
-// ── Telegram Stars & Inline Query Handlers ─────────────────────────────────────
-
-async function handleSendStarsInvoice(chatId: number, isYear = false) {
-  const starsAmount = isYear ? 450 : 50
-  const title = isYear ? 'Zerf Premium (1 Год)' : 'Zerf Premium (1 Месяц)'
-  const desc = isYear
-    ? '✨ Безлимитные голосовые задачи, Vision AI распознавание фото, неограниченные проекты и синхронизация на 365 дней!'
-    : '✨ Безлимитные голосовые задачи, Vision AI распознавание фото, неограниченные проекты и синхронизация на 30 дней!'
-
-  await tgApi('sendInvoice', {
-    chat_id: chatId,
-    title,
-    description: desc,
-    payload: isYear ? 'sub_stars_365' : 'sub_stars_30',
-    provider_token: '', // Empty for native Telegram Stars
-    currency: 'XTR',
-    prices: [
-      { label: title, amount: starsAmount }
-    ],
-  })
-}
-
-async function handleSuccessfulStarsPayment(chatId: number, payment: any) {
-  const payload = payment.invoice_payload || ''
-  const isYear = payload.includes('365') || payload.includes('year')
-  const days = isYear ? 365 : 30
-
-  const { activateUserSubscription } = await import('@/lib/backend/db')
-  await activateUserSubscription(chatId, days)
-
-  await send(chatId,
-    `🎉 *ОПЛАТА УСПЕШНО ПРОШЛА!* ⭐\n\n` +
-    `Вам начислено *${days} дней подписки Zerf Premium* за Telegram Stars!\n` +
-    `• *Сумма:* ${payment.total_amount} ⭐️ Stars\n` +
-    `• *ID транзакции:* \`${payment.telegram_payment_charge_id}\`\n\n` +
-    `Все безлимитные функции ИИ, распознавания фото и проектов активированы. Спасибо за поддержку проекта! 🚀`,
-    {
-      reply_markup: miniAppKeyboard(chatId)
-    }
-  )
-}
+// ── Inline Query Handlers ──────────────────────────────────────────────────
 
 async function handleInlineQuery(iq: any) {
   const query = (iq.query || '').trim()
@@ -2391,15 +2348,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    // Handle Telegram Stars Pre-Checkout Queries
-    if (update.pre_checkout_query) {
-      await tgApi('answerPreCheckoutQuery', {
-        pre_checkout_query_id: update.pre_checkout_query.id,
-        ok: true,
-      })
-      return NextResponse.json({ ok: true })
-    }
-
     // Handle Callback Queries (inline buttons)
     if (update.callback_query) {
       const cb = update.callback_query
@@ -2408,12 +2356,6 @@ export async function POST(req: NextRequest) {
 
       if (data === 'cmd_subscribe') {
         await handleSubscribe(chatId)
-      } else if (data === 'buy_stars_30') {
-        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Выставляю счёт Stars...' })
-        await handleSendStarsInvoice(chatId, false)
-      } else if (data === 'buy_stars_365') {
-        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Выставляю счёт Stars на 1 год...' })
-        await handleSendStarsInvoice(chatId, true)
       } else if (data === 'cmd_matrix') {
         await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Формирую матрицу...' })
         await handleMatrixCommand(chatId)
@@ -2831,12 +2773,6 @@ export async function POST(req: NextRequest) {
     const voice = msg.voice || msg.audio
     const photo = msg.photo
 
-    // Handle Telegram Stars Successful Payment
-    if (msg.successful_payment) {
-      await handleSuccessfulStarsPayment(chatId, msg.successful_payment)
-      return NextResponse.json({ ok: true })
-    }
-
     // Register user details (updates name automatically on every message!)
     await registerChatId(senderId, firstName, username, lastName).catch(() => {})
 
@@ -3005,10 +2941,6 @@ export async function POST(req: NextRequest) {
         await handleMatrixCommand(chatId)
       } else if (cmd === '/cleanup') {
         await handleCleanupCommand(chatId)
-      } else if (cmd === '/stars') {
-        await handleSendStarsInvoice(chatId, false)
-      } else if (cmd === '/stars_year') {
-        await handleSendStarsInvoice(chatId, true)
       } else if (cmd === '/report') {
         await handleWeeklyReport(senderId, chatId)
       } else if (cmd === '/name' || cmd === '/setname') {
