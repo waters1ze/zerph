@@ -258,7 +258,12 @@ export function getTgChatId(): string | null {
       try {
         localStorage.removeItem('zerf_chat_id')
         localStorage.removeItem('zerf_auth_token')
+        localStorage.removeItem('zerf_cached_state')
+        localStorage.removeItem('zerf-settings')
+        localStorage.removeItem('zerf-usage')
+        localStorage.removeItem('zerf_birthday')
         document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
       } catch {}
       let guestId = 'guest_' + String(Math.floor(100000000 + Math.random() * 899999999))
       localStorage.setItem('zerf_guest_id', guestId)
@@ -299,9 +304,23 @@ export function getAuthHeaders(): Record<string, string> {
 
 function initAppState(initialState: AppState): AppState {
   if (typeof window === 'undefined') return initialState
+  const currentChatId = getTgChatId()
   let savedSettings = {}
   let savedView: View | null = null
   let cachedData: any = {}
+
+  try {
+    const cachedStateStr = localStorage.getItem('zerf_cached_state')
+    if (cachedStateStr) {
+      const parsed = JSON.parse(cachedStateStr)
+      // Strictly verify that the cached tasks belong to the active user profile!
+      if (parsed.chatId && parsed.chatId === currentChatId) {
+        cachedData = parsed
+      } else {
+        localStorage.removeItem('zerf_cached_state')
+      }
+    }
+  } catch {}
 
   try {
     const saved = localStorage.getItem('zerf-settings')
@@ -313,21 +332,14 @@ function initAppState(initialState: AppState): AppState {
     if (viewStr) savedView = viewStr
   } catch {}
 
-  try {
-    const cachedStateStr = localStorage.getItem('zerf_cached_state')
-    if (cachedStateStr) {
-      cachedData = JSON.parse(cachedStateStr)
-    }
-  } catch {}
-
   return {
     ...initialState,
-    tasks: Array.isArray(cachedData.tasks) && cachedData.tasks.length > 0 ? cachedData.tasks : initialState.tasks,
-    goals: Array.isArray(cachedData.goals) && cachedData.goals.length > 0 ? cachedData.goals : initialState.goals,
-    notes: Array.isArray(cachedData.notes) && cachedData.notes.length > 0 ? cachedData.notes : initialState.notes,
-    projects: Array.isArray(cachedData.projects) && cachedData.projects.length > 0 ? cachedData.projects : initialState.projects,
-    friends: Array.isArray(cachedData.friends) && cachedData.friends.length > 0 ? cachedData.friends : initialState.friends,
-    habits: Array.isArray(cachedData.habits) && cachedData.habits.length > 0 ? cachedData.habits : initialState.habits,
+    tasks: Array.isArray(cachedData.tasks) ? cachedData.tasks : [],
+    goals: Array.isArray(cachedData.goals) ? cachedData.goals : [],
+    notes: Array.isArray(cachedData.notes) ? cachedData.notes : [],
+    projects: Array.isArray(cachedData.projects) ? cachedData.projects : [],
+    friends: Array.isArray(cachedData.friends) ? cachedData.friends : [],
+    habits: Array.isArray(cachedData.habits) ? cachedData.habits : [],
     settings: { ...initialState.settings, ...savedSettings },
     ...(savedView ? { currentView: savedView } : {})
   }
@@ -397,11 +409,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (theme === 'dark') {
       root.classList.add('dark')
       root.classList.remove('light')
+      document.body.classList.add('dark')
+      document.body.classList.remove('light')
     } else if (theme === 'light') {
       root.classList.remove('dark')
       root.classList.add('light')
+      document.body.classList.remove('dark')
+      document.body.classList.add('light')
     } else {
       root.classList.remove('dark', 'light')
+      document.body.classList.remove('dark', 'light')
     }
   }, [state.settings.theme])
 
@@ -412,10 +429,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.settings])
 
-  // Persist all workspace state to cache for instant load on refresh
+  // Persist all workspace state scoped to active user profile
   useEffect(() => {
     try {
+      const currentChatId = getTgChatId()
       localStorage.setItem('zerf_cached_state', JSON.stringify({
+        chatId: currentChatId,
         tasks: state.tasks,
         goals: state.goals,
         notes: state.notes,
@@ -432,9 +451,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const chatId = headers['x-chat-id']
 
     fetch('/api/tasks', { headers })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) {
+          dispatch({
+            type: 'LOAD_STATE',
+            state: { tasks: [], goals: [], notes: [], friends: [], habits: [] }
+          })
+          return null
+        }
+        return r.json()
+      })
       .then(data => {
-        if (data.tasks || data.goals || data.notes || data.friends || data.habits) {
+        if (!data) return
+        if (data.tasks !== undefined) {
           dispatch({
             type: 'LOAD_STATE',
             state: {
