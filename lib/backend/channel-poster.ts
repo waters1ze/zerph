@@ -348,3 +348,79 @@ export async function generateAndSendFridayAiProposal(): Promise<boolean> {
     return false
   }
 }
+
+/** 6. Post Welcome Intro Post to Channel */
+export async function postWelcomeIntroToChannel(channelId = DEFAULT_CHANNEL): Promise<{ ok: boolean; text?: string; error?: string }> {
+  if (!GROQ_API_KEY) return { ok: false, error: 'GROQ_API_KEY is not configured' }
+
+  try {
+    const prompt =
+      `Ты — главный редактор и AI-ассистент официального Telegram-канала Zerf AI (@zerph_off).\n` +
+      `Твоя задача: написать мощный, стильный, вдохновляющий и структурированный вступительный пост (Welcome Post) для нашего канала.\n\n` +
+      `О чем этот канал и проект:\n` +
+      `- Название: zerph / Zerf AI (@zerph_off)\n` +
+      `- Миссия: "Обсуждение, голосование, розыгрыши. Всё про наш Telegram-бот + сайт. Составьте ваш личный график вместе с нами."\n` +
+      `- Возможности экосистемы Zerf AI:\n` +
+      `  • 🎙️ Мгновенные голосовые задачи (просто надиктуй боту — он поймет время, приоритет и создаст напоминание)\n` +
+      `  • ⏳ Живой обратный отсчет до дедлайнов (как в приложении «Часы»)\n` +
+      `  • 📷 Распознавание задач по фото/скриншотам расписания (Vision AI)\n` +
+      `  • 🍅 Помодоро-таймер глубокого фокуса\n` +
+      `  • 👥 Делегирование задач друзьям и командам в 1 клик\n` +
+      `  • 📅 Двусторонняя синхронизация с Apple и Google Календарём\n` +
+      `  • 🔥 Стрики продуктивности и бесплатные дни Premium за непрерывную работу\n\n` +
+      `Что будет происходить в этом канале:\n` +
+      `1. 🗳️ Ежедневные утренние голосования за новые функции (вы решаете, что мы программируем!)\n` +
+      `2. 🎁 Регулярные розыгрыши подписок и подарков\n` +
+      `3. 💡 Эксклюзивные лайфхаки по личной эффективности и тайм-менеджменту\n` +
+      `4. 🚀 Анонсы обновлений и закулисье разработки\n\n` +
+      `Стиль и оформление:\n` +
+      `- Эстетичный, премиальный неоновый стиль (свечение, аккуратные визуальные акценты, эмодзи ✨, 💫, 💎, 🚀, 🔥, ⚡, 🎯, ⏳, 🎙️).\n` +
+      `- Четкая структура с красивыми заголовками и списками.\n` +
+      `- В конце поста обязательно добавь ссылки:\n` +
+      `  🤖 *Бот:* @Zerph_bot\n` +
+      `  🌐 *Веб-версия:* https://zerph.vercel.app\n` +
+      `  💬 *Чат обсуждений:* кнопка под постом\n\n` +
+      `Напиши готовый пост на русском языке без вступительных реплик от себя.`
+
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 1200,
+      }),
+    })
+
+    const groqData = await groqRes.json()
+    const text = groqData.choices?.[0]?.message?.content?.trim()
+    if (!text) return { ok: false, error: 'Empty AI response' }
+
+    const tgRes = await callTg('sendMessage', {
+      chat_id: channelId,
+      text,
+      parse_mode: 'Markdown',
+      disable_web_page_preview: false,
+    })
+
+    if (!tgRes?.ok) {
+      const retryRes = await callTg('sendMessage', {
+        chat_id: channelId,
+        text,
+        disable_web_page_preview: false,
+      })
+      if (!retryRes?.ok) {
+        return { ok: false, error: retryRes?.description || tgRes?.description || 'Failed to post' }
+      }
+    }
+
+    return { ok: true, text }
+  } catch (err: unknown) {
+    return { ok: false, error: String(err) }
+  }
+}
+
