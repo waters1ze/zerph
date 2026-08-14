@@ -161,8 +161,16 @@ export async function POST(req: NextRequest) {
     // Send confirmation in Telegram
     let tgMsg = `🍏 *Голосовой ввод через Siri / Быстрые команды*\n\n`
     items.forEach((item, idx) => {
-      const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-      tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
+      if (item.action === 'delete') {
+        tgMsg += `${idx + 1}. 🗑️ *Удалено:* ${item.targetTitle || item.title}\n`
+      } else if (item.action === 'delete_all') {
+        tgMsg += `🗑️ *Все задачи очищены*\n`
+      } else if (item.action === 'completion' || item.type === 'completion') {
+        tgMsg += `${idx + 1}. ✅ *Выполнено:* ${item.targetTitle || item.title}\n`
+      } else {
+        const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+        tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
+      }
     })
     sendTgNotification(chatId, tgMsg).catch(() => {})
     sendVoiceResponse(chatId, spokenText).catch(() => {})
@@ -228,7 +236,8 @@ export async function GET(req: NextRequest) {
     return new NextResponse(spokenResponse, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
   }
 
-  const items = await parseIntentWithGroq(text, key)
+  const context = await getExistingItemsContext(chatId)
+  const items = await parseIntentWithGroq(text, key, undefined, context)
 
   for (const item of items) {
     await saveParsedItemToDb(item, chatId)
@@ -240,8 +249,16 @@ export async function GET(req: NextRequest) {
   // Send confirmation in Telegram
   let tgMsg = `🍏 *Голосовой ввод через Siri / Быстрые команды*\n\n`
   items.forEach((item, idx) => {
-    const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-    tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
+    if (item.action === 'delete') {
+      tgMsg += `${idx + 1}. 🗑️ *Удалено:* ${item.targetTitle || item.title}\n`
+    } else if (item.action === 'delete_all') {
+      tgMsg += `🗑️ *Все задачи очищены*\n`
+    } else if (item.action === 'completion' || item.type === 'completion') {
+      tgMsg += `${idx + 1}. ✅ *Выполнено:* ${item.targetTitle || item.title}\n`
+    } else {
+      const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+      tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
+    }
   })
   sendTgNotification(chatId, tgMsg).catch(() => {})
 

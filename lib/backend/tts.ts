@@ -57,8 +57,23 @@ export async function sendTelegramVoice(
 }
 
 export function createSpokenSummary(items: any[]): string {
-  if (!items || items.length === 0) return 'Команда обработана.'
+  if (!items || items.length === 0) return 'Готово.'
   const first = items[0]
+
+  if (first.action === 'delete_all') {
+    return 'Все задачи успешно удалены.'
+  }
+  if (first.action === 'delete') {
+    const target = first.targetTitle || first.title || 'Задача'
+    return `Задача «${target}» удалена.`
+  }
+  if (first.action === 'completion' || first.type === 'completion') {
+    const target = first.targetTitle || first.title || 'Задача'
+    return `Задача «${target}» выполнена!`
+  }
+  if (first.action === 'set_my_birthday') {
+    return first.title || 'День рождения сохранен.'
+  }
   if (first.type === 'note') {
     return `Заметка «${first.title}» сохранена.`
   }
@@ -66,12 +81,12 @@ export function createSpokenSummary(items: any[]): string {
     return `Цель «${first.title}» добавлена в ваши цели.`
   }
   if (first.type === 'delegate' || first.recipientName) {
-    return `Задача «${first.title}» успешно поручена.`
+    return `Задача «${first.title}» поручена ${first.recipientName || 'коллеге'}.`
   }
   if (first.dueTime) {
     return `Задача «${first.title}» записана на ${first.dueTime}.`
   }
-  return `Задача «${first.title}» успешно добавлена в список дел!`
+  return `Задача «${first.title}» добавлена в список дел!`
 }
 
 export async function sendVoiceResponse(chatId: string | number | bigint, text: string) {
