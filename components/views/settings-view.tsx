@@ -147,7 +147,7 @@ export function SettingsView() {
     fetchSubscription()
   }, [])
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (period: 'month' | 'year' = 'month') => {
     setLoadingPay(true)
     try {
       const cid = getTgChatId()
@@ -156,7 +156,7 @@ export function SettingsView() {
       const res = await fetch('/api/subscription', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ownerChatId: cid }),
+        body: JSON.stringify({ ownerChatId: cid, period }),
       })
       const data = await res.json()
       if (data.paymentUrl) {
@@ -176,7 +176,7 @@ export function SettingsView() {
       {/* Subscription & Limits */}
       <Section title="Подписка и Дневные Лимиты">
         <div className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <span className={cn(
                 'px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase',
@@ -192,14 +192,34 @@ export function SettingsView() {
                 </p>
               )}
             </div>
-            {!isPremium && (
-              <button
-                onClick={handleSubscribe}
-                disabled={loadingPay}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium text-[13px] hover:brightness-110 active:scale-95 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
-              >
-                {loadingPay ? 'Переход...' : 'Подписаться 99 ₽/мес'}
-              </button>
+            {!isPremium ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleSubscribe('year')}
+                  disabled={loadingPay}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium text-[12px] hover:brightness-110 active:scale-95 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>⭐ 1 год (-15%)</span>
+                  <span className="opacity-90">1009 ₽</span>
+                </button>
+                <button
+                  onClick={() => handleSubscribe('month')}
+                  disabled={loadingPay}
+                  className="px-3.5 py-2 rounded-xl bg-muted/80 hover:bg-muted text-foreground font-medium text-[12px] border border-border/80 transition-all disabled:opacity-50"
+                >
+                  1 месяц — 99 ₽
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSubscribe('year')}
+                  disabled={loadingPay}
+                  className="px-3 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground text-[11px] border border-border/60 transition-all"
+                >
+                  Продлить на год (-15%)
+                </button>
+              </div>
             )}
           </div>
 

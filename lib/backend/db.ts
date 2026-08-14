@@ -73,8 +73,7 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
 
     const seen = new Set<string>()
     const uniqueTasks = allTasks.filter(t => {
-      const lower = (t.title || '').toLowerCase()
-      if (lower.includes('день рождения') || lower.includes('др')) {
+      if (isBirthdayTitle(t.title)) {
         const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
         if (seen.has(normKey)) return false
         seen.add(normKey)
@@ -83,19 +82,31 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
     })
 
     return uniqueTasks.map(t => {
-      if (t.title && t.title.includes('День рождения')) {
+      if (isBirthdayTitle(t.title)) {
         return {
           ...t,
           title: t.title.startsWith('🎂') ? t.title : `🎂 ${t.title}`,
           dueTime: '00:00',
         }
+      } else {
+        // Strip erroneous 🎂 from non-birthday tasks
+        return {
+          ...t,
+          title: t.title.replace(/^🎂\s*/, ''),
+        }
       }
-      return t
     })
   } catch (err) {
     console.error('getAllTasks error:', err)
     return []
   }
+}
+
+export function isBirthdayTitle(title: string | null | undefined): boolean {
+  if (!title) return false
+  const clean = title.replace(/^🎂\s*/, '').trim()
+  // Match "день рождения", "д.р.", "др", but NOT "друзья", "друг", "друзьями", "подарок", etc.
+  return /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(clean)
 }
 
 export async function getAllGoals(ownerChatId?: number | bigint | string | null) {
@@ -137,8 +148,7 @@ export async function getAllNotes(ownerChatId?: number | bigint | string | null)
 }
 
 function processBirthdayTaskData<T extends { title: string; dueTime?: string | null; repeat?: string | null; tags?: string[] }>(data: T): T {
-  const lower = (data.title || '').toLowerCase()
-  const isBirthday = lower.includes('день рождения') || lower.includes('др ') || lower.includes('др:') || lower.endsWith('др')
+  const isBirthday = isBirthdayTitle(data.title)
 
   if (isBirthday) {
     let title = data.title.trim()
@@ -156,8 +166,16 @@ function processBirthdayTaskData<T extends { title: string; dueTime?: string | n
       repeat: 'yearly',
       tags,
     }
+  } else {
+    // If not a birthday, remove accidental 🎂 and "день рождения" tag
+    let title = data.title.replace(/^🎂\s*/, '').trim()
+    let tags = data.tags ? data.tags.filter(t => t.toLowerCase() !== 'день рождения') : data.tags
+    return {
+      ...data,
+      title,
+      tags,
+    }
   }
-  return data
 }
 
 export async function createTask(data: {
@@ -531,25 +549,42 @@ export async function registerChatId(
   firstName?: string,
   username?: string,
   lastName?: string
-) {
+): Promise<{ isNewUser: boolean }> {
   try {
     const cid = BigInt(chatId)
+    const existing = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
+
     const updateData: { firstName?: string; username?: string; lastName?: string } = {}
     if (firstName) updateData.firstName = firstName
     if (username) updateData.username = username
     if (lastName) updateData.lastName = lastName
 
-    await prisma.telegramChat.upsert({
-      where: { chatId: cid },
-      update: updateData,
-      create: {
+    if (existing) {
+      if (Object.keys(updateData).length > 0) {
+        await prisma.telegramChat.update({
+          where: { chatId: cid },
+          data: updateData,
+        })
+      }
+      return { isNewUser: false }
+    }
+
+    // New user: grant 1-day free trial Premium!
+    const oneDayTrialExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await prisma.telegramChat.create({
+      data: {
         chatId: cid,
         firstName: firstName || null,
         lastName: lastName || null,
         username: username || null,
+        plan: 'premium',
+        subscriptionExpiry: oneDayTrialExpiry,
       },
     })
-  } catch {}
+    return { isNewUser: true }
+  } catch {
+    return { isNewUser: false }
+  }
 }
 
 export async function checkGroupOrUserHasPremium(
@@ -873,7 +908,8 @@ export async function saveParsedItemToDb(
       : item.summary
 
     let finalDueDate = item.dueDate || new Date().toISOString().slice(0, 10)
-    const finalRepeat = item.repeat || ((item.title || item.rawText || '').toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null)
+    const isYearlyEvent = /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?|праздник|годовщин\w*)(?:[^а-яёa-z0-9]|$)/i.test(item.title || item.rawText || '')
+    const finalRepeat = item.repeat || (isYearlyEvent ? 'yearly' : null)
 
     if (finalRepeat === 'yearly' && finalDueDate) {
       const parts = finalDueDate.split('-')
@@ -1230,7 +1266,6 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
           ownerChatId: cid,
           OR: [
             { title: { contains: 'День рождения', mode: 'insensitive' } },
-            { title: { contains: 'ДР', mode: 'insensitive' } },
             { tags: { has: 'день рождения' } },
           ],
         },
@@ -1239,6 +1274,21 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
       const seen = new Set<string>()
       for (const t of allBdayTasks) {
+        // If not actually a birthday title (e.g. "Игра с друзьями"), clean up mistagging!
+        if (!isBirthdayTitle(t.title)) {
+          const cleanTitle = t.title.replace(/^🎂\s*/, '').trim()
+          const cleanTags = (t.tags || []).filter(tag => tag.toLowerCase() !== 'день рождения')
+          await prisma.task.update({
+            where: { id: t.id },
+            data: {
+              title: cleanTitle,
+              tags: cleanTags,
+              repeat: t.repeat === 'yearly' ? null : t.repeat,
+            },
+          }).catch(() => {})
+          continue
+        }
+
         const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
         if (seen.has(normKey)) {
           await prisma.task.delete({ where: { id: t.id } }).catch(() => {})

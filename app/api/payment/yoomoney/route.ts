@@ -54,17 +54,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Activate subscription for 30 days
-    const success = await activateUserSubscription(label, 30)
+    // Determine subscription duration: 365 days for annual, 30 days for monthly
+    let actualChatId = label
+    let days = 30
+    const amtNum = parseFloat(amount || '0')
+
+    if (label.includes('_365') || label.includes('_year') || amtNum >= 900) {
+      days = 365
+      actualChatId = label.replace('_365', '').replace('_year', '')
+    } else if (label.includes('_30') || label.includes('_month')) {
+      days = 30
+      actualChatId = label.replace('_30', '').replace('_month', '')
+    }
+
+    // Activate subscription in database
+    const success = await activateUserSubscription(actualChatId, days)
 
     if (success) {
+      const periodName = days === 365 ? '1 год (365 дней)' : '30 дней'
       await sendTgNotification(
-        label,
-        `🎉 *Подписка Zerf Premium успешно активирована на 30 дней!*\n\n` +
-        `✨ Теперь вам доступны:\n` +
-        `• 🎙 Неограниченный голосовой ввод (до 10 минут записи в день)\n` +
-        `• 📌 Безлимитное создание заметок\n` +
-        `• 💬 Безлимитное общение с Zerf AI`
+        actualChatId,
+        `🎉 *Подписка Zerf Premium успешно активирована на ${periodName}!* ⭐\n\n` +
+        `✨ Вам открыт полный доступ ко всем возможностям Zerf AI:\n` +
+        `• 🎙 Неограниченный голосовой ввод и интеграция с Siri (до 10 мин/день)\n` +
+        `• 🧠 Безлимитное ИИ-перепланирование задач (/reschedule)\n` +
+        `• 🔥 Безлимитный режим фокуса и таймеры отдыха (/focus)\n` +
+        `• 📊 Полная аналитика продуктивности и недельные отчеты (/stats)\n` +
+        `• 📌 Заметки и ИИ-чат без ограничений`
       )
     }
 

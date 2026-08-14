@@ -669,16 +669,27 @@ async function handleSubscribe(chatId: number) {
   const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
-  const params = new URLSearchParams({
+  const monthParams = new URLSearchParams({
     receiver,
     'quickpay-form': 'shop',
     targets: 'Подписка Zerf Premium (30 дней)',
     paymentType: 'AC',
     sum: '99',
-    label: String(chatId),
+    label: `${chatId}_30`,
     successURL: `${appUrl}/?payment=success`,
   })
-  const paymentUrl = `https://yoomoney.ru/quickpay/confirm?${params.toString()}`
+  const monthUrl = `https://yoomoney.ru/quickpay/confirm?${monthParams.toString()}`
+
+  const yearParams = new URLSearchParams({
+    receiver,
+    'quickpay-form': 'shop',
+    targets: 'Подписка Zerf Premium на 1 год (со скидкой 15%)',
+    paymentType: 'AC',
+    sum: '1009',
+    label: `${chatId}_365`,
+    successURL: `${appUrl}/?payment=success`,
+  })
+  const yearUrl = `https://yoomoney.ru/quickpay/confirm?${yearParams.toString()}`
 
   if (limits.plan === 'premium') {
     const exp = limits.subscriptionExpiry
@@ -691,14 +702,23 @@ async function handleSubscribe(chatId: number) {
       `• 🧠 ИИ-перепланирование (/reschedule): безлимитно\n` +
       `• 🔥 Режим фокуса (/focus): до 180 минут\n` +
       `• 📊 Полная статистика продуктивности (/stats)\n` +
-      `• 📌 Заметки и ИИ чат: безлимитно`,
-      { reply_markup: miniAppKeyboard(chatId) }
+      `• 📌 Заметки и ИИ чат: безлимитно\n\n` +
+      `_Продлить подписку со скидкой:_`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '⭐ Продлить на 1 год (-15%) — 1009 ₽', url: yearUrl }],
+            [{ text: '💳 Продлить на 1 месяц — 99 ₽', url: monthUrl }],
+            [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
+          ]
+        }
+      }
     )
     return
   }
 
   await send(chatId,
-    `⭐ *Zerf Premium — 99 ₽/месяц*\n\n` +
+    `⭐ *Тарифы Zerf Premium*\n\n` +
     `🆓 *Сейчас у тебя бесплатный тариф:*\n` +
     `• 🎙 Голосовые и Siri: 2 в день (осталось: ${Math.max(0, 2 - (limits.voice.used || 0))})\n` +
     `• 🧠 ИИ-перепланирование: 2 в день\n` +
@@ -711,11 +731,12 @@ async function handleSubscribe(chatId: number) {
     `• 🔥 Глубокий фокус: до 180 минут\n` +
     `• 📊 Полная аналитика продуктивности и стрики\n` +
     `• 📌 Заметки и ИИ чат: безлимитно\n\n` +
-    `💳 Нажми кнопку ниже, чтобы оплатить через ЮMoney:`,
+    `💰 *Выберите удобный период:*`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '💳 Оплатить 99 ₽ через ЮMoney', url: paymentUrl }],
+          [{ text: '⭐ 1 год (Скидка 15%) — 1009 ₽', url: yearUrl }],
+          [{ text: '💳 1 месяц — 99 ₽', url: monthUrl }],
           [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
         ]
       }
@@ -1570,9 +1591,14 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
 // ── Group & Friend Handlers ──────────────────────────────────────────────────────────
 
 async function handleStart(chatId: number, firstName: string) {
-  await registerChatId(chatId, firstName)
+  const regRes = await registerChatId(chatId, firstName)
+  const trialNotice = regRes.isNewUser
+    ? `🎁 *Вам начислен 1 день бесплатного пробного периода Zerf Premium!* Протестируйте все возможности без ограничений.\n\n`
+    : ``
+
   await send(chatId,
     `🎉 *Профиль успешно привязан!*\n\n` +
+    trialNotice +
     `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI. Вот полное руководство по использованию:\n\n` +
     `✨ *Основные функции (ИИ-ассистент):*\n` +
     `🎙️ *Голосовой и текстовый ввод* — просто надиктуй или напиши боту:\n` +

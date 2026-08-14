@@ -120,8 +120,7 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
     if (t.dueDate === dateStr) return true
     if (t.dueDate && t.dueDate.includes('-')) {
       const isYearly = t.repeat === 'yearly' ||
-                       t.title?.toLowerCase().includes('день рождения') ||
-                       t.title?.toLowerCase().includes('др') ||
+                       /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(t.title || '') ||
                        t.tags?.includes('день рождения')
       if (isYearly) {
         const [, tm, td] = t.dueDate.split('-').map(Number)
@@ -269,8 +268,7 @@ export function CalendarView() {
   const tasksByDate = state.tasks.reduce((acc, t) => {
     if (t.dueDate && t.dueDate.includes('-')) {
       const isYearly = t.repeat === 'yearly' ||
-                       t.title?.toLowerCase().includes('день рождения') ||
-                       t.title?.toLowerCase().includes('др') ||
+                       /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(t.title || '') ||
                        t.tags?.includes('день рождения')
 
       if (isYearly) {
@@ -302,8 +300,7 @@ export function CalendarView() {
       if (!t.dueDate || !t.dueDate.includes('-')) return false
       const [ty, tm, td] = t.dueDate.split('-').map(Number)
       const isYearly = t.repeat === 'yearly' ||
-                       t.title?.toLowerCase().includes('день рождения') ||
-                       t.title?.toLowerCase().includes('др') ||
+                       /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(t.title || '') ||
                        t.tags?.includes('день рождения')
       if (isYearly) {
         const projectedDate = `${year}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`

@@ -42,18 +42,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ownerChatId is required' }, { status: 400 })
     }
 
+    const isYear = body.period === 'year' || body.period === 'annual' || body.duration === 'year'
+    const sum = isYear ? '1009' : '99'
+    const targets = isYear
+      ? 'Подписка Zerf Premium на 1 год (со скидкой 15%)'
+      : 'Подписка Zerf Premium (30 дней)'
+    const label = isYear ? `${ownerChatId}_365` : `${ownerChatId}_30`
+
     const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
     const successUrl = `${appUrl}/?payment=success`
 
     // ЮMoney QuickPay form parameters
     const params = new URLSearchParams({
       receiver: receiver,
       'quickpay-form': 'shop',
-      targets: 'Подписка Zerf Premium (30 дней)',
+      targets,
       paymentType: 'AC', // Allows Bank card or ЮMoney
-      sum: '99',
-      label: String(ownerChatId),
+      sum,
+      label,
       successURL: successUrl,
     })
 
@@ -62,7 +69,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       paymentUrl,
-      amount: 99,
+      amount: Number(sum),
+      period: isYear ? 'year' : 'month',
+      days: isYear ? 365 : 30,
       currency: 'RUB',
     })
   } catch (err: unknown) {
