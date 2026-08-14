@@ -879,9 +879,9 @@ async function handleAdminCommand(chatId: number, args: string[]) {
       `👤 *Пользователь ${targetChatId}*\n\n` +
       `📋 Тариф: *${data.plan === 'premium' ? '✨ Premium' : '🆓 Free'}*\n` +
       `📅 Истекает: ${exp}\n\n` +
-      `🎙 Голос сегодня: ${data.voice?.used || 0}${data.plan === 'premium' ? ` (${Math.round((data.voice?.secondsUsed || 0)/60)} мин)` : '/2'}\n` +
-      `📌 Заметки сегодня: ${data.notes?.used || 0}${data.plan !== 'premium' ? '/2' : ''}\n` +
-      `💬 Чат сегодня: ${data.chat?.used || 0}${data.plan !== 'premium' ? '/10' : ''}`
+      `🎙 Голос сегодня: ${data.voice?.used || 0}${data.plan === 'premium' ? ` (${Math.round((data.voice?.secondsUsed || 0)/60)} мин)` : '/5 (до 3 мин)'}\n` +
+      `📌 Заметки сегодня: ${data.notes?.used || 0}${data.plan !== 'premium' ? '/5' : ''}\n` +
+      `💬 Чат сегодня: ${data.chat?.used || 0}${data.plan !== 'premium' ? '/20' : ''}`
     )
     return
   }

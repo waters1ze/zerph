@@ -227,11 +227,11 @@ export function SettingsView() {
           <div className="space-y-3 pt-2 border-t border-border/50">
             <div>
               <div className="flex justify-between text-[12px] mb-1 font-medium">
-                <span>🎙 Голосовые сообщения в день</span>
+                <span>🎙 Голосовые сообщения (до 3 минут)</span>
                 <span className="text-muted-foreground">
                   {isPremium
-                    ? `${Math.round((usage?.voice?.secondsUsed || 0) / 60)}м / 10 мин`
-                    : `${usage?.voice?.used || 0} / 2`}
+                    ? 'Безлимитно ✨'
+                    : `${usage?.voice?.used || 0} / 5 в день`}
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -239,8 +239,8 @@ export function SettingsView() {
                   className="h-full bg-primary transition-all duration-300"
                   style={{
                     width: isPremium
-                      ? `${Math.min(100, ((usage?.voice?.secondsUsed || 0) / 600) * 100)}%`
-                      : `${Math.min(100, ((usage?.voice?.used || 0) / 2) * 100)}%`
+                      ? '100%'
+                      : `${Math.min(100, ((usage?.voice?.used || 0) / 5) * 100)}%`
                   }}
                 />
               </div>

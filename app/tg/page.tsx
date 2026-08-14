@@ -501,18 +501,18 @@ export default function TelegramApp() {
                   <div className="space-y-3">
                     <div>
                       <div className="flex justify-between text-[11px] mb-1">
-                        <span className="text-muted-foreground">🎙 Голосовые</span>
+                        <span className="text-muted-foreground">🎙 Голосовые (до 3 мин)</span>
                         <span className="font-medium">
                           {usage?.plan === 'premium'
-                            ? `${Math.round((usage?.voice?.secondsUsed || 0) / 60)} / 10 мин`
-                            : `${usage?.voice?.used || 0} / 2 в день`}
+                            ? 'Безлимитно ✨'
+                            : `${usage?.voice?.used || 0} / 5 в день`}
                         </span>
                       </div>
                       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                         <div className="h-full bg-amber-400 rounded-full transition-all" style={{
                           width: usage?.plan === 'premium'
-                            ? `${Math.min(100, ((usage?.voice?.secondsUsed || 0) / 600) * 100)}%`
-                            : `${Math.min(100, ((usage?.voice?.used || 0) / 2) * 100)}%`
+                            ? '100%'
+                            : `${Math.min(100, ((usage?.voice?.used || 0) / 5) * 100)}%`
                         }} />
                       </div>
                     </div>
