@@ -50,8 +50,6 @@ export async function POST(req: NextRequest) {
       where: { chatId: cid },
       data: {
         isAdmin: Boolean(makeAdmin),
-        // If made admin, also unlock Premium privileges
-        ...(makeAdmin ? { plan: 'premium' } : {}),
       },
     })
 

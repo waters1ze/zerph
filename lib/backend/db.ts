@@ -5,6 +5,7 @@
 
 import { prisma } from './prisma'
 import { ParsedItem, stringSimilarity, generateReminderContext } from './groq'
+import { ROOT_ADMIN_IDS } from './admin'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
@@ -916,6 +917,14 @@ export async function saveParsedItemToDb(
       ownerChatId,
     })
   } else if (item.type === 'note') {
+    if (ownerChatId) {
+      const limits = await getUserUsageAndLimits(ownerChatId)
+      if (!limits.canCreateNote) {
+        item.title = `❌ Дневной лимит заметок исчерпан (5 в день). Оформите Zerf Premium для безлимита!`
+        return { item, updatedItem: true }
+      }
+    }
+
     const mdContent = item.summary.includes('#')
       ? item.summary
       : `# ${item.title}\n\n${item.summary}`
@@ -1601,14 +1610,32 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       })
     }
 
-    // Expiry check
-    let isPremium = chat.plan === 'premium'
-    if (isPremium && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < new Date()) {
+    // Expiry check: ONLY Root Admin (Owner) has permanent unlimited Premium
+    const chatIdStr = String(ownerChatId).trim()
+    const isRoot = ROOT_ADMIN_IDS.includes(chatIdStr)
+
+    let isPremium = false
+
+    if (isRoot) {
+      isPremium = true
+    } else if (chat.plan === 'premium' && chat.subscriptionExpiry) {
+      if (new Date(chat.subscriptionExpiry) >= new Date()) {
+        isPremium = true
+      } else {
+        // Expired
+        isPremium = false
+        await prisma.telegramChat.update({
+          where: { chatId: cid },
+          data: { plan: 'free' }
+        }).catch(() => {})
+      }
+    } else if (chat.plan === 'premium' && !chat.subscriptionExpiry) {
+      // Erroneous premium without expiry
       isPremium = false
       await prisma.telegramChat.update({
         where: { chatId: cid },
         data: { plan: 'free' }
-      })
+      }).catch(() => {})
     }
 
     // Daily reset check
@@ -1630,29 +1657,26 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
     const notesMax = isPremium ? Infinity : 5
     const chatMax = isPremium ? Infinity : 20
 
-    const canSendVoice = isPremium
-      ? true
-      : (chat.voiceCountToday < 5)
-
+    const canSendVoice = isPremium ? true : (chat.voiceCountToday < 5)
     const canCreateNote = isPremium ? true : (chat.notesCountToday < 5)
     const canSendChatMessage = isPremium ? true : (chat.chatMessagesToday < 20)
 
     return {
       plan: isPremium ? 'premium' : 'free',
-      subscriptionExpiry: chat.subscriptionExpiry ? chat.subscriptionExpiry.toISOString() : null,
+      subscriptionExpiry: isRoot ? null : (chat.subscriptionExpiry ? chat.subscriptionExpiry.toISOString() : null),
       voice: {
         used: chat.voiceCountToday,
-        max: voiceMax,
+        max: isPremium ? Infinity : 5,
         secondsUsed: chat.voiceSecondsToday,
         maxSeconds: voiceMaxSeconds,
       },
       notes: {
         used: chat.notesCountToday,
-        max: notesMax,
+        max: isPremium ? Infinity : 5,
       },
       chat: {
         used: chat.chatMessagesToday,
-        max: chatMax,
+        max: isPremium ? Infinity : 20,
       },
       canSendVoice,
       canCreateNote,

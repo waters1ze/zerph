@@ -45,16 +45,14 @@ export async function GET(req: NextRequest) {
       let isSubscriptionActive = false
       let daysRemaining = 0
 
-      if (u.plan === 'premium') {
-        if (!u.subscriptionExpiry) {
+      if (isRoot) {
+        isSubscriptionActive = true
+        daysRemaining = 9999 // Owner / Root
+      } else if (u.plan === 'premium' && u.subscriptionExpiry) {
+        const expDate = new Date(u.subscriptionExpiry)
+        if (expDate >= now) {
           isSubscriptionActive = true
-          daysRemaining = 9999 // Lifetime / Admin
-        } else {
-          const expDate = new Date(u.subscriptionExpiry)
-          if (expDate >= now) {
-            isSubscriptionActive = true
-            daysRemaining = Math.max(0, Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-          }
+          daysRemaining = Math.max(0, Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
         }
       }
 

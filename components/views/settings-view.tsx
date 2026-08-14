@@ -225,53 +225,101 @@ export function SettingsView() {
 
           {/* Limits Progress */}
           <div className="space-y-3 pt-2 border-t border-border/50">
+            {/* Voice limit */}
             <div>
               <div className="flex justify-between text-[12px] mb-1 font-medium">
                 <span>🎙 Голосовые сообщения (до 3 минут)</span>
-                <span className="text-muted-foreground">
-                  {isPremium
-                    ? 'Безлимитно ✨'
-                    : `${usage?.voice?.used || 0} / 5 в день`}
-                </span>
+                {isPremium ? (
+                  <span className="text-emerald-500 font-semibold">Безлимитно ✨</span>
+                ) : (
+                  <span className={(usage?.voice?.used || 0) >= (usage?.voice?.max || 5) ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}>
+                    {(usage?.voice?.used || 0) >= (usage?.voice?.max || 5)
+                      ? `${usage?.voice?.used || 0} / ${usage?.voice?.max || 5} (Лимит исчерпан)`
+                      : `${usage?.voice?.used || 0} / ${usage?.voice?.max || 5} в день`}
+                  </span>
+                )}
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300"
+                  className={cn(
+                    'h-full transition-all duration-300',
+                    isPremium
+                      ? 'bg-emerald-500'
+                      : (usage?.voice?.used || 0) >= (usage?.voice?.max || 5)
+                        ? 'bg-rose-500'
+                        : 'bg-primary'
+                  )}
                   style={{
                     width: isPremium
                       ? '100%'
-                      : `${Math.min(100, ((usage?.voice?.used || 0) / 5) * 100)}%`
+                      : `${Math.min(100, Math.round(((usage?.voice?.used || 0) / (usage?.voice?.max || 5)) * 100))}%`
                   }}
                 />
               </div>
             </div>
 
+            {/* Notes limit */}
             <div>
               <div className="flex justify-between text-[12px] mb-1 font-medium">
                 <span>📌 Заметки в день</span>
-                <span className="text-muted-foreground">
-                  {isPremium ? 'Безлимитно ✨' : `${usage?.notes?.used || 0} / 2`}
-                </span>
+                {isPremium ? (
+                  <span className="text-emerald-500 font-semibold">Безлимитно ✨</span>
+                ) : (
+                  <span className={(usage?.notes?.used || 0) >= (usage?.notes?.max || 5) ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}>
+                    {(usage?.notes?.used || 0) >= (usage?.notes?.max || 5)
+                      ? `${usage?.notes?.used || 0} / ${usage?.notes?.max || 5} (Лимит исчерпан)`
+                      : `${usage?.notes?.used || 0} / ${usage?.notes?.max || 5} в день`}
+                  </span>
+                )}
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: isPremium ? '0%' : `${Math.min(100, ((usage?.notes?.used || 0) / 2) * 100)}%` }}
+                  className={cn(
+                    'h-full transition-all duration-300',
+                    isPremium
+                      ? 'bg-emerald-500'
+                      : (usage?.notes?.used || 0) >= (usage?.notes?.max || 5)
+                        ? 'bg-rose-500'
+                        : 'bg-primary'
+                  )}
+                  style={{
+                    width: isPremium
+                      ? '100%'
+                      : `${Math.min(100, Math.round(((usage?.notes?.used || 0) / (usage?.notes?.max || 5)) * 100))}%`
+                  }}
                 />
               </div>
             </div>
 
+            {/* AI Chat limit */}
             <div>
               <div className="flex justify-between text-[12px] mb-1 font-medium">
                 <span>💬 Сообщения в ИИ чат</span>
-                <span className="text-muted-foreground">
-                  {isPremium ? 'Безлимитно ✨' : `${usage?.chat?.used || 0} / 10`}
-                </span>
+                {isPremium ? (
+                  <span className="text-emerald-500 font-semibold">Безлимитно ✨</span>
+                ) : (
+                  <span className={(usage?.chat?.used || 0) >= (usage?.chat?.max || 20) ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}>
+                    {(usage?.chat?.used || 0) >= (usage?.chat?.max || 20)
+                      ? `${usage?.chat?.used || 0} / ${usage?.chat?.max || 20} (Лимит исчерпан)`
+                      : `${usage?.chat?.used || 0} / ${usage?.chat?.max || 20} в день`}
+                  </span>
+                )}
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: isPremium ? '0%' : `${Math.min(100, ((usage?.chat?.used || 0) / 10) * 100)}%` }}
+                  className={cn(
+                    'h-full transition-all duration-300',
+                    isPremium
+                      ? 'bg-emerald-500'
+                      : (usage?.chat?.used || 0) >= (usage?.chat?.max || 20)
+                        ? 'bg-rose-500'
+                        : 'bg-primary'
+                  )}
+                  style={{
+                    width: isPremium
+                      ? '100%'
+                      : `${Math.min(100, Math.round(((usage?.chat?.used || 0) / (usage?.chat?.max || 20)) * 100))}%`
+                  }}
                 />
               </div>
             </div>
