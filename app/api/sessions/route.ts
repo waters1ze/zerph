@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { getAuthHeaders } from '@/lib/store'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 // Parse a readable device name from User-Agent string
 function parseDeviceName(ua: string): { name: string; type: string } {
@@ -40,9 +40,10 @@ function parseDeviceName(ua: string): { name: string; type: string } {
 // GET /api/sessions — list all sessions for the current user
 export async function GET(req: NextRequest) {
   try {
-    const chatId = req.headers.get('x-chat-id')
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const chatId = authUser.chatId
     const authToken = req.headers.get('x-auth-token')
-    if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const sessions = await prisma.userSession.findMany({
       where: { chatId: BigInt(chatId), isRevoked: false },
@@ -70,9 +71,10 @@ export async function GET(req: NextRequest) {
 // DELETE /api/sessions?all=true — revoke ALL sessions except current
 export async function DELETE(req: NextRequest) {
   try {
-    const chatId = req.headers.get('x-chat-id')
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const chatId = authUser.chatId
     const authToken = req.headers.get('x-auth-token')
-    if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

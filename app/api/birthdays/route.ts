@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function GET(req: NextRequest) {
-  const chatId = req.headers.get('x-chat-id') || req.nextUrl.searchParams.get('chatId')
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authUser = await getAuthenticatedUser(req)
+  if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const cid = BigInt(chatId)
+    const cid = BigInt(authUser.chatId)
 
     // Get all friendships for this user
     const friendships = await prisma.friendship.findMany({

@@ -94,3 +94,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { isAdmin } = await isCallerAdmin(req)
+    if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { searchParams } = new URL(req.url)
+    const targetChatId = searchParams.get('chatId')
+    if (!targetChatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 })
+
+    if (ROOT_ADMIN_IDS.includes(targetChatId)) {
+      return NextResponse.json({ error: 'Нельзя удалить владельца' }, { status: 400 })
+    }
+
+    const cid = BigInt(targetChatId)
+    await prisma.telegramChat.deleteMany({ where: { chatId: cid } })
+    await prisma.userSession.deleteMany({ where: { chatId: cid } }).catch(() => {})
+    await prisma.task.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
+    await prisma.friendship.deleteMany({ where: { OR: [{ userChatId: cid }, { friendChatId: cid }] } }).catch(() => {})
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield, Crown, Users, Sparkles, Check, Search, RefreshCw,
   Send, UserX, AlertCircle, Copy, Clock, MessageSquare, Mic,
-  CheckCircle2, XCircle, ChevronDown, RotateCcw, Megaphone
+  CheckCircle2, XCircle, ChevronDown, RotateCcw, Megaphone, Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/store'
@@ -218,7 +218,7 @@ export function AdminView() {
       })
       const data = await res.json()
       if (data.success) {
-        showNotice('success', data.message)
+        showNotice('success', data.message || 'Лимиты успешно сброшены!')
         fetchAdminData()
       } else {
         showNotice('error', data.error || 'Ошибка сброса лимитов')
@@ -255,6 +255,35 @@ export function AdminView() {
       }
     } catch {
       showNotice('error', 'Ошибка запроса')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Action: Delete User
+  const handleDeleteUser = async (targetUser: AdminUser) => {
+    if (targetUser.isRoot) {
+      alert('Нельзя удалить аккаунт владельца!')
+      return
+    }
+    const name = targetUser.firstName || targetUser.username || targetUser.chatId
+    if (!window.confirm(`Вы уверены, что хотите удалить пользователя ${name} (ID: ${targetUser.chatId})? Все его данные будут удалены.`)) return
+
+    setActionLoading(`delete_${targetUser.chatId}`)
+    try {
+      const res = await fetch(`/api/admin/users?chatId=${targetUser.chatId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showNotice('success', `Пользователь ${name} удален`)
+        fetchAdminData()
+      } else {
+        showNotice('error', data.error || 'Ошибка удаления пользователя')
+      }
+    } catch {
+      showNotice('error', 'Ошибка запроса к серверу')
     } finally {
       setActionLoading(null)
     }
@@ -702,6 +731,18 @@ export function AdminView() {
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
+
+                    {/* Delete User (Not Owner) */}
+                    {isViewerRoot && !u.isRoot && (
+                      <button
+                        onClick={() => handleDeleteUser(u)}
+                        disabled={isActionRunning}
+                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition-all"
+                        title="Удалить пользователя из системы"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )

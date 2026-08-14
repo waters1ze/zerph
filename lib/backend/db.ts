@@ -1344,6 +1344,7 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
     // 3. Upsert birthday tasks for each friend — one task per friend chatId
     for (const friend of friendChats) {
+      if (friend.chatId === cid) continue // Do not create a reminder task to congratulate yourself
       if (!friend.birthday) continue
       const parsed = parseBirthday(friend.birthday)
       if (!parsed) continue
@@ -1389,7 +1390,8 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
               dueDate: targetDueDate,
               dueTime: '00:00',
               repeat: 'yearly',
-              assignees: [String(cid), friendCidStr],
+              isShared: false,
+              assignees: [friendCidStr],
               status: 'todo',
             },
           })
@@ -1404,8 +1406,8 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
               dueTime: '00:00',
               repeat: 'yearly',
               tags: ['день рождения', 'друзья'],
-              isShared: true,
-              assignees: [String(cid), friendCidStr],
+              isShared: false,
+              assignees: [friendCidStr],
               ownerChatId: cid,
             },
           })

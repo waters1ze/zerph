@@ -20,12 +20,12 @@ Be concise, smart, actionable. Use markdown formatting. Keep responses focused a
 When enhancing voice input, add structure, formatting, and relevant details while preserving the original intent.`
 
 import { getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext } from '@/lib/backend/db'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const ownerChatId = req.headers.get('x-chat-id') || body.ownerChatId || searchParams.get('chatId') || searchParams.get('chat_id')
+    const authUser = await getAuthenticatedUser(req)
+    const ownerChatId = authUser ? authUser.chatId : null
 
     if (ownerChatId) {
       const limits = await getUserUsageAndLimits(ownerChatId)
@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
         }, { status: 403 })
       }
     }
+
+    const body = await req.json()
 
     const { messages, apiKey, context: clientContext, mode } = body
     const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY

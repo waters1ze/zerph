@@ -26,8 +26,12 @@ interface PendingRequest {
 
 function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void }) {
   const { state } = useApp()
-  const sharedTasks = state.tasks.filter(t => t.assignees.includes(friend.id))
-  const doneTasks = sharedTasks.filter(t => t.status === 'done')
+  const sharedTasks = state.tasks.filter((t: any) => 
+    t.assignees.includes(friend.id) &&
+    !t.tags?.includes('день рождения') &&
+    !t.title.startsWith('🎂')
+  )
+  const doneTasks = sharedTasks.filter((t: any) => t.status === 'done')
   const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
   const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.name || '').toLowerCase().includes('zerph')
   const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? (isBot ? true : false))
