@@ -5,13 +5,13 @@ import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { Inbox, Users, Bell } from 'lucide-react'
 
-import { isBirthdayVisible } from '@/lib/utils'
+import { isBirthdayTask } from '@/lib/utils'
 
 export function InboxView() {
   const { state } = useApp()
 
-  const uncategorized = state.tasks.filter(t => !t.projectId && !t.goalId && isBirthdayVisible(t))
-  const sharedWithMe = state.tasks.filter(t => t.isShared && isBirthdayVisible(t))
+  const uncategorized = state.tasks.filter(t => !t.projectId && !t.goalId && !isBirthdayTask(t))
+  const sharedWithMe = state.tasks.filter(t => t.isShared && !isBirthdayTask(t))
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
