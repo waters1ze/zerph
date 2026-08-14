@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url: webhookUrl,
-        allowed_updates: ['message'],
+        allowed_updates: ['message', 'callback_query', 'channel_post', 'chat_member'],
       }),
     })
     const webhookData = await webhookRes.json()
