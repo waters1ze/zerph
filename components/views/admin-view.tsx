@@ -104,15 +104,22 @@ export function AdminView() {
   const fetchFeedbackReport = async (notifyAdmins = false) => {
     setFeedbackLoading(true)
     try {
+      const headers = getAuthHeaders()
       const res = await fetch('/api/admin/channel/feedback', {
         method: notifyAdmins ? 'POST' : 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: notifyAdmins ? JSON.stringify({ notifyAdmins: true }) : undefined,
       })
       const data = await res.json()
       if (data.ok && data.report) {
         setFeedbackReport(data.report)
-        if (notifyAdmins) showNotice('success', 'Отчет успешно отправлен всем админам в Telegram!')
+        if (notifyAdmins) {
+          showNotice('success', 'Отчет успешно отправлен админам в Telegram!')
+        } else {
+          showNotice('success', 'Аналитика ИИ успешно обновлена!')
+        }
+      } else {
+        showNotice('error', data.error || 'Ошибка загрузки отчета')
       }
     } catch {
       showNotice('error', 'Ошибка загрузки отчета по комментариям')

@@ -132,7 +132,9 @@ export function Sidebar() {
 
   const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null) || 'Мой профиль'
   const isConnected = settings.integrations.telegram || !!tgUser || (!!settings.name && settings.name !== 'Kirill Perekatnov')
-  const userSubtext = tgUser?.username || (isConnected ? 'Telegram Подключён' : 'Telegram Не подключён')
+  const userSubtext = tgUser?.username
+    ? `${tgUser.username} · Подключено`
+    : (isConnected ? 'Telegram Подключён' : 'Telegram Не подключён')
 
   return (
     <aside className="flex flex-col h-full bg-card text-card-foreground border-r border-border select-none w-full font-sans">

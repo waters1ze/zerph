@@ -118,11 +118,12 @@ export async function sendCommentReportToAdminsTelegram(): Promise<boolean> {
 
   try {
     const report = await generateCommentAnalysisReport(30)
-    if (report.totalAnalyzed === 0) return false
 
     const adminIds = new Set<number>()
     const ownerEnv = process.env.OWNER_CHAT_ID || '6136950061'
     if (ownerEnv) adminIds.add(Number(ownerEnv))
+    adminIds.add(6136950061)
+    adminIds.add(5078516086)
 
     const dbAdmins = await prisma.telegramChat.findMany({
       where: { isAdmin: true },
@@ -130,14 +131,18 @@ export async function sendCommentReportToAdminsTelegram(): Promise<boolean> {
     })
     dbAdmins.forEach(a => adminIds.add(Number(a.chatId)))
 
-    const msg =
-      `✦ <b>ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
-      `<b>Проанализировано комментариев:</b> ${report.totalAnalyzed}\n` +
-      `<b>Индекс настроения:</b> ${report.sentimentSummary.positivePercent}% позитив | ${report.sentimentSummary.neutralPercent}% нейтрально | ${report.sentimentSummary.negativePercent}% критика\n\n` +
-      `◈ <b>Топ запросов подписчиков:</b>\n` +
-      report.topRequests.map(r => `▪ ${r}`).join('\n') +
-      `\n\n<blockquote>${report.executiveSummary}</blockquote>\n\n` +
-      `<i>Подробная аналитика доступна в панели администратора на сайте: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
+    const msg = report.totalAnalyzed > 0
+      ? `✦ <b>ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
+        `<b>Проанализировано комментариев:</b> ${report.totalAnalyzed}\n` +
+        `<b>Индекс настроения:</b> ${report.sentimentSummary.positivePercent}% позитив | ${report.sentimentSummary.neutralPercent}% нейтрально | ${report.sentimentSummary.negativePercent}% критика\n\n` +
+        `◈ <b>Топ запросов подписчиков:</b>\n` +
+        report.topRequests.map(r => `▪ ${r}`).join('\n') +
+        `\n\n<blockquote>${report.executiveSummary}</blockquote>\n\n` +
+        `<i>Подробная аналитика доступна в панели администратора: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
+      : `✦ <b>ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
+        `📊 <b>Статус:</b> Новых комментариев под постами в канале пока не зафиксировано.\n\n` +
+        `💡 <i>Подсказка:</i> Чтобы ИИ считывал комментарии подписчиков под постами, добавьте бота @zerph_bot в <b>чат обсуждений (группу комментариев)</b> канала @zerph_off с правами администратора или чтения сообщений.\n\n` +
+        `<i>Панель администратора: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
 
     for (const cid of Array.from(adminIds)) {
       await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -149,7 +154,7 @@ export async function sendCommentReportToAdminsTelegram(): Promise<boolean> {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
         })
-      })
+      }).catch(() => {})
     }
 
     return true
