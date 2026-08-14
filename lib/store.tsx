@@ -267,9 +267,9 @@ export function getTgChatId(): string | null {
       } catch {}
     }
 
-    // 3. Saved authenticated session on this device
-    const savedChatId = localStorage.getItem('zerf_chat_id')
-    const savedToken = localStorage.getItem('zerf_auth_token')
+    // 3. Saved authenticated session on this device (check both localStorage and permanent cookie for PWA)
+    let savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
+    let savedToken = localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')
 
     // PURGE PROTECTION: If an unauthorized device cached the ROOT ADMIN ID without valid token:
     if (savedChatId && ROOT_ADMIN_IDS_LIST.includes(savedChatId) && !savedToken && !u?.id) {
@@ -288,6 +288,12 @@ export function getTgChatId(): string | null {
 
     // Only return chatId if authenticated with a session token or Telegram WebApp
     if (savedChatId && savedToken) {
+      try {
+        localStorage.setItem('zerf_chat_id', savedChatId)
+        localStorage.setItem('zerf_auth_token', savedToken)
+        setPermanentCookie('zerf_chat_id', savedChatId)
+        setPermanentCookie('zerf_auth_token', savedToken)
+      } catch {}
       return savedChatId
     }
 
@@ -298,7 +304,7 @@ export function getTgChatId(): string | null {
 
 export function getAuthHeaders(): Record<string, string> {
   const chatId = getTgChatId()
-  const token = typeof window !== 'undefined' ? localStorage.getItem('zerf_auth_token') : null
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')) : null
   const initData = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initData : null
   
   const headers: Record<string, string> = {}

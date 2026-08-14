@@ -816,6 +816,50 @@ export function SettingsView() {
         </div>
       </Section>
 
+      {/* PWA App Installation Guide */}
+      <Section title="📲 Установка как приложение (PWA)">
+        <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-3 text-xs">
+          <p className="text-muted-foreground leading-relaxed">
+            Установите Zerf как автономное приложение на телефон или компьютер. Оно будет работать в полноэкранном режиме с постоянным сохранением вашей сессии и мгновенным запуском!
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <span>🍏</span> На iPhone (iOS)
+              </p>
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                1. Откройте сайт в <b>Safari</b>.<br />
+                2. Нажмите кнопку <b>«Поделиться»</b> (квадрат со стрелочкой вверх).<br />
+                3. Прокрутите и выберите <b>«На экран „Домой“»</b>.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <span>🤖</span> На Android
+              </p>
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                1. Откройте сайт в <b>Chrome</b>.<br />
+                2. Нажмите меню <b>(три точки)</b> в правом верхнем углу.<br />
+                3. Выберите <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <span>💻</span> На ПК (Windows / Mac)
+              </p>
+              <p className="text-muted-foreground text-[11px] leading-relaxed">
+                1. Откройте сайт в <b>Chrome</b> или <b>Edge</b>.<br />
+                2. В правой части адресной строки нажмите значок <b>⊕ «Установить приложение»</b>.<br />
+                3. Zerf появится на панели задач как отдельная программа!
+              </p>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {/* Data & Privacy */}
       <Section title="Data & Privacy">
         <Row label="Export data" description="Download all your tasks, notes and goals as JSON">

@@ -1,0 +1,26 @@
+{
+  "name": "Zerf AI — Умный Планировщик & Тайм-Менеджер",
+  "short_name": "Zerf",
+  "description": "Экосистема персональной продуктивности: задачи, голосовой ввод, помодоро, цели и ИИ-ассистент.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "categories": ["productivity", "utilities", "business"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
