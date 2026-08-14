@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
@@ -8,11 +8,14 @@ import { NotificationsPanel } from '@/components/notifications-panel'
 import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu } from 'lucide-react'
 import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
+import { Clock } from 'lucide-react'
+import { playAlarmChime, showWebNotification } from '@/lib/notifications'
 
 const VIEW_LABELS: Record<string, string> = {
   today:    'Сегодня',
   inbox:    'Входящие',
   tasks:    'Задачи',
+  clock:    'Часы и Таймеры',
   goals:    'Цели',
   projects: 'Проекты',
   notes:    'Заметки',
@@ -32,6 +35,70 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
   const { state, dispatch } = useApp()
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
+  const [nextTaskCountdown, setNextTaskCountdown] = useState<{ title: string; timeStr: string } | null>(null)
+  const notifiedTasksRef = useRef<Set<string>>(new Set())
+
+  // Background ticker for live countdown & in-browser audio alarms
+  useEffect(() => {
+    const checkTicker = () => {
+      const now = new Date()
+      const todayStr = now.toISOString().slice(0, 10)
+      const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+      // 1. Find upcoming task with time today
+      const upcoming = state.tasks
+        .filter(t => t.status !== 'done' && t.dueTime && (t.dueDate === todayStr || !t.dueDate))
+        .sort((a, b) => (a.dueTime || '').localeCompare(b.dueTime || ''))
+
+      const next = upcoming[0]
+      if (next && next.dueTime) {
+        const [h, m] = next.dueTime.split(':').map(Number)
+        const target = new Date()
+        target.setHours(h || 0, m || 0, 0, 0)
+        const diffMs = target.getTime() - now.getTime()
+
+        if (diffMs > 0) {
+          const totalSec = Math.floor(diffMs / 1000)
+          const hrs = Math.floor(totalSec / 3600)
+          const mins = Math.floor((totalSec % 3600) / 60)
+          const secs = totalSec % 60
+          const formatted = hrs > 0
+            ? `${hrs}ч ${String(mins).padStart(2, '0')}м`
+            : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+
+          setNextTaskCountdown({
+            title: next.title,
+            timeStr: formatted
+          })
+        } else {
+          setNextTaskCountdown(null)
+        }
+      } else {
+        setNextTaskCountdown(null)
+      }
+
+      // 2. In-browser audio & push notification when task is due right now
+      state.tasks.forEach(t => {
+        if (t.status !== 'done' && t.dueTime === currentHHMM && (t.dueDate === todayStr || !t.dueDate)) {
+          const key = `${t.id}-${todayStr}-${currentHHMM}`
+          if (!notifiedTasksRef.current.has(key)) {
+            notifiedTasksRef.current.add(key)
+            playAlarmChime('alarm')
+            showWebNotification(`⏰ Напоминание: ${t.title}`, {
+              body: `Время: ${t.dueTime}. Нажмите, чтобы открыть задачу.`,
+              onClick: () => {
+                dispatch({ type: 'SELECT_TASK', id: t.id })
+              }
+            })
+          }
+        }
+      })
+    }
+
+    checkTicker()
+    const interval = setInterval(checkTicker, 1000)
+    return () => clearInterval(interval)
+  }, [state.tasks, dispatch])
 
   return (
     <header className="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-20">
@@ -46,7 +113,7 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
       </button>
 
       {/* Title */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex items-center gap-3">
         <div className="flex items-baseline gap-2">
           <h1 className="text-base font-semibold text-foreground truncate">
             {VIEW_LABELS[state.currentView] ?? 'Zerf'}
@@ -57,6 +124,19 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
             </span>
           )}
         </div>
+
+        {/* Live Task Countdown Pill in TopBar */}
+        {nextTaskCountdown && (
+          <button
+            onClick={() => dispatch({ type: 'SET_VIEW', view: 'clock' })}
+            title="Нажмите, чтобы открыть экран обратного отсчета и таймеров"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/20 text-[11px] font-semibold text-primary transition-all animate-pulse"
+          >
+            <Clock className="w-3 h-3" />
+            <span className="truncate max-w-[120px]">{nextTaskCountdown.title}:</span>
+            <span className="font-mono font-bold">{nextTaskCountdown.timeStr}</span>
+          </button>
+        )}
       </div>
 
       {/* Search — desktop only */}

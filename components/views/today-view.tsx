@@ -16,7 +16,7 @@ interface DailyContext {
 }
 
 export function TodayView() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const today = new Date().toISOString().slice(0, 10)
   const [context, setContext] = useState<DailyContext | null>(null)
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
@@ -69,6 +69,45 @@ export function TodayView() {
           </div>
         </motion.div>
       )}
+
+      {/* Next Task Live Countdown Card */}
+      {(() => {
+        const nextTimedTask = activeTasks
+          .filter(t => t.dueTime)
+          .sort((a, b) => (a.dueTime || '').localeCompare(b.dueTime || ''))[0]
+
+        if (!nextTimedTask || !nextTimedTask.dueTime) return null
+
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-primary/15 via-primary/10 to-transparent border border-primary/25 shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                <Clock className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold tracking-wide uppercase text-primary">
+                  Следующее дело в {nextTimedTask.dueTime}:
+                </p>
+                <p className="text-[13px] font-semibold text-foreground truncate max-w-[240px] sm:max-w-xs">
+                  {nextTimedTask.title}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => dispatch({ type: 'SET_VIEW', view: 'clock' })}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity shrink-0"
+            >
+              <span>Таймер</span>
+              <Sparkles className="w-3 h-3" />
+            </button>
+          </motion.div>
+        )
+      })()}
 
       {/* Stats row */}
       <div className="stats-grid-4 grid grid-cols-4 gap-3">

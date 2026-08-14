@@ -8,7 +8,7 @@ import type { View } from '@/lib/types'
 import { ChevronRight, Circle, User } from 'lucide-react'
 
 import {
-  Sun, Inbox, CheckSquare, FileText, Calendar,
+  Sun, Inbox, CheckSquare, FileText, Calendar, Clock,
   Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Crown
 } from 'lucide-react'
 
@@ -24,6 +24,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { id: 'today',      label: 'Сегодня',     icon: Sun,         section: 'workspace' },
   { id: 'inbox',      label: 'Входящие',    icon: Inbox,        section: 'workspace' },
   { id: 'tasks',      label: 'Задачи',      icon: CheckSquare, section: 'workspace' },
+  { id: 'clock',      label: 'Часы и Таймеры', icon: Clock,    section: 'workspace' },
   { id: 'notes',      label: 'Заметки',     icon: FileText,    section: 'workspace' },
   { id: 'calendar',   label: 'Календарь',   icon: Calendar,    section: 'planning' },
   { id: 'goals',      label: 'Цели',        icon: Target,      section: 'planning' },

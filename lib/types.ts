@@ -11,6 +11,7 @@ export type View =
   | 'eisenhower'
   | 'notes'
   | 'calendar'
+  | 'clock'
   | 'chat'
   | 'stats'
   | 'friends'

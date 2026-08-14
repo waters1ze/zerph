@@ -24,6 +24,7 @@ import { SettingsView } from '@/components/views/settings-view'
 import { ProjectsView } from '@/components/views/projects-view'
 import { EisenhowerView } from '@/components/views/eisenhower-view'
 import { AdminView } from '@/components/views/admin-view'
+import { ClockView } from '@/components/views/clock-view'
 
 function AppShell() {
   const { state } = useApp()
@@ -53,6 +54,7 @@ function AppShell() {
     today:      <TodayView />,
     inbox:      <InboxView />,
     tasks:      <TasksView />,
+    clock:      <ClockView />,
     goals:      <GoalsView />,
     notes:      <NotesView />,
     calendar:   <CalendarView />,
