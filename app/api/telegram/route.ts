@@ -565,7 +565,7 @@ async function handleFocus(chatId: number, minutesStr?: string) {
 }
 
 async function handleSiriSetup(chatId: number) {
-  const appUrl = APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = APP_URL || 'https://zerph.vercel.app'
   const endpointUrl = `${appUrl}/api/shortcuts`
   const testUrl = `${endpointUrl}?chatId=${chatId}&text=Купить+молоко+в+19:00`
 

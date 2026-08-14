@@ -760,7 +760,8 @@ export function SettingsView() {
               <span className="text-muted-foreground">API Шлюз для Быстрых команд:</span>
               <button
                 onClick={() => {
-                  const url = `${typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'}/api/shortcuts`
+                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'
+                  const url = `${origin}/api/shortcuts`
                   navigator.clipboard.writeText(url)
                   alert('✅ URL скопирован в буфер обмена!')
                 }}
