@@ -1269,7 +1269,21 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       const matches = await findFriendMatches(chatId, item.recipientName)
 
       if (matches.length === 0) {
-        msg += `⚠️ Пользователь '${escMd(item.recipientName)}' не найден среди ваших друзей или команд, либо он запретил отправлять ему задачи.\n\n`
+        await prisma.task.create({
+          data: {
+            title: item.title,
+            description: item.summary || '',
+            priority: item.priority || 'medium',
+            status: 'todo',
+            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueTime: item.dueTime || null,
+            tags: item.tags || [],
+            ownerChatId: BigInt(chatId),
+            authorChatId: BigInt(chatId),
+            isShared: false,
+          } as any
+        })
+        msg += `ℹ️ Пользователь *«${escMd(item.recipientName)}»* не найден в вашей команде. Чтобы задача не потерялась, я сохранил её в вашем *личном списке*!\n\n`
         continue
       }
 
@@ -1280,7 +1294,21 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       const allowedMatches = matches.filter(m => m.isAllowed)
 
       if (allowedMatches.length === 0) {
-        msg += `⚠️ Ни один из найденных пользователей по запросу '${escMd(item.recipientName)}' не разрешил получение задач от вас.\n\n`
+        await prisma.task.create({
+          data: {
+            title: item.title,
+            description: item.summary || '',
+            priority: item.priority || 'medium',
+            status: 'todo',
+            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueTime: item.dueTime || null,
+            tags: item.tags || [],
+            ownerChatId: BigInt(chatId),
+            authorChatId: BigInt(chatId),
+            isShared: false,
+          } as any
+        })
+        msg += `⚠️ Пользователь *«${escMd(item.recipientName)}»* ограничил приём задач. Задача сохранена в вашем *личном списке*.\n\n`
         continue
       }
 
@@ -1296,16 +1324,17 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           }
         })
 
-        let amMsg = `🤔 Найдено несколько человек по запросу "${escMd(item.recipientName)}". Кого вы имели в виду?\n`
+        let amMsg = `🤔 Найдено несколько человек по запросу *«${escMd(item.recipientName)}»*. Уточни фамилию или выбери нужного человека:\n`
         
         const inlineKeyboard = []
         for (const m of allowedMatches) {
           const fn = m.friend.firstName || ''
           const ln = m.friend.lastName || ''
           const un = m.friend.username ? ` (@${m.friend.username})` : ''
-          const fullName = `${fn} ${ln}${un}`.trim()
+          const fullName = `👤 ${fn} ${ln}${un}`.trim()
           inlineKeyboard.push([{ text: fullName, callback_data: `dr_${draftTask.id}:${m.friend.chatId}` }])
         }
+        inlineKeyboard.push([{ text: '🔒 Оставить только у себя (Личная задача)', callback_data: `dr_${draftTask.id}:self` }])
         inlineKeyboard.push([{ text: '❌ Отмена', callback_data: `dr_${draftTask.id}:cancel` }])
 
         await send(chatId, amMsg, {
@@ -1699,43 +1728,40 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
 
 async function handleStart(chatId: number, firstName: string) {
   const regRes = await registerChatId(chatId, firstName)
+  const dbUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+
   const trialNotice = regRes.isNewUser
     ? `🎁 *Вам начислен 1 день бесплатного пробного периода Zerf Premium!* Протестируйте все возможности без ограничений.\n\n`
+    : ``
+
+  const nameNotice = (!dbUser?.lastName)
+    ? `\n\n👤 *Как тебя зовут?*\nНапиши прямо сейчас в ответ свои *Имя и Фамилию* (например: \`Артём Смирнов\`), чтобы твои задачи были подписаны твоим именем, а друзья могли находить тебя при совместной работе!`
     : ``
 
   await send(chatId,
     `🎉 *Профиль успешно привязан!*\n\n` +
     trialNotice +
-    `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI. Вот полное руководство по использованию:\n\n` +
-    `✨ *Основные функции (ИИ-ассистент):*\n` +
+    `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI.\n` +
+    `🔒 *Все твои задачи строго конфиденциальны* и сохраняются только в твоем личном списке.` +
+    nameNotice +
+    `\n\n✨ *Быстрый старт (ИИ-ассистент):*\n` +
     `🎙️ *Голосовой и текстовый ввод* — просто надиктуй или напиши боту:\n` +
     `  • _"Напомни купить молоко в 18:00"_\n` +
     `  • _"Дай задачу Вове подготовить отчет"_\n` +
     `  • _"Добавь цель: Выучить английский до зимы"_\n` +
-    `  • _"Запиши идею для стартапа: приложение для кошек"_\n` +
-    `✏️ *Умное редактирование* — ИИ понимает контекст:\n` +
-    `  • _"Измени время той задачи на 19:00"_\n` +
-    `  • _"Отмени встречу с Леной"_\n\n` +
-    `👥 *Командная работа:*\n` +
-    `Добавь бота в любую группу, и он автоматически добавит всех участников в твои контакты Zerf AI. После этого ты сможешь поручать им задачи словами: _"Поручи Коле сделать презентацию"_\n` +
-    `⚠️ *Важно:* Отправь боту сообщение *Меня зовут Имя Фамилия*, чтобы друзья легко находили тебя при поручении задач!\n\n` +
+    `  • _"Запиши идею для стартапа"_\n\n` +
     `⚙️ *Доступные команды:*\n` +
+    `/name <Имя Фамилия> — Указать свои имя и фамилию\n` +
     `/today — Твои задачи и цели на сегодня\n` +
-    `/inbox — Входящие задачи от других и неразобранное\n` +
-    `/shared — Задачи, порученные друзьям и коллегам\n` +
-    `/p <Название> — Фильтр задач по проекту или категории\n` +
-    `/reschedule — Умное ИИ-перепланирование просроченных дел\n` +
-    `/stats — Интерактивная статистика и стрики продуктивности\n` +
-    `/focus [мин] — Режим глубокого фокуса / Помодоро (по умолч. 25 мин)\n` +
-    `/siri (или /phone) — Интеграция с Siri, кнопкой Action Button и виджетами\n` +
-    `/goals — Список активных целей\n` +
-    `/notes — Твои последние заметки\n` +
-    `/report — Еженедельный отчет по продуктивности\n` +
-    `/reminders (или /settings) — Настройка интервалов и повторов напоминаний\n` +
-    `/language (или /lang) — Сменить язык\n` +
-    `/ref (или /invite) — Твоя реферальная ссылка (приведи друга — получи Premium!)\n` +
-    `/premium (или /buy) — Купить подписку Zerf Premium\n\n` +
-    `Жми кнопки ниже, чтобы открыть Mini App или перейти на полный сайт:`,
+    `/inbox — Входящие задачи от других\n` +
+    `/shared — Задачи, порученные другим\n` +
+    `/p <Название> — Задачи по проекту\n` +
+    `/reschedule — Умное ИИ-перепланирование\n` +
+    `/stats — Статистика и стрики\n` +
+    `/focus [мин] — Таймер Помодоро\n` +
+    `/siri — Синхронизация с Siri и Календарем\n` +
+    `/settings — Настройки и интервалы\n\n` +
+    `Жми кнопки ниже, чтобы открыть приложение или перейти на сайт:`,
     { reply_markup: miniAppKeyboard(chatId) }
   )
 }
@@ -2210,6 +2236,25 @@ export async function POST(req: NextRequest) {
           if (actionOrId === 'cancel') {
             await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отменено' })
             await safeEditOrSend(chatId, cb.message.message_id, `❌ *Отправка отменена.*`)
+          } else if (actionOrId === 'self') {
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Сохранено у вас' })
+            const item = JSON.parse(draftTask.rawText)
+            await prisma.task.create({
+              data: {
+                title: item.title,
+                description: item.summary || '',
+                priority: item.priority || 'medium',
+                status: 'todo',
+                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                dueTime: item.dueTime || null,
+                repeat: item.repeat || null,
+                tags: item.tags || [],
+                ownerChatId: BigInt(chatId),
+                authorChatId: BigInt(chatId),
+                isShared: false,
+              } as any
+            })
+            await safeEditOrSend(chatId, cb.message.message_id, `🔒 Задача *«${escMd(item.title)}»* сохранена в твоем личном списке!`)
           } else {
             await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отправляю...' })
             
@@ -2742,16 +2787,25 @@ export async function POST(req: NextRequest) {
       } else if (voice) {
         await processVoice(chatId, voice.file_id, voice.duration || 15)
       } else if (text.trim()) {
-        const lowerText = text.trim().toLowerCase()
-        if (lowerText.startsWith('меня зовут ')) {
-          const newName = text.trim().slice(11).trim()
-          const [fn, ...lnArr] = newName.split(' ')
-          const ln = lnArr.join(' ') || null
-          await prisma.telegramChat.update({
+        const trimmed = text.trim()
+        const lowerText = trimmed.toLowerCase()
+
+        // Name setting detection: "Меня зовут Артём Смирнов", "Я Артём Смирнов", or "Артём Смирнов" (2 capitalized words)
+        const namePrefixMatch = trimmed.match(/^(?:меня зовут|я|мое имя|моё имя)\s+([А-ЯЁа-яёA-Za-z]+)\s+([А-ЯЁа-яёA-Za-z]+)$/i)
+        const twoCapitalWordsMatch = trimmed.match(/^([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})$/)
+        const isNotTaskVerb = twoCapitalWordsMatch && !/^(Купить|Сделать|Позвонить|Написать|Пойти|Сходить|Напомни|Создай|Удали|Открой|Покажи|Принять|Перенести|Поставить|Записать|Найти|Отправить|Поручить)/i.test(twoCapitalWordsMatch[1])
+
+        if (namePrefixMatch || isNotTaskVerb) {
+          const fn = namePrefixMatch ? namePrefixMatch[1] : twoCapitalWordsMatch![1]
+          const ln = namePrefixMatch ? namePrefixMatch[2] : twoCapitalWordsMatch![2]
+          await prisma.telegramChat.upsert({
             where: { chatId: BigInt(chatId) },
-            data: { firstName: fn, lastName: ln }
+            update: { firstName: fn, lastName: ln },
+            create: { chatId: BigInt(chatId), firstName: fn, lastName: ln },
           })
-          await send(chatId, `✅ Отлично! Теперь я знаю вас как *${newName}*. Это имя будет использоваться при работе в команде!`)
+          await send(chatId, `✅ Приятно познакомиться, *${escMd(fn)} ${escMd(ln)}*!\n\nТвоё имя успешно сохранено в Zerf AI. Все задачи сохраняются только в твоем личном списке, а друзья и коллеги смогут легко находить тебя по имени при поручении задач!`, {
+            reply_markup: miniAppKeyboard(chatId)
+          })
         } else {
           await processText(chatId, text)
         }
