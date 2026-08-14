@@ -62,10 +62,49 @@ export async function GET(req: NextRequest) {
     // Mark as used (one-time only!)
     await prisma.loginToken.update({ where: { token }, data: { used: true } })
 
-    // Generate a long-lived session token (random, stored nowhere — just signed with secret)
-    // The client stores this as zerf_auth_token and sends it as x-auth-token header
-    // Server accepts any non-empty token from a known chatId (token proves browser origin)
+    // Generate a long-lived session token
     const sessionToken = crypto.randomBytes(24).toString('hex')
+
+    // Detect device info from request
+    const ua = req.headers.get('user-agent') || ''
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') || ''
+
+    function parseDeviceName(uaStr: string): { name: string; type: string } {
+      if (!uaStr) return { name: 'Неизвестное устройство', type: 'web' }
+      let os = ''
+      let browser = ''
+      let type = 'web'
+      if (uaStr.includes('iPhone')) { os = 'iPhone'; type = 'mobile' }
+      else if (uaStr.includes('iPad')) { os = 'iPad'; type = 'mobile' }
+      else if (uaStr.includes('Android')) { os = 'Android'; type = 'mobile' }
+      else if (uaStr.includes('Windows NT')) os = 'Windows'
+      else if (uaStr.includes('Mac OS X')) os = 'macOS'
+      else if (uaStr.includes('Linux')) os = 'Linux'
+      if (uaStr.includes('YaBrowser')) browser = 'Яндекс Браузер'
+      else if (uaStr.includes('OPR') || uaStr.includes('Opera')) browser = 'Opera'
+      else if (uaStr.includes('Edg/')) browser = 'Edge'
+      else if (uaStr.includes('Chrome')) browser = 'Chrome'
+      else if (uaStr.includes('Firefox')) browser = 'Firefox'
+      else if (uaStr.includes('Safari')) browser = 'Safari'
+      const name = browser && os ? `${browser} · ${os}` : browser || os || 'Браузер'
+      return { name, type }
+    }
+
+    const { name: deviceName, type: deviceType } = parseDeviceName(ua)
+
+    // Register session in DB
+    await prisma.userSession.create({
+      data: {
+        chatId: record.chatId,
+        sessionToken,
+        deviceName,
+        deviceType,
+        ipAddress: ip || null,
+        userAgent: ua || null,
+        isRevoked: false,
+      },
+    }).catch(() => {}) // non-blocking
 
     return NextResponse.json({
       valid: true,

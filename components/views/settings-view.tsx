@@ -10,6 +10,7 @@ import {
   User, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight
 } from 'lucide-react'
+import { SessionsPanel } from '@/components/sessions-panel'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -602,6 +603,13 @@ export function SettingsView() {
           <Toggle checked={settings.focusModeEnabled} onChange={v => update({ focusModeEnabled: v })} />
         </Row>
       </Section>
+
+      {/* Sessions */}
+      {currentChatId && !currentChatId.startsWith('guest_') && (
+        <Section title="Безопасность и сессии">
+          <SessionsPanel />
+        </Section>
+      )}
 
       {/* Notifications */}
       <Section title="Notifications & Reminders">

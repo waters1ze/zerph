@@ -126,6 +126,23 @@ model LoginToken {
   @@index([token])
 }
 
+// Active browser sessions — one per device/browser login
+model UserSession {
+  id           String   @id @default(cuid())
+  chatId       BigInt
+  sessionToken String   @unique          // same token stored in localStorage
+  deviceName   String?                   // parsed from User-Agent: "Chrome on Windows"
+  deviceType   String   @default("web")  // "web" | "telegram" | "mobile"
+  ipAddress    String?
+  userAgent    String?
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  isRevoked    Boolean  @default(false)
+
+  @@index([chatId])
+  @@index([sessionToken])
+}
+
 // Full collaborative project model
 model ProjectDB {
   id          String   @id @default(cuid())
