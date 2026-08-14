@@ -25,16 +25,35 @@ import { ProjectsView } from '@/components/views/projects-view'
 import { EisenhowerView } from '@/components/views/eisenhower-view'
 import { AdminView } from '@/components/views/admin-view'
 import { ClockView } from '@/components/views/clock-view'
+import { AuthGateModal } from '@/components/auth-gate-modal'
 
 function AppShell() {
   const { state } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+
+  const handleOpenNewTask = () => {
+    const chatId = getTgChatId()
+    if (!chatId || chatId.startsWith('guest_')) {
+      setAuthModalOpen(true)
+      return
+    }
+    setNewTaskOpen(true)
+  }
+
+  const handleOpenVoice = () => {
+    const chatId = getTgChatId()
+    if (!chatId || chatId.startsWith('guest_')) {
+      setAuthModalOpen(true)
+      return
+    }
+    setVoiceOpen(true)
+  }
 
   useEffect(() => {
-    getTgChatId()
-    const handleVoice = () => setVoiceOpen(true)
+    const handleVoice = () => handleOpenVoice()
     window.addEventListener('zerf:open-voice', handleVoice)
     return () => window.removeEventListener('zerf:open-voice', handleVoice)
   }, [])
@@ -122,7 +141,7 @@ function AppShell() {
       {/* ── Main content area ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar
-          onNewTask={() => setNewTaskOpen(true)}
+          onNewTask={handleOpenNewTask}
           onMenuOpen={() => setMobileSidebarOpen(true)}
         />
 
@@ -175,6 +194,9 @@ function AppShell() {
 
       {/* Voice recorder */}
       <VoiceRecorder open={voiceOpen} onClose={() => setVoiceOpen(false)} />
+
+      {/* Telegram Auth Gate Modal */}
+      <AuthGateModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </div>
   )
 }

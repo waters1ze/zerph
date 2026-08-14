@@ -267,9 +267,9 @@ export function getTgChatId(): string | null {
       } catch {}
     }
 
-    // 3. Saved localStorage / cookie on this device
-    const savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
-    const savedToken = localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')
+    // 3. Saved authenticated session on this device
+    const savedChatId = localStorage.getItem('zerf_chat_id')
+    const savedToken = localStorage.getItem('zerf_auth_token')
 
     // PURGE PROTECTION: If an unauthorized device cached the ROOT ADMIN ID without valid token:
     if (savedChatId && ROOT_ADMIN_IDS_LIST.includes(savedChatId) && !savedToken && !u?.id) {
@@ -283,27 +283,15 @@ export function getTgChatId(): string | null {
         document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
         document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
       } catch {}
-      let guestId = 'guest_' + String(Math.floor(100000000 + Math.random() * 899999999))
-      localStorage.setItem('zerf_guest_id', guestId)
-      setPermanentCookie('zerf_guest_id', guestId)
-      return guestId
+      return null
     }
 
-    if (savedChatId) {
-      setPermanentCookie('zerf_chat_id', savedChatId)
+    // Only return chatId if authenticated with a session token or Telegram WebApp
+    if (savedChatId && savedToken) {
       return savedChatId
     }
 
-    // 4. Fallback persistent guest identifier on this device
-    try {
-      let guestId = localStorage.getItem('zerf_guest_id') || getCookie('zerf_guest_id')
-      if (!guestId) {
-        guestId = 'guest_' + String(Math.floor(100000000 + Math.random() * 899999999))
-        localStorage.setItem('zerf_guest_id', guestId)
-        setPermanentCookie('zerf_guest_id', guestId)
-      }
-      return guestId
-    } catch {}
+    return null
   }
   return null
 }

@@ -6,23 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
 
-import { verifyUserAuth } from '@/lib/backend/auth'
-
-function getOwnerChatId(req: NextRequest): string | null {
-  const { searchParams } = new URL(req.url)
-  const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId') || null
-  const token = req.headers.get('x-auth-token') || searchParams.get('token') || null
-  const initData = req.headers.get('x-tg-init-data') || null
-  
-  if (!chatId) return null
-  if (!verifyUserAuth(chatId, token, initData)) return null
-  return chatId
-}
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function GET(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    const ownerChatId = authUser.chatId
     
     const usage = await getUserUsageAndLimits(ownerChatId)
     return NextResponse.json(usage)
@@ -33,8 +23,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    const ownerChatId = authUser.chatId
     
     const body = await req.json().catch(() => ({}))
 

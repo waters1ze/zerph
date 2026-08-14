@@ -6,23 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseIntentWithGroq } from '@/lib/backend/groq'
 import { saveParsedItemToDb } from '@/lib/backend/db'
-import { verifyUserAuth } from '@/lib/backend/auth'
-
-function getOwnerChatId(req: NextRequest): string | null {
-  const { searchParams } = new URL(req.url)
-  const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId')
-  const token = req.headers.get('x-auth-token') || searchParams.get('token')
-  const initData = req.headers.get('x-tg-init-data')
-  
-  if (!chatId) return null
-  if (!verifyUserAuth(chatId, token, initData)) return null
-  return chatId
-}
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    const ownerChatId = authUser.chatId
 
     const { text, apiKey } = await req.json()
     const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY

@@ -5,20 +5,15 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { verifyUserAuth } from '@/lib/backend/auth'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const headerChatId = req.headers.get('x-chat-id')
-    const queryChatId = searchParams.get('chatId') || searchParams.get('chat_id')
-    const cid = queryChatId || headerChatId
-    const token = req.headers.get('x-auth-token') || searchParams.get('token')
-    const initData = req.headers.get('x-tg-init-data')
-
-    if (!cid || !verifyUserAuth(cid, token, initData)) {
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
       return NextResponse.json({ connected: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const cid = authUser.chatId
 
     const chat = await prisma.telegramChat.findUnique({
       where: { chatId: BigInt(cid) },
@@ -56,16 +51,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const headerChatId = req.headers.get('x-chat-id')
-    const queryChatId = searchParams.get('chatId') || searchParams.get('chat_id')
-    const cid = queryChatId || headerChatId
-    const token = req.headers.get('x-auth-token') || searchParams.get('token')
-    const initData = req.headers.get('x-tg-init-data')
-
-    if (!cid || !verifyUserAuth(cid, token, initData)) {
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const cid = authUser.chatId
 
     const { birthday, name } = await req.json()
     const userCid = BigInt(cid)

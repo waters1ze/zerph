@@ -1,15 +1,9 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { verifyTelegramWebAppData } from '@/lib/backend/auth'
+import { getAuthenticatedUser, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-
-// ROOT_ADMIN_IDS — only the actual owners of the platform (YOU)
-// These are set in environment, never in client-accessible code
-export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean)
+export { ROOT_ADMIN_IDS }
 
 // Hardcoded explicit blocklist — add IDs here to permanently deny admin rights
 const BLOCKED_FROM_ADMIN: string[] = []
@@ -23,32 +17,22 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
     return { isAdmin: true, callerChatId: 'root_secret', isRoot: true }
   }
 
-  // 2. Check chatId — from headers (preferred) or query param (allowed with auth token)
-  const rawChatId = req.headers.get('x-chat-id') ||
-    req.headers.get('x-tg-user-id') ||
-    new URL(req.url).searchParams.get('chatId') || // query param OK only if auth token present
-    null
-
-  if (!rawChatId) {
+  // 2. Authenticate the caller strictly via Telegram HMAC or DB session
+  const authUser = await getAuthenticatedUser(req)
+  if (!authUser) {
     return { isAdmin: false, callerChatId: null, isRoot: false }
   }
 
-  const strId = String(rawChatId).trim()
+  const strId = authUser.chatId
 
   // 3. Check blocklist
   if (BLOCKED_FROM_ADMIN.length > 0 && BLOCKED_FROM_ADMIN.includes(strId)) {
     return { isAdmin: false, callerChatId: strId, isRoot: false }
   }
 
-  // 4. Check if root admin (The Owner) — must also validate initData or auth token
-  if (ROOT_ADMIN_IDS.includes(strId)) {
-    const initData = req.headers.get('x-tg-init-data')
-    const authToken = req.headers.get('x-auth-token')
-    if (initData || authToken) {
-      return { isAdmin: true, callerChatId: strId, isRoot: true }
-    }
-    // No initData and no auth token = not authenticated as root
-    return { isAdmin: false, callerChatId: strId, isRoot: false }
+  // 4. Check if root admin (The Owner)
+  if (authUser.isRoot || ROOT_ADMIN_IDS.includes(strId)) {
+    return { isAdmin: true, callerChatId: strId, isRoot: true }
   }
 
   // 5. Check Database record for isAdmin flag (non-root admins)

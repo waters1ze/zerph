@@ -15,8 +15,7 @@ import {
   touchUserLastActive, createHabit, updateHabit, deleteHabit,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
-import { verifyUserAuth, verifyTelegramWebAppData } from '@/lib/backend/auth'
-import { ROOT_ADMIN_IDS } from '@/lib/backend/admin'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 startReminderScheduler()
 
@@ -33,34 +32,15 @@ function serialize(obj: unknown): unknown {
   return obj
 }
 
-function getOwnerChatId(req: NextRequest): string | null {
-  // SECURITY: Never accept chatId from URL query params — headers only!
-  const chatId = req.headers.get('x-chat-id')
-  const token = req.headers.get('x-auth-token')
-  const initData = req.headers.get('x-tg-init-data')
-  
-  if (!chatId) return null
-  const cidStr = String(chatId).trim()
-
-  // Protect ROOT_ADMIN_IDS from unauthorized access without token or initData
-  if (ROOT_ADMIN_IDS.includes(cidStr)) {
-    const validInit = initData && verifyTelegramWebAppData(initData)
-    // Accept if Telegram Mini App (initData) OR stored session token present
-    if (!validInit && !token) {
-      return null // Unauthorized — not from Telegram app and no session token
-    }
-  }
-
-  if (!verifyUserAuth(cidStr, token, initData)) {
-    return null
-  }
-  return cidStr
+async function getOwnerChatId(req: NextRequest): Promise<string | null> {
+  const authUser = await getAuthenticatedUser(req)
+  return authUser ? authUser.chatId : null
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ownerChatId = await getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     
     await touchUserLastActive(ownerChatId)
     await syncFriendBirthdays(ownerChatId)
@@ -79,8 +59,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ownerChatId = await getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
     const body = await req.json()
 
@@ -157,8 +137,8 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ownerChatId = await getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
     const body = await req.json()
 
@@ -213,8 +193,8 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const ownerChatId = getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ownerChatId = await getOwnerChatId(req)
+    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

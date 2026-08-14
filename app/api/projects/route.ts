@@ -1,17 +1,18 @@
-﻿/**
+/**
  * /api/projects — Full Projects CRUD API
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
-function getChatId(req: NextRequest): bigint | null {
-  const header = req.headers.get('x-chat-id')
-  if (!header) return null
-  try { return BigInt(header) } catch { return null }
+async function getChatId(req: NextRequest): Promise<bigint | null> {
+  const authUser = await getAuthenticatedUser(req)
+  if (!authUser) return null
+  try { return BigInt(authUser.chatId) } catch { return null }
 }
 
 export async function GET(req: NextRequest) {
-  const chatId = getChatId(req)
+  const chatId = await getChatId(req)
   if (!chatId) return NextResponse.json({ projects: [] })
 
   try {
@@ -42,8 +43,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
   try {
     const { title, description, color, memberUsernames } = await req.json()
     if (!title?.trim()) return NextResponse.json({ error: 'Title required' }, { status: 400 })
@@ -60,8 +61,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
   try {
     const { id, title, description, color, status, memberUsernames } = await req.json()
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -85,8 +86,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   try {

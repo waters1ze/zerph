@@ -39,6 +39,9 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({
         commands: [
           { command: 'today',      description: '📅 Задачи и цели на сегодня' },
+          { command: 'matrix',     description: '🎯 Матрица Эйзенхауэра (Фокус дня)' },
+          { command: 'login',      description: '🔑 Вход на сайт (ПК/браузер)' },
+          { command: 'cleanup',    description: '🌙 Вечерний перенос задач на завтра' },
           { command: 'inbox',      description: '📥 Входящие и неразобранное' },
           { command: 'shared',     description: '👥 Порученные задачи коллегам' },
           { command: 'p',          description: '📁 Фильтр по проекту или тегу' },

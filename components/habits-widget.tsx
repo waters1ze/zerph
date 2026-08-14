@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Check, MoreVertical, Flame } from 'lucide-react'
-import { useApp } from '@/lib/store'
+import { useApp, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Habit } from '@/lib/types'
 
@@ -74,6 +74,11 @@ export function HabitsWidget() {
         </h3>
         <button
           onClick={() => {
+            const chatId = getTgChatId()
+            if (!chatId || chatId.startsWith('guest_')) {
+              window.open('https://t.me/Zerph_bot?start=login', '_blank')
+              return
+            }
             if (state.settings.userPlan === 'free' && state.habits.length >= 3) {
               alert('В бесплатной версии доступно максимум 3 привычки. Пожалуйста, приобретите Premium через бота.')
               return

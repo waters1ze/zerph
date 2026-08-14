@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { getFriends, syncFriendBirthdays } from '@/lib/backend/db'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
-function getChatId(req: NextRequest): bigint | null {
-  const { searchParams } = new URL(req.url)
-  const header = req.headers.get('x-chat-id') || searchParams.get('chatId')
-  if (!header) return null
-  try { return BigInt(header) } catch { return null }
+async function getChatId(req: NextRequest): Promise<bigint | null> {
+  const authUser = await getAuthenticatedUser(req)
+  if (!authUser) return null
+  try { return BigInt(authUser.chatId) } catch { return null }
 }
 
 async function sendTgMessage(chatId: string | number | bigint, text: string, replyMarkup?: object) {
@@ -28,7 +28,7 @@ async function sendTgMessage(chatId: string | number | bigint, text: string, rep
 }
 
 export async function GET(req: NextRequest) {
-  const chatId = getChatId(req)
+  const chatId = await getChatId(req)
   if (!chatId) return NextResponse.json({ friends: [], pendingRequests: [] })
 
   try {
@@ -66,8 +66,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
   try {
     const body = await req.json()
@@ -155,8 +155,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
   try {
     const { fromChatId, action } = await req.json() // action: 'accept' | 'decline'
@@ -205,8 +205,8 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
   try {
     const { friendId, allowTasks, birthday } = await req.json()
@@ -245,8 +245,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const chatId = getChatId(req)
-  if (!chatId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const chatId = await getChatId(req)
+  if (!chatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
   try {
     const { searchParams } = new URL(req.url)
