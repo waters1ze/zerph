@@ -23,27 +23,27 @@ export function verifyTelegramWebAppData(initDataStr: string): boolean {
 }
 
 export function verifyUserAuth(chatId?: string | number | null, token?: string | null, initData?: string | null): boolean {
-  if (!chatId) return false // Require a chatId
+  if (!chatId) return false
   
   const cidStr = String(chatId).trim()
   if (!cidStr) return false
 
-  // Method 1: Telegram WebApp initData (Secure, natively from Telegram)
+  // 1. Telegram WebApp initData
   if (initData) {
     const validInitData = verifyTelegramWebAppData(initData)
     if (validInitData) return true
   }
 
-  // Method 2: Custom token (used for Web Browser access)
+  // 2. Secret HMAC Auth Token
   if (token) {
     const expectedToken = getUserAuthToken(cidStr)
     if (token === expectedToken) return true
   }
 
-  // Method 3: Valid numeric Telegram Chat ID session
-  if (/^\d{5,15}$/.test(cidStr)) {
+  // 3. Guest identifier (guest accounts have random 9-digit format)
+  if (cidStr.startsWith('guest_') || /^\d{9}$/.test(cidStr)) {
     return true
   }
 
-  return true
+  return false
 }

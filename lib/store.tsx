@@ -211,7 +211,7 @@ function getCookie(name: string): string | null {
 
 export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
-    // 1. HIGHEST PRIORITY: Telegram WebApp context (cryptographically bound to active Telegram account)
+    // 1. HIGHEST PRIORITY: Telegram WebApp context (cryptographically signed by Telegram servers)
     const u = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } })?.Telegram?.WebApp?.initDataUnsafe?.user
     if (u?.id) {
       const tgId = String(u.id)
@@ -222,32 +222,15 @@ export function getTgChatId(): string | null {
       return tgId
     }
 
-    // 2. Query parameters on first load from bot link (?chatId=...&token=...)
-    const urlParams = new URLSearchParams(window.location.search)
-    const qChatId = urlParams.get('chatId') || urlParams.get('chat_id')
-    const qToken = urlParams.get('token')
-
-    if (qToken) {
+    // Always strip any query params from address bar immediately to prevent accidental link forwarding
+    if (window.location.search && window.history && window.history.replaceState) {
       try {
-        localStorage.setItem('zerf_auth_token', qToken)
-        setPermanentCookie('zerf_auth_token', qToken)
+        const cleanUrl = window.location.pathname + (window.location.hash || '')
+        window.history.replaceState({}, document.title, cleanUrl)
       } catch {}
     }
 
-    if (qChatId) {
-      try {
-        localStorage.setItem('zerf_chat_id', qChatId)
-        setPermanentCookie('zerf_chat_id', qChatId)
-        // Clean URL immediately so sharing/copying URL does NOT leak chatId or token!
-        if (window.history && window.history.replaceState) {
-          const cleanUrl = window.location.pathname + (window.location.hash || '')
-          window.history.replaceState({}, document.title, cleanUrl)
-        }
-      } catch {}
-      return qChatId
-    }
-
-    // 3. Saved localStorage on this device
+    // 2. Saved localStorage on this device
     try {
       const savedChatId = localStorage.getItem('zerf_chat_id')
       if (savedChatId) {
@@ -256,18 +239,18 @@ export function getTgChatId(): string | null {
       }
     } catch {}
 
-    // 4. Saved cookie on this device
+    // 3. Saved cookie on this device
     const cookieChatId = getCookie('zerf_chat_id')
     if (cookieChatId) {
       try { localStorage.setItem('zerf_chat_id', cookieChatId) } catch {}
       return cookieChatId
     }
 
-    // 5. Fallback persistent guest identifier on this device
+    // 4. Fallback persistent guest identifier on this device
     try {
       let guestId = localStorage.getItem('zerf_guest_id') || getCookie('zerf_guest_id')
       if (!guestId) {
-        guestId = String(Math.floor(100000000 + Math.random() * 899999999))
+        guestId = 'guest_' + String(Math.floor(100000000 + Math.random() * 899999999))
         localStorage.setItem('zerf_guest_id', guestId)
         setPermanentCookie('zerf_guest_id', guestId)
       }
