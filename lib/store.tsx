@@ -246,6 +246,11 @@ export function getTgChatId(): string | null {
               localStorage.setItem('zerf_chat_id', chatId)
               localStorage.removeItem('zerf_cached_state') // clear any previous user's cache
               setPermanentCookie('zerf_chat_id', chatId)
+              // Save the long-lived session token so root user stays authenticated
+              if (data.sessionToken) {
+                localStorage.setItem('zerf_auth_token', data.sessionToken)
+                setPermanentCookie('zerf_auth_token', data.sessionToken)
+              }
             } catch {}
             window.location.reload() // reload with correct identity
           }

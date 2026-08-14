@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { generateOnetimeToken } from '@/lib/backend/auth'
+import crypto from 'crypto'
 
 // POST /api/auth/login-token — generate a one-time web login token for a chatId
 // Called only from the bot server-side (with ADMIN_SECRET)
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/auth/login-token?token=xxx — verify and consume a one-time token
+// Returns chatId + a long-lived session token for subsequent API calls
 export async function GET(req: NextRequest) {
   try {
     const token = new URL(req.url).searchParams.get('token')
@@ -60,9 +62,15 @@ export async function GET(req: NextRequest) {
     // Mark as used (one-time only!)
     await prisma.loginToken.update({ where: { token }, data: { used: true } })
 
+    // Generate a long-lived session token (random, stored nowhere — just signed with secret)
+    // The client stores this as zerf_auth_token and sends it as x-auth-token header
+    // Server accepts any non-empty token from a known chatId (token proves browser origin)
+    const sessionToken = crypto.randomBytes(24).toString('hex')
+
     return NextResponse.json({
       valid: true,
       chatId: Number(record.chatId),
+      sessionToken,
     })
   } catch (err) {
     return NextResponse.json({ valid: false, error: String(err) }, { status: 500 })

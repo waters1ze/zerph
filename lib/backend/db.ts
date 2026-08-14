@@ -1331,21 +1331,18 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
     })
 
     const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
-    if (friendChatIds.length === 0) return 0
 
-    // 2. Find friend profile records that have birthday set
-    const friendChats = await prisma.telegramChat.findMany({
-      where: {
-        chatId: { in: friendChatIds },
-        birthday: { not: null },
-      },
-    })
-
-    if (friendChats.length === 0) return 0
+    // 2. Find friend profiles with birthday set
+    const friendChats = friendChatIds.length > 0
+      ? await prisma.telegramChat.findMany({
+          where: { chatId: { in: friendChatIds }, birthday: { not: null } },
+        })
+      : []
 
     const currentYear = new Date().getFullYear()
     let createdCount = 0
 
+    // 3. Upsert birthday tasks for each friend — one task per friend chatId
     for (const friend of friendChats) {
       if (!friend.birthday) continue
       const parsed = parseBirthday(friend.birthday)
@@ -1353,133 +1350,113 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
       const monthStr = String(parsed.month).padStart(2, '0')
       const dayStr = String(parsed.day).padStart(2, '0')
-
-      const friendName = friend.firstName ? `${friend.firstName}${friend.lastName ? ' ' + friend.lastName : ''}` : (friend.username ? `@${friend.username}` : `Друг #${friend.chatId}`)
+      const friendName = friend.firstName
+        ? `${friend.firstName}${friend.lastName ? ' ' + friend.lastName : ''}`
+        : (friend.username ? `@${friend.username}` : `Друг #${friend.chatId}`)
       const taskTitle = `🎂 День рождения: ${friendName}`
-      
+
       const thisYearDate = new Date(`${currentYear}-${monthStr}-${dayStr}T00:00:00`)
-      let targetYear = currentYear
-      if (thisYearDate.getTime() < Date.now()) {
-        targetYear = currentYear + 1
-      }
+      const targetYear = thisYearDate.getTime() < Date.now() ? currentYear + 1 : currentYear
       const targetDueDate = `${targetYear}-${monthStr}-${dayStr}`
 
+      // Use chatId of friend as the unique marker stored in assignees
+      const friendCidStr = String(friend.chatId)
+
+      // Find any existing birthday task for THIS friend by their chatId in assignees
       const existing = await prisma.task.findFirst({
         where: {
           ownerChatId: cid,
-          OR: [
-            { title: taskTitle },
-            { title: `День рождения: ${friendName}` },
-            { title: { contains: friendName, mode: 'insensitive' } },
-          ],
+          tags: { has: 'день рождения' },
+          assignees: { has: friendCidStr },
         },
       })
 
       if (!existing) {
-        await prisma.task.create({
-          data: {
-            title: taskTitle,
-            description: `Не забудь поздравить ${friendName} с Днём рождения! 🎉`,
-            priority: 'urgent',
-            status: 'todo',
-            dueDate: targetDueDate,
-            dueTime: '00:00',
-            repeat: 'yearly',
-            tags: ['день рождения', 'друзья'],
-            isShared: true,
-            assignees: [String(cid), String(friend.chatId)],
+        // Also check for old-style tasks by name (to avoid creating a third copy)
+        const oldByName = await prisma.task.findFirst({
+          where: {
             ownerChatId: cid,
+            tags: { has: 'день рождения' },
+            title: { contains: friendName, mode: 'insensitive' },
           },
         })
-        createdCount++
-      } else {
-        let needsUpdate = false
-        const updates: any = {}
-        
-        if (existing.dueTime !== '00:00') {
-          updates.dueTime = '00:00'
-          needsUpdate = true
+        if (oldByName) {
+          // Update old task to add chatId marker and correct data
+          await prisma.task.update({
+            where: { id: oldByName.id },
+            data: {
+              title: taskTitle,
+              dueDate: targetDueDate,
+              dueTime: '00:00',
+              repeat: 'yearly',
+              assignees: [String(cid), friendCidStr],
+              status: 'todo',
+            },
+          })
+        } else {
+          await prisma.task.create({
+            data: {
+              title: taskTitle,
+              description: `Не забудь поздравить ${friendName} с Днём рождения! 🎉`,
+              priority: 'urgent',
+              status: 'todo',
+              dueDate: targetDueDate,
+              dueTime: '00:00',
+              repeat: 'yearly',
+              tags: ['день рождения', 'друзья'],
+              isShared: true,
+              assignees: [String(cid), friendCidStr],
+              ownerChatId: cid,
+            },
+          })
+          createdCount++
         }
+      } else {
+        // Update title (name may have changed), date if needed
+        const updates: any = {}
+        if (existing.title !== taskTitle) updates.title = taskTitle
+        if (existing.dueTime !== '00:00') updates.dueTime = '00:00'
         if (existing.dueDate && existing.dueDate < targetDueDate) {
           updates.dueDate = targetDueDate
           updates.status = 'todo'
           updates.reminderSent = false
           updates.remindersSentCount = 0
-          needsUpdate = true
         }
-        if (existing.repeat !== 'yearly') {
-          updates.repeat = 'yearly'
-          needsUpdate = true
-        }
-
-        if (needsUpdate) {
-          await prisma.task.update({
-            where: { id: existing.id },
-            data: updates,
-          })
+        if (existing.repeat !== 'yearly') updates.repeat = 'yearly'
+        if (Object.keys(updates).length > 0) {
+          await prisma.task.update({ where: { id: existing.id }, data: updates })
         }
       }
     }
 
-    // Force all existing birthday tasks (manual + auto) in DB to 00:00, yearly repeat, and 🎂 prefix + DEDUPLICATE
-    try {
-      const allBdayTasks = await prisma.task.findMany({
-        where: {
-          ownerChatId: cid,
-          OR: [
-            { title: { contains: 'День рождения', mode: 'insensitive' } },
-            { tags: { has: 'день рождения' } },
-          ],
-        },
-        orderBy: { createdAt: 'desc' },
-      })
+    // 4. DEDUPLICATE: delete extra birthday tasks for the same friend chatId
+    const allBdayTasks = await prisma.task.findMany({
+      where: { ownerChatId: cid, tags: { has: 'день рождения' } },
+      orderBy: { createdAt: 'asc' }, // keep oldest
+    })
 
-      const seen = new Set<string>()
-      for (const t of allBdayTasks) {
-        // If not actually a birthday title (e.g. "Игра с друзьями"), clean up mistagging!
-        if (!isBirthdayTitle(t.title)) {
-          const cleanTitle = t.title.replace(/^🎂\s*/, '').trim()
-          const cleanTags = (t.tags || []).filter(tag => tag.toLowerCase() !== 'день рождения')
-          await prisma.task.update({
-            where: { id: t.id },
-            data: {
-              title: cleanTitle,
-              tags: cleanTags,
-              repeat: t.repeat === 'yearly' ? null : t.repeat,
-            },
-          }).catch(() => {})
-          continue
-        }
-
-        const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
-        if (seen.has(normKey)) {
+    const seenFriendId = new Set<string>()
+    for (const t of allBdayTasks) {
+      // Find the friend chatId stored in assignees (not the owner)
+      const friendId = (t.assignees || []).find((a: string) => a !== String(cid))
+      if (friendId) {
+        if (seenFriendId.has(friendId)) {
+          // Duplicate — delete
           await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
           continue
         }
-        seen.add(normKey)
-
-        let newTitle = t.title.trim()
-        if (!newTitle.startsWith('🎂')) {
-          newTitle = `🎂 ${newTitle}`
-        }
-        let tags = t.tags || []
-        if (!tags.includes('день рождения')) {
-          tags = [...tags, 'день рождения']
-        }
-
-        if (newTitle !== t.title || t.dueTime !== '00:00' || t.repeat !== 'yearly') {
-          await prisma.task.update({
-            where: { id: t.id },
-            data: {
-              title: newTitle,
-              dueTime: '00:00',
-              repeat: 'yearly',
-              tags,
-            },
-          })
-        }
+        seenFriendId.add(friendId)
       }
-    } catch {}
+    }
+
+    // 5. Delete birthday tasks for friends who no longer exist or have no birthday
+    const validFriendIds = new Set(friendChats.map(f => String(f.chatId)))
+    for (const t of allBdayTasks) {
+      const friendId = (t.assignees || []).find((a: string) => a !== String(cid))
+      if (friendId && !validFriendIds.has(friendId)) {
+        await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+      }
+    }
 
     return createdCount
   } catch (err) {
