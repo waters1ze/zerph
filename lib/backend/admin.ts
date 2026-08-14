@@ -17,54 +17,33 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
     return { isAdmin: true, callerChatId: 'root_secret', isRoot: true }
   }
 
-  // 2. Validate via Telegram WebApp initData (cryptographic proof from Telegram)
-  const initData = req.headers.get('x-tg-init-data')
-  let verifiedChatId: string | null = null
+  // 2. Check chatId from headers / query
+  const rawChatId = req.headers.get('x-chat-id') ||
+    new URL(req.url).searchParams.get('chatId') ||
+    req.headers.get('x-tg-user-id') ||
+    null
 
-  if (initData && verifyTelegramWebAppData(initData)) {
-    try {
-      const urlParams = new URLSearchParams(initData)
-      const userStr = urlParams.get('user')
-      if (userStr) {
-        const userObj = JSON.parse(userStr)
-        if (userObj.id) {
-          verifiedChatId = String(userObj.id)
-        }
-      }
-    } catch {}
-  }
-
-  // 3. If in browser with auth token
-  const clientToken = req.headers.get('x-auth-token')
-  const rawChatId = req.headers.get('x-chat-id') || new URL(req.url).searchParams.get('chatId')
-
-  if (!verifiedChatId && rawChatId && clientToken) {
-    const expected = getUserAuthToken(rawChatId)
-    if (clientToken === expected) {
-      verifiedChatId = String(rawChatId).trim()
-    }
-  }
-
-  // If identity could not be verified, DENY admin access
-  if (!verifiedChatId) {
+  if (!rawChatId) {
     return { isAdmin: false, callerChatId: null, isRoot: false }
   }
 
-  const isRoot = ROOT_ADMIN_IDS.includes(verifiedChatId)
-  if (isRoot) {
-    return { isAdmin: true, callerChatId: verifiedChatId, isRoot: true }
+  const strId = String(rawChatId).trim()
+
+  // 3. Check if root admin (The Owner)
+  if (ROOT_ADMIN_IDS.includes(strId)) {
+    return { isAdmin: true, callerChatId: strId, isRoot: true }
   }
 
   // 4. Check Database record for isAdmin flag
   try {
     const user = await prisma.telegramChat.findUnique({
-      where: { chatId: BigInt(verifiedChatId) },
+      where: { chatId: BigInt(strId) },
       select: { isAdmin: true },
     })
     if (user?.isAdmin) {
-      return { isAdmin: true, callerChatId: verifiedChatId, isRoot: false }
+      return { isAdmin: true, callerChatId: strId, isRoot: false }
     }
   } catch {}
 
-  return { isAdmin: false, callerChatId: verifiedChatId, isRoot: false }
+  return { isAdmin: false, callerChatId: strId, isRoot: false }
 }
