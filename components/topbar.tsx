@@ -103,6 +103,15 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
           <span className="hidden sm:inline">Задача</span>
         </motion.button>
 
+        {/* Streak Flame Badge */}
+        <div
+          title="Стрик продуктивности: выполняйте задачи каждый день, чтобы получать бонусы!"
+          className="flex items-center gap-1 px-2.5 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold shrink-0 cursor-default"
+        >
+          <span className="text-sm">🔥</span>
+          <span>{state.tasks.filter(t => t.status === 'done').length > 0 ? Math.max(1, state.tasks.filter(t => t.status === 'done').length) : 0}</span>
+        </div>
+
         {/* Voice */}
         <motion.button
           whileTap={{ scale: 0.93 }}

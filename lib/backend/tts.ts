@@ -1,88 +1,92 @@
-/**
- * Text-to-Speech (TTS) Voice Responses for Zerf AI
- * Synthesizes clear audio voice notes and sends via Telegram sendVoice API.
- */
+import { Buffer } from 'buffer'
+import { prisma } from '@/lib/backend/prisma'
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
-
-/**
- * Generate audio buffer from Russian text using Google TTS endpoint.
- */
-export async function generateTtsAudio(text: string): Promise<Buffer | null> {
+export async function generateTtsAudio(text: string, lang = 'ru'): Promise<Buffer | null> {
   try {
-    // Clean text from markdown and limit length for concise voice message
     const cleanText = text
-      .replace(/[*_`~[\]()#•\-+>]/g, ' ')
+      .replace(/[*_`~#\[\]()]/g, '')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 200)
+      .slice(0, 250)
 
     if (!cleanText) return null
 
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=ru&client=tw-ob`
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=${lang}&client=tw-ob`
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     })
-
     if (!res.ok) return null
-
     const arrayBuf = await res.arrayBuffer()
     return Buffer.from(arrayBuf)
   } catch (err) {
-    console.error('TTS Generation error:', err)
+    console.error('TTS generate error:', err)
     return null
   }
 }
 
-/**
- * Send voice message to Telegram user
- */
-export async function sendVoiceResponse(chatId: number, text: string): Promise<boolean> {
-  try {
-    const audioBuf = await generateTtsAudio(text)
-    if (!audioBuf) return false
+export async function sendTelegramVoice(
+  chatId: string | number | bigint,
+  audioBuffer: Buffer,
+  caption?: string
+): Promise<boolean> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return false
 
+  try {
     const formData = new FormData()
     formData.append('chat_id', String(chatId))
-    formData.append('voice', new Blob([audioBuf], { type: 'audio/mpeg' }), 'response.mp3')
+    const blob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+    formData.append('voice', blob, 'voice.mp3')
+    if (caption) {
+      formData.append('caption', caption)
+      formData.append('parse_mode', 'Markdown')
+    }
 
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVoice`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendVoice`, {
       method: 'POST',
       body: formData,
     })
-
     const data = await res.json()
-    return !!data.ok
+    return data.ok
   } catch (err) {
-    console.error('sendVoiceResponse error:', err)
+    console.error('sendTelegramVoice error:', err)
     return false
   }
 }
 
-/**
- * Create a natural short spoken phrase from parsed items
- */
 export function createSpokenSummary(items: any[]): string {
-  if (!items || items.length === 0) return 'Готово!'
-
-  if (items.length === 1) {
-    const item = items[0]
-    const title = item.title || 'задачу'
-    const timeStr = item.dueTime ? ` на ${item.dueTime}` : ''
-
-    if (item.type === 'note') {
-      return `Заметка ${title} успешно сохранена!`
-    }
-    if (item.type === 'goal') {
-      return `Цель ${title} добавлена!`
-    }
-    if (item.action === 'completion' || item.type === 'completion') {
-      return `Задача ${title} отмечена как выполненная! Отличная работа!`
-    }
-    return `Записал задачу: ${title}${timeStr}. Напомню вовремя!`
+  if (!items || items.length === 0) return 'Команда обработана.'
+  const first = items[0]
+  if (first.type === 'note') {
+    return `Заметка «${first.title}» сохранена.`
   }
+  if (first.type === 'goal') {
+    return `Цель «${first.title}» добавлена в ваши цели.`
+  }
+  if (first.type === 'delegate' || first.recipientName) {
+    return `Задача «${first.title}» успешно поручена.`
+  }
+  if (first.dueTime) {
+    return `Задача «${first.title}» записана на ${first.dueTime}.`
+  }
+  return `Задача «${first.title}» успешно добавлена в список дел!`
+}
 
-  return `Готово! Создал ${items.length} новых элементов в Zerf AI.`
+export async function sendVoiceResponse(chatId: string | number | bigint, text: string) {
+  try {
+    const user = await prisma.telegramChat.findUnique({
+      where: { chatId: BigInt(chatId) },
+      select: { ttsEnabled: true }
+    })
+    if (user && user.ttsEnabled === false) return
+
+    const audioBuf = await generateTtsAudio(text)
+    if (audioBuf) {
+      await sendTelegramVoice(chatId, audioBuf)
+    }
+  } catch (err) {
+    console.error('sendVoiceResponse error:', err)
+  }
 }

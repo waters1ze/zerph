@@ -285,6 +285,10 @@ export async function updateTask(id: string, data: Partial<{
       // Clear repeat flag on the completed instance so it doesn't get processed again
       data = { ...data, repeat: null } as any
     }
+
+    if (existing && data.status === 'done' && existing.ownerChatId) {
+      recordTaskCompletionStreak(existing.ownerChatId).catch(() => {})
+    }
   }
   return prisma.task.update({ where: { id }, data })
 }
@@ -295,6 +299,58 @@ export async function completeTask(id: string) {
     completedAt: new Date(),
     reminderSent: true,
   })
+}
+
+export async function recordTaskCompletionStreak(
+  ownerChatId?: number | bigint | string | null
+): Promise<{ streakDays: number; earnedReward: boolean }> {
+  if (!ownerChatId) return { streakDays: 0, earnedReward: false }
+  try {
+    const cid = BigInt(ownerChatId)
+    const { mskDate } = getMskDateTime()
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    const chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
+    if (!chat) return { streakDays: 1, earnedReward: false }
+
+    if (chat.lastStreakDate === mskDate) {
+      return { streakDays: chat.streakDays, earnedReward: false }
+    }
+
+    let nextStreak = 1
+    if (chat.lastStreakDate === yesterday) {
+      nextStreak = (chat.streakDays || 0) + 1
+    } else {
+      nextStreak = 1
+    }
+
+    let earnedReward = false
+    const updateData: any = {
+      streakDays: nextStreak,
+      lastStreakDate: mskDate,
+    }
+
+    // Reward: Every 14 days of consecutive streak: grant +1 day free Premium!
+    if (nextStreak > 0 && nextStreak % 14 === 0) {
+      earnedReward = true
+      const now = new Date()
+      const baseExpiry = chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) > now
+        ? new Date(chat.subscriptionExpiry)
+        : now
+      updateData.plan = 'premium'
+      updateData.subscriptionExpiry = new Date(baseExpiry.getTime() + 24 * 60 * 60 * 1000)
+    }
+
+    await prisma.telegramChat.update({
+      where: { chatId: cid },
+      data: updateData,
+    })
+
+    return { streakDays: nextStreak, earnedReward }
+  } catch (err) {
+    console.error('Streak record error:', err)
+    return { streakDays: 1, earnedReward: false }
+  }
 }
 
 export async function getUserProductivityStats(ownerChatId: number | bigint | string) {
@@ -1094,6 +1150,9 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               referredBy: null,
               referralCount: 0,
               isAdmin: false,
+              streakDays: 0,
+              lastStreakDate: null,
+              ttsEnabled: true,
               addedAt: new Date(),
             }
           }

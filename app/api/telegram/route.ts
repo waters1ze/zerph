@@ -611,19 +611,22 @@ async function handleSiriSetup(chatId: number) {
 async function handleSettings(chatId: number) {
   let interval = 5
   let repeat = 3
+  let ttsEnabled = true
   try {
     const userChat = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
     if (userChat) {
       interval = userChat.reminderIntervalMinutes
       repeat = userChat.reminderRepeatCount
+      ttsEnabled = userChat.ttsEnabled ?? true
     }
   } catch {}
 
   await send(chatId,
     `⚙️ *Настройки напоминаний и интеграций*\n\n` +
     `⏱️ *Интервал между напоминаниями:* ${interval} мин\n` +
-    `🔁 *Количество повторов:* ${repeat} раза\n\n` +
-    `_Выберите параметр для изменения или настройте голосовой ввод:_`,
+    `🔁 *Количество повторов:* ${repeat} раза\n` +
+    `🎙️ *Голосовые ответы ИИ:* ${ttsEnabled ? 'Включены' : 'Выключены'}\n\n` +
+    `_Выберите параметр для изменения или подключите внешний календарь:_`,
     {
       reply_markup: {
         inline_keyboard: [
@@ -632,7 +635,11 @@ async function handleSettings(chatId: number) {
             { text: `🔁 Повторы: ${repeat}x`, callback_data: 'cfg_repeat_menu' },
           ],
           [
-            { text: '🍏 Настроить Siri / Кнопку телефона', callback_data: 'open_siri_guide' },
+            { text: `🎙️ Голосовые ответы: ${ttsEnabled ? 'ВКЛ ✅' : 'ВЫКЛ 🔇'}`, callback_data: 'toggle_tts' },
+          ],
+          [
+            { text: '📅 Apple / Google Календарь', callback_data: 'open_calendar_sync' },
+            { text: '🍏 Siri / Телефон', callback_data: 'open_siri_guide' },
           ],
           [{ text: '📱 Открыть сайт / App', web_app: { url: `${MINIAPP_URL}?chatId=${chatId}` } }],
         ],
@@ -1433,6 +1440,29 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
 
   for (const item of items) {
+    // If task was created with subtasks, send an interactive checklist message
+    if (item.type === 'task' && item.subtasks && item.subtasks.length > 0 && item.action !== 'delete' && item.action !== 'completion') {
+      try {
+        const createdTask = await prisma.task.findFirst({
+          where: { ownerChatId: BigInt(chatId), title: item.title },
+          orderBy: { createdAt: 'desc' }
+        })
+        if (createdTask && Array.isArray(createdTask.subtasks) && createdTask.subtasks.length > 0) {
+          const subtasks = createdTask.subtasks as any[]
+          const inlineKeyboard = subtasks.map((st, i) => ([
+            { text: `◻️ ${i + 1}. ${st.title.slice(0, 35)}`, callback_data: `st_${createdTask.id}_${i}` }
+          ]))
+          inlineKeyboard.push([
+            { text: '✅ Завершить задачу целиком', callback_data: `rem_done_${createdTask.id}` }
+          ])
+
+          await send(chatId, `📎 *Интерактивный чек-лист к задаче «${escMd(item.title)}»:*\n_Нажимайте на пункты прямо в Telegram по мере выполнения:_`, {
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          })
+        }
+      } catch {}
+    }
+
     if (
       item.type === 'task' &&
       item.dueTime &&
@@ -2249,6 +2279,91 @@ export async function POST(req: NextRequest) {
         } else {
           await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Задача не найдена' })
         }
+      } else if (data.startsWith('st_')) {
+        const parts = data.split('_')
+        const taskId = parts[1]
+        const subIndex = parseInt(parts[2], 10)
+
+        const task = await prisma.task.findUnique({ where: { id: taskId } })
+        if (task && Array.isArray(task.subtasks) && task.subtasks[subIndex]) {
+          const subtasks = [...(task.subtasks as any[])]
+          subtasks[subIndex].done = !subtasks[subIndex].done
+          const allDone = subtasks.every(s => s.done)
+
+          await prisma.task.update({
+            where: { id: taskId },
+            data: {
+              subtasks,
+              ...(allDone ? { status: 'done', completedAt: new Date(), reminderSent: true } : {})
+            }
+          })
+
+          if (allDone && task.ownerChatId) {
+            const { recordTaskCompletionStreak } = await import('@/lib/backend/db')
+            recordTaskCompletionStreak(task.ownerChatId).then(res => {
+              if (res.earnedReward) {
+                send(chatId, `🏆 *Потрясающе! Ваш стрик продуктивности достиг ${res.streakDays} дней!* 🔥\nВам начислен подарок: *+1 день бесплатного тарифа Premium*!`)
+              }
+            }).catch(() => {})
+          }
+
+          await tgApi('answerCallbackQuery', {
+            callback_query_id: cb.id,
+            text: subtasks[subIndex].done ? '☑️ Пункт выполнен!' : '◻️ Пункт возвращен'
+          })
+
+          // Build updated subtasks keyboard
+          const newInlineKeyboard = subtasks.map((st, i) => ([
+            {
+              text: `${st.done ? '☑️' : '◻️'} ${i + 1}. ${st.title.slice(0, 35)}`,
+              callback_data: `st_${taskId}_${i}`
+            }
+          ]))
+          newInlineKeyboard.push([
+            { text: allDone ? '🎉 Все пункты выполнены!' : '✅ Завершить задачу целиком', callback_data: `rem_done_${taskId}` }
+          ])
+
+          const doneCount = subtasks.filter(s => s.done).length
+          const updatedMsgText = `📌 *Задача:* ${escMd(task.title)}\n` +
+            `📊 *Прогресс:* ${doneCount} из ${subtasks.length} выполнено\n\n` +
+            (allDone ? `🎉 *Все подзадачи закрыты!* Задача выполнена.` : `_Нажмите на пункт, чтобы отметить выполнение:_`)
+
+          await safeEditOrSend(chatId, cb.message.message_id, updatedMsgText, {
+            reply_markup: { inline_keyboard: newInlineKeyboard }
+          })
+        }
+      } else if (data === 'toggle_tts') {
+        const u = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { ttsEnabled: true } })
+        const nextTts = !(u?.ttsEnabled ?? true)
+        await prisma.telegramChat.update({
+          where: { chatId: BigInt(chatId) },
+          data: { ttsEnabled: nextTts }
+        })
+        await tgApi('answerCallbackQuery', {
+          callback_query_id: cb.id,
+          text: nextTts ? '🎙️ Голосовые ответы включены' : '🔇 Голосовые ответы отключены'
+        })
+        await handleSettings(chatId)
+      } else if (data === 'open_calendar_sync') {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+        const webcalUrl = `${appUrl.replace(/^https?:\/\//, 'webcal://')}/api/alarm/ics?chatId=${chatId}`
+        const httpsUrl = `${appUrl}/api/alarm/ics?chatId=${chatId}`
+
+        await send(chatId,
+          `📅 *Синхронизация с Apple и Google Календарём*\n\n` +
+          `Все ваши задачи со временем из Zerf AI будут автоматически появляться в системном календаре на телефоне или компьютере!\n\n` +
+          `🔗 *Ваша персональная ссылка подписки:*\n\`${httpsUrl}\`\n\n` +
+          `📱 *Для iPhone / Mac:* Нажмите кнопку «Подключить Apple Календарь» ниже.\n` +
+          `💻 *Для Google Calendar:* Откройте Google Календарь на компьютере ➔ «Другие календари» (+) ➔ «С помощью URL» ➔ вставьте ссылку выше.`,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🍏 Подключить к Apple Календарю (1-клик)', url: webcalUrl }],
+                [{ text: '🌐 Открыть веб-сайт', url: `${appUrl}/?chatId=${chatId}` }]
+              ]
+            }
+          }
+        )
       } else if (data === 'postpone_today') {
         const cid = BigInt(chatId)
         const now = new Date()
