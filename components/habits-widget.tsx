@@ -16,7 +16,7 @@ export function HabitsWidget() {
 
   const todayStr = new Date().toISOString().slice(0, 10)
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAdd = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newTitle.trim()) return
 
@@ -31,42 +31,20 @@ export function HabitsWidget() {
       updatedAt: new Date().toISOString(),
     }
 
+    // enhancedDispatch will POST to API and REPLACE_HABIT with real DB id
     dispatch({ type: 'ADD_HABIT', habit: newHabit })
     setNewTitle('')
     setIsAdding(false)
-
-    // Call API
-    try {
-      const headers = {
-        'Content-Type': 'application/json',
-        'x-chat-id': localStorage.getItem('zerf_chat_id') || ''
-      }
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          itemType: 'habit',
-          title: newHabit.title,
-          icon: newHabit.icon,
-        })
-      })
-      const data = await res.json()
-      if (data.habit) {
-        dispatch({ type: 'UPDATE_HABIT', id: tempId, updates: data.habit })
-      }
-    } catch {}
   }
 
-  const toggleHabit = async (habit: Habit) => {
+  const toggleHabit = (habit: Habit) => {
     const isCompletedToday = habit.lastCompletedAt === todayStr
     const newCompletedAt = isCompletedToday ? undefined : todayStr
-    
-    // basic streak logic for optimistic UI
+
     let newStreak = habit.streak
     if (isCompletedToday) {
       newStreak = Math.max(0, habit.streak - 1)
     } else {
-      // If it was completed yesterday, increment. If earlier, reset to 1.
       const yesterday = new Date()
       yesterday.setDate(yesterday.getDate() - 1)
       const yStr = yesterday.toISOString().slice(0, 10)
@@ -77,28 +55,14 @@ export function HabitsWidget() {
       }
     }
 
+    // enhancedDispatch will PATCH to API
     dispatch({ type: 'UPDATE_HABIT', id: habit.id, updates: { lastCompletedAt: newCompletedAt, streak: newStreak } })
-
-    try {
-      const headers = {
-        'Content-Type': 'application/json',
-        'x-chat-id': localStorage.getItem('zerf_chat_id') || ''
-      }
-      await fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: habit.id, type: 'habit', lastCompletedAt: newCompletedAt, streak: newStreak })
-      })
-    } catch {}
   }
 
-  const deleteHabit = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm('Удалить привычку?')) return
+    // enhancedDispatch will DELETE from API
     dispatch({ type: 'DELETE_HABIT', id })
-    try {
-      const headers = { 'x-chat-id': localStorage.getItem('zerf_chat_id') || '' }
-      await fetch(`/api/tasks?id=${id}&type=habit`, { method: 'DELETE', headers })
-    } catch {}
   }
 
   return (
@@ -208,7 +172,7 @@ export function HabitsWidget() {
                     </span>
                   )}
                   <button
-                    onClick={(e) => { e.stopPropagation(); deleteHabit(habit.id) }}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(habit.id) }}
                     className="text-muted-foreground/50 hover:text-destructive transition-colors p-1"
                   >
                     <MoreVertical className="w-3 h-3" />

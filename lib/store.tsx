@@ -82,6 +82,7 @@ type Action =
   | { type: 'UPDATE_PROJECT'; id: string; updates: Partial<Project> }
   | { type: 'ADD_HABIT'; habit: Habit }
   | { type: 'UPDATE_HABIT'; id: string; updates: Partial<Habit> }
+  | { type: 'REPLACE_HABIT'; tempId: string; habit: Habit }
   | { type: 'DELETE_HABIT'; id: string }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
   | { type: 'UPDATE_SETTINGS'; updates: Partial<UserSettings> }
@@ -155,6 +156,9 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, habits: [action.habit, ...state.habits] }
     case 'UPDATE_HABIT':
       return { ...state, habits: state.habits.map(h => h.id === action.id ? { ...h, ...action.updates, updatedAt: new Date().toISOString() } : h) }
+    case 'REPLACE_HABIT':
+      // Replace temp optimistic habit with real DB record (different id)
+      return { ...state, habits: state.habits.map(h => h.id === action.tempId ? action.habit : h) }
     case 'DELETE_HABIT':
       return { ...state, habits: state.habits.filter(h => h.id !== action.id) }
     case 'ADD_CHAT_MESSAGE':
@@ -408,8 +412,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers,
         body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
       }).catch(() => {})
+    } else if (action.type === 'ADD_HABIT') {
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ itemType: 'habit', title: action.habit.title, icon: action.habit.icon, frequency: action.habit.frequency }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.habit) {
+            dispatch({ type: 'REPLACE_HABIT', tempId: action.habit.id, habit: data.habit })
+          }
+        })
+        .catch(() => {})
+    } else if (action.type === 'UPDATE_HABIT') {
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, itemType: 'habit', ...action.updates }),
+      }).catch(() => {})
+    } else if (action.type === 'DELETE_HABIT') {
+      fetch(`/api/tasks?id=${action.id}&type=habit`, { method: 'DELETE', headers }).catch(() => {})
     }
-  }, [state.tasks])
+  }, [state.tasks, state.habits])
 
   // Apply theme class
   useEffect(() => {
