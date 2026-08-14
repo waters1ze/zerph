@@ -27,7 +27,7 @@ import { AdminView } from '@/components/views/admin-view'
 import { ClockView } from '@/components/views/clock-view'
 import { AuthGateModal } from '@/components/auth-gate-modal'
 
-function AppShell() {
+export function AppShell() {
   const { state } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
@@ -81,29 +81,8 @@ function AppShell() {
 
   const isFullHeight = state.currentView === 'notes'
 
-
   return (
     <div className="app-shell flex h-screen bg-background overflow-hidden relative">
-
-      {/* ── Mobile edge tab for sidebar (Floating menu tab) ── */}
-      <AnimatePresence>
-        {!mobileSidebarOpen && (
-          <motion.button
-            key="mobile-nav-trigger-tab"
-            initial={{ x: -16, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -16, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setMobileSidebarOpen(true)}
-            aria-label="Открыть меню навигации"
-            title="Разделы приложения"
-            className="fixed left-0 top-1/2 -translate-y-1/2 z-30 sm:hidden flex items-center justify-center h-14 w-7 bg-primary text-primary-foreground rounded-r-xl shadow-lg shadow-primary/20 hover:w-8 transition-all border-t border-b border-r border-primary/60"
-          >
-            <Menu className="w-4 h-4 shrink-0" strokeWidth={2.5} />
-          </motion.button>
-        )}
-      </AnimatePresence>
-
       {/* ── Mobile sidebar overlay ── */}
       <AnimatePresence>
         {mobileSidebarOpen && (
