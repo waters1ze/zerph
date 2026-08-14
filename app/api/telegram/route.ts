@@ -122,6 +122,8 @@ async function ensureBotCommandsRegistered() {
     await tgApi('setMyCommands', {
       commands: [
         { command: 'today',      description: '📅 Задачи и цели на сегодня' },
+        { command: 'matrix',     description: '🎯 Матрица Эйзенхауэра (Фокус дня)' },
+        { command: 'cleanup',    description: '🌙 Вечерний перенос задач на завтра' },
         { command: 'inbox',      description: '📥 Входящие и неразобранное' },
         { command: 'shared',     description: '👥 Порученные задачи коллегам' },
         { command: 'p',          description: '📁 Фильтр по проекту или тегу' },
@@ -132,6 +134,7 @@ async function ensureBotCommandsRegistered() {
         { command: 'goals',      description: '🎯 Активные цели' },
         { command: 'notes',      description: '📝 Мои заметки' },
         { command: 'report',     description: '📈 Недельный AI-отчет' },
+        { command: 'stars',      description: '⭐️ Оплата Telegram Stars' },
         { command: 'settings',   description: '⚙️ Настройки напоминаний' },
         { command: 'buy',        description: '⭐ Zerf Premium (99 ₽/мес)' },
         { command: 'help',       description: '❓ Полное руководство' },
@@ -738,12 +741,14 @@ async function handleSubscribe(chatId: number) {
     `• 🔥 Глубокий фокус: до 180 минут\n` +
     `• 📊 Полная аналитика продуктивности и стрики\n` +
     `• 📌 Заметки и ИИ чат: безлимитно\n\n` +
-    `💰 *Выберите удобный период:*`,
+    `💰 *Выберите удобный способ оплаты:*`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '⭐ 1 год (Скидка 15%) — 1009 ₽', url: yearUrl }],
-          [{ text: '💳 1 месяц — 99 ₽', url: monthUrl }],
+          [{ text: '⭐️ Оплатить Telegram Stars (50 ⭐️ / месяц)', callback_data: 'buy_stars_30' }],
+          [{ text: '⭐️ Год за Telegram Stars (450 ⭐️ / год)', callback_data: 'buy_stars_365' }],
+          [{ text: '💳 Карта / ЮMoney — 99 ₽ (1 мес)', url: monthUrl }],
+          [{ text: '⭐ Карта на 1 год (-15%) — 1009 ₽', url: yearUrl }],
           [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
         ]
       }
@@ -2130,12 +2135,270 @@ async function handlePublicCommand(chatId: number, taskId?: string) {
   }
 }
 
+// ── Telegram Stars & Inline Query Handlers ─────────────────────────────────────
+
+async function handleSendStarsInvoice(chatId: number, isYear = false) {
+  const starsAmount = isYear ? 450 : 50
+  const title = isYear ? 'Zerf Premium (1 Год)' : 'Zerf Premium (1 Месяц)'
+  const desc = isYear
+    ? '✨ Безлимитные голосовые задачи, Vision AI распознавание фото, неограниченные проекты и синхронизация на 365 дней!'
+    : '✨ Безлимитные голосовые задачи, Vision AI распознавание фото, неограниченные проекты и синхронизация на 30 дней!'
+
+  await tgApi('sendInvoice', {
+    chat_id: chatId,
+    title,
+    description: desc,
+    payload: isYear ? 'sub_stars_365' : 'sub_stars_30',
+    provider_token: '', // Empty for native Telegram Stars
+    currency: 'XTR',
+    prices: [
+      { label: title, amount: starsAmount }
+    ],
+  })
+}
+
+async function handleSuccessfulStarsPayment(chatId: number, payment: any) {
+  const payload = payment.invoice_payload || ''
+  const isYear = payload.includes('365') || payload.includes('year')
+  const days = isYear ? 365 : 30
+
+  const { activateUserSubscription } = await import('@/lib/backend/db')
+  await activateUserSubscription(chatId, days)
+
+  await send(chatId,
+    `🎉 *ОПЛАТА УСПЕШНО ПРОШЛА!* ⭐\n\n` +
+    `Вам начислено *${days} дней подписки Zerf Premium* за Telegram Stars!\n` +
+    `• *Сумма:* ${payment.total_amount} ⭐️ Stars\n` +
+    `• *ID транзакции:* \`${payment.telegram_payment_charge_id}\`\n\n` +
+    `Все безлимитные функции ИИ, распознавания фото и проектов активированы. Спасибо за поддержку проекта! 🚀`,
+    {
+      reply_markup: miniAppKeyboard(chatId)
+    }
+  )
+}
+
+async function handleInlineQuery(iq: any) {
+  const query = (iq.query || '').trim()
+  const fromId = iq.from?.id
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+
+  const results: any[] = []
+
+  // 1. If user has active tasks, show them
+  if (fromId) {
+    try {
+      const tasks = await prisma.task.findMany({
+        where: {
+          ownerChatId: BigInt(fromId),
+          status: { not: 'done' },
+        },
+        orderBy: [{ dueDate: 'asc' }, { dueTime: 'asc' }],
+        take: 5,
+      })
+
+      if (tasks.length > 0) {
+        const taskLines = tasks.map((t) => {
+          const time = t.dueTime ? ` ⏰ ${t.dueTime}` : ''
+          const p = t.priority === 'urgent' ? '🔴' : t.priority === 'high' ? '🟠' : '▫️'
+          return `${p} <b>${escMd(t.title)}</b>${time}`
+        }).join('\n')
+
+        results.push({
+          type: 'article',
+          id: 'user_tasks_today',
+          title: `📋 Мои задачи на сегодня (${tasks.length})`,
+          description: tasks.map(t => t.title).join(', ').slice(0, 80),
+          input_message_content: {
+            message_text:
+              `✦ <b>МОИ ЗАДАЧИ В ZERF AI:</b>\n\n` +
+              `${taskLines}\n\n` +
+              `<i>Составлено в <a href="${appUrl}">Zerf AI</a></i>`,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+          },
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📱 Открыть Zerf App', url: `${appUrl}/tg?chatId=${fromId}` }]
+            ]
+          }
+        })
+      }
+    } catch {}
+  }
+
+  // 2. Share Pomodoro Focus Timer
+  results.push({
+    type: 'article',
+    id: 'focus_pomodoro_share',
+    title: '⏳ Таймер фокуса Pomodoro (25 / 5)',
+    description: 'Поделиться сессией глубокой концентрации',
+    input_message_content: {
+      message_text:
+        `⏳ <b>ФОКУС-СЕССИЯ ZERF AI (25 МИНУТ)</b>\n\n` +
+        `<blockquote>🎯 Режим глубокой концентрации активирован. Время без отвлечений и уведомлений.</blockquote>\n\n` +
+        `Присоединяйтесь к совместному фокусу в <a href="${appUrl}">Zerf AI</a>!`,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    },
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '🚀 Запустить фокус в Zerf App', url: `${appUrl}/tg` }]
+      ]
+    }
+  })
+
+  // 3. If query typed, create a shareable card
+  if (query) {
+    results.push({
+      type: 'article',
+      id: `custom_task_${Date.now()}`,
+      title: `📌 Создать задачу: «${query.slice(0, 30)}»`,
+      description: `Поделиться карточкой «${query}» в этом чате`,
+      input_message_content: {
+        message_text:
+          `📌 <b>ЗАДАЧА:</b> ${query}\n\n` +
+          `<i>Создано через быстрый инлайн-режим <a href="${appUrl}">@Zerph_bot</a></i>`,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      },
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '➕ Добавить себе в Zerf AI', url: `https://t.me/Zerph_bot?start=add_${encodeURIComponent(query.slice(0, 50))}` }]
+        ]
+      }
+    })
+  }
+
+  // 4. Share Zerf AI Ecosystem App
+  results.push({
+    type: 'article',
+    id: 'share_zerf_app',
+    title: '✦ Zerf AI — Умный ИИ-планировщик',
+    description: 'Голосовые задачи, таймеры дедлайнов, Telegram-синхронизация',
+    input_message_content: {
+      message_text:
+        `✦ <b>ZERF AI — ПЕРСОНАЛЬНЫЙ ИИ-АССИСТЕНТ ПРОДУКТИВНОСТИ</b> ✦\n\n` +
+        `▪ <b>Голосовые задачи</b> — надиктуйте на бегу, ИИ сам определит дедлайн\n` +
+        `▪ <b>Живой обратный отсчет</b> — точные часы до задачи\n` +
+        `▪ <b>Дерево проектов</b> — схема связей задач в стиле Google Stitch\n` +
+        `▪ <b>Vision AI OCR</b> — распознавание расписания по фото\n\n` +
+        `🔗 <b>Попробуйте бесплатно:</b> <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="${appUrl}">${appUrl.replace(/^https?:\/\//, '')}</a>`,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    },
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '🚀 Запустить Zerf AI Mini App', url: `https://t.me/Zerph_bot/app` }]
+      ]
+    }
+  })
+
+  await tgApi('answerInlineQuery', {
+    inline_query_id: iq.id,
+    results,
+    cache_time: 10,
+    is_personal: true,
+  }).catch(() => {})
+}
+
+async function handleMatrixCommand(chatId: number) {
+  const tasks = await prisma.task.findMany({
+    where: {
+      ownerChatId: BigInt(chatId),
+      status: { not: 'done' },
+    },
+    orderBy: [{ priority: 'asc' }, { dueDate: 'asc' }],
+  })
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  const q1 = tasks.filter(t => t.priority === 'urgent' || (t.priority === 'high' && (!t.dueDate || t.dueDate <= todayStr)))
+  const q2 = tasks.filter(t => (t.priority === 'high' && t.dueDate && t.dueDate > todayStr) || (t.priority === 'medium' && (!t.dueDate || t.dueDate > todayStr)))
+  const q3 = tasks.filter(t => (t.priority === 'medium' || t.priority === 'low') && t.dueDate && t.dueDate <= todayStr && !q1.includes(t))
+  const q4 = tasks.filter(t => !q1.includes(t) && !q2.includes(t) && !q3.includes(t))
+
+  let msg = `✦ *МАТРИЦА ЭЙЗЕНХАУЭРА (ФОКУС ДНЯ)* ✦\n\n`
+  
+  msg += `🔴 *1. Сделать СЕЙЧАС (Срочно и Важно):* [${q1.length}]\n`
+  if (q1.length === 0) msg += `_Нет срочных задач_\n`
+  else q1.slice(0, 4).forEach(t => msg += `• *${escMd(t.title)}*${t.dueTime ? ` (${t.dueTime})` : ''}\n`)
+  msg += `\n`
+
+  msg += `🟡 *2. Запланировать (Важно, но не срочно):* [${q2.length}]\n`
+  if (q2.length === 0) msg += `_Пусто_\n`
+  else q2.slice(0, 4).forEach(t => msg += `• ${escMd(t.title)}${t.dueDate ? ` (📅 ${t.dueDate})` : ''}\n`)
+  msg += `\n`
+
+  msg += `🔵 *3. Делегировать / Закрыть быстро (Срочно, но не важно):* [${q3.length}]\n`
+  if (q3.length === 0) msg += `_Пусто_\n`
+  else q3.slice(0, 3).forEach(t => msg += `• ${escMd(t.title)}\n`)
+  msg += `\n`
+
+  msg += `⚪️ *4. Убрать лишнее (Не срочно и не важно):* [${q4.length}]\n`
+  if (q4.length === 0) msg += `_Пусто_\n`
+  else q4.slice(0, 3).forEach(t => msg += `• ${escMd(t.title)}\n`)
+
+  await send(chatId, msg, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '📱 Открыть задачи на сайте', web_app: { url: `https://zeprh.vercel.app/tg?chatId=${chatId}` } }]
+      ]
+    }
+  })
+}
+
+async function handleCleanupCommand(chatId: number) {
+  const cid = BigInt(chatId)
+  const openTasks = await prisma.task.findMany({
+    where: {
+      ownerChatId: cid,
+      status: { notIn: ['done', 'draft'] },
+    }
+  })
+
+  if (openTasks.length === 0) {
+    await send(chatId, `🎉 *У вас нет незавершенных задач!* Все дела закрыты. Отличная работа!`)
+    return
+  }
+
+  const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  await send(chatId,
+    `🌙 *ВЕЧЕРНИЙ SMART CLEAN-UP*\n\n` +
+    `У вас осталось незавершенных задач: *${openTasks.length}*.\n` +
+    `Хотите в 1 клик перенести их все на завтра (${tomorrowStr}), чтобы очистить список на сегодня и начать утро со свежим графиком?`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: `🟢 Перенести все ${openTasks.length} задач на завтра`, callback_data: 'postpone_today' }],
+          [{ text: '⚡ Умное ИИ-перепланирование', callback_data: 'cmd_reschedule' }]
+        ]
+      }
+    }
+  )
+}
+
 // ── Main webhook handler ──────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const update = await req.json()
     ensureBotCommandsRegistered().catch(() => {})
+
+    // Handle Inline Queries (@Zerph_bot ...)
+    if (update.inline_query) {
+      await handleInlineQuery(update.inline_query)
+      return NextResponse.json({ ok: true })
+    }
+
+    // Handle Telegram Stars Pre-Checkout Queries
+    if (update.pre_checkout_query) {
+      await tgApi('answerPreCheckoutQuery', {
+        pre_checkout_query_id: update.pre_checkout_query.id,
+        ok: true,
+      })
+      return NextResponse.json({ ok: true })
+    }
 
     // Handle Callback Queries (inline buttons)
     if (update.callback_query) {
@@ -2145,6 +2408,18 @@ export async function POST(req: NextRequest) {
 
       if (data === 'cmd_subscribe') {
         await handleSubscribe(chatId)
+      } else if (data === 'buy_stars_30') {
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Выставляю счёт Stars...' })
+        await handleSendStarsInvoice(chatId, false)
+      } else if (data === 'buy_stars_365') {
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Выставляю счёт Stars на 1 год...' })
+        await handleSendStarsInvoice(chatId, true)
+      } else if (data === 'cmd_matrix') {
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Формирую матрицу...' })
+        await handleMatrixCommand(chatId)
+      } else if (data === 'cmd_cleanup') {
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Проверяю задачи...' })
+        await handleCleanupCommand(chatId)
       } else if (data === 'cfg_interval_menu') {
         await send(chatId, `⏱️ *Выберите интервал между напоминаниями:*`, {
           reply_markup: {
@@ -2556,6 +2831,12 @@ export async function POST(req: NextRequest) {
     const voice = msg.voice || msg.audio
     const photo = msg.photo
 
+    // Handle Telegram Stars Successful Payment
+    if (msg.successful_payment) {
+      await handleSuccessfulStarsPayment(chatId, msg.successful_payment)
+      return NextResponse.json({ ok: true })
+    }
+
     // Register user details (updates name automatically on every message!)
     await registerChatId(senderId, firstName, username, lastName).catch(() => {})
 
@@ -2720,6 +3001,14 @@ export async function POST(req: NextRequest) {
         await handleWeeklyReport(chatId, senderId)
       } else if (cmd === '/premium' || cmd === '/subscribe' || cmd === '/buy') {
         await handleSubscribe(chatId)
+      } else if (cmd === '/matrix' || cmd === '/eisenhower') {
+        await handleMatrixCommand(chatId)
+      } else if (cmd === '/cleanup') {
+        await handleCleanupCommand(chatId)
+      } else if (cmd === '/stars') {
+        await handleSendStarsInvoice(chatId, false)
+      } else if (cmd === '/stars_year') {
+        await handleSendStarsInvoice(chatId, true)
       } else if (cmd === '/report') {
         await handleWeeklyReport(senderId, chatId)
       } else if (cmd === '/name' || cmd === '/setname') {
