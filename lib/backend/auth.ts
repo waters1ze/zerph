@@ -1,8 +1,21 @@
 import crypto from 'crypto'
 
+// Internal pepper secret - never exposed to client, never in URL
+const INTERNAL_PEPPER = process.env.AUTH_PEPPER || 'zERf-s3cur3-pEpp3r-k3y-2026-x7q9m2'
+
 export function getUserAuthToken(chatId: number | string | bigint): string {
   const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.GROQ_API_KEY || 'zerf-auth-secret-key-2026'
-  return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 32)
+  // Pepper is mixed in so that knowing chatId+botToken is NOT enough to forge a token
+  const combined = `${INTERNAL_PEPPER}:${String(chatId)}:${secret}`
+  return crypto.createHmac('sha256', INTERNAL_PEPPER).update(combined).digest('hex').slice(0, 32)
+}
+
+/**
+ * Generate a cryptographically secure one-time login token for web browser auth.
+ * This token is stored in the DB and can only be used once before expiry.
+ */
+export function generateOnetimeToken(): string {
+  return crypto.randomBytes(32).toString('hex')
 }
 
 export function verifyTelegramWebAppData(initDataStr: string): boolean {

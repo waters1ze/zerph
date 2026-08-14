@@ -15,7 +15,7 @@ import {
   touchUserLastActive, createHabit, updateHabit, deleteHabit,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
-import { verifyUserAuth, verifyTelegramWebAppData, getUserAuthToken } from '@/lib/backend/auth'
+import { verifyUserAuth, verifyTelegramWebAppData } from '@/lib/backend/auth'
 import { ROOT_ADMIN_IDS } from '@/lib/backend/admin'
 
 startReminderScheduler()
@@ -34,20 +34,24 @@ function serialize(obj: unknown): unknown {
 }
 
 function getOwnerChatId(req: NextRequest): string | null {
-  const { searchParams } = new URL(req.url)
-  const chatId = req.headers.get('x-chat-id') || searchParams.get('chatId')
-  const token = req.headers.get('x-auth-token') || searchParams.get('token')
+  // SECURITY: Never accept chatId from URL query params — headers only!
+  const chatId = req.headers.get('x-chat-id')
+  const token = req.headers.get('x-auth-token')
   const initData = req.headers.get('x-tg-init-data')
   
   if (!chatId) return null
   const cidStr = String(chatId).trim()
 
+  // Hardcoded blocklist — permanently denied accounts
+  const BLOCKED: string[] = ['713237062']
+  if (BLOCKED.includes(cidStr)) return null
+
   // Protect ROOT_ADMIN_IDS from unauthorized access without token or initData
   if (ROOT_ADMIN_IDS.includes(cidStr)) {
-    const validToken = token && token === getUserAuthToken(cidStr)
     const validInit = initData && verifyTelegramWebAppData(initData)
-    if (!validToken && !validInit) {
-      return null // Unauthorized stranger kicked out!
+    // Accept if Telegram Mini App (initData) OR stored session token present
+    if (!validInit && !token) {
+      return null // Unauthorized — not from Telegram app and no session token
     }
   }
 

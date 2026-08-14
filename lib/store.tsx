@@ -224,21 +224,30 @@ export function getTgChatId(): string | null {
       return tgId
     }
 
-    // 2. Secret 1-click login from bot (/login or /web command)
+    // 2. One-time login token from bot (/login command) — verified server-side and consumed
     const urlParams = new URLSearchParams(window.location.search)
-    const authId = urlParams.get('auth_id')
-    const authToken = urlParams.get('auth_token')
-    if (authId && authToken) {
-      try {
-        localStorage.setItem('zerf_chat_id', authId)
-        localStorage.setItem('zerf_auth_token', authToken)
-        setPermanentCookie('zerf_chat_id', authId)
-        setPermanentCookie('zerf_auth_token', authToken)
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState({}, document.title, window.location.pathname)
-        }
-        return authId
-      } catch {}
+    const loginToken = urlParams.get('login_token')
+    if (loginToken) {
+      // Immediately clean URL so token can't be copied/forwarded
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+      // Verify + consume one-time token server-side (async, non-blocking on initial render)
+      fetch(`/api/auth/login-token?token=${loginToken}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.valid && data.chatId) {
+            const chatId = String(data.chatId)
+            try {
+              localStorage.setItem('zerf_chat_id', chatId)
+              localStorage.removeItem('zerf_cached_state') // clear any previous user's cache
+              setPermanentCookie('zerf_chat_id', chatId)
+            } catch {}
+            window.location.reload() // reload with correct identity
+          }
+        })
+        .catch(() => {})
+      // While verifying, return whatever is already stored
     }
 
     // Always strip any query params from address bar immediately to prevent accidental link forwarding

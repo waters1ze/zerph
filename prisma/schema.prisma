@@ -113,6 +113,19 @@ model Friendship {
   @@unique([userChatId, friendChatId])
 }
 
+// One-time login tokens for secure web browser auth
+model LoginToken {
+  id        String   @id @default(cuid())
+  chatId    BigInt
+  token     String   @unique
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([chatId])
+  @@index([token])
+}
+
 // Full collaborative project model
 model ProjectDB {
   id          String   @id @default(cuid())

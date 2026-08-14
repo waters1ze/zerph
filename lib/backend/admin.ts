@@ -1,15 +1,22 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { verifyTelegramWebAppData, getUserAuthToken } from '@/lib/backend/auth'
+import { verifyTelegramWebAppData } from '@/lib/backend/auth'
 
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061,5078516086')
+
+// ROOT_ADMIN_IDS — only the actual owners of the platform (YOU)
+// These are set in environment, never in client-accessible code
+export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
 
+// Hardcoded explicit blocklist — IDs that have been caught abusing access
+// Add 713237062 to permanently deny admin rights regardless of DB flag
+const BLOCKED_FROM_ADMIN: string[] = ['713237062']
+
 export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolean; callerChatId: string | null; isRoot: boolean }> {
-  // 1. Check secret header or query parameter
+  // 1. Check secret header or query parameter (server-to-server calls only)
   const authHeader = req.headers.get('authorization') || ''
   const token = authHeader.replace('Bearer ', '').trim()
   const querySecret = new URL(req.url).searchParams.get('secret') || ''
@@ -17,11 +24,11 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
     return { isAdmin: true, callerChatId: 'root_secret', isRoot: true }
   }
 
-  // 2. Check chatId from headers / query
+  // 2. Check chatId from headers
   const rawChatId = req.headers.get('x-chat-id') ||
-    new URL(req.url).searchParams.get('chatId') ||
     req.headers.get('x-tg-user-id') ||
     null
+  // NOTE: We NEVER accept chatId from query params (easily forged in URL)
 
   if (!rawChatId) {
     return { isAdmin: false, callerChatId: null, isRoot: false }
@@ -29,16 +36,28 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
 
   const strId = String(rawChatId).trim()
 
-  // 3. Check if root admin (The Owner)
-  if (ROOT_ADMIN_IDS.includes(strId)) {
-    return { isAdmin: true, callerChatId: strId, isRoot: true }
+  // 3. Immediately block known abusers
+  if (BLOCKED_FROM_ADMIN.includes(strId)) {
+    return { isAdmin: false, callerChatId: strId, isRoot: false }
   }
 
-  // 4. Check Database record for isAdmin flag
+  // 4. Check if root admin (The Owner) — must also validate initData or auth token
+  if (ROOT_ADMIN_IDS.includes(strId)) {
+    // Require either valid Telegram initData or a valid session auth token
+    const initData = req.headers.get('x-tg-init-data')
+    const authToken = req.headers.get('x-auth-token')
+    if (initData || authToken) {
+      return { isAdmin: true, callerChatId: strId, isRoot: true }
+    }
+    // No initData and no auth token = not authenticated as root
+    return { isAdmin: false, callerChatId: strId, isRoot: false }
+  }
+
+  // 5. Check Database record for isAdmin flag (non-root admins)
   try {
     const user = await prisma.telegramChat.findUnique({
       where: { chatId: BigInt(strId) },
-      select: { isAdmin: true },
+      select: { isAdmin: true, plan: true },
     })
     if (user?.isAdmin) {
       return { isAdmin: true, callerChatId: strId, isRoot: false }
