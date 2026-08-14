@@ -209,6 +209,8 @@ function getCookie(name: string): string | null {
   return matches ? decodeURIComponent(matches[1]) : null
 }
 
+const ROOT_ADMIN_IDS_LIST = ['6136950061', '5078516086']
+
 export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
     // 1. HIGHEST PRIORITY: Telegram WebApp context (cryptographically signed by Telegram servers)
@@ -222,6 +224,23 @@ export function getTgChatId(): string | null {
       return tgId
     }
 
+    // 2. Secret 1-click login from bot (/login or /web command)
+    const urlParams = new URLSearchParams(window.location.search)
+    const authId = urlParams.get('auth_id')
+    const authToken = urlParams.get('auth_token')
+    if (authId && authToken) {
+      try {
+        localStorage.setItem('zerf_chat_id', authId)
+        localStorage.setItem('zerf_auth_token', authToken)
+        setPermanentCookie('zerf_chat_id', authId)
+        setPermanentCookie('zerf_auth_token', authToken)
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState({}, document.title, window.location.pathname)
+        }
+        return authId
+      } catch {}
+    }
+
     // Always strip any query params from address bar immediately to prevent accidental link forwarding
     if (window.location.search && window.history && window.history.replaceState) {
       try {
@@ -230,20 +249,26 @@ export function getTgChatId(): string | null {
       } catch {}
     }
 
-    // 2. Saved localStorage on this device
-    try {
-      const savedChatId = localStorage.getItem('zerf_chat_id')
-      if (savedChatId) {
-        setPermanentCookie('zerf_chat_id', savedChatId)
-        return savedChatId
-      }
-    } catch {}
+    // 3. Saved localStorage / cookie on this device
+    const savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
+    const savedToken = localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')
 
-    // 3. Saved cookie on this device
-    const cookieChatId = getCookie('zerf_chat_id')
-    if (cookieChatId) {
-      try { localStorage.setItem('zerf_chat_id', cookieChatId) } catch {}
-      return cookieChatId
+    // PURGE PROTECTION: If an unauthorized device cached the ROOT ADMIN ID without valid token:
+    if (savedChatId && ROOT_ADMIN_IDS_LIST.includes(savedChatId) && !savedToken && !u?.id) {
+      try {
+        localStorage.removeItem('zerf_chat_id')
+        localStorage.removeItem('zerf_auth_token')
+        document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      } catch {}
+      let guestId = 'guest_' + String(Math.floor(100000000 + Math.random() * 899999999))
+      localStorage.setItem('zerf_guest_id', guestId)
+      setPermanentCookie('zerf_guest_id', guestId)
+      return guestId
+    }
+
+    if (savedChatId) {
+      setPermanentCookie('zerf_chat_id', savedChatId)
+      return savedChatId
     }
 
     // 4. Fallback persistent guest identifier on this device

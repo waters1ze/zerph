@@ -2816,8 +2816,22 @@ export async function POST(req: NextRequest) {
         await handleGroupAddCommand(msg)
       } else if (cmd === '/invite') {
         await handleInviteCommand(senderId, firstName, parts[1])
-      } else if (cmd === '/login' || (cmd === '/start' && param === 'login')) {
-        await handleStart(chatId, firstName)
+      } else if (cmd === '/login' || cmd === '/web' || (cmd === '/start' && param === 'login')) {
+        const token = getUserAuthToken(chatId)
+        const loginUrl = `${APP_URL}/?auth_id=${chatId}&auth_token=${token}`
+        await send(chatId,
+          `🔐 *Безопасный вход в Zerf на компьютере*\n\n` +
+          `Нажмите на кнопку ниже, чтобы автоматически войти в свой профиль на этом устройстве:\n\n` +
+          `⚠️ *Никому не пересылайте эту ссылку — она предназначена исключительно для вас.*`,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔑 Войти в Zerf на ПК', url: loginUrl }],
+                [{ text: '📱 Открыть в Telegram', web_app: { url: MINIAPP_URL } }],
+              ]
+            }
+          }
+        )
       } else if (cmd === '/start' && param?.startsWith('invite_')) {
         await handleStart(chatId, firstName)
         const inviterId = Number(param.split('_')[1])

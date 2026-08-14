@@ -15,7 +15,8 @@ import {
   touchUserLastActive, createHabit, updateHabit, deleteHabit,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
-import { verifyUserAuth } from '@/lib/backend/auth'
+import { verifyUserAuth, verifyTelegramWebAppData, getUserAuthToken } from '@/lib/backend/auth'
+import { ROOT_ADMIN_IDS } from '@/lib/backend/admin'
 
 startReminderScheduler()
 
@@ -39,10 +40,21 @@ function getOwnerChatId(req: NextRequest): string | null {
   const initData = req.headers.get('x-tg-init-data')
   
   if (!chatId) return null
-  if (!verifyUserAuth(chatId, token, initData)) {
+  const cidStr = String(chatId).trim()
+
+  // Protect ROOT_ADMIN_IDS from unauthorized access without token or initData
+  if (ROOT_ADMIN_IDS.includes(cidStr)) {
+    const validToken = token && token === getUserAuthToken(cidStr)
+    const validInit = initData && verifyTelegramWebAppData(initData)
+    if (!validToken && !validInit) {
+      return null // Unauthorized stranger kicked out!
+    }
+  }
+
+  if (!verifyUserAuth(cidStr, token, initData)) {
     return null
   }
-  return chatId
+  return cidStr
 }
 
 export async function GET(req: NextRequest) {
