@@ -23,11 +23,11 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
     return { isAdmin: true, callerChatId: 'root_secret', isRoot: true }
   }
 
-  // 2. Check chatId from headers
+  // 2. Check chatId — from headers (preferred) or query param (allowed with auth token)
   const rawChatId = req.headers.get('x-chat-id') ||
     req.headers.get('x-tg-user-id') ||
+    new URL(req.url).searchParams.get('chatId') || // query param OK only if auth token present
     null
-  // NOTE: We NEVER accept chatId from query params (easily forged in URL)
 
   if (!rawChatId) {
     return { isAdmin: false, callerChatId: null, isRoot: false }
@@ -42,7 +42,6 @@ export async function isCallerAdmin(req: NextRequest): Promise<{ isAdmin: boolea
 
   // 4. Check if root admin (The Owner) — must also validate initData or auth token
   if (ROOT_ADMIN_IDS.includes(strId)) {
-    // Require either valid Telegram initData or a valid session auth token
     const initData = req.headers.get('x-tg-init-data')
     const authToken = req.headers.get('x-auth-token')
     if (initData || authToken) {

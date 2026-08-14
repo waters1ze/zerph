@@ -55,12 +55,11 @@ export function Sidebar() {
     const checkAdmin = async () => {
       try {
         const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
-        const res = await fetch(`/api/admin/check?chatId=${qChatId}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(qChatId ? { 'x-chat-id': qChatId } : {})
-          }
-        })
+        const authToken = typeof window !== 'undefined' ? localStorage.getItem('zerf_auth_token') || '' : ''
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (qChatId) headers['x-chat-id'] = qChatId
+        if (authToken) headers['x-auth-token'] = authToken
+        const res = await fetch(`/api/admin/check`, { headers })
         const data = await res.json()
         if (data.isAdmin) {
           setIsAdmin(true)

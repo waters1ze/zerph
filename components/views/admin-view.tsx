@@ -67,12 +67,10 @@ export function AdminView() {
 
   const checkViewerRole = async () => {
     try {
-      const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
-      const res = await fetch(`/api/admin/check?chatId=${qChatId}`, {
+      const res = await fetch(`/api/admin/check`, {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
-          ...(qChatId ? { 'x-chat-id': qChatId } : {})
         }
       })
       const data = await res.json()
@@ -83,12 +81,10 @@ export function AdminView() {
   const fetchAdminData = async () => {
     setLoading(true)
     try {
-      const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
-      const res = await fetch(`/api/admin/users?chatId=${qChatId}`, {
+      const res = await fetch(`/api/admin/users`, {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
-          ...(qChatId ? { 'x-chat-id': qChatId } : {})
         }
       })
       const data = await res.json()
