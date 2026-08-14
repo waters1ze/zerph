@@ -65,7 +65,10 @@ Today's Date: ${mskDate} (YYYY-MM-DD)
 Current Time Right Now: ${mskTime} (24-hour HH:MM format, Europe/Moscow timezone)
 
 CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
-- All relative time phrases (e.g., "через минуту", "напиши мне через 1 минуту", "через 10 минут", "в 15:00", "завтра в 9 утра") MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
+- All relative time phrases (e.g., "через минуту", "напиши мне через 1 минуту", "через 10 минут", "в 15:00", "завтра в 9 утра", "проснуться в 9 утра", "будильник на 8:00", "разбуди в 7 утра") MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
+- Example: "проснуться в 9 утра" or "будильник на 9 утра" -> ALWAYS extract "dueTime": "09:00"!
+- Example: "в 8 вечера" -> ALWAYS extract "dueTime": "20:00"!
+- If current time is past the mentioned time (e.g. at night 02:00 saying "проснуться в 9 утра"), set "dueDate" to the upcoming morning!
 - Example: If current Moscow time is "${mskTime}" and user says "через минуту" or "через 1 минуту", dueTime MUST be calculated as current minute + 1 minute (e.g. if current is 22:57, dueTime is 22:58). DO NOT SHIFT TIME OR ADD EXTRA HOURS!
 - Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.`
 

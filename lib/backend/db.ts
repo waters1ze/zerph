@@ -148,6 +148,48 @@ export async function getAllNotes(ownerChatId?: number | bigint | string | null)
   }
 }
 
+export function extractNaturalTime(text: string): string | null {
+  if (!text) return null
+  const t = text.toLowerCase()
+
+  // 1. Direct HH:MM (e.g. 09:00, 19:30, в 9:00)
+  const directMatch = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/)
+  if (directMatch) {
+    return `${directMatch[1].padStart(2, '0')}:${directMatch[2]}`
+  }
+
+  // 2. "в X утра / вечера / дня / ночи" or "на X утра / вечера" or "к X утра"
+  const wordTimeMatch = t.match(/(?:в|на|к|около|до)\s*(\d{1,2})(?::(\d{2}))?\s*(утра|вечера|дня|ночи)?\b/i)
+  if (wordTimeMatch) {
+    let hours = parseInt(wordTimeMatch[1], 10)
+    const minutes = wordTimeMatch[2] ? wordTimeMatch[2] : '00'
+    const period = wordTimeMatch[3] ? wordTimeMatch[3].toLowerCase() : ''
+
+    if (period === 'вечера' || period === 'дня') {
+      if (hours < 12) hours += 12
+    } else if (period === 'ночи') {
+      if (hours === 12) hours = 0
+    } else if (period === 'утра') {
+      if (hours === 12) hours = 0
+    }
+
+    if (hours >= 0 && hours <= 23) {
+      return `${String(hours).padStart(2, '0')}:${minutes}`
+    }
+  }
+
+  // 3. Simple "в 9" / "на 9"
+  const simpleMatch = t.match(/\b(?:в|на)\s+(\d{1,2})\s*(?:ч|час|часов|утра)?\b/i)
+  if (simpleMatch) {
+    const hours = parseInt(simpleMatch[1], 10)
+    if (hours >= 0 && hours <= 23) {
+      return `${String(hours).padStart(2, '0')}:00`
+    }
+  }
+
+  return null
+}
+
 function processBirthdayTaskData<T extends { title: string; dueTime?: string | null; repeat?: string | null; tags?: string[] }>(data: T): T {
   const isBirthday = isBirthdayTitle(data.title)
 
@@ -1005,7 +1047,25 @@ export async function saveParsedItemToDb(
       ? `📩 Отправить ${item.recipientName}: ${item.summary}`
       : item.summary
 
+    const extractedTime = item.dueTime || extractNaturalTime(item.rawText || item.title || item.summary) || undefined
+    if (extractedTime && !item.dueTime) {
+      item.dueTime = extractedTime
+    }
+
     let finalDueDate = item.dueDate || new Date().toISOString().slice(0, 10)
+    // If time is set but dueDate was not explicitly given, check if that time has already passed today
+    if (!item.dueDate && extractedTime) {
+      const now = new Date()
+      const [dueH, dueM] = extractedTime.split(':').map(Number)
+      const currentH = now.getHours()
+      const currentM = now.getMinutes()
+      if (currentH > dueH || (currentH === dueH && currentM >= dueM)) {
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        finalDueDate = tomorrow.toISOString().slice(0, 10)
+      }
+    }
+
     const isYearlyEvent = /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?|праздник|годовщин\w*)(?:[^а-яёa-z0-9]|$)/i.test(item.title || item.rawText || '')
     const finalRepeat = item.repeat || (isYearlyEvent ? 'yearly' : null)
 
@@ -1032,7 +1092,7 @@ export async function saveParsedItemToDb(
       description: desc,
       priority: item.priority || 'medium',
       dueDate: finalDueDate,
-      dueTime: item.dueTime || undefined,
+      dueTime: extractedTime,
       repeat: finalRepeat,
       reminderOffsetMinutes: item.reminderOffsetMinutes || 0,
       tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
