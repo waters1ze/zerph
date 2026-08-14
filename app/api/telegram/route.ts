@@ -3144,10 +3144,10 @@ export async function POST(req: NextRequest) {
         // 2. Name + Birthday setting detection (e.g. "Артём Смирнов 15.04.1995" or "Меня зовут Кирилл Перекатнов 03.04.2010" or "03.04.2010")
         const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
         const rawDateMatch = trimmed.match(/\b(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\b/)
-        const parsedBday = rawDateMatch ? parseBirthday(rawDateMatch[1]) : null
+        const parsedBday = rawDateMatch ? parseBirthday(rawDateMatch[1]) : parseBirthday(trimmed)
 
         const textWithoutDate = trimmed.replace(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/g, '').replace(/,/g, '').trim()
-        const namePrefixMatch = textWithoutDate.match(/^(?:меня зовут|я|мое имя|моё имя|др|мой др)\s+([А-ЯЁа-яёA-Za-z]+)(?:\s+([А-ЯЁа-яёA-Za-z]+))?$/i)
+        const namePrefixMatch = textWithoutDate.match(/^(?:меня зовут|я|мое имя|моё имя|запиши мое имя|запиши моё имя|поменяй имя на|смени имя на|имя|зовут)\s+([А-ЯЁа-яёA-Za-z]+)(?:\s+([А-ЯЁа-яёA-Za-z]+))?$/i)
         const twoCapitalWordsMatch = textWithoutDate.match(/^([А-ЯЁ][а-яё]{1,20})\s+([А-ЯЁ][а-яё]{1,20})$/)
         const isNotTaskVerb = twoCapitalWordsMatch && !/^(Купить|Сделать|Позвонить|Написать|Пойти|Сходить|Напомни|Создай|Удали|Открой|Покажи|Принять|Перенести|Поставить|Записать|Найти|Отправить|Поручить)/i.test(twoCapitalWordsMatch[1])
 
@@ -3169,9 +3169,11 @@ export async function POST(req: NextRequest) {
             await broadcastMyBirthdayToFriends(chatId)
           }
 
-          let resp = `✅ Приятно познакомиться, *${escMd(fn)}${ln ? ' ' + escMd(ln) : ''}*!\n\nТвои данные успешно сохранены в Zerf AI.`
+          let resp = `✅ Приятно познакомиться, *${escMd(fn)}${ln ? ' ' + escMd(ln) : ''}*!\n\nТвой профиль успешно обновлен в Zerf AI.`
           if (parsedBday) {
             resp += `\n🎂 *День рождения:* ${String(parsedBday.day).padStart(2, '0')}.${String(parsedBday.month).padStart(2, '0')}${parsedBday.year ? `.${parsedBday.year}` : ''} (друзья автоматически увидят напоминание в календаре!).`
+          } else {
+            resp += `\n\n🎂 *Подскажи, когда твой День рождения?* (напиши дату, например: \`3 апреля 2010\` или \`03.04\`), чтобы друзья автоматически получили напоминание!`
           }
           await send(chatId, resp, { reply_markup: miniAppKeyboard(chatId) })
         } else if (parsedBday && textWithoutDate.length === 0) {
