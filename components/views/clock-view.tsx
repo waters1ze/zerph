@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { playAlarmChime, showWebNotification, requestNotificationPermission } from '@/lib/notifications'
@@ -98,52 +98,93 @@ export function ClockView() {
 }
 
 // ── 1. Task Countdown Tab ──────────────────────────────────────────────────
+
+function getTaskDueTimestamp(t: { dueDate?: string; dueTime?: string }): number {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const d = t.dueDate || todayStr
+  const tm = t.dueTime || '23:59'
+  const [h, m] = tm.split(':').map(Number)
+  const date = new Date(d)
+  date.setHours(isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0)
+  return date.getTime()
+}
+
 function TaskCountdownTab() {
   const { state, dispatch } = useApp()
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const nowMs = Date.now()
 
-  // Filter pending tasks that have a dueTime
-  const pendingTasksWithTime = state.tasks.filter(
-    t => t.status !== 'done' && t.dueTime && (t.dueDate === todayStr || !t.dueDate || t.dueDate >= todayStr)
-  ).sort((a, b) => (a.dueTime || '').localeCompare(b.dueTime || ''))
+  // Chronologically sort all non-done tasks so the closest upcoming task is FIRST
+  const sortedTasks = useMemo(() => {
+    return [...state.tasks]
+      .filter(t => t.status !== 'done')
+      .map(t => ({
+        task: t,
+        ts: getTaskDueTimestamp(t),
+      }))
+      .sort((a, b) => {
+        const diffA = a.ts - nowMs
+        const diffB = b.ts - nowMs
+        // Both in the future: smallest positive diff (closest) first
+        if (diffA >= 0 && diffB >= 0) return diffA - diffB
+        // Upcoming future tasks before overdue tasks
+        if (diffA >= 0 && diffB < 0) return -1
+        if (diffA < 0 && diffB >= 0) return 1
+        // Both overdue: most recently overdue first
+        return diffB - diffA
+      })
+      .map(x => x.task)
+  }, [state.tasks, nowMs])
 
   const [selectedTaskId, setSelectedTaskId] = useState<string>(
-    pendingTasksWithTime[0]?.id || state.tasks.find(t => t.status !== 'done')?.id || ''
+    sortedTasks[0]?.id || ''
   )
-  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number; isOverdue: boolean; totalSec: number }>({
-    hours: 0, minutes: 0, seconds: 0, isOverdue: false, totalSec: 0
+
+  useEffect(() => {
+    if ((!selectedTaskId || !state.tasks.some(t => t.id === selectedTaskId && t.status !== 'done')) && sortedTasks[0]?.id) {
+      setSelectedTaskId(sortedTasks[0].id)
+    }
+  }, [sortedTasks, selectedTaskId, state.tasks])
+
+  const [timeLeft, setTimeLeft] = useState<{
+    months: number
+    days: number
+    hours: number
+    minutes: number
+    seconds: number
+    isOverdue: boolean
+    totalSec: number
+  }>({
+    months: 0, days: 0, hours: 0, minutes: 0, seconds: 0, isOverdue: false, totalSec: 0
   })
 
-  const targetTask = state.tasks.find(t => t.id === selectedTaskId)
+  const targetTask = state.tasks.find(t => t.id === selectedTaskId) || sortedTasks[0]
 
   useEffect(() => {
     if (!targetTask) return
 
     const updateCountdown = () => {
       const now = new Date()
-      const taskDate = targetTask.dueDate || todayStr
-      const timeStr = targetTask.dueTime || '23:59'
-      const [h, m] = timeStr.split(':').map(Number)
+      const targetTs = getTaskDueTimestamp(targetTask)
 
-      const target = new Date(taskDate)
-      target.setHours(h || 0, m || 0, 0, 0)
-
-      const diffMs = target.getTime() - now.getTime()
+      const diffMs = targetTs - now.getTime()
       const isOverdue = diffMs < 0
       const absDiff = Math.abs(diffMs)
 
       const totalSec = Math.floor(absDiff / 1000)
-      const hours = Math.floor(totalSec / 3600)
+      const totalDays = Math.floor(totalSec / 86400)
+      const months = Math.floor(totalDays / 30)
+      const days = totalDays % 30
+      const hours = Math.floor((totalSec % 86400) / 3600)
       const minutes = Math.floor((totalSec % 3600) / 60)
       const seconds = totalSec % 60
 
-      setTimeLeft({ hours, minutes, seconds, isOverdue, totalSec })
+      setTimeLeft({ months, days, hours, minutes, seconds, isOverdue, totalSec })
     }
 
     updateCountdown()
     const timer = setInterval(updateCountdown, 1000)
     return () => clearInterval(timer)
-  }, [targetTask, todayStr])
+  }, [targetTask])
 
   const handleComplete = () => {
     if (!targetTask) return
@@ -168,16 +209,16 @@ function TaskCountdownTab() {
           onChange={e => setSelectedTaskId(e.target.value)}
           className="bg-muted/80 border border-border text-foreground text-sm font-medium rounded-xl px-3 py-2 outline-none cursor-pointer max-w-full sm:max-w-md"
         >
-          {state.tasks.filter(t => t.status !== 'done').map(t => (
+          {sortedTasks.map(t => (
             <option key={t.id} value={t.id}>
-              {t.dueTime ? `⏰ ${t.dueTime} — ` : ''}{t.title.slice(0, 50)}
+              {t.dueTime ? `⏰ ${t.dueTime} — ` : ''}{t.dueDate ? `(${t.dueDate}) ` : ''}{t.title.slice(0, 45)}
             </option>
           ))}
         </select>
       </div>
 
       {targetTask ? (
-        <div className="flex flex-col items-center justify-center p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-card to-card/60 border border-border shadow-xl text-center relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center p-6 sm:p-12 rounded-3xl bg-gradient-to-b from-card to-card/60 border border-border shadow-xl text-center relative overflow-hidden">
           {/* Subtle glow circle */}
           <div className="absolute w-72 h-72 rounded-full bg-primary/10 blur-3xl pointer-events-none -top-10" />
 
@@ -199,31 +240,55 @@ function TaskCountdownTab() {
             </p>
           )}
 
-          {/* Big Clock Digits */}
-          <div className="flex items-center justify-center gap-3 sm:gap-6 my-4">
+          {/* Big Clock Digits: Months, Days, Hours, Minutes, Seconds */}
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 my-4 max-w-full">
+            {timeLeft.months > 0 && (
+              <>
+                <div className="flex flex-col items-center">
+                  <div className="text-3xl sm:text-6xl font-mono font-extrabold tracking-tight bg-muted/60 border border-border/80 rounded-2xl w-18 sm:w-28 py-3 sm:py-5 shadow-inner text-foreground">
+                    {String(timeLeft.months).padStart(2, '0')}
+                  </div>
+                  <span className="text-[10px] sm:text-xs uppercase font-semibold text-muted-foreground mt-1.5 sm:mt-2">Месяцев</span>
+                </div>
+                <span className="text-2xl sm:text-5xl font-mono font-bold text-muted-foreground/40 self-center -mt-4 sm:-mt-6">:</span>
+              </>
+            )}
+
+            {(timeLeft.months > 0 || timeLeft.days > 0) && (
+              <>
+                <div className="flex flex-col items-center">
+                  <div className="text-3xl sm:text-6xl font-mono font-extrabold tracking-tight bg-muted/60 border border-border/80 rounded-2xl w-18 sm:w-28 py-3 sm:py-5 shadow-inner text-foreground">
+                    {String(timeLeft.days).padStart(2, '0')}
+                  </div>
+                  <span className="text-[10px] sm:text-xs uppercase font-semibold text-muted-foreground mt-1.5 sm:mt-2">Дней</span>
+                </div>
+                <span className="text-2xl sm:text-5xl font-mono font-bold text-muted-foreground/40 self-center -mt-4 sm:-mt-6">:</span>
+              </>
+            )}
+
             <div className="flex flex-col items-center">
-              <div className="text-5xl sm:text-7xl font-mono font-extrabold tracking-tight bg-muted/60 border border-border/80 rounded-2xl w-24 sm:w-36 py-4 sm:py-6 shadow-inner text-foreground">
+              <div className="text-3xl sm:text-6xl font-mono font-extrabold tracking-tight bg-muted/60 border border-border/80 rounded-2xl w-18 sm:w-28 py-3 sm:py-5 shadow-inner text-foreground">
                 {String(timeLeft.hours).padStart(2, '0')}
               </div>
-              <span className="text-xs uppercase font-semibold text-muted-foreground mt-2">Часов</span>
+              <span className="text-[10px] sm:text-xs uppercase font-semibold text-muted-foreground mt-1.5 sm:mt-2">Часов</span>
             </div>
 
-            <span className="text-4xl sm:text-6xl font-mono font-bold text-muted-foreground/40 self-center -mt-6">:</span>
+            <span className="text-2xl sm:text-5xl font-mono font-bold text-muted-foreground/40 self-center -mt-4 sm:-mt-6">:</span>
 
             <div className="flex flex-col items-center">
-              <div className="text-5xl sm:text-7xl font-mono font-extrabold tracking-tight bg-muted/60 border border-border/80 rounded-2xl w-24 sm:w-36 py-4 sm:py-6 shadow-inner text-foreground">
+              <div className="text-3xl sm:text-6xl font-mono font-extrabold tracking-tight bg-muted/60 border border-border/80 rounded-2xl w-18 sm:w-28 py-3 sm:py-5 shadow-inner text-foreground">
                 {String(timeLeft.minutes).padStart(2, '0')}
               </div>
-              <span className="text-xs uppercase font-semibold text-muted-foreground mt-2">Минут</span>
+              <span className="text-[10px] sm:text-xs uppercase font-semibold text-muted-foreground mt-1.5 sm:mt-2">Минут</span>
             </div>
 
-            <span className="text-4xl sm:text-6xl font-mono font-bold text-muted-foreground/40 self-center -mt-6">:</span>
+            <span className="text-2xl sm:text-5xl font-mono font-bold text-muted-foreground/40 self-center -mt-4 sm:-mt-6">:</span>
 
             <div className="flex flex-col items-center">
-              <div className="text-5xl sm:text-7xl font-mono font-extrabold tracking-tight bg-primary/10 border border-primary/30 rounded-2xl w-24 sm:w-36 py-4 sm:py-6 shadow-inner text-primary">
+              <div className="text-3xl sm:text-6xl font-mono font-extrabold tracking-tight bg-primary/10 border border-primary/30 rounded-2xl w-18 sm:w-28 py-3 sm:py-5 shadow-inner text-primary">
                 {String(timeLeft.seconds).padStart(2, '0')}
               </div>
-              <span className="text-xs uppercase font-semibold text-primary/80 mt-2">Секунд</span>
+              <span className="text-[10px] sm:text-xs uppercase font-semibold text-primary/80 mt-1.5 sm:mt-2">Секунд</span>
             </div>
           </div>
 
@@ -248,7 +313,7 @@ function TaskCountdownTab() {
       ) : (
         <div className="text-center p-12 rounded-3xl bg-card border border-border text-muted-foreground">
           <Clock className="w-12 h-12 mx-auto mb-3 opacity-40" />
-          <p className="font-semibold text-foreground">Нет активных задач со временем</p>
+          <p className="font-semibold text-foreground">Нет активных задач</p>
           <p className="text-xs mt-1">Создайте новую задачу со временем (например, 18:00), чтобы включить живой отсчет!</p>
         </div>
       )}

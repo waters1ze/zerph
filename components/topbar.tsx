@@ -45,34 +45,46 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
       const todayStr = now.toISOString().slice(0, 10)
       const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-      // 1. Find upcoming task with time today
+      // 1. Find upcoming task with time across closest dates
+      const nowMs = now.getTime()
       const upcoming = state.tasks
-        .filter(t => t.status !== 'done' && t.dueTime && (t.dueDate === todayStr || !t.dueDate))
-        .sort((a, b) => (a.dueTime || '').localeCompare(b.dueTime || ''))
+        .filter(t => t.status !== 'done' && t.dueTime)
+        .map(t => {
+          const d = t.dueDate || todayStr
+          const [h, m] = (t.dueTime || '23:59').split(':').map(Number)
+          const target = new Date(d)
+          target.setHours(isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0)
+          return { task: t, targetTs: target.getTime() }
+        })
+        .filter(x => x.targetTs > nowMs)
+        .sort((a, b) => a.targetTs - b.targetTs)
 
       const next = upcoming[0]
-      if (next && next.dueTime) {
-        const [h, m] = next.dueTime.split(':').map(Number)
-        const target = new Date()
-        target.setHours(h || 0, m || 0, 0, 0)
-        const diffMs = target.getTime() - now.getTime()
+      if (next) {
+        const diffMs = next.targetTs - nowMs
+        const totalSec = Math.floor(diffMs / 1000)
+        const totalDays = Math.floor(totalSec / 86400)
+        const months = Math.floor(totalDays / 30)
+        const days = totalDays % 30
+        const hrs = Math.floor((totalSec % 86400) / 3600)
+        const mins = Math.floor((totalSec % 3600) / 60)
+        const secs = totalSec % 60
 
-        if (diffMs > 0) {
-          const totalSec = Math.floor(diffMs / 1000)
-          const hrs = Math.floor(totalSec / 3600)
-          const mins = Math.floor((totalSec % 3600) / 60)
-          const secs = totalSec % 60
-          const formatted = hrs > 0
-            ? `${hrs}ч ${String(mins).padStart(2, '0')}м`
-            : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-
-          setNextTaskCountdown({
-            title: next.title,
-            timeStr: formatted
-          })
+        let formatted = ''
+        if (months > 0) {
+          formatted = `${months}мес ${days}д`
+        } else if (days > 0) {
+          formatted = `${days}д ${hrs}ч`
+        } else if (hrs > 0) {
+          formatted = `${hrs}ч ${String(mins).padStart(2, '0')}м`
         } else {
-          setNextTaskCountdown(null)
+          formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
         }
+
+        setNextTaskCountdown({
+          title: next.task.title,
+          timeStr: formatted
+        })
       } else {
         setNextTaskCountdown(null)
       }
