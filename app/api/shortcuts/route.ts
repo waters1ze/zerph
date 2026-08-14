@@ -4,12 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { parseIntentWithGroq, transcribeAudioWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks } from '@/lib/backend/db'
+import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { GROQ_API_KEY } from '@/lib/config'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+
+export function getSiriUserKey(chatId: number | string | bigint): string {
+  const secret = process.env.TELEGRAM_BOT_TOKEN || 'zerf-siri-secret-key-2026'
+  return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
+}
 
 async function sendTgNotification(chatId: number, text: string) {
   if (!BOT_TOKEN) return
@@ -64,13 +70,14 @@ export async function POST(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     let chatId: number | null = null
     let inputText = ''
+    let bodyObj: Record<string, any> = {}
 
     const contentType = req.headers.get('content-type') || ''
     if (contentType.includes('application/json')) {
-      const body = await req.json().catch(() => ({}))
-      const rawCid = body.chatId || body.chat_id || body.userId || body.user_id || req.headers.get('x-chat-id') || searchParams.get('chatId')
+      bodyObj = await req.json().catch(() => ({}))
+      const rawCid = bodyObj.chatId || bodyObj.chat_id || bodyObj.userId || bodyObj.user_id || req.headers.get('x-chat-id') || searchParams.get('chatId')
       if (rawCid) chatId = Number(rawCid)
-      inputText = body.text || body.query || body.task || body.q || body.prompt || body.message || ''
+      inputText = bodyObj.text || bodyObj.query || bodyObj.task || bodyObj.q || bodyObj.prompt || bodyObj.message || ''
     } else if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData().catch(() => null)
       if (formData) {
@@ -98,6 +105,15 @@ export async function POST(req: NextRequest) {
         error: 'chatId is required. Find your Chat ID via /start in @Zerph_bot',
         example: 'POST /api/shortcuts with {"chatId": 123456789, "text": "Купить молоко в 19:00"}'
       }, { status: 400 })
+    }
+
+    // Optional Key Verification
+    const providedKey = searchParams.get('key') || bodyObj.key
+    if (providedKey) {
+      const expectedKey = getSiriUserKey(chatId)
+      if (providedKey !== expectedKey) {
+        return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403 })
+      }
     }
 
     if (!inputText || !inputText.trim()) {
@@ -171,6 +187,7 @@ export async function GET(req: NextRequest) {
   const rawCid = searchParams.get('chatId') || searchParams.get('chat_id')
   const text = searchParams.get('text') || searchParams.get('q') || searchParams.get('query')
   const format = searchParams.get('format')
+  const providedKey = searchParams.get('key')
 
   if (!rawCid || !text) {
     return NextResponse.json({
@@ -184,6 +201,14 @@ export async function GET(req: NextRequest) {
   const chatId = Number(rawCid)
   if (isNaN(chatId)) {
     return NextResponse.json({ error: 'Invalid chatId' }, { status: 400 })
+  }
+
+  // Optional Key Verification
+  if (providedKey) {
+    const expectedKey = getSiriUserKey(chatId)
+    if (providedKey !== expectedKey) {
+      return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403 })
+    }
   }
 
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
@@ -218,6 +243,8 @@ export async function GET(req: NextRequest) {
     const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
     tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
   })
+  sendTgNotification(chatId, tgMsg).catch(() => {})
+
   if (format === 'json') {
     return NextResponse.json({
       success: true,

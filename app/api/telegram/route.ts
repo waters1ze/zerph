@@ -24,6 +24,7 @@ import { runReminderCheck, startFocusSession, stopFocusSession, getFocusSession 
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
+import { getSiriUserKey } from '@/app/api/shortcuts/route'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)
 export const maxDuration = 60
@@ -567,31 +568,35 @@ async function handleFocus(chatId: number, minutesStr?: string) {
 async function handleSiriSetup(chatId: number) {
   const appUrl = APP_URL || 'https://zeprh.vercel.app'
   const endpointUrl = `${appUrl}/api/shortcuts`
-  const testUrl = `${endpointUrl}?chatId=${chatId}&text=Купить+молоко+в+19:00`
+  const siriKey = getSiriUserKey(chatId)
+  const personalUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=`
+  const testUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=Купить+молоко+в+19:00`
 
   let msg = `🍏 *Интеграция с Siri, Action Button и виджетами*\n\n` +
-    `Превратите Zerf AI в нативного голосового ассистента на вашем iPhone! Задачи создаются за 1 секунду голосом Siri или по нажатию физической кнопки.\n\n` +
-    `🔑 *Ваш персональный Chat ID:* \`${chatId}\` _(нажмите, чтобы скопировать)_\n` +
-    `🌐 *API Шлюз:* \`${endpointUrl}\`\n\n` +
+    `Превратите Zerf AI в личного голосового ассистента на вашем iPhone! Задачи создаются за 1 секунду голосом Siri или по нажатию кнопки.\n\n` +
+    `🔒 *Ваша персональная защищенная ссылка для Siri:*\n` +
+    `\`${personalUrl}\`\n` +
+    `_(нажмите на строчку выше — она скопируется в буфер обмена целиком!)_\n\n` +
     `───────────────\n` +
-    `📱 *САМАЯ ПРОСТАЯ НАСТРОЙКА НА IPHONE (3 действия):*\n\n` +
+    `📱 *НАСТРОЙКА НА IPHONE (3 простых действия):*\n\n` +
     `1️⃣ Откройте стандартное приложение **Команды** (Shortcuts) на iPhone и нажмите **+**.\n` +
     `2️⃣ Назовите команду сверху: *Запиши в Zerf* (или *Новая задача*).\n` +
-    `3️⃣ Добавьте всего 3 простых действия (словарей не нужно!):\n\n` +
+    `3️⃣ Добавьте по очереди 3 действия:\n\n` +
     `   🔸 *1. Диктовать текст* (Dictate text) — Язык: _Русский_\n` +
     `   🔸 *2. Получить содержимое URL* (Get contents of URL):\n` +
-    `      • В поле URL вставьте:\n` +
-    `        \`${endpointUrl}?chatId=${chatId}&text=\`\n` +
-    `      • В самый конец этой ссылки вставьте переменную: *[Продиктованный текст]*\n` +
+    `      • В поле URL вставьте вашу скопированную ссылку выше:\n` +
+    `        \`${personalUrl}\`\n` +
+    `      • В самый конец этой ссылки (сразу после \`text=\`) добавьте переменную: *[Продиктованный текст]*\n` +
     `   🔸 *3. Произнести текст* (Speak text):\n` +
-    `      • Текст: выберите *[Содержимое URL]*\n\n` +
+    `      • В поле текста выберите переменную: *[Содержимое URL]*\n\n` +
     `4️⃣ *Привязка к кнопке или жесту:*\n` +
     `   • **iPhone 15/16 Pro:** _Настройки ➔ Кнопка действия ➔ Быстрая команда ➔ Запиши в Zerf_\n` +
     `   • **Любой iPhone:** _Настройки ➔ Универсальный доступ ➔ Касание ➔ Касание задней панели ➔ Двойное касание ➔ Запиши в Zerf_\n\n` +
     `───────────────\n` +
     `🤖 *НАСТРОЙКА НА ANDROID (Виджет в 1 клик):*\n\n` +
     `1️⃣ Установите бесплатное приложение **HTTP Shortcuts** из Google Play.\n` +
-    `2️⃣ Создайте ярлык на \`${endpointUrl}?chatId=${chatId}&text=...\`\n` +
+    `2️⃣ Создайте ярлык на вашу персональную ссылку выше:\n` +
+    `   \`${personalUrl}...\`\n` +
     `3️⃣ Разместите виджет на экране блокировки или рабочем столе!\n\n` +
     `🧪 *Проверить работу прямо сейчас:* нажмите кнопку ниже:`
 
