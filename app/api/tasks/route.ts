@@ -134,6 +134,8 @@ export async function POST(req: NextRequest) {
       dueTime: body.dueTime,
       tags: body.tags || [],
       subtasks: body.subtasks || [],
+      projectId: body.projectId || null,
+      parentTaskId: body.parentTaskId || null,
       ownerChatId: ownerChatId,
     })
     return NextResponse.json(serialize({ success: true, task }))

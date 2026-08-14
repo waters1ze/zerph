@@ -194,6 +194,8 @@ export async function createTask(data: {
   isShared?: boolean
   repeat?: string | null
   reminderOffsetMinutes?: number | null
+  projectId?: string | null
+  parentTaskId?: string | null
   ownerChatId?: number | bigint | string | null   // Telegram chatId of the creator
 }) {
   const processed = processBirthdayTaskData(data)
@@ -208,6 +210,8 @@ export async function createTask(data: {
       dueTime: processed.dueTime || null,
       repeat: processed.repeat || null,
       reminderOffsetMinutes: processed.reminderOffsetMinutes || 0,
+      projectId: processed.projectId || null,
+      parentTaskId: processed.parentTaskId || null,
       tags: processed.tags || [],
       assignees: processed.assignees || [],
       isShared: processed.isShared || false,
@@ -1486,9 +1490,9 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
   const defaultLimits: UserUsageLimits = {
     plan: 'free',
     subscriptionExpiry: null,
-    voice: { used: 0, max: 2, secondsUsed: 0, maxSeconds: Infinity },
-    notes: { used: 0, max: 2 },
-    chat: { used: 0, max: 10 },
+    voice: { used: 0, max: 5, secondsUsed: 0, maxSeconds: 180 },
+    notes: { used: 0, max: 5 },
+    chat: { used: 0, max: 20 },
     canSendVoice: true,
     canCreateNote: true,
     canSendChatMessage: true,
@@ -1532,17 +1536,17 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       })
     }
 
-    const voiceMax = isPremium ? Infinity : 2
-    const voiceMaxSeconds = isPremium ? 600 : Infinity // 10 min = 600s for premium
-    const notesMax = isPremium ? Infinity : 2
-    const chatMax = isPremium ? Infinity : 10
+    const voiceMax = isPremium ? Infinity : 5
+    const voiceMaxSeconds = isPremium ? 900 : 180 // 15 min for premium, 3 min for free
+    const notesMax = isPremium ? Infinity : 5
+    const chatMax = isPremium ? Infinity : 20
 
     const canSendVoice = isPremium
-      ? (chat.voiceSecondsToday < 600)
-      : (chat.voiceCountToday < 2)
+      ? true
+      : (chat.voiceCountToday < 5)
 
-    const canCreateNote = isPremium ? true : (chat.notesCountToday < 2)
-    const canSendChatMessage = isPremium ? true : (chat.chatMessagesToday < 10)
+    const canCreateNote = isPremium ? true : (chat.notesCountToday < 5)
+    const canSendChatMessage = isPremium ? true : (chat.chatMessagesToday < 20)
 
     return {
       plan: isPremium ? 'premium' : 'free',
