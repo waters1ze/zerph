@@ -16,7 +16,7 @@ interface Props {
 }
 
 const PRIORITIES: Priority[] = ['urgent', 'high', 'medium', 'low']
-const PRIORITY_LABELS: Record<Priority, string> = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' }
+const PRIORITY_LABELS: Record<Priority, string> = { urgent: 'Срочный', high: 'Высокий', medium: 'Обычный', low: 'Низкий' }
 const PRIORITY_COLORS: Record<Priority, string> = {
   urgent: 'var(--priority-urgent)',
   high: 'var(--priority-high)',
@@ -96,7 +96,7 @@ export function NewTaskModal({ open, onClose }: Props) {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
-              <h2 className="text-[15px] font-semibold text-foreground">New task</h2>
+              <h2 className="text-[15px] font-semibold text-foreground">Новая задача</h2>
               <button
                 onClick={handleClose}
                 className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
@@ -116,7 +116,7 @@ export function NewTaskModal({ open, onClose }: Props) {
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.metaKey) submit()
                   if (e.key === 'Escape') handleClose()
                 }}
-                placeholder="Task title…"
+                placeholder="Что нужно сделать?…"
                 className="w-full text-base font-medium bg-transparent outline-none text-foreground placeholder:text-muted-foreground/50 border-b border-border/50 pb-2 focus:border-primary/50 transition-colors"
               />
 
@@ -124,14 +124,14 @@ export function NewTaskModal({ open, onClose }: Props) {
               <textarea
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="Add description (optional)…"
+                placeholder="Добавить описание или заметки (необязательно)…"
                 rows={2}
                 className="w-full text-[13px] text-foreground/80 bg-muted/40 rounded-lg px-3 py-2.5 border border-border/50 outline-none resize-none placeholder:text-muted-foreground/50 focus:border-primary/40 transition-colors"
               />
 
               {/* Priority */}
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Priority</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Приоритет</p>
                 <div className="flex gap-2">
                   {PRIORITIES.map(p => (
                     <button
@@ -158,31 +158,31 @@ export function NewTaskModal({ open, onClose }: Props) {
               {/* Due date + Project */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Due date</p>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Срок выполнения</p>
                   <DatePicker
                     value={dueDate}
                     onChange={setDueDate}
-                    placeholder="No date"
+                    placeholder="Без даты"
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Project</p>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Привязать к проекту</p>
                   <CustomSelect
                     value={projectId}
                     onChange={setProjectId}
                     icon={<FolderKanban className="w-3.5 h-3.5" />}
                     options={[
-                      { value: '', label: 'No project' },
+                      { value: '', label: 'Без проекта' },
                       ...state.projects.map(p => ({ value: p.id, label: p.title, color: p.color })),
                     ]}
-                    placeholder="No project"
+                    placeholder="Без проекта"
                   />
                 </div>
               </div>
 
               {/* Tags */}
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Tags</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Теги</p>
                 <div className="flex items-center gap-2 bg-muted/40 px-3 py-2 rounded-lg border border-border/50">
                   <Tag className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <div className="flex flex-wrap gap-1.5 flex-1">
@@ -192,7 +192,7 @@ export function NewTaskModal({ open, onClose }: Props) {
                         onClick={() => setTags(prev => prev.filter(t => t !== tag))}
                         className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground cursor-pointer hover:bg-destructive/20 hover:text-destructive transition-colors"
                       >
-                        {tag}
+                        #{tag}
                       </span>
                     ))}
                     <input
@@ -203,7 +203,7 @@ export function NewTaskModal({ open, onClose }: Props) {
                           e.preventDefault(); addTag()
                         }
                       }}
-                      placeholder="Add tag…"
+                      placeholder="+ Добавить тег…"
                       className="bg-transparent outline-none text-[12px] text-foreground placeholder:text-muted-foreground/50 min-w-[80px]"
                     />
                   </div>
@@ -214,21 +214,21 @@ export function NewTaskModal({ open, onClose }: Props) {
             {/* Footer */}
             <div className="flex items-center justify-between px-5 pt-3 pb-5 shrink-0 border-t border-border mt-2">
               <p className="text-[11px] text-muted-foreground/60">
-                Press <kbd className="font-mono">⌘ Enter</kbd> to save
+                Нажмите <kbd className="font-mono">⌘ / Ctrl + Enter</kbd> для сохранения
               </p>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleClose}
                   className="h-8 px-4 rounded-lg border border-border text-[13px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                 >
-                  Cancel
+                  Отмена
                 </button>
                 <button
                   onClick={submit}
                   disabled={!title.trim()}
                   className="h-8 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                 >
-                  Create task
+                  Создать задачу
                 </button>
               </div>
             </div>

@@ -253,15 +253,40 @@ export async function DELETE(req: NextRequest) {
     const friendId = searchParams.get('id')
     if (!friendId) return NextResponse.json({ error: 'friendId required' }, { status: 400 })
 
-    const targetCid = BigInt(friendId)
-    await prisma.friendship.deleteMany({
-      where: {
-        OR: [
-          { userChatId: chatId, friendChatId: targetCid },
-          { userChatId: targetCid, friendChatId: chatId },
-        ]
-      }
-    })
+    let targetCid: bigint | null = null
+    try {
+      targetCid = BigInt(friendId)
+    } catch {
+      const clean = friendId.replace(/^@/, '').trim()
+      const chat = await prisma.telegramChat.findFirst({
+        where: {
+          OR: [
+            { username: { equals: clean, mode: 'insensitive' } },
+            { firstName: { equals: clean, mode: 'insensitive' } },
+          ]
+        }
+      })
+      if (chat) targetCid = chat.chatId
+    }
+
+    if (targetCid) {
+      await prisma.friendship.deleteMany({
+        where: {
+          OR: [
+            { userChatId: chatId, friendChatId: targetCid },
+            { userChatId: targetCid, friendChatId: chatId },
+          ]
+        }
+      })
+    } else {
+      // If passed a friendship record cuid
+      await prisma.friendship.deleteMany({
+        where: {
+          id: friendId,
+          OR: [{ userChatId: chatId }, { friendChatId: chatId }]
+        }
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

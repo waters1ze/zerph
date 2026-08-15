@@ -9,7 +9,7 @@ import {
   Bell, Volume2, Sparkles, Flame, Flag, AlertCircle, ArrowRight
 } from 'lucide-react'
 
-type ClockTab = 'task_countdown' | 'timer' | 'stopwatch' | 'pomodoro'
+type ClockTab = 'task_countdown' | 'timer' | 'stopwatch'
 
 export function ClockView() {
   const { state, dispatch } = useApp()
@@ -43,7 +43,7 @@ export function ClockView() {
             Часы, Таймеры и Отсчет
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Живой отсчет времени до дедлайнов задач, универсальный таймер и режим глубокого фокуса
+            Живой отсчет времени до дедлайнов задач, универсальный таймер и точный секундомер
           </p>
         </div>
 
@@ -64,7 +64,6 @@ export function ClockView() {
         {[
           { id: 'task_countdown', label: '⏳ Отсчет до задачи', icon: Clock },
           { id: 'timer',          label: '⏱️ Таймер',           icon: Timer },
-          { id: 'pomodoro',       label: '🍅 Помодоро',         icon: Flame },
           { id: 'stopwatch',      label: '⏲️ Секундомер',       icon: Flag },
         ].map(tab => {
           const Icon = tab.icon
@@ -90,7 +89,6 @@ export function ClockView() {
       <AnimatePresence mode="wait">
         {activeTab === 'task_countdown' && <TaskCountdownTab key="task_countdown" />}
         {activeTab === 'timer' && <CustomTimerTab key="timer" />}
-        {activeTab === 'pomodoro' && <PomodoroTab key="pomodoro" />}
         {activeTab === 'stopwatch' && <StopwatchTab key="stopwatch" />}
       </AnimatePresence>
     </div>

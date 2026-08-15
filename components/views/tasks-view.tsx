@@ -121,19 +121,21 @@ export function TasksView() {
           value={filterProject}
           onChange={setFilterProject}
           options={[
-            { value: 'all', label: 'All projects' },
+            { value: 'all', label: 'Все проекты' },
             ...state.projects.map(p => ({ value: p.id, label: p.title, color: p.color })),
           ]}
+          placeholder="Все проекты"
           className="w-40"
         />
         <CustomSelect
           value={sortKey}
           onChange={v => setSortKey(v as SortKey)}
           options={[
-            { value: 'dueDate',   label: 'Due date' },
-            { value: 'priority',  label: 'Priority' },
-            { value: 'createdAt', label: 'Created' },
+            { value: 'dueDate',   label: 'По сроку' },
+            { value: 'priority',  label: 'По приоритету' },
+            { value: 'createdAt', label: 'По созданию' },
           ]}
+          placeholder="Сортировка"
           className="w-36 ml-auto"
         />
       </div>

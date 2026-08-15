@@ -955,7 +955,52 @@ export async function saveParsedItemToDb(
     return { item, completedTask: completed }
   }
 
-  if (item.type === 'goal') {
+  if (item.type === 'habit') {
+    const icon = (item as any).icon || '🔥'
+    const frequency = (item as any).frequency || 'daily'
+    await createHabit({
+      title: item.title,
+      icon,
+      frequency,
+      ownerChatId,
+    })
+  } else if (item.type === 'project') {
+    const rawMembers: string[] = (item as any).members || (item as any).memberNames || (item as any).memberUsernames || []
+    if (item.recipientName && !rawMembers.includes(item.recipientName)) {
+      rawMembers.push(item.recipientName)
+    }
+
+    const cid = ownerChatId ? BigInt(ownerChatId) : null
+    let memberIds: bigint[] = cid ? [cid] : []
+
+    for (const name of rawMembers) {
+      const clean = name.replace(/^@/, '').trim()
+      if (!clean) continue
+      const chat = await prisma.telegramChat.findFirst({
+        where: {
+          OR: [
+            { username: { equals: clean, mode: 'insensitive' } },
+            { firstName: { equals: clean, mode: 'insensitive' } },
+            { lastName: { equals: clean, mode: 'insensitive' } },
+          ]
+        }
+      })
+      if (chat && !memberIds.includes(chat.chatId)) {
+        memberIds.push(chat.chatId)
+      }
+    }
+
+    await (prisma as any).projectDB.create({
+      data: {
+        title: item.title,
+        description: item.summary,
+        ownerChatId: cid,
+        memberIds,
+        color: '#F59E0B',
+        status: 'active',
+      }
+    })
+  } else if (item.type === 'goal') {
     await createGoal({
       title: item.title,
       description: item.summary,
@@ -1168,59 +1213,19 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
 
     const contactIdsSet = new Set<bigint>()
 
-    // 1. Get explicit friendships (bidirectional)
+    // 1. Get explicit accepted friendships (bidirectional)
     const friendships = await prisma.friendship.findMany({
       where: {
-        OR: [{ userChatId: cid }, { friendChatId: cid }],
+        OR: [
+          { userChatId: cid, status: 'accepted' },
+          { friendChatId: cid, status: 'accepted' },
+        ],
       },
     })
     friendships.forEach(f => {
       if (f.userChatId !== cid) contactIdsSet.add(f.userChatId)
       if (f.friendChatId !== cid) contactIdsSet.add(f.friendChatId)
     })
-
-    // 2. Find all co-assignees from shared tasks
-    const sharedTasks = await prisma.task.findMany({
-      where: {
-        OR: [{ ownerChatId: cid }, { assignees: { has: strId } }],
-      },
-      select: { assignees: true, ownerChatId: true },
-    })
-
-    sharedTasks.forEach(t => {
-      if (t.ownerChatId && t.ownerChatId !== cid) contactIdsSet.add(t.ownerChatId)
-      t.assignees.forEach(a => {
-        try {
-          const aCid = BigInt(a)
-          if (aCid !== cid) contactIdsSet.add(aCid)
-        } catch {}
-      })
-    })
-
-    // 3. Find all co-members from GroupMembership table (all members of any group this user is in)
-    try {
-      const userGroups = await prisma.groupMembership.findMany({
-        where: { memberChatId: cid },
-        select: { groupChatId: true },
-      })
-      if (userGroups.length > 0) {
-        const groupIds = userGroups.map(g => g.groupChatId)
-        const groupMembers = await prisma.groupMembership.findMany({
-          where: { groupChatId: { in: groupIds } },
-          select: { memberChatId: true },
-        })
-        groupMembers.forEach(m => {
-          if (m.memberChatId !== cid) contactIdsSet.add(m.memberChatId)
-        })
-      }
-    } catch {}
-
-    // Auto-create bidirectional friendship records in DB for all discovered contacts
-    for (const fid of contactIdsSet) {
-      if (fid !== cid) {
-        autoAddFriends(cid, fid).catch(() => {})
-      }
-    }
 
     const friendIds = Array.from(contactIdsSet)
     if (friendIds.length === 0) return []

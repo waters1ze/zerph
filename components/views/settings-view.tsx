@@ -670,8 +670,8 @@ export function SettingsView() {
         </Row>
       </Section>
 
-      {/* Focus & Pomodoro Mode */}
-      <Section title="🔥 Focus Mode & Pomodoro">
+      {/* Focus Mode */}
+      <Section title="🔥 Режим глубокого фокуса">
         <Row label="Длительность фокус-сессии" description="Стандартное время непрерывной глубокой работы">
           <select
             value={settings.focusSettings?.defaultDurationMinutes || 25}
@@ -684,7 +684,7 @@ export function SettingsView() {
             className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
           >
             <option value={15}>15 минут (Быстрый спринт)</option>
-            <option value={25}>25 минут (Помодоро по умолч.)</option>
+            <option value={25}>25 минут (Стандарт фокуса)</option>
             <option value={45}>45 минут (Глубокий фокус)</option>
             <option value={60}>60 минут (1 час)</option>
             <option value={90}>90 минут (Ультра-фокус)</option>

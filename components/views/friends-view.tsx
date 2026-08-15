@@ -517,9 +517,14 @@ export function FriendsView() {
             <FriendCard
               key={f.id}
               friend={f}
-              onRemove={() => {
+              onRemove={async () => {
                 dispatch({ type: 'REMOVE_FRIEND', id: f.id })
-                fetch(`/api/friends?id=${f.id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(() => {})
+                const targetId = f.chatId || f.id
+                await fetch(`/api/friends?id=${encodeURIComponent(targetId)}`, {
+                  method: 'DELETE',
+                  headers: getAuthHeaders()
+                }).catch(() => {})
+                loadFriendsAndRequests()
               }}
             />
           ))}

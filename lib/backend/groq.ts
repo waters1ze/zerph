@@ -6,7 +6,7 @@
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
 
 export interface ParsedItem {
-  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion' | 'delegate'
+  type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate'
   action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday'
   targetId?: string | null
   title: string
@@ -19,6 +19,10 @@ export interface ParsedItem {
   targetTitle?: string          // for 'completion' type — the task being marked done
   projectId?: string | null
   goalId?: string | null
+  folder?: string | null
+  members?: string[] | null
+  icon?: string | null
+  frequency?: string | null
   tags: string[]
   subtasks?: string[]
   milestones?: string[]
@@ -137,7 +141,7 @@ Always respond with ONLY valid JSON:
     {
       "action": "create" | "update" | "delete" | "delete_all" | "completion" | "set_my_birthday",
       "targetId": "ID элемента если action update/delete" | null,
-      "type": "task" | "goal" | "note" | "project" | "reminder" | "completion" | "delegate",
+      "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate",
       "title": "Понятное, информативное название с сутью действия",
       "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями)",
       "priority": "urgent" | "high" | "medium" | "low",
@@ -151,6 +155,9 @@ Always respond with ONLY valid JSON:
       "projectId": null,
       "goalId": null,
       "folder": "Название папки для заметки ('Работа', 'Личное', 'Идеи', 'Учеба', 'Проекты') или 'Общее'" | null,
+      "members": ["массив имен или @username участников если создается проект, например ['Лера', 'Артем']"] | null,
+      "icon": "эмодзи для привычки (например '🔥', '💧', '📚', '🏃', '🧘') если type: habit" | null,
+      "frequency": "daily" | "weekly" | "weekdays" | null,
       "tags": ["тег1", "тег2"],
       "subtasks": ["конкретный шаг 1", "конкретный шаг 2", "конкретный шаг 3"],
       "milestones": ["этап 1", "этап 2"],
@@ -159,6 +166,10 @@ Always respond with ONLY valid JSON:
     }
   ]
 }
+
+HABITS & PROJECTS RULES:
+- If input mentions "привычка", "добавь привычку", "создай привычку", "трекать привычку" (e.g., "привычка пить 2л воды каждое утро", "привычка читать 15 минут"), set "type": "habit", "title": "...", "frequency": "daily" (or "weekdays" / "weekly"), "icon": "💧"!
+- If input mentions creating a project with team members (e.g., "создай проект 'Сайт' с Лерой и Артемом", "новый проект Диплом с @alex"), set "type": "project", "title": "...", "members": ["Лера", "Артем"] (extract all mentioned friends)!
 
 RECURRENCE & ADVANCE REMINDERS RULES:
 - If input mentions "по будням", "каждый рабочий день", "пн-пт", "с понедельника по пятницу", set "repeat": "weekdays"!
