@@ -26,6 +26,7 @@ import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { recordChannelComment } from '@/lib/backend/comment-analyzer'
 import { getSiriUserKey } from '@/app/api/shortcuts/route'
+import { NAME_TO_CLUSTER_MAP, tokenMatchesCandidateName, namesAreRelated } from '@/lib/backend/name-aliases'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)
 export const maxDuration = 60
@@ -1042,31 +1043,8 @@ async function handleWeeklyReport(chatId: number, senderId: number) {
   }
 }
 
-const NAME_ALIASES: Record<string, string[]> = {
-  владимир: ['вова', 'володя', 'вовчик', 'влад'],
-  дмитрий: ['дима', 'димка', 'димон'],
-  александр: ['саша', 'шура', 'саня', 'алекс'],
-  алексей: ['лёша', 'леша', 'алёша', 'леха', 'лёха'],
-  евгений: ['женя', 'жека'],
-  иван: ['ваня', 'ватек'],
-  сергей: ['серёжа', 'сережа', 'серый'],
-  павел: ['паша', 'пашок'],
-  михаил: ['миша', 'мишаня'],
-  николай: ['коля', 'колян'],
-  андрей: ['ндрюша', 'андрюха'],
-  максим: ['макс'],
-  артем: ['артём', 'тёма', 'тема'],
-  валерия: ['лера'],
-  анастасия: ['настя'],
-  ольга: ['оля'],
-  екатерина: ['катя'],
-  мария: ['маша'],
-  дарья: ['даша'],
-  татьяна: ['таня'],
-  анна: ['аня'],
-  юлия: ['юля'],
-  кирилл: ['кирюха', 'киря', 'кир'],
-}
+// NAME_ALIASES is now imported from lib/backend/name-aliases.ts (comprehensive, 100+ names)
+// Used via tokenMatchesCandidateName() and NAME_TO_CLUSTER_MAP in findFriendMatches below.
 
 export interface FriendMatch {
   friend: any; // TelegramChat
@@ -1144,25 +1122,21 @@ async function findFriendMatches(userChatId: number | bigint, recipientName: str
           isMatch = true; break
         }
 
-        for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
-          const tokenMatchesAlias = aliases.some(a => token.includes(a) || (a.length >= 3 && token.startsWith(a.slice(0, 3))))
-          const tokenMatchesCanonical = token.includes(canonical) || (canonical.length >= 4 && token.startsWith(canonical.slice(0, 4)))
-          
-          const fnMatchesCanonical = fn.includes(canonical) || fullName.includes(canonical) || (canonical.length >= 4 && fn.startsWith(canonical.slice(0, 4)))
-          const fnMatchesAlias = aliases.some(a => fn.includes(a) || fullName.includes(a) || (a.length >= 3 && fn.startsWith(a.slice(0, 3))))
-
-          if ((tokenMatchesAlias && fnMatchesCanonical) || (tokenMatchesCanonical && fnMatchesAlias)) {
-            isMatch = true; break
-          }
+        // Cluster-based matching via comprehensive name-aliases.ts (100+ Russian names + all forms)
+        if (tokenMatchesCandidateName(token, [fn, ln, un].filter(Boolean))) {
+          isMatch = true; break
         }
-        if (isMatch) break
       }
     }
 
     if (!isMatch) {
-      for (const [canonical, aliases] of Object.entries(NAME_ALIASES)) {
-        if (aliases.some(a => rawQuery.includes(a)) && (fn.includes(canonical) || ln.includes(canonical))) {
-          isMatch = true; break
+      // Cluster-based alias matching via comprehensive name-aliases.ts (100+ Russian names)
+      const queryTokens2 = rawQuery.split(/\s+/).filter(Boolean)
+      for (const token of queryTokens2) {
+        const candidateNames = [fn, ln, un].filter(Boolean)
+        if (tokenMatchesCandidateName(token, candidateNames)) {
+          isMatch = true
+          break
         }
       }
     }
@@ -2131,31 +2105,10 @@ function transliterateRu(str: string): string {
   return str.toLowerCase().split('').map(c => ruToEn[c] || c).join('')
 }
 
-const COMMON_NAME_ALIASES: Record<string, string[]> = {
-  'лер': ['лера', 'лерочч', 'лерочка', 'валерия', 'lerochka', 'leroch', 'llerochkap', 'lera', 'valeria'],
-  'арт': ['артем', 'артём', 'тема', 'тёма', 'artem', 'artyom', 'tema'],
-  'вов': ['вова', 'володя', 'владимир', 'вован', 'vova', 'vladimir'],
-  'влад': ['влад', 'владик', 'владислав', 'vlad'],
-  'саш': ['саша', 'александр', 'александра', 'саня', 'шура', 'alex', 'sasha'],
-  'дим': ['дима', 'дмитрий', 'димон', 'митя', 'dima', 'dmitry'],
-  'маш': ['маша', 'мария', 'марья', 'машка', 'masha', 'maria'],
-  'даш': ['даша', 'дарья', 'дарина', 'dasha', 'daria'],
-  'наст': ['настя', 'анастасия', 'ася', 'nastya', 'anastasia'],
-  'кат': ['катя', 'екатерина', 'катрин', 'katya', 'ekaterina', 'kate'],
-  'кост': ['костя', 'константин', 'kostya', 'konstantin'],
-  'жен': ['женя', 'евгений', 'евгения', 'zhenya', 'evgeny'],
-  'миш': ['миша', 'михаил', 'misha', 'mikhail'],
-  'ник': ['никита', 'коля', 'николай', 'nikita', 'kolya', 'nikolay'],
-  'кир': ['кирилл', 'кирюха', 'kirill'],
-  'пол': ['полина', 'поля', 'polina'],
-  'сон': ['соня', 'софия', 'софья', 'sonya', 'sofia'],
-  'ван': ['ваня', 'иван', 'ванек', 'vanya', 'ivan'],
-  'серг': ['сережа', 'сергей', 'серж', 'sergey'],
-  'макс': ['макс', 'максим', 'maxim', 'max'],
-  'иль': ['илья', 'илюха', 'ilya'],
-  'андр': ['андрей', 'andrey', 'andrew'],
-}
-
+/**
+ * Finds a friend by any name form: official, diminutive, nickname, username, transliteration.
+ * Uses comprehensive cluster-based matching from lib/backend/name-aliases.ts
+ */
 function findMatchingFriendUser(query: string, friendUsers: any[]) {
   if (!query || !query.trim() || friendUsers.length === 0) return null
   const cleanQ = query.replace(/^@/, '').toLowerCase().trim()
@@ -2168,13 +2121,19 @@ function findMatchingFriendUser(query: string, friendUsers: any[]) {
     const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
     const full = `${fn} ${ln}`.trim()
     const cid = String(u.chatId)
-
-    if (fn === cleanQ || ln === cleanQ || un === cleanQ || full === cleanQ || cid === cleanQ) {
-      return u
-    }
+    if (fn === cleanQ || ln === cleanQ || un === cleanQ || full === cleanQ || cid === cleanQ) return u
   }
 
-  // 2. Substring & Transliteration match
+  // 2. Cluster-based name matching (100+ Russian names with ALL diminutives)
+  for (const u of friendUsers) {
+    const fn = (u.firstName || '').toLowerCase().trim()
+    const ln = (u.lastName || '').toLowerCase().trim()
+    const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
+    const candidateNames = [fn, ln, un].filter(Boolean)
+    if (tokenMatchesCandidateName(cleanQ, candidateNames)) return u
+  }
+
+  // 3. Substring & transliteration match (for usernames like "llerochkap" → "лера")
   for (const u of friendUsers) {
     const fn = (u.firstName || '').toLowerCase().trim()
     const ln = (u.lastName || '').toLowerCase().trim()
@@ -2186,40 +2145,29 @@ function findMatchingFriendUser(query: string, friendUsers: any[]) {
     if (
       (fn && (fn.includes(cleanQ) || cleanQ.includes(fn))) ||
       (un && (un.includes(cleanQ) || cleanQ.includes(un))) ||
-      (full && (full.includes(cleanQ) || cleanQ.includes(full))) ||
+      (full && full.includes(cleanQ)) ||
       (translitUn && (translitUn.includes(translitQ) || translitQ.includes(translitUn))) ||
       (translitFn && (translitFn.includes(translitQ) || translitQ.includes(translitFn)))
-    ) {
-      return u
-    }
+    ) return u
+
+    // Transliterated username vs cluster lookup (e.g. username="llerochkap" → transliterated → match "лера")
+    const translitUnClusters = NAME_TO_CLUSTER_MAP.get(translitUn)
+    const cleanQCluster = NAME_TO_CLUSTER_MAP.get(cleanQ)
+    if (translitUnClusters && cleanQCluster && translitUnClusters === cleanQCluster) return u
   }
 
-  // 3. Name Aliases & Diminutive Stems (e.g. "лера" -> "лерочч", "llerochkap")
-  for (const [stem, aliases] of Object.entries(COMMON_NAME_ALIASES)) {
-    const qMatches = cleanQ.startsWith(stem) || aliases.some(a => cleanQ.includes(a) || a.includes(cleanQ) || translitQ.includes(transliterateRu(a)))
-    if (qMatches) {
-      for (const u of friendUsers) {
-        const fn = (u.firstName || '').toLowerCase().trim()
-        const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
-        const fnMatches = fn.startsWith(stem) || aliases.some(a => fn.includes(a) || a.includes(fn))
-        const unMatches = un.startsWith(stem) || aliases.some(a => un.includes(a) || a.includes(un))
-        if (fnMatches || unMatches) {
-          return u
-        }
-      }
-    }
-  }
-
-  // 4. Prefix match (first 3 letters)
+  // 4. Prefix match fallback (first 3 letters)
   if (cleanQ.length >= 3) {
     const prefix3 = cleanQ.slice(0, 3)
     const transPrefix3 = translitQ.slice(0, 3)
     for (const u of friendUsers) {
       const fn = (u.firstName || '').toLowerCase().trim()
       const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
-      if (fn.startsWith(prefix3) || un.startsWith(prefix3) || transliterateRu(un).startsWith(transPrefix3) || transliterateRu(fn).startsWith(transPrefix3)) {
-        return u
-      }
+      if (
+        fn.startsWith(prefix3) || un.startsWith(prefix3) ||
+        transliterateRu(un).startsWith(transPrefix3) ||
+        transliterateRu(fn).startsWith(transPrefix3)
+      ) return u
     }
   }
 
