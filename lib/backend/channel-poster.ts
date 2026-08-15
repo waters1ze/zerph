@@ -123,7 +123,8 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
 
   try {
     const pollRecord = await prisma.channelPoll.findFirst({
-      where: { date: mskDate, channelId, isClosed: false }
+      where: { channelId, isClosed: false },
+      orderBy: { createdAt: 'desc' }
     })
     if (!pollRecord) return false
 

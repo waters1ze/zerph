@@ -2786,6 +2786,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // Handle real-time Poll updates (votes in channel polls)
+    if (update.poll) {
+      const poll = update.poll
+      try {
+        const pollRecord = await prisma.channelPoll.findFirst({
+          where: { pollId: poll.id }
+        })
+        if (pollRecord) {
+          const opts: Array<{ text: string; voter_count: number }> = poll.options || []
+          let winningText = pollRecord.winningOption || 'Нет голосов'
+          if (opts.length > 0) {
+            const sorted = [...opts].sort((a, b) => b.voter_count - a.voter_count)
+            if (sorted[0] && sorted[0].voter_count > 0) {
+              winningText = sorted[0].text
+            }
+          }
+          await prisma.channelPoll.update({
+            where: { id: pollRecord.id },
+            data: {
+              options: opts.map(o => ({ text: o.text, voter_count: o.voter_count })),
+              winningOption: winningText,
+            }
+          })
+        }
+      } catch (err) {
+        console.error('Error updating live poll results:', err)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
     const msg = update.message
     if (!msg) return NextResponse.json({ ok: true })
 
