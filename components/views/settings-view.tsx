@@ -773,26 +773,31 @@ export function SettingsView() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
-            <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2">
-              <p className="font-semibold text-foreground flex items-center gap-1.5">
-                <span>🍎</span> Для iPhone (Siri & Action Button)
-              </p>
-              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>Откройте приложение <b>Команды</b> ➔ <b>+</b></li>
-                <li>Добавьте <b>Диктовать текст</b></li>
-                <li>Добавьте <b>Получить содержимое URL</b>:
-                  <div className="text-[11px] font-mono bg-muted/60 p-1.5 rounded my-1 break-all">
-                    URL: https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || '12345'}&text=[Продиктованный текст]
-                  </div>
-                </li>
-                <li>Добавьте <b>Произнести текст</b>: выберите <b>[Содержимое URL]</b></li>
-                <li className="pt-1 text-foreground font-medium">⏰ <i>Опционально (будильник в Часы):</i>
-                  <p className="text-[11px] font-normal text-muted-foreground mt-0.5">
-                    Добавьте <b>«Выбрать из меню»</b> (вопрос: <i>Поставить будильник?</i> ➔ Да / Нет). В ветку «Да» добавьте <b>«Поставить будильник»</b> (Время: <i>[Продиктованный текст] ➔ Тип: Дата</i>, Название: <i>[Продиктованный текст]</i>).
-                  </p>
-                </li>
-                <li>Назначьте команду на <b>Action Button</b> или <b>Стук по крышке</b>!</li>
-              </ol>
+            <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-foreground flex items-center gap-1.5">
+                  <span>🍎</span> Для iPhone (Siri & Action Button)
+                </p>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
+                  1-клик
+                </span>
+              </div>
+              <a
+                href="https://www.icloud.com/shortcuts/f0143b9430e64942b63ba87b47182861"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-2 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
+              >
+                <span>🍏 Установить команду в 1 клик</span>
+              </a>
+              <div className="pt-1 text-[11px] text-muted-foreground space-y-1">
+                <p><b>Как это работает:</b></p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Нажмите <b>«Скопировать ссылку»</b> выше.</li>
+                  <li>Нажмите <b>«Установить команду в 1 клик»</b> ➔ <b>«Добавить»</b>.</li>
+                  <li>Во 2-м блоке вставьте вашу ссылку с <b>[Продиктованный текст]</b> в конце.</li>
+                </ol>
+              </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2">
