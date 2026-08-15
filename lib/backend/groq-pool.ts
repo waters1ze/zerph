@@ -165,8 +165,22 @@ class GroqKeyPool {
 
 export const groqPool = new GroqKeyPool()
 
+export function getHuggingFaceTokens(): string[] {
+  const rawHfTokens: string[] = []
+  if (process.env.HF_TOKEN) rawHfTokens.push(...process.env.HF_TOKEN.split(/[\s,;\n]+/))
+  if (process.env.HF_TOKENS) rawHfTokens.push(...process.env.HF_TOKENS.split(/[\s,;\n]+/))
+  if (process.env.HUGGINGFACE_API_KEY) rawHfTokens.push(...process.env.HUGGINGFACE_API_KEY.split(/[\s,;\n]+/))
+  if (process.env.HUGGINGFACE_TOKEN) rawHfTokens.push(...process.env.HUGGINGFACE_TOKEN.split(/[\s,;\n]+/))
+  for (let i = 1; i <= 10; i++) {
+    const t = process.env[`HF_TOKEN_${i}`]
+    if (t) rawHfTokens.push(t.trim())
+  }
+  return Array.from(new Set(rawHfTokens.map(t => t.trim()).filter(t => t.startsWith('hf_') || t.length > 20)))
+}
+
 /**
  * Execute Groq Chat Completion with full automatic key rotation and model fallback
+ * Secondary fallback: Hugging Face Serverless Chat/LLM API Pool
  */
 export async function callGroqChatCompletion(options: {
   messages: Array<{ role: string; content: any }>
@@ -178,9 +192,6 @@ export async function callGroqChatCompletion(options: {
   fallbackModels?: string[]
 }): Promise<{ content: string; keyUsed: string; modelUsed: string }> {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
-  if (keys.length === 0) {
-    throw new Error('No Groq API keys configured. Please add GROQ_API_KEY to environment variables.')
-  }
 
   const primaryModel = options.model || GROQ_CHAT_MODEL
   const models = [
@@ -190,53 +201,129 @@ export async function callGroqChatCompletion(options: {
 
   let lastError: Error | null = null
 
-  for (const m of models) {
-    for (const key of keys) {
-      try {
-        const body: Record<string, any> = {
-          model: m,
-          messages: options.messages,
-          temperature: options.temperature ?? 0.3,
-        }
-        if (options.max_tokens) body.max_tokens = options.max_tokens
-        if (options.response_format) body.response_format = options.response_format
+  // ── Tier 1: Groq Multi-Account Round-Robin Pool ──
+  if (keys.length > 0) {
+    for (const m of models) {
+      for (const key of keys) {
+        try {
+          const body: Record<string, any> = {
+            model: m,
+            messages: options.messages,
+            temperature: options.temperature ?? 0.3,
+          }
+          if (options.max_tokens) body.max_tokens = options.max_tokens
+          if (options.response_format) body.response_format = options.response_format
 
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        })
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${key}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          })
 
-        if (res.status === 429) {
-          groqPool.markKeyRateLimited(key, 60)
-          console.warn(`[GroqChat] 429 Rate Limit on key, rotating to next key...`)
-          continue
-        }
-
-        if (!res.ok) {
-          const errText = await res.text()
-          if (errText.includes('rate_limit') || res.status === 413 || res.status === 503) {
-            groqPool.markKeyRateLimited(key, 45)
+          if (res.status === 429) {
+            groqPool.markKeyRateLimited(key, 60)
+            console.warn(`[GroqChat] 429 Rate Limit on key, rotating to next key...`)
             continue
           }
-          throw new Error(`Groq Chat error (${res.status}): ${errText}`)
-        }
 
-        const data = await res.json()
-        const content = data.choices?.[0]?.message?.content || ''
-        groqPool.markKeySuccess(key)
-        return { content, keyUsed: key, modelUsed: m }
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(String(err))
-        console.warn(`[GroqChat] Attempt failed with model ${m}: ${lastError.message}`)
+          if (!res.ok) {
+            const errText = await res.text()
+            if (errText.includes('rate_limit') || res.status === 413 || res.status === 503) {
+              groqPool.markKeyRateLimited(key, 45)
+              continue
+            }
+            throw new Error(`Groq Chat error (${res.status}): ${errText}`)
+          }
+
+          const data = await res.json()
+          const content = data.choices?.[0]?.message?.content || ''
+          groqPool.markKeySuccess(key)
+          return { content, keyUsed: key, modelUsed: m }
+        } catch (err: unknown) {
+          lastError = err instanceof Error ? err : new Error(String(err))
+          console.warn(`[GroqChat] Attempt failed with model ${m}: ${lastError.message}`)
+        }
       }
     }
   }
 
-  throw lastError || new Error('All Groq keys and fallback models failed.')
+  // ── Tier 2: Hugging Face Serverless Chat LLM Pool ──
+  const hfTokens = getHuggingFaceTokens()
+  if (hfTokens.length > 0) {
+    const hfChatModels = [
+      'meta-llama/Llama-3.3-70B-Instruct',
+      'meta-llama/Llama-3.1-8B-Instruct',
+      'Qwen/Qwen2.5-72B-Instruct',
+      'mistralai/Mistral-7B-Instruct-v0.3',
+    ]
+
+    for (const hfModel of hfChatModels) {
+      for (const token of hfTokens) {
+        try {
+          console.log(`[GroqChat Fallback] Switching to Hugging Face LLM: ${hfModel}...`)
+          const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: hfModel,
+              messages: options.messages,
+              temperature: options.temperature ?? 0.3,
+              max_tokens: options.max_tokens ?? 1024,
+              ...(options.response_format ? { response_format: options.response_format } : {})
+            }),
+          })
+
+          if (hfRes.ok) {
+            const hfData = await hfRes.json()
+            const content = hfData.choices?.[0]?.message?.content || ''
+            if (content) {
+              return { content, keyUsed: `${token.slice(0, 6)}...`, modelUsed: hfModel }
+            }
+          }
+        } catch (hfErr) {
+          console.warn(`[HF-Chat] Model ${hfModel} error:`, hfErr)
+        }
+      }
+    }
+  }
+
+  // ── Tier 3: OpenAI Fallback (if configured) ──
+  const openAiKey = process.env.OPENAI_API_KEY
+  if (openAiKey) {
+    try {
+      const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: options.messages,
+          temperature: options.temperature ?? 0.3,
+          max_tokens: options.max_tokens ?? 1024,
+        }),
+      })
+
+      if (openAiRes.ok) {
+        const oData = await openAiRes.json()
+        const content = oData.choices?.[0]?.message?.content || ''
+        if (content) {
+          return { content, keyUsed: 'openai_key', modelUsed: 'gpt-4o-mini' }
+        }
+      }
+    } catch (oErr) {
+      console.warn('[OpenAI-Chat] error:', oErr)
+    }
+  }
+
+  throw lastError || new Error('All Groq keys and Hugging Face fallback models failed.')
 }
 
 /**
@@ -306,16 +393,7 @@ export async function callGroqWhisper(options: {
   // ── Multi-Provider Secondary Fallbacks (Hugging Face / OpenAI / Cloudflare) ──
 
   // 1. Hugging Face Inference API Pool (Free & Serverless)
-  const rawHfTokens: string[] = []
-  if (process.env.HF_TOKEN) rawHfTokens.push(...process.env.HF_TOKEN.split(/[\s,;\n]+/))
-  if (process.env.HF_TOKENS) rawHfTokens.push(...process.env.HF_TOKENS.split(/[\s,;\n]+/))
-  if (process.env.HUGGINGFACE_API_KEY) rawHfTokens.push(...process.env.HUGGINGFACE_API_KEY.split(/[\s,;\n]+/))
-  if (process.env.HUGGINGFACE_TOKEN) rawHfTokens.push(...process.env.HUGGINGFACE_TOKEN.split(/[\s,;\n]+/))
-  for (let i = 1; i <= 10; i++) {
-    const t = process.env[`HF_TOKEN_${i}`]
-    if (t) rawHfTokens.push(t.trim())
-  }
-  const hfTokens = Array.from(new Set(rawHfTokens.map(t => t.trim()).filter(t => t.startsWith('hf_') || t.length > 20)))
+  const hfTokens = getHuggingFaceTokens()
 
   if (hfTokens.length > 0) {
     const hfModels = [
