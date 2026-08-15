@@ -211,12 +211,16 @@ model AppActionLog {
 
 // Comments from channel posts & discussion groups analyzed by AI
 model ChannelComment {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   channelPostId Int?
   chatId        BigInt?
   userName      String?
   text          String
-  sentiment     String?  // 'positive' | 'negative' | 'suggestion' | 'neutral'
-  createdAt     DateTime @default(now())
+  sentiment     String?   // 'positive' | 'negative' | 'suggestion' | 'neutral'
+  isAnalyzed    Boolean   @default(false)
+  analyzedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([isAnalyzed])
 }
 

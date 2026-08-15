@@ -5,6 +5,7 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
 export interface CommentAnalysisResult {
   totalAnalyzed: number
+  newCommentsCount: number
   sentimentSummary: {
     positivePercent: number
     neutralPercent: number
@@ -21,6 +22,11 @@ export interface CommentAnalysisResult {
   }>
 }
 
+/**
+ * 1. Passive real-time capture:
+ * ONLY saves raw text to database with isAnalyzed: false.
+ * Does NOT call any LLM or AI in real-time.
+ */
 export async function recordChannelComment(data: {
   channelPostId?: number
   chatId?: number | bigint
@@ -34,6 +40,7 @@ export async function recordChannelComment(data: {
         chatId: data.chatId ? BigInt(data.chatId) : null,
         userName: data.userName || 'Подписчик',
         text: data.text.slice(0, 1000),
+        isAnalyzed: false,
       }
     })
   } catch (err) {
@@ -42,29 +49,44 @@ export async function recordChannelComment(data: {
   }
 }
 
-export async function generateCommentAnalysisReport(limit = 50): Promise<CommentAnalysisResult> {
-  const comments = await prisma.channelComment.findMany({
+/**
+ * 2. Scheduled / On-Demand Batch AI Analysis:
+ * Reads ONLY NEW, unanalyzed comments (isAnalyzed: false).
+ * Optionally marks them as analyzed after generating the report.
+ */
+export async function generateCommentAnalysisReport(
+  limit = 100,
+  markAsAnalyzed = false
+): Promise<CommentAnalysisResult> {
+  // Fetch fresh comments that have NOT been analyzed in previous reports
+  const newComments = await prisma.channelComment.findMany({
+    where: { isAnalyzed: false },
     take: limit,
     orderBy: { createdAt: 'desc' }
   })
 
-  if (comments.length === 0) {
+  // If no new comments, check if there are any recent analyzed comments to show history
+  if (newComments.length === 0) {
+    const totalInDb = await prisma.channelComment.count().catch(() => 0)
     return {
-      totalAnalyzed: 0,
+      totalAnalyzed: totalInDb,
+      newCommentsCount: 0,
       sentimentSummary: { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
-      topRequests: ['Пока нет новых комментариев под постами в канале'],
+      topRequests: ['Все предыдущие комментарии уже проанализированы в прошлых отчетах'],
       mainIssuesOrQuestions: [],
-      executiveSummary: 'Комментариев за эту неделю пока не поступало. Отчет формируется еженедельно перед отправкой сводки.',
+      executiveSummary: totalInDb > 0
+        ? 'Все ранее поступившие комментарии уже были включены в предыдущие сводки. Новых комментариев пока не поступало.'
+        : 'Комментариев за эту неделю пока не поступало. Отчет формируется еженедельно перед отправкой сводки.',
       rawComments: []
     }
   }
 
-  const commentTexts = comments.map(c => `${c.userName || 'User'}: ${c.text}`).join('\n')
+  const commentTexts = newComments.map(c => `${c.userName || 'Подписчик'}: ${c.text}`).join('\n')
   let analysis: any = null
 
   try {
     const prompt =
-      `Ты — ведущий продуктовый аналитик экосистемы Zerf AI. Проанализируй комментарии подписчиков под постами Telegram-канала @zerph_off:\n\n` +
+      `Ты — ведущий продуктовый аналитик экосистемы Zerf AI. Проанализируй новую порцию свежих комментариев подписчиков под постами Telegram-канала @zerph_off:\n\n` +
       `${commentTexts}\n\n` +
       `Верни строго JSON со следующей структурой:\n` +
       `{\n` +
@@ -84,16 +106,29 @@ export async function generateCommentAnalysisReport(limit = 50): Promise<Comment
 
     analysis = JSON.parse(result.content || '{}')
   } catch (e) {
-    console.error('Groq comment analysis error:', e)
+    console.error('Groq batch comment analysis error:', e)
+  }
+
+  // If requested (e.g. before sending weekly telegram digest to admins), mark these comments as analyzed
+  if (markAsAnalyzed && newComments.length > 0) {
+    const ids = newComments.map(c => c.id)
+    await prisma.channelComment.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        isAnalyzed: true,
+        analyzedAt: new Date(),
+      }
+    }).catch(err => console.error('Failed to mark comments as analyzed:', err))
   }
 
   return {
-    totalAnalyzed: comments.length,
+    totalAnalyzed: newComments.length,
+    newCommentsCount: newComments.length,
     sentimentSummary: analysis?.sentiment || { positivePercent: 80, neutralPercent: 15, negativePercent: 5 },
     topRequests: analysis?.topRequests || ['Пользователям нравится текущий функционал'],
     mainIssuesOrQuestions: analysis?.mainIssuesOrQuestions || [],
-    executiveSummary: analysis?.executiveSummary || 'Аудитория активно следит за развитием проекта.',
-    rawComments: comments.map(c => ({
+    executiveSummary: analysis?.executiveSummary || 'Аудитория активно обсуждает обновления проекта.',
+    rawComments: newComments.map(c => ({
       id: c.id,
       userName: c.userName,
       text: c.text,
@@ -102,11 +137,16 @@ export async function generateCommentAnalysisReport(limit = 50): Promise<Comment
   }
 }
 
+/**
+ * 3. Send digest to admins:
+ * Analyzes fresh comments and automatically marks them as analyzed.
+ */
 export async function sendCommentReportToAdminsTelegram(): Promise<boolean> {
   if (!BOT_TOKEN) return false
 
   try {
-    const report = await generateCommentAnalysisReport(30)
+    // Generate analysis strictly for new comments and mark them as analyzed
+    const report = await generateCommentAnalysisReport(50, true)
 
     const adminIds = new Set<number>()
     const ownerEnv = process.env.OWNER_CHAT_ID || '6136950061'
@@ -120,17 +160,16 @@ export async function sendCommentReportToAdminsTelegram(): Promise<boolean> {
     })
     dbAdmins.forEach(a => adminIds.add(Number(a.chatId)))
 
-    const msg = report.totalAnalyzed > 0
-      ? `✦ <b>ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
-        `<b>Проанализировано комментариев:</b> ${report.totalAnalyzed}\n` +
+    const msg = report.newCommentsCount > 0
+      ? `✦ <b>СВЕЖИЙ ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
+        `<b>Новых комментариев за период:</b> ${report.newCommentsCount}\n` +
         `<b>Индекс настроения:</b> ${report.sentimentSummary.positivePercent}% позитив | ${report.sentimentSummary.neutralPercent}% нейтрально | ${report.sentimentSummary.negativePercent}% критика\n\n` +
         `◈ <b>Топ запросов подписчиков:</b>\n` +
         report.topRequests.map(r => `▪ ${r}`).join('\n') +
         `\n\n<blockquote>${report.executiveSummary}</blockquote>\n\n` +
-        `<i>Подробная аналитика доступна в панели администратора: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
+        `<i>Все эти комментарии помечены как обработанные. Панель управления: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
       : `✦ <b>ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
-        `📊 <b>Статус:</b> Новых комментариев под постами в канале пока не зафиксировано.\n\n` +
-        `💡 <i>Подсказка:</i> Чтобы ИИ считывал комментарии подписчиков под постами, добавьте бота @zerph_bot в <b>чат обсуждений (группу комментариев)</b> канала @zerph_off с правами администратора или чтения сообщений.\n\n` +
+        `📊 <b>Статус:</b> Новых необработанных комментариев с момента прошлого отчета не поступало.\n\n` +
         `<i>Панель администратора: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
 
     for (const cid of Array.from(adminIds)) {
