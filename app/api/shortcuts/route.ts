@@ -100,6 +100,8 @@ export async function POST(req: NextRequest) {
       inputText = rawText || searchParams.get('text') || searchParams.get('q') || ''
     }
 
+    const format = searchParams.get('format') || bodyObj.format
+
     if (!chatId || isNaN(chatId)) {
       return NextResponse.json({
         error: 'chatId is required. Find your Chat ID via /start in @Zerph_bot',
@@ -174,14 +176,20 @@ export async function POST(req: NextRequest) {
     })
     sendTgNotification(chatId, tgMsg).catch(() => {})
 
-    return NextResponse.json({
-      success: true,
-      rawInput: inputText,
-      itemsCount: items.length,
-      spokenResponse: spokenText,
-      result: spokenText,
-      text: spokenText,
-      items: items.map(i => ({ title: i.title, dueTime: i.dueTime, priority: i.priority }))
+    if (format === 'json' || req.headers.get('accept')?.includes('application/json')) {
+      return NextResponse.json({
+        success: true,
+        rawInput: inputText,
+        itemsCount: items.length,
+        spokenResponse: spokenText,
+        result: spokenText,
+        text: spokenText,
+        items: items.map(i => ({ title: i.title, dueTime: i.dueTime, priority: i.priority }))
+      })
+    }
+
+    return new NextResponse(spokenText, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   } catch (err: unknown) {
     console.error('Shortcuts API error:', err)
