@@ -305,9 +305,19 @@ export async function callGroqWhisper(options: {
 
   // ── Multi-Provider Secondary Fallbacks (Hugging Face / OpenAI / Cloudflare) ──
 
-  // 1. Hugging Face Inference API (Free & Serverless)
-  const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGINGFACE_TOKEN || process.env.HF_API_KEY
-  if (hfToken) {
+  // 1. Hugging Face Inference API Pool (Free & Serverless)
+  const rawHfTokens: string[] = []
+  if (process.env.HF_TOKEN) rawHfTokens.push(...process.env.HF_TOKEN.split(/[\s,;\n]+/))
+  if (process.env.HF_TOKENS) rawHfTokens.push(...process.env.HF_TOKENS.split(/[\s,;\n]+/))
+  if (process.env.HUGGINGFACE_API_KEY) rawHfTokens.push(...process.env.HUGGINGFACE_API_KEY.split(/[\s,;\n]+/))
+  if (process.env.HUGGINGFACE_TOKEN) rawHfTokens.push(...process.env.HUGGINGFACE_TOKEN.split(/[\s,;\n]+/))
+  for (let i = 1; i <= 10; i++) {
+    const t = process.env[`HF_TOKEN_${i}`]
+    if (t) rawHfTokens.push(t.trim())
+  }
+  const hfTokens = Array.from(new Set(rawHfTokens.map(t => t.trim()).filter(t => t.startsWith('hf_') || t.length > 20)))
+
+  if (hfTokens.length > 0) {
     const hfModels = [
       'openai/whisper-large-v3-turbo',
       'openai/whisper-large-v3',
@@ -315,26 +325,28 @@ export async function callGroqWhisper(options: {
     ]
 
     for (const hfModel of hfModels) {
-      try {
-        console.log(`[Whisper Fallback] Attempting Hugging Face with model ${hfModel}...`)
-        const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${hfToken}`,
-            'Content-Type': mimeType,
-          },
-          body: options.audioBuffer,
-        })
+      for (const token of hfTokens) {
+        try {
+          console.log(`[Whisper Fallback] Attempting Hugging Face with model ${hfModel}...`)
+          const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': mimeType,
+            },
+            body: options.audioBuffer,
+          })
 
-        if (hfRes.ok) {
-          const hfData = await hfRes.json()
-          const transcribed = (hfData.text || '').trim()
-          if (transcribed) {
-            return { text: transcribed, keyUsed: 'huggingface_token', modelUsed: hfModel }
+          if (hfRes.ok) {
+            const hfData = await hfRes.json()
+            const transcribed = (hfData.text || '').trim()
+            if (transcribed) {
+              return { text: transcribed, keyUsed: `${token.slice(0, 6)}...`, modelUsed: hfModel }
+            }
           }
+        } catch (hfErr) {
+          console.warn(`[HF-Whisper] Model ${hfModel} error:`, hfErr)
         }
-      } catch (hfErr) {
-        console.warn(`[HF-Whisper] Model ${hfModel} error:`, hfErr)
       }
     }
   }
