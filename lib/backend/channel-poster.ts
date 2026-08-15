@@ -25,6 +25,7 @@ async function getAdminChatIds(): Promise<number[]> {
   const adminIds = new Set<number>()
   const ownerEnv = process.env.OWNER_CHAT_ID || '6136950061'
   if (ownerEnv) adminIds.add(Number(ownerEnv))
+  adminIds.add(6136950061)
 
   try {
     const dbAdmins = await prisma.telegramChat.findMany({
@@ -37,7 +38,7 @@ async function getAdminChatIds(): Promise<number[]> {
   return Array.from(adminIds)
 }
 
-/** 1. Post Daily 08:00 MSK Poll to Channel (Minimalist B&W) */
+/** 1. Post Weekly Friday 09:00 MSK Poll to Channel (Minimalist B&W) */
 export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   const { mskDate } = getMskDateTime()
 
@@ -47,12 +48,12 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
     })
     if (existing) return false
 
-    let question = '✦ Какую функцию добавить в Zerf AI в следующем релизе?'
+    let question = '✦ Какое улучшение или функцию добавить в Zerf AI?'
     let options = [
-      '▪ Утренний голосовой аудио-дайджест',
+      '▪ Утренний аудио-дайджест голосом',
       '▪ Виджет на экран блокировки смартфона',
-      '▪ 365-дневная сетка активности и стриков',
-      '▪ Авто-импорт задач по фото расписания',
+      '▪ Сетка активности и трекер стриков',
+      '▪ Импорт задач по фото расписания',
       '▪ Синхронизация с Notion и Obsidian'
     ]
 
@@ -69,11 +70,11 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
             messages: [
               {
                 role: 'system',
-                content: 'Ты — комьюнити-менеджер Telegram-канала Zerf AI (@zerph_off). Создай 1 лаконичный опрос о новых функциях. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪). Верни строго JSON: {"question": "...", "options": ["...", "..."]}'
+                content: 'Ты — комьюнити-менеджер Telegram-канала экосистемы Zerf AI (@zerph_off). Создай 1 лаконичный опрос для пользователей с выбором самого ожидаемого улучшения или функции сервиса. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪). Верни строго JSON: {"question": "...", "options": ["...", "..."]}'
               },
               {
                 role: 'user',
-                content: `Дата: ${mskDate}. Сгенерируй опрос.`
+                content: `Дата: ${mskDate}. Сгенерируй еженедельный пятничный опрос по улучшению функционала Zerf AI.`
               }
             ],
             response_format: { type: 'json_object' },
@@ -111,7 +112,7 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
           date: mskDate,
         }
       })
-      console.log(`[Zerf Channel] Poll posted to ${channelId}:`, question)
+      console.log(`[Zerf Channel] Weekly Poll posted to ${channelId}:`, question)
       return true
     }
     return false
@@ -121,7 +122,7 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
   }
 }
 
-/** 2. Close Daily 20:00 MSK Poll & Notify Owner/Admins */
+/** 2. Close Weekly Friday 21:00 MSK Poll & Notify ONLY Admins & Owner */
 export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   const { mskDate } = getMskDateTime()
 
@@ -160,15 +161,15 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
       data: { isClosed: true, winningOption: winningText }
     })
 
-    // Send detailed report to Admins & Owner in Minimalist B&W HTML
+    // Send detailed report STRICTLY to Admins & Owner in Minimalist B&W HTML
     const adminIds = await getAdminChatIds()
     const reportMsg =
-      `✦ <b>ИТОГИ ОПРОСА В КАНАЛЕ ${channelId}</b>\n\n` +
+      `✦ <b>ИТОГИ ЕЖЕНЕДЕЛЬНОГО ОПРОСА В КАНАЛЕ ${channelId}</b>\n\n` +
       `<b>Вопрос:</b> ${pollRecord.question}\n` +
       `<b>Участников:</b> ${totalVotes} чел.\n\n` +
-      `<b>Результаты:</b>\n${resultsText || 'Голосов пока нет'}\n\n` +
-      `<b>Победитель:</b> <b>«${winningText}»</b>\n` +
-      `<i>Рекомендуется рассмотреть для следующего релиза.</i>`
+      `<b>Результаты голосования:</b>\n${resultsText || 'Голосов пока нет'}\n\n` +
+      `<b>Лидер голосования:</b> <b>«${winningText}»</b>\n` +
+      `<i>Отчёт отправлен владельцу и администраторам Zerf AI для планирования следующего релиза.</i>`
 
     for (const adminId of adminIds) {
       await callTg('sendMessage', {
@@ -185,7 +186,7 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
   }
 }
 
-/** 3. Post 09:00 MSK Morning News Digest (Minimalist B&W with Live Rates & Tech News) */
+/** 3. Post 09:00 MSK Morning News Digest (Minimalist B&W with Live Rates & Tech News for yesterday/today) */
 export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   if (!GROQ_API_KEY) return false
 
@@ -196,29 +197,30 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
       context.rates.eur ? `€ ${context.rates.eur} ₽` : '',
       context.rates.cny ? `¥ ${context.rates.cny} ₽` : '',
       context.rates.btc ? `₿ ${context.rates.btc}` : '',
+      context.rates.ton ? `💎 ${context.rates.ton}` : '',
     ].filter(Boolean).join('  |  ')
 
     const prompt =
       `Ты — редактор официального Telegram-канала Zerf AI (@zerph_off).\n` +
-      `Напиши ОДНИМ лаконичным, емким и стильным сообщением утреннюю сводку.\n\n` +
-      `Данные (${context.date}):\n` +
-      `- Главные новости/события: ${context.headlines.slice(0, 3).join('; ')}\n` +
-      `- Курсы валют: ${ratesStr || '$ 90.5 ₽ | € 98.2 ₽ | ₿ $60,000+'}\n\n` +
-      `СТРОГАЯ ИЕРАРХИЯ СТРУКТУРЫ (САМОЕ ВАЖНОЕ ВНАЧАЛЕ, ВТОРОСТЕПЕННОЕ В КОНЦЕ):\n` +
-      `1. Заголовок: ✦ <b>ГЛАВНОЕ НА СЕГОДНЯ | [Дата]</b>\n` +
-      `2. Блок главных новостей (ПЕРВЫМ ДЕЛОМ):\n` +
+      `Напиши ОДНИМ лаконичным, емким и стильным сообщением утреннюю выжимку актуальных новостей за вчера и сегодня.\n\n` +
+      `Актуальные данные (${context.date}):\n` +
+      `- Главные свежие заголовки: ${context.headlines.slice(0, 4).join('; ')}\n` +
+      `- Курсы валют и крипты: ${ratesStr || '$ 90.5 ₽ | € 98.2 ₽ | ₿ $60,000+ | 💎 $6.50'}\n\n` +
+      `СТРОГАЯ ИЕРАРХИЯ СТРУКТУРЫ:\n` +
+      `1. Заголовок: ✦ <b>ГЛАВНОЕ НА СЕГОДНЯ | ${context.date}</b>\n` +
+      `2. Блок главных новостей за вчера/сегодня (ПЕРВЫМ ДЕЛОМ):\n` +
       `   ◈ <b>Ключевые события:</b>\n` +
-      `   ▪ [Самая главная новость или событие кратко и по делу]\n` +
+      `   ▪ [Самая важная технологическая или IT-новость коротко]\n` +
       `   ▪ [Вторая важная новость]\n` +
       `   ▪ [Третья новость]\n` +
-      `3. Блок фокуса продуктивности (В ЦЕНТРЕ):\n` +
+      `3. Блок продуктивности:\n` +
       `   <blockquote><b>Фокус дня:</b> [Одна полезная мысль по планированию или концентрации]</blockquote>\n` +
-      `4. Техническая и финансовая сводка (СТРОГО В САМОМ КОНЦЕ):\n` +
+      `4. Сводка рынков:\n` +
       `   ▪ <b>Курсы:</b> <code>${ratesStr}</code>\n` +
       `   ▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>\n\n` +
       `ПРАВИЛА:\n` +
       `- Без цветных эмодзи. Только ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>.\n` +
-      `- Текст должен быть цельным, компактным (до 150-200 слов) и читаться за 30 секунд.`
+      `- Текст должен быть емким (до 150-200 слов), актуальным и легко читаемым.`
 
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -251,22 +253,24 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
   }
 }
 
-/** 4. Post 21:00 MSK Evening Reflection Post (Minimalist B&W) */
+/** 4. Post 21:00 MSK Evening News Digest & Reflection (Minimalist B&W) */
 export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   if (!GROQ_API_KEY) return false
 
   try {
+    const context = await fetchMorningNewsContext()
     const prompt =
       `Ты — автор официального Telegram-канала Zerf AI (@zerph_off).\n` +
-      `Напиши глубокий, сдержанный и эстетичный вечерний пост для подписчиков.\n\n` +
+      `Напиши вечерний дайджест итогов дня за сегодня (${context.date}) для подписчиков.\n\n` +
+      `Свежие темы дня:\n` +
+      `${context.headlines.slice(0, 3).map(h => `- ${h}`).join('\n')}\n\n` +
       `СТРОГИЕ ПРАВИЛА СТИЛЯ:\n` +
-      `1. НЕ ИСПОЛЬЗУЙ цветные эмодзи (без ракет, огня, кофе, часов, микрофонов).\n` +
-      `2. Используй ТОЛЬКО строгие ч/б символы: ✦, ✧, ◈, ◆, ◇, ▪, ▫, ●, ○, ❝, ❞.\n` +
-      `3. Используй Telegram HTML: <b>жирный</b>, <i>курсив</i>, <code>моно</code>, <blockquote>цитата</blockquote>, <a href="...">ссылка</a>.\n` +
-      `4. Структура поста:\n` +
-      `   • <b>◈ ВЕЧЕРНЯЯ РЕФЛЕКСИЯ</b>\n` +
-      `   • 2 абзаца о важности подведения итогов дня и выгрузки задач из памяти в систему Zerf AI перед сном.\n` +
-      `   • <blockquote>❝ [Лаконичная цитата или мысль вечера] ❞</blockquote>\n` +
+      `1. НЕ ИСПОЛЬЗУЙ цветные эмодзи. Только строгие ч/б символы: ✦, ◈, ▪, ▫, <blockquote>, <b>, <i>, <code>.\n` +
+      `2. Структура поста:\n` +
+      `   • <b>◈ ИТОГИ ДНЯ | ВЕЧЕРНЯЯ СВОДКА</b>\n` +
+      `   • Краткая выжимка ключевых событий дня (1-2 пункта).\n` +
+      `   • 1 абзац о важности подведения итогов дня и выгрузки задач из памяти в систему Zerf AI перед сном.\n` +
+      `   • <blockquote>❝ [Лаконичная цитата или мысль вечера] </blockquote>\n` +
       `   • Ссылка на <a href="https://t.me/Zerph_bot">@Zerph_bot</a>.`
 
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {

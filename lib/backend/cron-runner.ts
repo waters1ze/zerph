@@ -417,31 +417,31 @@ export async function runChannelAndAiCron() {
     const day = getPart('weekday').toLowerCase() // 'fri', 'mon', etc.
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // 08:00 MSK: Daily poll to @zerph_off
-    if (hour === 8 && lastChannelPollDate !== todayStr) {
+    // 1. Friday 09:00 MSK: Weekly Poll on Improvements and New Features
+    if (day === 'fri' && hour === 9 && lastChannelPollDate !== todayStr) {
       lastChannelPollDate = todayStr
       postDailyPollToChannel().catch(() => {})
     }
 
-    // 09:00 MSK: Morning post to @zerph_off
-    if (hour === 9 && lastMorningPostDate !== todayStr) {
+    // 2. Monday-Thursday & Saturday-Sunday 09:00 MSK: Morning News Digest (2 posts/day schedule)
+    if (day !== 'fri' && hour === 9 && lastMorningPostDate !== todayStr) {
       lastMorningPostDate = todayStr
       postDailyMorningPostToChannel().catch(() => {})
     }
 
-    // 20:00 MSK: Close poll and report winner to Admins & Owner
-    if (hour === 20 && lastClosePollDate !== todayStr) {
+    // 3. Friday 21:00 MSK (9:00 вечера): Close Weekly Poll & Send Results STRICTLY to Owner & Admins
+    if (day === 'fri' && hour === 21 && lastClosePollDate !== todayStr) {
       lastClosePollDate = todayStr
       closeDailyPollAndNotifyAdmins().catch(() => {})
     }
 
-    // 21:00 MSK: Evening post to @zerph_off
+    // 4. Every Day 21:00 MSK: Evening News Digest & Daily Reflection (on Friday it's the 1x news post)
     if (hour === 21 && lastEveningPostDate !== todayStr) {
       lastEveningPostDate = todayStr
       postDailyEveningPostToChannel().catch(() => {})
     }
 
-    // Friday 00:00 MSK: AI Autonomous Feature Evolution Proposal
+    // 5. Friday 00:00 MSK: AI Autonomous Feature Evolution Proposal to Admins
     if (day === 'fri' && hour === 0 && lastFridayProposalDate !== todayStr) {
       lastFridayProposalDate = todayStr
       generateAndSendFridayAiProposal().catch(() => {})
