@@ -10,6 +10,7 @@
 import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig } from './db'
 import { generateMorningGreeting, generateEveningReview } from './groq'
 import { prisma } from './prisma'
+import { sendCommentReportToAdminsTelegram } from './comment-analyzer'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
 
@@ -449,11 +450,12 @@ export async function runChannelAndAiCron() {
       }
     }
 
-    // 3. Friday 21:00-23:59 MSK: Close Weekly Poll & Send Results STRICTLY to Owner & Admins
+    // 3. Friday 21:00-23:59 MSK: Close Weekly Poll & Send Results and Comment Sentiment STRICTLY to Owner & Admins
     if (day === 'fri' && hour >= 21) {
       const lastClose = await getConfig('last_channel_close_poll_date')
       if (lastClose !== todayStr) {
         const ok = await closeDailyPollAndNotifyAdmins()
+        await sendCommentReportToAdminsTelegram().catch(() => {})
         if (ok) await setConfig('last_channel_close_poll_date', todayStr)
       }
     }

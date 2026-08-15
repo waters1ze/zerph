@@ -2868,7 +2868,18 @@ export async function POST(req: NextRequest) {
     )
 
     // Save user comment from channel discussion group / replies for AI sentiment & feature analysis
-    if (text && !text.startsWith('/')) {
+    // EXCLUDE:
+    // 1. Channel automatic forwards / channel posts (msg.is_automatic_forward, msg.sender_chat)
+    // 2. Bot itself (msg.from?.is_bot)
+    // 3. Channel admin / owner (senderId === 6136950061, username === 'proj_1', 'zerph_bot', 'zerph_off', etc.)
+    const isFromChannelOrBotOrOwner = Boolean(msg.is_automatic_forward) ||
+      Boolean(msg.sender_chat) ||
+      Boolean(msg.from?.is_bot) ||
+      senderId === 6136950061 ||
+      String(senderId) === process.env.OWNER_CHAT_ID ||
+      ['proj_1', 'zerph_bot', 'zerph_off', 'channel_bot', 'groupanonymousbot'].includes((username || '').toLowerCase())
+
+    if (text && !text.startsWith('/') && !isFromChannelOrBotOrOwner) {
       const isChannelComment = isDiscussionGroup || Boolean(msg.reply_to_message) || Boolean(msg.forward_from_chat)
       if (isChannelComment) {
         const channelPostId = msg.reply_to_message?.forward_from_message_id || msg.reply_to_message?.message_id

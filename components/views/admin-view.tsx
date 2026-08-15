@@ -101,11 +101,14 @@ export function AdminView() {
     }
   }
 
-  const fetchFeedbackReport = async (notifyAdmins = false) => {
+  const fetchFeedbackReport = async (notifyAdmins = false, forceRefresh = false) => {
     setFeedbackLoading(true)
     try {
       const headers = getAuthHeaders()
-      const res = await fetch('/api/admin/channel/feedback', {
+      const url = notifyAdmins
+        ? '/api/admin/channel/feedback'
+        : `/api/admin/channel/feedback${forceRefresh ? '?refresh=true' : ''}`
+      const res = await fetch(url, {
         method: notifyAdmins ? 'POST' : 'GET',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: notifyAdmins ? JSON.stringify({ notifyAdmins: true }) : undefined,
@@ -115,8 +118,8 @@ export function AdminView() {
         setFeedbackReport(data.report)
         if (notifyAdmins) {
           showNotice('success', 'Отчет успешно отправлен админам в Telegram!')
-        } else {
-          showNotice('success', 'Аналитика ИИ успешно обновлена!')
+        } else if (forceRefresh) {
+          showNotice('success', 'Свежий ИИ-анализ комментариев сформирован!')
         }
       } else {
         showNotice('error', data.error || 'Ошибка загрузки отчета')
@@ -462,7 +465,7 @@ export function AdminView() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => fetchFeedbackReport(false)}
+              onClick={() => fetchFeedbackReport(false, true)}
               disabled={feedbackLoading}
               className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-medium border border-border flex items-center gap-1.5 transition-all"
             >
@@ -470,7 +473,7 @@ export function AdminView() {
               <span>Обновить ИИ</span>
             </button>
             <button
-              onClick={() => fetchFeedbackReport(true)}
+              onClick={() => fetchFeedbackReport(true, true)}
               disabled={feedbackLoading}
               className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center gap-1.5 transition-all shadow-sm shadow-blue-500/20"
             >
@@ -485,36 +488,44 @@ export function AdminView() {
             {/* Sentiment breakdown */}
             <div className="p-4 rounded-xl bg-muted/40 border border-border/60 flex flex-col justify-between">
               <div>
-                <span className="text-xs font-semibold text-foreground">Настроение аудитории</span>
-                {(feedbackReport.totalAnalyzed || 0) > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Настроение аудитории</span>
+                  {(feedbackReport.newCommentsCount || 0) > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
+                      Новых: {feedbackReport.newCommentsCount}
+                    </span>
+                  )}
+                </div>
+                {(feedbackReport.totalAnalyzed || 0) > 0 && (feedbackReport.sentimentSummary?.positivePercent > 0 || feedbackReport.sentimentSummary?.negativePercent > 0 || feedbackReport.sentimentSummary?.neutralPercent > 0) ? (
                   <>
                     <div className="mt-3 flex items-center gap-2">
                       <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden flex">
                         <div
                           style={{ width: `${feedbackReport.sentimentSummary?.positivePercent || 0}%` }}
-                          className="bg-emerald-500 h-full"
+                          className="bg-emerald-500 h-full transition-all duration-500"
                           title={`Позитив: ${feedbackReport.sentimentSummary?.positivePercent || 0}%`}
                         />
                         <div
                           style={{ width: `${feedbackReport.sentimentSummary?.neutralPercent || 0}%` }}
-                          className="bg-amber-500 h-full"
+                          className="bg-amber-500 h-full transition-all duration-500"
                           title={`Нейтрально: ${feedbackReport.sentimentSummary?.neutralPercent || 0}%`}
                         />
                         <div
                           style={{ width: `${feedbackReport.sentimentSummary?.negativePercent || 0}%` }}
-                          className="bg-rose-500 h-full"
+                          className="bg-rose-500 h-full transition-all duration-500"
                           title={`Критика: ${feedbackReport.sentimentSummary?.negativePercent || 0}%`}
                         />
                       </div>
                     </div>
                     <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
                       <span className="text-emerald-500 font-medium">+{feedbackReport.sentimentSummary?.positivePercent || 0}% позитив</span>
+                      <span className="text-amber-500 font-medium">{feedbackReport.sentimentSummary?.neutralPercent || 0}% нейтрально</span>
                       <span className="text-rose-500 font-medium">-{feedbackReport.sentimentSummary?.negativePercent || 0}% критика</span>
                     </div>
                   </>
                 ) : (
                   <div className="mt-3 py-2 px-3 rounded-lg bg-muted/60 text-[11px] text-muted-foreground">
-                    Нет комментариев за текущую неделю. Сводка формируется еженедельно перед отправкой отчета.
+                    Комментариев за неделю пока нет. Анализ формируется еженедельно перед отправкой сводки.
                   </div>
                 )}
               </div>
@@ -527,12 +538,16 @@ export function AdminView() {
             <div className="p-4 rounded-xl bg-muted/40 border border-border/60 flex flex-col">
               <span className="text-xs font-semibold text-foreground mb-2">Топ запросов функций от подписчиков</span>
               <div className="space-y-1.5 flex-1">
-                {(feedbackReport.topRequests || []).slice(0, 3).map((req: string, idx: number) => (
-                  <div key={idx} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
-                    <span className="text-primary font-bold">▪</span>
-                    <span className="text-foreground">{req}</span>
-                  </div>
-                ))}
+                {(feedbackReport.topRequests || []).length > 0 ? (
+                  (feedbackReport.topRequests || []).slice(0, 3).map((req: string, idx: number) => (
+                    <div key={idx} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                      <span className="text-primary font-bold">▪</span>
+                      <span className="text-foreground">{req}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-muted-foreground italic">Запросов пока не зафиксировано</div>
+                )}
               </div>
             </div>
 
@@ -543,7 +558,7 @@ export function AdminView() {
                 "{feedbackReport.executiveSummary}"
               </p>
               <div className="mt-2 text-[10px] text-primary/80 font-medium">
-                Анализ обновляется автоматически в реальном времени
+                Формируется еженедельно по пятницам (или по кнопке «Обновить ИИ»)
               </div>
             </div>
           </div>

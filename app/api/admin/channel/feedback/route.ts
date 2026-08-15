@@ -6,8 +6,9 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const limit = parseInt(searchParams.get('limit') || '40', 10)
+    const forceRefresh = searchParams.get('refresh') === 'true'
 
-    const report = await generateCommentAnalysisReport(limit)
+    const report = await generateCommentAnalysisReport(limit, false, forceRefresh)
     return NextResponse.json({ ok: true, report })
   } catch (err: unknown) {
     console.error('Comment feedback API error:', err)
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
       await sendCommentReportToAdminsTelegram()
     }
 
-    const report = await generateCommentAnalysisReport(50)
+    const report = await generateCommentAnalysisReport(50, Boolean(body.notifyAdmins), true)
     return NextResponse.json({ ok: true, report })
   } catch (err: unknown) {
     console.error('Comment feedback POST error:', err)

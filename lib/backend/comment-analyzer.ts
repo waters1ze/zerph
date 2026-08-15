@@ -51,33 +51,85 @@ export async function recordChannelComment(data: {
 
 /**
  * 2. Scheduled / On-Demand Batch AI Analysis:
- * Reads ONLY NEW, unanalyzed comments (isAnalyzed: false).
- * Optionally marks them as analyzed after generating the report.
+ * - When forceRefresh = false: Returns cached report from DB Config + real comment count. Zero LLM calls!
+ * - When forceRefresh = true: Runs Groq LLM batch analysis strictly on unanalyzed comments, saves cache to DB.
  */
 export async function generateCommentAnalysisReport(
   limit = 100,
-  markAsAnalyzed = false
+  markAsAnalyzed = false,
+  forceRefresh = false
 ): Promise<CommentAnalysisResult> {
-  // Fetch fresh comments that have NOT been analyzed in previous reports
+  const totalInDb = await prisma.channelComment.count().catch(() => 0)
+  const unanalyzedCount = await prisma.channelComment.count({ where: { isAnalyzed: false } }).catch(() => 0)
+
+  const recentComments = await prisma.channelComment.findMany({
+    take: limit,
+    orderBy: { createdAt: 'desc' }
+  })
+
+  // If not force refresh, check if we have a cached report in Config
+  if (!forceRefresh) {
+    const cachedConfig = await prisma.config.findUnique({
+      where: { key: 'last_comment_analysis_json' }
+    }).catch(() => null)
+
+    if (cachedConfig?.value) {
+      try {
+        const cached = JSON.parse(cachedConfig.value)
+        return {
+          totalAnalyzed: totalInDb,
+          newCommentsCount: unanalyzedCount,
+          sentimentSummary: cached.sentiment || { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
+          topRequests: cached.topRequests || [],
+          mainIssuesOrQuestions: cached.mainIssuesOrQuestions || [],
+          executiveSummary: cached.executiveSummary || 'Сводка сформирована на основе предыдущих комментариев.',
+          rawComments: recentComments.map(c => ({
+            id: c.id,
+            userName: c.userName,
+            text: c.text,
+            createdAt: c.createdAt.toISOString()
+          }))
+        }
+      } catch {}
+    }
+
+    // If no cache and no comments at all
+    if (totalInDb === 0) {
+      return {
+        totalAnalyzed: 0,
+        newCommentsCount: 0,
+        sentimentSummary: { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
+        topRequests: ['Комментариев от подписчиков пока нет'],
+        mainIssuesOrQuestions: [],
+        executiveSummary: 'Комментариев за эту неделю пока не поступало. Отчет формируется еженедельно по пятницам.',
+        rawComments: []
+      }
+    }
+  }
+
+  // If forceRefresh or no cache: fetch fresh comments that have NOT been analyzed
   const newComments = await prisma.channelComment.findMany({
     where: { isAnalyzed: false },
     take: limit,
     orderBy: { createdAt: 'desc' }
   })
 
-  // If no new comments, check if there are any recent analyzed comments to show history
   if (newComments.length === 0) {
-    const totalInDb = await prisma.channelComment.count().catch(() => 0)
     return {
       totalAnalyzed: totalInDb,
       newCommentsCount: 0,
       sentimentSummary: { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
-      topRequests: ['Все предыдущие комментарии уже проанализированы в прошлых отчетах'],
+      topRequests: ['Все комментарии уже были включены в предыдущие отчеты'],
       mainIssuesOrQuestions: [],
       executiveSummary: totalInDb > 0
         ? 'Все ранее поступившие комментарии уже были включены в предыдущие сводки. Новых комментариев пока не поступало.'
         : 'Комментариев за эту неделю пока не поступало. Отчет формируется еженедельно перед отправкой сводки.',
-      rawComments: []
+      rawComments: recentComments.map(c => ({
+        id: c.id,
+        userName: c.userName,
+        text: c.text,
+        createdAt: c.createdAt.toISOString()
+      }))
     }
   }
 
@@ -105,6 +157,15 @@ export async function generateCommentAnalysisReport(
     })
 
     analysis = JSON.parse(result.content || '{}')
+
+    // Cache the analysis in DB Config
+    if (analysis?.sentiment) {
+      await prisma.config.upsert({
+        where: { key: 'last_comment_analysis_json' },
+        update: { value: JSON.stringify(analysis) },
+        create: { key: 'last_comment_analysis_json', value: JSON.stringify(analysis) },
+      }).catch(() => {})
+    }
   } catch (e) {
     console.error('Groq batch comment analysis error:', e)
   }
@@ -122,13 +183,13 @@ export async function generateCommentAnalysisReport(
   }
 
   return {
-    totalAnalyzed: newComments.length,
+    totalAnalyzed: totalInDb,
     newCommentsCount: newComments.length,
-    sentimentSummary: analysis?.sentiment || { positivePercent: 80, neutralPercent: 15, negativePercent: 5 },
+    sentimentSummary: analysis?.sentiment || { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
     topRequests: analysis?.topRequests || ['Пользователям нравится текущий функционал'],
     mainIssuesOrQuestions: analysis?.mainIssuesOrQuestions || [],
-    executiveSummary: analysis?.executiveSummary || 'Аудитория активно обсуждает обновления проекта.',
-    rawComments: newComments.map(c => ({
+    executiveSummary: analysis?.executiveSummary || 'Сводка сформирована по комментариям сообщества.',
+    rawComments: recentComments.map(c => ({
       id: c.id,
       userName: c.userName,
       text: c.text,
