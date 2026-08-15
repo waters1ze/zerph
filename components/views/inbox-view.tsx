@@ -4,17 +4,17 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { Inbox, Users, Tag } from 'lucide-react'
+import { Inbox, Users, Tag, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity } from 'lucide-react'
 import { cn, isBirthdayTask } from '@/lib/utils'
 
 const FIXED_TAGS = [
   { id: 'all', label: 'Все' },
-  { id: 'работа', label: '💼 Работа' },
-  { id: 'личное', label: '👤 Личное' },
-  { id: 'срочно', label: '⚡ Срочно' },
-  { id: 'идеи', label: '💡 Идеи' },
-  { id: 'учеба', label: '🎓 Учеба' },
-  { id: 'спорт', label: '🏃 Спорт' },
+  { id: 'работа', label: 'Работа', icon: Briefcase },
+  { id: 'личное', label: 'Личное', icon: User },
+  { id: 'срочно', label: 'Срочно', icon: Zap },
+  { id: 'идеи', label: 'Идеи', icon: Lightbulb },
+  { id: 'учеба', label: 'Учеба', icon: GraduationCap },
+  { id: 'спорт', label: 'Спорт', icon: Activity },
 ]
 
 export function InboxView() {
@@ -41,18 +41,20 @@ export function InboxView() {
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
         {FIXED_TAGS.map(tag => {
           const isActive = selectedTag === tag.id
+          const Icon = (tag as any).icon
           return (
             <button
               key={tag.id}
               onClick={() => setSelectedTag(tag.id)}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
                 isActive
                   ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
                   : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
               )}
             >
-              {tag.label}
+              {Icon && <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />}
+              <span>{tag.label}</span>
             </button>
           )
         })}

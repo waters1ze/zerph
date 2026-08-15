@@ -6,7 +6,8 @@ import { useApp } from '@/lib/store'
 import { playAlarmChime, showWebNotification, requestNotificationPermission } from '@/lib/notifications'
 import {
   Clock, Timer, Play, Pause, RotateCcw, CheckCircle2,
-  Bell, Volume2, Sparkles, Flame, Flag, AlertCircle, ArrowRight
+  Bell, Volume2, Sparkles, Flame, Flag, AlertCircle, ArrowRight,
+  Briefcase, Coffee
 } from 'lucide-react'
 
 type ClockTab = 'task_countdown' | 'timer' | 'stopwatch'
@@ -498,19 +499,21 @@ function PomodoroTab() {
       <div className="flex items-center gap-2 mb-6">
         <button
           onClick={() => { setIsRunning(false); setMode('work'); setSeconds(25 * 60) }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            mode === 'work' ? 'bg-rose-500 text-white shadow-md' : 'bg-muted text-muted-foreground'
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            mode === 'work' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground hover:text-foreground'
           }`}
         >
-          🍅 Работа (25 мин)
+          <Briefcase className="w-3.5 h-3.5" />
+          <span>Фокус (25 мин)</span>
         </button>
         <button
           onClick={() => { setIsRunning(false); setMode('break'); setSeconds(5 * 60) }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            mode === 'break' ? 'bg-emerald-500 text-white shadow-md' : 'bg-muted text-muted-foreground'
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            mode === 'break' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground hover:text-foreground'
           }`}
         >
-          ☕ Перерыв (5 мин)
+          <Coffee className="w-3.5 h-3.5" />
+          <span>Перерыв (5 мин)</span>
         </button>
       </div>
 
@@ -519,7 +522,7 @@ function PomodoroTab() {
       </div>
 
       <p className="text-xs font-semibold text-muted-foreground mb-8">
-        Завершено помодоро-сессий сегодня: <strong className="text-primary font-bold text-sm">🔥 {sessionsCompleted}</strong>
+        Завершено помодоро-сессий сегодня: <strong className="text-primary font-bold text-sm">✦ {sessionsCompleted}</strong>
       </p>
 
       <div className="flex items-center gap-3">

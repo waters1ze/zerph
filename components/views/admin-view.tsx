@@ -798,25 +798,25 @@ export function AdminView() {
                     onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 7)}
                     className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left"
                   >
-                    ⚡ +7 дней (Спринт)
+                    ✦ +7 дней (Спринт)
                   </button>
                   <button
                     onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 30)}
                     className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left"
                   >
-                    ⭐ +30 дней (1 месяц)
+                    ✦ +30 дней (1 месяц)
                   </button>
                   <button
                     onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 90)}
                     className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left"
                   >
-                    🚀 +90 дней (Квартал)
+                    ✦ +90 дней (Квартал)
                   </button>
                   <button
                     onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 365)}
-                    className="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold transition-all text-left"
+                    className="p-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all text-left"
                   >
-                    👑 +1 год (365 дней)
+                    ★ +1 год (365 дней)
                   </button>
                 </div>
               </div>

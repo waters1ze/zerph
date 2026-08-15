@@ -11,18 +11,19 @@ import remarkGfm from 'remark-gfm'
 import {
   FileText, Plus, Folder, Pin, Tag, Edit3, Save,
   Trash2, Search, Calendar as CalendarIcon,
-  ChevronLeft, BookOpen, Users, Sparkles, Loader2, Check, X, FolderPlus
+  ChevronLeft, BookOpen, Users, Sparkles, Loader2, Check, X, FolderPlus,
+  Briefcase, User, Zap, Lightbulb, GraduationCap, Activity
 } from 'lucide-react'
 import type { Note, NoteType } from '@/lib/types'
 
 const FIXED_TAGS = [
   { id: 'all', label: 'Все' },
-  { id: 'работа', label: '💼 Работа' },
-  { id: 'личное', label: '👤 Личное' },
-  { id: 'срочно', label: '⚡ Срочно' },
-  { id: 'идеи', label: '💡 Идеи' },
-  { id: 'учеба', label: '🎓 Учеба' },
-  { id: 'спорт', label: '🏃 Спорт' },
+  { id: 'работа', label: 'Работа', icon: Briefcase },
+  { id: 'личное', label: 'Личное', icon: User },
+  { id: 'срочно', label: 'Срочно', icon: Zap },
+  { id: 'идеи', label: 'Идеи', icon: Lightbulb },
+  { id: 'учеба', label: 'Учеба', icon: GraduationCap },
+  { id: 'спорт', label: 'Спорт', icon: Activity },
 ]
 
 const DEFAULT_FOLDERS = ['Общее', 'Работа', 'Личное', 'Идеи', 'Учеба', 'Проекты']
@@ -416,18 +417,20 @@ ${editContent}`
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar select-none">
             {FIXED_TAGS.map(tag => {
               const isActive = selectedTag === tag.id
+              const Icon = (tag as any).icon
               return (
                 <button
                   key={tag.id}
                   onClick={() => setSelectedTag(tag.id)}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all border shrink-0',
+                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all border shrink-0',
                     isActive
                       ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold'
                       : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}
                 >
-                  {tag.label}
+                  {Icon && <Icon className={cn('w-3 h-3', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />}
+                  <span>{tag.label}</span>
                 </button>
               )
             })}
