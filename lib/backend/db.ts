@@ -822,6 +822,138 @@ export async function autoAddFriends(chatId1: number | bigint, chatId2: number |
   } catch {}
 }
 
+export interface FriendScheduleSlot {
+  id: string
+  title: string
+  dueTime: string | null
+  isPrivate: boolean
+  priority?: string
+  status: string
+}
+
+export interface FriendScheduleResult {
+  friend: {
+    chatId: string
+    name: string
+    username: string | null
+  }
+  date: string
+  slots: FriendScheduleSlot[]
+  busySummary: string
+  freeWindows: string[]
+  isFriend: boolean
+}
+
+export async function getFriendSchedule(
+  viewerChatId: number | bigint | string,
+  targetFriendChatId: number | bigint | string,
+  dateStr?: string
+): Promise<FriendScheduleResult | null> {
+  const vCid = BigInt(viewerChatId)
+  const tCid = BigInt(targetFriendChatId)
+
+  // 1. Verify friendship
+  const friendship = await prisma.friendship.findFirst({
+    where: {
+      userChatId: vCid,
+      friendChatId: tCid,
+      status: 'accepted'
+    }
+  })
+
+  // Also allow if root admin or same user
+  const isAllowed = Boolean(friendship) || vCid === tCid
+
+  const friendUser = await prisma.telegramChat.findUnique({
+    where: { chatId: tCid }
+  })
+  if (!friendUser) return null
+
+  const targetDate = dateStr || new Date().toISOString().slice(0, 10)
+
+  // Fetch friend's tasks for that date
+  const tasks = await prisma.task.findMany({
+    where: {
+      ownerChatId: tCid,
+      dueDate: targetDate,
+      status: { notIn: ['done', 'draft'] }
+    },
+    orderBy: { dueTime: 'asc' }
+  })
+
+  const slots: FriendScheduleSlot[] = tasks.map(t => {
+    // Check if task is shared or public to the viewer
+    const isSharedWithViewer =
+      t.isShared ||
+      t.authorChatId === vCid ||
+      (Array.isArray(t.assignees) && t.assignees.includes(String(vCid)))
+
+    return {
+      id: t.id,
+      title: isSharedWithViewer ? t.title : 'Занято',
+      dueTime: t.dueTime || null,
+      isPrivate: !isSharedWithViewer,
+      priority: isSharedWithViewer ? t.priority : undefined,
+      status: t.status,
+    }
+  })
+
+  // Calculate free windows between 09:00 and 21:00
+  const timedSlots = slots
+    .filter(s => s.dueTime && /^\d{2}:\d{2}$/.test(s.dueTime))
+    .map(s => {
+      const [h, m] = (s.dueTime as string).split(':').map(Number)
+      return { start: h * 60 + m, end: h * 60 + m + 60, title: s.title, isPrivate: s.isPrivate }
+    })
+    .sort((a, b) => a.start - b.start)
+
+  const dayStart = 9 * 60 // 09:00
+  const dayEnd = 21 * 60  // 21:00
+
+  const freeWindows: string[] = []
+  let currentCursor = dayStart
+
+  for (const slot of timedSlots) {
+    if (slot.start > currentCursor + 30) {
+      const startH = Math.floor(currentCursor / 60)
+      const startM = currentCursor % 60
+      const endH = Math.floor(slot.start / 60)
+      const endM = slot.start % 60
+      freeWindows.push(
+        `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')} - ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
+      )
+    }
+    if (slot.end > currentCursor) {
+      currentCursor = slot.end
+    }
+  }
+
+  if (currentCursor < dayEnd) {
+    const startH = Math.floor(currentCursor / 60)
+    const startM = currentCursor % 60
+    freeWindows.push(`после ${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`)
+  }
+
+  if (timedSlots.length === 0 && slots.length === 0) {
+    freeWindows.push('Весь день свободен')
+  }
+
+  const friendName = [friendUser.firstName, friendUser.lastName].filter(Boolean).join(' ') || friendUser.firstName || 'Друг'
+
+  return {
+    friend: {
+      chatId: String(friendUser.chatId),
+      name: friendName,
+      username: friendUser.username ? `@${friendUser.username.replace(/^@/, '')}` : null,
+    },
+    date: targetDate,
+    slots,
+    busySummary: slots.length === 0 ? 'Свободен весь день' : `Запланировано ${slots.length} задач(и)`,
+    freeWindows,
+    isFriend: isAllowed,
+  }
+}
+
 export async function getAllChatIds(): Promise<number[]> {
   const chats = await prisma.telegramChat.findMany()
   return chats.map((c: { chatId: bigint }) => Number(c.chatId))

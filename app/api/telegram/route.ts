@@ -1367,6 +1367,25 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         }
 
         if (item.type === 'delegate' || item.type === 'task') {
+          // Check collision if dueTime is set
+          let conflictNotice = ''
+          let notifyConflictNotice = ''
+          if (item.dueTime) {
+            const conflict = await prisma.task.findFirst({
+              where: {
+                ownerChatId: friend.chatId,
+                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                dueTime: item.dueTime,
+                status: { notIn: ['done', 'draft'] }
+              }
+            })
+            if (conflict) {
+              const conflictTitle = conflict.isShared ? `«${conflict.title}»` : '🔒 Занято (личное дело)'
+              conflictNotice = `\n⚠️ *Внимание:* У *${escMd(friend.firstName || item.recipientName)}* на ${item.dueTime} уже запланировано: ${conflictTitle}.`
+              notifyConflictNotice = `\n⚠️ _(Внимание: в это время у вас уже запланировано другое дело)_`
+            }
+          }
+
           const newTask = await prisma.task.create({
             data: {
               title: item.title,
@@ -1390,7 +1409,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
           }
           if (item.dueTime) {
-            notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+            notifyMsg += `⏰ *Время:* ${item.dueTime}${notifyConflictNotice}\n`
           }
           notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
 
@@ -1405,7 +1424,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
               ]
             }
           })
-          msg += `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!\n\n`
+          msg += `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
         } else {
           // Note or Goal
           await saveParsedItemToDb(item, friend.chatId, chatId)
@@ -2078,51 +2097,117 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
 
 // ── Schedule Command ───────────────────────────────────────────────────────────
 
-async function handleScheduleCommand(chatId: number, targetUsername: string) {
-  const cleanUsername = targetUsername.replace('@', '').trim()
+async function handleScheduleCommand(senderChatId: number, targetQuery?: string) {
+  const cid = BigInt(senderChatId)
 
-  let targetUser = await prisma.telegramChat.findFirst({
-    where: { username: { equals: cleanUsername, mode: 'insensitive' } }
+  // Fetch user's friends list
+  const friendships = await prisma.friendship.findMany({
+    where: {
+      OR: [
+        { userChatId: cid, status: 'accepted' },
+        { friendChatId: cid, status: 'accepted' },
+      ]
+    }
   })
-  if (!targetUser && !isNaN(Number(cleanUsername))) {
-    targetUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(cleanUsername) } })
-  }
 
-  if (!targetUser) {
-    await send(chatId, `🔍 Пользователь *@${cleanUsername}* не найден в Zerf.`)
+  const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
+  const friendUsers = await prisma.telegramChat.findMany({
+    where: { chatId: { in: friendChatIds } }
+  })
+
+  if (friendUsers.length === 0) {
+    await send(senderChatId,
+      `👥 *В вашей команде пока нет участников.*\n\n` +
+      `Пригласите друзей или коллег, чтобы смотреть их расписание и поручать задачи:\n` +
+      `\`/invite @username\` или отправьте инвайт-ссылку:\n` +
+      `https://t.me/Zerph_bot?start=invite_${senderChatId}`
+    )
     return
   }
 
-  const { tasks, goals } = await getPublicItemsByUser(targetUser.chatId)
-  const name = escMd(targetUser.firstName || cleanUsername)
+  // If no target given, show selection buttons
+  if (!targetQuery || !targetQuery.trim()) {
+    const inlineKeyboard = friendUsers.map(u => {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || 'Друг'
+      return [{
+        text: `📅 График: ${name}`,
+        callback_data: `view_sched_${u.chatId}`
+      }]
+    })
 
-  if (tasks.length === 0 && goals.length === 0) {
-    await send(chatId, `📅 *Расписание ${name}*\n\nПользователь не поделился ни одной задачей. Попроси его использовать /public!`)
+    await send(senderChatId,
+      `📅 *График и доступность участников команды*\n\n` +
+      `Использование: \`/schedule [имя или @username]\`\n(например: \`/schedule Лера\` или \`/график Артем\`)\n\n` +
+      `Или выберите участника ниже:`,
+      {
+        reply_markup: {
+          inline_keyboard: inlineKeyboard
+        }
+      }
+    )
     return
   }
 
-  let msg = `📅 *Публичное расписание ${name}*\n\n`
+  // Find target friend
+  const cleanQ = targetQuery.replace(/^@/, '').toLowerCase().trim()
+  const matched = friendUsers.find(u => {
+    const fn = (u.firstName || '').toLowerCase()
+    const ln = (u.lastName || '').toLowerCase()
+    const un = (u.username || '').toLowerCase()
+    const full = `${fn} ${ln}`.trim()
+    return un === cleanQ || fn === cleanQ || full.includes(cleanQ) || String(u.chatId) === cleanQ
+  })
 
-  if (tasks.length > 0) {
-    msg += `📌 *Задачи:*\n`
-    tasks.slice(0, 10).forEach((t: any) => {
-      const priority = t.priority === 'urgent' ? '🔴' : t.priority === 'high' ? '🟠' : t.priority === 'low' ? '🟢' : '🟡'
-      const date = t.dueDate ? ` · ${t.dueDate}` : ''
-      const time = t.dueTime ? ` ${t.dueTime}` : ''
-      msg += `${priority} ${escMd(t.title)}${date}${time}\n`
-    })
+  if (!matched) {
+    await send(senderChatId,
+      `🔍 Участник *«${escMd(targetQuery)}»* не найден среди ваших друзей.\n\n` +
+      `Используйте \`/schedule\` для списка всех участников или \`/invite @username\` для добавления.`
+    )
+    return
   }
 
-  if (goals.length > 0) {
-    msg += `\n🎯 *Цели:*\n`
-    goals.slice(0, 5).forEach((g: any) => {
-      const dl = g.deadline ? ` · ${g.deadline}` : ''
-      msg += `• ${escMd(g.title)} — ${g.progress}%${dl}\n`
-    })
+  const { getFriendSchedule } = await import('@/lib/backend/db')
+  const sched = await getFriendSchedule(senderChatId, matched.chatId)
+
+  if (!sched) {
+    await send(senderChatId, `⚠️ Не удалось получить график пользователя.`)
+    return
   }
 
-  msg += `\n_Чтобы договориться о времени — напишите @${cleanUsername} напрямую_`
-  await send(chatId, msg)
+  let msg = `📅 *График и занятость:* *${escMd(sched.friend.name)}* ${sched.friend.username ? `(${sched.friend.username})` : ''}\n`
+  msg += `📆 *Дата:* Сегодня (${new Date().toLocaleDateString('ru-RU')})\n\n`
+
+  if (sched.slots.length === 0) {
+    msg += `✨ *Весь день свободен!* Нет запланированных задач.\n\n`
+  } else {
+    msg += `📊 *Расписание на сегодня:*\n`
+    sched.slots.forEach(s => {
+      const timeStr = s.dueTime ? `\`${s.dueTime}\`` : `_в течение дня_`
+      if (s.isPrivate) {
+        msg += `• ${timeStr} — 🔒 *Занято* _(личное дело)_\n`
+      } else {
+        msg += `• ${timeStr} — 👥 *${escMd(s.title)}*\n`
+      }
+    })
+    msg += `\n`
+
+    if (sched.freeWindows.length > 0) {
+      msg += `✨ *Свободные окна:* ${sched.freeWindows.join(', ')}\n\n`
+    }
+  }
+
+  msg += `💡 _Личные дела скрыты для приватности, открытые командные задачи видны с названием._`
+
+  await send(senderChatId, msg, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: `➕ Поручить задачу (${sched.friend.name})`, callback_data: `prep_delegate_${matched.chatId}` },
+          { text: `🔄 Обновить`, callback_data: `view_sched_${matched.chatId}` }
+        ]
+      ]
+    }
+  })
 }
 
 // ── Public/Share Command ───────────────────────────────────────────────────────
@@ -2443,6 +2528,16 @@ export async function POST(req: NextRequest) {
         })
         await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Отклонено' })
         await safeEditOrSend(chatId, cb.message.message_id, `❌ *Приглашение отклонено.*`)
+      } else if (data.startsWith('view_sched_')) {
+        const targetId = BigInt(data.replace('view_sched_', ''))
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Загрузка графика...' })
+        await handleScheduleCommand(chatId, String(targetId))
+      } else if (data.startsWith('prep_delegate_')) {
+        const targetId = BigInt(data.replace('prep_delegate_', ''))
+        const targetUser = await prisma.telegramChat.findUnique({ where: { chatId: targetId } })
+        const name = targetUser?.firstName || 'участнику'
+        await tgApi('answerCallbackQuery', { callback_query_id: cb.id })
+        await send(chatId, `✍️ *Чтобы поручить задачу ${name}:*\n\nПросто напишите или надиктуйте голосом:\n«Поручи ${name} [текст задачи] [время]»\n\nПример: \`Поручи ${name} созвониться с клиентом в 16:00\``)
       } else if (data.startsWith('delegate_accept_')) {
         const taskId = data.replace('delegate_accept_', '')
         const task = await prisma.task.update({ where: { id: taskId }, data: { status: 'inprogress' } })
@@ -3112,14 +3207,9 @@ export async function POST(req: NextRequest) {
         } else {
           await handleSendCommand(chatId, firstName, target, taskText)
         }
-      } else if (cmd === '/schedule') {
-        // /schedule @username — показать публичное расписание
-        const target = parts[1]
-        if (!target) {
-          await send(chatId, `📅 *Просмотр расписания*\n\nИспользование: \`/schedule @username\`\n\nПоказывает задачи, которыми пользователь поделился публично.`)
-        } else {
-          await handleScheduleCommand(chatId, target)
-        }
+      } else if (cmd === '/schedule' || cmd === '/график' || cmd === '/busy' || cmd === '/расписание' || cmd === '/team_schedule') {
+        const target = parts.slice(1).join(' ').trim()
+        await handleScheduleCommand(chatId, target || undefined)
       } else if (cmd === '/public' || cmd === '/share') {
         // /public — поделиться последней задачей / /public taskId
         const targetId = parts[1]
@@ -3153,6 +3243,14 @@ export async function POST(req: NextRequest) {
       } else if (text.trim()) {
         const trimmed = text.trim()
         const lowerText = trimmed.toLowerCase()
+
+        // 0. Natural team schedule query ("график лера", "расписание артем", "занятость никита", "график команды", "график")
+        const scheduleMatch = trimmed.match(/^(?:график|расписание|занятость|свободное время)(?:\s+(.+))?$/i)
+        if (scheduleMatch) {
+          const target = (scheduleMatch[1] || '').trim()
+          await handleScheduleCommand(senderId, target || undefined)
+          return NextResponse.json({ ok: true })
+        }
 
         // 1. Reply to bot message deletion or smart delete ("удали эту заметку", "удали", "удалить", "удали задачу", "удаляй")
         const isDeleteVerb = /^(?:удали|удалить|удаляй|удали это|удали эту|удали заметку|удали эту заметку|удали задачу|удали эту задачу|стереть|delete|remove)\b/i.test(lowerText)

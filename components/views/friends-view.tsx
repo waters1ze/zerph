@@ -6,7 +6,8 @@ import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import {
   Users, UserPlus, Trash2, CheckSquare, Circle,
-  X, Mail, Send, Copy, Check, Share2, UserCheck, AlertCircle, Sparkles, RefreshCw
+  X, Mail, Send, Copy, Check, Share2, UserCheck, AlertCircle, Sparkles, RefreshCw,
+  Clock, Calendar, CalendarDays, Lock, ShieldCheck, Plus
 } from 'lucide-react'
 import type { Friend } from '@/lib/types'
 
@@ -24,7 +25,15 @@ interface PendingRequest {
   status: string
 }
 
-function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void }) {
+function FriendCard({
+  friend,
+  onRemove,
+  onSchedule,
+}: {
+  friend: Friend
+  onRemove: () => void
+  onSchedule: (friend: Friend) => void
+}) {
   const { state } = useApp()
   const sharedTasks = state.tasks.filter((t: any) => 
     t.assignees.includes(friend.id) &&
@@ -90,13 +99,23 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
                 {friend.email}
               </p>
             </div>
-            <button
-              onClick={onRemove}
-              title="Удалить из команды"
-              className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onSchedule(friend)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-semibold transition-all active:scale-95 shadow-sm"
+                title="Посмотреть график и свободные окна"
+              >
+                <Clock className="w-3 h-3" />
+                <span>График</span>
+              </button>
+              <button
+                onClick={onRemove}
+                title="Удалить из команды"
+                className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Task permission toggle */}
@@ -184,6 +203,25 @@ export function FriendsView() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
+  const [scheduleModal, setScheduleModal] = useState<{
+    friend: Friend
+    schedule: any | null
+    loading: boolean
+  } | null>(null)
+
+  const handleOpenSchedule = async (friend: Friend) => {
+    setScheduleModal({ friend, schedule: null, loading: true })
+    try {
+      const targetId = friend.chatId || friend.id
+      const res = await fetch(`/api/friends/schedule?friendId=${encodeURIComponent(targetId)}`, {
+        headers: getAuthHeaders()
+      })
+      const data = await res.json()
+      setScheduleModal({ friend, schedule: data, loading: false })
+    } catch {
+      setScheduleModal(prev => prev ? { ...prev, loading: false } : null)
+    }
+  }
 
   const showNotification = (type: 'success' | 'error' | 'info', text: string) => {
     setNotice({ type, text })
@@ -517,6 +555,7 @@ export function FriendsView() {
             <FriendCard
               key={f.id}
               friend={f}
+              onSchedule={handleOpenSchedule}
               onRemove={async () => {
                 dispatch({ type: 'REMOVE_FRIEND', id: f.id })
                 const targetId = f.chatId || f.id
@@ -530,6 +569,139 @@ export function FriendsView() {
           ))}
         </div>
       )}
+
+      {/* Schedule & Availability Modal */}
+      <AnimatePresence>
+        {scheduleModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden font-sans flex flex-col max-h-[85vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-border flex items-center justify-between bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center border border-primary/20">
+                    <span className="text-sm font-bold text-primary">
+                      {scheduleModal.friend.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                      <span>{scheduleModal.friend.name}</span>
+                      {scheduleModal.schedule?.friend?.username && (
+                        <span className="text-[11px] text-muted-foreground font-normal">
+                          {scheduleModal.schedule.friend.username}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <CalendarDays className="w-3 h-3 text-primary" />
+                      <span>Расписание и занятость на сегодня</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setScheduleModal(null)}
+                  className="w-8 h-8 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                {scheduleModal.loading ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+                    <p className="text-xs">Загрузка расписания...</p>
+                  </div>
+                ) : !scheduleModal.schedule ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    Не удалось получить график пользователя.
+                  </div>
+                ) : (
+                  <>
+                    {/* Free windows banner */}
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2.5">
+                      <Sparkles className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-foreground">Свободные окна для задач:</p>
+                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-medium">
+                          {scheduleModal.schedule.freeWindows?.length > 0
+                            ? scheduleModal.schedule.freeWindows.join(', ')
+                            : 'Весь день свободен'
+                          }
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Timeline / Slots */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Запланированные дела ({scheduleModal.schedule.slots?.length || 0})
+                      </p>
+
+                      {(!scheduleModal.schedule.slots || scheduleModal.schedule.slots.length === 0) ? (
+                        <div className="py-6 text-center rounded-xl bg-muted/20 border border-border/50">
+                          <p className="text-xs text-muted-foreground">✨ На сегодня задач нет. Человек полностью свободен!</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {scheduleModal.schedule.slots.map((s: any, idx: number) => (
+                            <div
+                              key={s.id || idx}
+                              className={cn(
+                                'p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs transition-all',
+                                s.isPrivate
+                                  ? 'bg-muted/30 border-border/60 text-muted-foreground'
+                                  : 'bg-primary/5 border-primary/20 text-foreground font-medium'
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                {s.isPrivate ? (
+                                  <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                ) : (
+                                  <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+                                )}
+                                <span className="truncate">
+                                  {s.isPrivate ? '🔒 Занято (Личное дело)' : s.title}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-semibold text-muted-foreground">
+                                <Clock className="w-3 h-3" />
+                                <span>{s.dueTime || 'В течение дня'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Privacy Note */}
+                    <div className="p-3 rounded-xl bg-muted/40 border border-border/40 flex items-start gap-2 text-[11px] text-muted-foreground">
+                      <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <span>Личные задачи скрыты ради приватности. Открытые и совместные проекты отображаются с названиями.</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3 border-t border-border bg-muted/20 flex justify-end gap-2">
+                <button
+                  onClick={() => setScheduleModal(null)}
+                  className="px-3.5 py-1.5 rounded-xl border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
