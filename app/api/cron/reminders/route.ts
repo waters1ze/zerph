@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runAllCronTasks, runMorningGreeting, runEveningReview, runReminderCheck } from '@/lib/backend/cron-runner'
-import { postDailyMorningPostToChannel, postDailyPollToChannel, postDailyEveningPostToChannel, closeDailyPollAndNotifyAdmins, postWelcomeIntroToChannel } from '@/lib/backend/channel-poster'
+import { postDailyMorningPostToChannel, postDailyPollToChannel, postDailyEveningPostToChannel, closeDailyPollAndNotifyAdmins } from '@/lib/backend/channel-poster'
 
 const OWNER_CHAT_ID = process.env.OWNER_CHAT_ID || '6136950061'
 const ADMIN_SECRET = process.env.ADMIN_SECRET || process.env.CRON_SECRET || 'zerph_secret_admin_7788'
@@ -44,10 +44,6 @@ export async function GET(req: NextRequest) {
       if (action === 'morning_greeting') {
         await runMorningGreeting()
         return NextResponse.json({ ok: true, action: 'morning_greeting' })
-      }
-      if (action === 'welcome') {
-        const res = await postWelcomeIntroToChannel()
-        return NextResponse.json({ ok: res.ok, action: 'welcome', text: res.text, error: res.error })
       }
       if (action === 'evening_review') {
         await runEveningReview()
