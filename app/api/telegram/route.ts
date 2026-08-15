@@ -2135,50 +2135,171 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
   await send(senderChatId, `✅ Задача *«${escMd(item.title || taskText)}»* отправлена *${escMd(targetUser.firstName || cleanUsername)}*!${conflictNotice}`)
 }
 
+function transliterateRu(str: string): string {
+  const ruToEn: Record<string, string> = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+    'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+    'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'kh', 'ц': 'ts',
+    'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+  }
+  return str.toLowerCase().split('').map(c => ruToEn[c] || c).join('')
+}
+
+const COMMON_NAME_ALIASES: Record<string, string[]> = {
+  'лер': ['лера', 'лерочч', 'лерочка', 'валерия', 'lerochka', 'leroch', 'llerochkap', 'lera', 'valeria'],
+  'арт': ['артем', 'артём', 'тема', 'тёма', 'artem', 'artyom', 'tema'],
+  'вов': ['вова', 'володя', 'владимир', 'вован', 'vova', 'vladimir'],
+  'влад': ['влад', 'владик', 'владислав', 'vlad'],
+  'саш': ['саша', 'александр', 'александра', 'саня', 'шура', 'alex', 'sasha'],
+  'дим': ['дима', 'дмитрий', 'димон', 'митя', 'dima', 'dmitry'],
+  'маш': ['маша', 'мария', 'марья', 'машка', 'masha', 'maria'],
+  'даш': ['даша', 'дарья', 'дарина', 'dasha', 'daria'],
+  'наст': ['настя', 'анастасия', 'ася', 'nastya', 'anastasia'],
+  'кат': ['катя', 'екатерина', 'катрин', 'katya', 'ekaterina', 'kate'],
+  'кост': ['костя', 'константин', 'kostya', 'konstantin'],
+  'жен': ['женя', 'евгений', 'евгения', 'zhenya', 'evgeny'],
+  'миш': ['миша', 'михаил', 'misha', 'mikhail'],
+  'ник': ['никита', 'коля', 'николай', 'nikita', 'kolya', 'nikolay'],
+  'кир': ['кирилл', 'кирюха', 'kirill'],
+  'пол': ['полина', 'поля', 'polina'],
+  'сон': ['соня', 'софия', 'софья', 'sonya', 'sofia'],
+  'ван': ['ваня', 'иван', 'ванек', 'vanya', 'ivan'],
+  'серг': ['сережа', 'сергей', 'серж', 'sergey'],
+  'макс': ['макс', 'максим', 'maxim', 'max'],
+  'иль': ['илья', 'илюха', 'ilya'],
+  'андр': ['андрей', 'andrey', 'andrew'],
+}
+
+function findMatchingFriendUser(query: string, friendUsers: any[]) {
+  if (!query || !query.trim() || friendUsers.length === 0) return null
+  const cleanQ = query.replace(/^@/, '').toLowerCase().trim()
+  const translitQ = transliterateRu(cleanQ)
+
+  // 1. Exact match (firstName, lastName, username, fullName, chatId)
+  for (const u of friendUsers) {
+    const fn = (u.firstName || '').toLowerCase().trim()
+    const ln = (u.lastName || '').toLowerCase().trim()
+    const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
+    const full = `${fn} ${ln}`.trim()
+    const cid = String(u.chatId)
+
+    if (fn === cleanQ || ln === cleanQ || un === cleanQ || full === cleanQ || cid === cleanQ) {
+      return u
+    }
+  }
+
+  // 2. Substring & Transliteration match
+  for (const u of friendUsers) {
+    const fn = (u.firstName || '').toLowerCase().trim()
+    const ln = (u.lastName || '').toLowerCase().trim()
+    const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
+    const full = `${fn} ${ln}`.trim()
+    const translitUn = transliterateRu(un)
+    const translitFn = transliterateRu(fn)
+
+    if (
+      (fn && (fn.includes(cleanQ) || cleanQ.includes(fn))) ||
+      (un && (un.includes(cleanQ) || cleanQ.includes(un))) ||
+      (full && (full.includes(cleanQ) || cleanQ.includes(full))) ||
+      (translitUn && (translitUn.includes(translitQ) || translitQ.includes(translitUn))) ||
+      (translitFn && (translitFn.includes(translitQ) || translitQ.includes(translitFn)))
+    ) {
+      return u
+    }
+  }
+
+  // 3. Name Aliases & Diminutive Stems (e.g. "лера" -> "лерочч", "llerochkap")
+  for (const [stem, aliases] of Object.entries(COMMON_NAME_ALIASES)) {
+    const qMatches = cleanQ.startsWith(stem) || aliases.some(a => cleanQ.includes(a) || a.includes(cleanQ) || translitQ.includes(transliterateRu(a)))
+    if (qMatches) {
+      for (const u of friendUsers) {
+        const fn = (u.firstName || '').toLowerCase().trim()
+        const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
+        const fnMatches = fn.startsWith(stem) || aliases.some(a => fn.includes(a) || a.includes(fn))
+        const unMatches = un.startsWith(stem) || aliases.some(a => un.includes(a) || a.includes(un))
+        if (fnMatches || unMatches) {
+          return u
+        }
+      }
+    }
+  }
+
+  // 4. Prefix match (first 3 letters)
+  if (cleanQ.length >= 3) {
+    const prefix3 = cleanQ.slice(0, 3)
+    const transPrefix3 = translitQ.slice(0, 3)
+    for (const u of friendUsers) {
+      const fn = (u.firstName || '').toLowerCase().trim()
+      const un = (u.username || '').toLowerCase().replace(/^@/, '').trim()
+      if (fn.startsWith(prefix3) || un.startsWith(prefix3) || transliterateRu(un).startsWith(transPrefix3) || transliterateRu(fn).startsWith(transPrefix3)) {
+        return u
+      }
+    }
+  }
+
+  return null
+}
+
 function parseScheduleQueryArgs(queryStr: string): { targetName: string; dateStr?: string; daysCount: number } {
   let text = queryStr.trim()
   let daysCount = 1
   let dateStr: string | undefined = undefined
 
-  // Check for week
-  if (/\b(?:на\s+)?(?:неделю|неделя|week|7\s*дней)\b/i.test(text)) {
+  // 1. Week check: "на неделю", "неделя", "на 7 дней", "week"
+  const weekRegex = /(?:^|\s)(?:на\s+)?(?:неделю|неделя|недельку|week|7\s*дней)(?:$|\s|[.,!?])/i
+  if (weekRegex.test(text)) {
     daysCount = 7
-    text = text.replace(/\b(?:на\s+)?(?:неделю|неделя|week|7\s*дней)\b/ig, '').trim()
-  } else if (/\b(?:на\s+)?(\d+)\s*(?:дня|дней|дн|days)\b/i.test(text)) {
-    const m = text.match(/\b(?:на\s+)?(\d+)\s*(?:дня|дней|дн|days)\b/i)
-    if (m) {
-      daysCount = Math.min(Math.max(1, parseInt(m[1], 10)), 14)
-      text = text.replace(m[0], '').trim()
-    }
-  } else if (/\b(?:на\s+)?(?:завтра|tomorrow)\b/i.test(text)) {
-    const tom = new Date()
-    tom.setDate(tom.getDate() + 1)
-    dateStr = tom.toISOString().slice(0, 10)
-    text = text.replace(/\b(?:на\s+)?(?:завтра|tomorrow)\b/ig, '').trim()
-  } else if (/\b(?:на\s+)?(?:послезавтра)\b/i.test(text)) {
+    text = text.replace(weekRegex, ' ').trim()
+  }
+
+  // 2. N days check: "на 3 дня", "на 5 дней", "3 days"
+  const nDaysRegex = /(?:^|\s)(?:на\s+)?(\d+)\s*(?:дня|дней|дн|days)(?:$|\s|[.,!?])/i
+  const nDaysMatch = text.match(nDaysRegex)
+  if (nDaysMatch) {
+    daysCount = Math.min(Math.max(1, parseInt(nDaysMatch[1], 10)), 14)
+    text = text.replace(nDaysRegex, ' ').trim()
+  }
+
+  // 3. Tomorrow / After tomorrow
+  const afterTomRegex = /(?:^|\s)(?:на\s+)?(?:послезавтра)(?:$|\s|[.,!?])/i
+  if (afterTomRegex.test(text)) {
     const afterTom = new Date()
     afterTom.setDate(afterTom.getDate() + 2)
     dateStr = afterTom.toISOString().slice(0, 10)
-    text = text.replace(/\b(?:на\s+)?(?:послезавтра)\b/ig, '').trim()
-  } else if (/\b(?:на\s+)?(?:сегодня|today)\b/i.test(text)) {
-    dateStr = new Date().toISOString().slice(0, 10)
-    text = text.replace(/\b(?:на\s+)?(?:сегодня|today)\b/ig, '').trim()
-  } else {
-    // Check specific date DD.MM or DD.MM.YYYY
-    const dateMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b/)
-    if (dateMatch) {
-      const day = parseInt(dateMatch[1], 10)
-      const month = parseInt(dateMatch[2], 10) - 1
-      const year = dateMatch[3] ? (dateMatch[3].length === 2 ? 2000 + parseInt(dateMatch[3], 10) : parseInt(dateMatch[3], 10)) : new Date().getFullYear()
-      const d = new Date(year, month, day)
-      if (!isNaN(d.getTime())) {
-        dateStr = d.toISOString().slice(0, 10)
-      }
-      text = text.replace(dateMatch[0], '').trim()
-    }
+    text = text.replace(afterTomRegex, ' ').trim()
   }
 
-  text = text.replace(/\bна\b/ig, '').replace(/[,.?!]+/g, '').trim()
+  const tomRegex = /(?:^|\s)(?:на\s+)?(?:завтра|утром|tomorrow)(?:$|\s|[.,!?])/i
+  if (tomRegex.test(text)) {
+    const tom = new Date()
+    tom.setDate(tom.getDate() + 1)
+    dateStr = tom.toISOString().slice(0, 10)
+    text = text.replace(tomRegex, ' ').trim()
+  }
+
+  // 4. Today
+  const todayRegex = /(?:^|\s)(?:на\s+)?(?:сегодня|сейчас|today)(?:$|\s|[.,!?])/i
+  if (todayRegex.test(text)) {
+    dateStr = new Date().toISOString().slice(0, 10)
+    text = text.replace(todayRegex, ' ').trim()
+  }
+
+  // 5. Specific date: "18.08", "18.08.2026", "29.10"
+  const dateRegex = /(?:^|\s)(?:на\s+)?(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?(?:$|\s|[.,!?])/
+  const dateMatch = text.match(dateRegex)
+  if (dateMatch) {
+    const day = parseInt(dateMatch[1], 10)
+    const month = parseInt(dateMatch[2], 10) - 1
+    const year = dateMatch[3] ? (dateMatch[3].length === 2 ? 2000 + parseInt(dateMatch[3], 10) : parseInt(dateMatch[3], 10)) : new Date().getFullYear()
+    const d = new Date(year, month, day)
+    if (!isNaN(d.getTime())) {
+      dateStr = d.toISOString().slice(0, 10)
+    }
+    text = text.replace(dateRegex, ' ').trim()
+  }
+
+  // Clean trailing prepositions & extra spaces
+  text = text.replace(/(?:^|\s)на(?:$|\s)/ig, ' ').replace(/[.,!?]+/g, '').trim()
   return { targetName: text, dateStr, daysCount }
 }
 
@@ -2243,15 +2364,8 @@ async function handleScheduleCommand(
   const dateStr = explicitDate || parsed.dateStr
   const daysCount = explicitDaysCount || parsed.daysCount || 1
 
-  // Find target friend
-  const cleanQ = targetName.replace(/^@/, '').toLowerCase().trim()
-  const matched = friendUsers.find(u => {
-    const fn = (u.firstName || '').toLowerCase()
-    const ln = (u.lastName || '').toLowerCase()
-    const un = (u.username || '').toLowerCase()
-    const full = `${fn} ${ln}`.trim()
-    return un === cleanQ || fn === cleanQ || full.includes(cleanQ) || String(u.chatId) === cleanQ
-  })
+  // Find target friend using smart matcher
+  const matched = findMatchingFriendUser(targetName, friendUsers)
 
   if (!matched) {
     await send(senderChatId,
