@@ -2827,10 +2827,20 @@ export async function POST(req: NextRequest) {
       trackGroupMember(chatId, senderId).catch(() => {})
     }
 
+    // Check if message is from the Official Channel Discussion group / comments thread
+    const chatTitle = (msg.chat?.title || '').toLowerCase()
+    const isDiscussionGroup = isGroup && (
+      chatTitle.includes('обсуждени') ||
+      chatTitle.includes('обсуждение') ||
+      msg.chat?.username === 'zerph_off' ||
+      msg.chat?.username === 'zerph_chat' ||
+      Boolean(msg.is_automatic_forward)
+    )
+
     // Save user comment from channel discussion group / replies for AI sentiment & feature analysis
     if (text && !text.startsWith('/')) {
-      const isChannelDiscussion = isGroup || Boolean(msg.reply_to_message) || Boolean(msg.forward_from_chat)
-      if (isChannelDiscussion) {
+      const isChannelComment = isDiscussionGroup || Boolean(msg.reply_to_message) || Boolean(msg.forward_from_chat)
+      if (isChannelComment) {
         const channelPostId = msg.reply_to_message?.forward_from_message_id || msg.reply_to_message?.message_id
         await recordChannelComment({
           channelPostId,
@@ -2839,6 +2849,11 @@ export async function POST(req: NextRequest) {
           text,
         }).catch(() => {})
       }
+    }
+
+    // In Official Channel Discussion group: remain 100% passive & silent (no command triggers, no task hints)
+    if (isDiscussionGroup) {
+      return NextResponse.json({ ok: true })
     }
 
     if (text.startsWith('/')) {

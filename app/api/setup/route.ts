@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     })
     const webhookData = await webhookRes.json()
 
-    // 2. Set Private Commands Menu
+    // 2. Set Private Commands Menu (ONLY for 1-on-1 private bot chats)
     const privateCommandsRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,25 +61,24 @@ export async function GET(req: NextRequest) {
     })
     const privateCommandsData = await privateCommandsRes.json()
 
-    // 3. Set Group Commands Menu (ONLY /add)
-    const groupCommandsRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
+    // 3. Clear/Delete commands in all groups & discussion chats so bot never shows '/' command hints in groups
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMyCommands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        commands: [
-          { command: 'add', description: '📌 Добавить задачу из этого сообщения в Zerf AI' },
-        ],
-        scope: { type: 'all_group_chats' },
-      }),
+      body: JSON.stringify({ scope: { type: 'all_group_chats' } }),
     })
-    const groupCommandsData = await groupCommandsRes.json()
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: { type: 'all_chat_administrators' } }),
+    })
 
     return NextResponse.json({
-      success: webhookData.ok && privateCommandsData.ok && groupCommandsData.ok,
+      success: webhookData.ok && privateCommandsData.ok,
       webhookUrl,
       webhookResult: webhookData,
       privateCommandsResult: privateCommandsData,
-      groupCommandsResult: groupCommandsData,
+      groupCommandsCleared: true,
     })
   } catch (err: unknown) {
     return NextResponse.json(
