@@ -77,8 +77,10 @@ export async function sendVkMessage(
   keyboard?: any
 ): Promise<boolean> {
   const randomId = Math.floor(Math.random() * 2147483647)
+  const peerId = Number(userId)
   const params: Record<string, any> = {
-    user_id: Number(userId),
+    peer_id: peerId,
+    user_id: peerId,
     random_id: randomId,
     message: message,
     dont_parse_links: 0,
@@ -88,7 +90,13 @@ export async function sendVkMessage(
     params.keyboard = keyboard
   }
 
-  const res = await callVkApi('messages.send', params)
+  let res = await callVkApi('messages.send', params)
+  if (res?.error && keyboard) {
+    console.warn('[VK API] Retrying sendVkMessage without keyboard due to error:', res.error)
+    delete params.keyboard
+    res = await callVkApi('messages.send', params)
+  }
+
   return Boolean(res && !res.error)
 }
 

@@ -23,29 +23,39 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-
-    // 1. Secret Key check (if configured)
-    const secretKey = getVkSecretKey()
-    if (secretKey && body.secret && body.secret !== secretKey) {
-      return new NextResponse('Invalid secret', { status: 403 })
+    const rawText = await req.text()
+    let body: any = {}
+    try {
+      body = JSON.parse(rawText)
+    } catch {
+      body = {}
     }
 
-    // 2. VK Callback API Confirmation
-    if (body.type === 'confirmation') {
+    // 1. VK Callback API Confirmation (Highest Priority)
+    if (body.type === 'confirmation' || rawText.includes('"confirmation"')) {
       const code = getVkConfirmationCode()
-      return new NextResponse(code, { status: 200 })
+      return new Response(code, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      })
+    }
+
+    // 2. Secret Key check (if present in request and configured)
+    const secretKey = getVkSecretKey()
+    if (secretKey && body.secret && body.secret !== secretKey) {
+      console.warn('[VK Callback] Secret mismatch:', body.secret, 'expected:', secretKey)
+      return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
     }
 
     // 3. New message from VK user
     if (body.type === 'message_new') {
       const message = body.object?.message || body.object
-      if (!message) return new NextResponse('ok', { status: 200 })
+      if (!message) return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
 
-      const fromId = message.from_id
-      if (!fromId || fromId < 0) {
+      const fromId = message.from_id || message.peer_id
+      if (!fromId || Number(fromId) < 0) {
         // Ignore community or system messages
-        return new NextResponse('ok', { status: 200 })
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 
       const text = (message.text || '').trim()
@@ -97,7 +107,7 @@ export async function POST(req: NextRequest) {
           `• Нажми кнопку ниже, чтобы открыть полноэкранный интерфейс в VK Mini Apps!`
 
         await sendVkMessage(fromId, welcome, keyboard)
-        return new NextResponse('ok', { status: 200 })
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 
       if (lower === 'задачи' || lower === 'сегодня' || lower === '/today') {
@@ -115,14 +125,14 @@ export async function POST(req: NextRequest) {
           })
           await sendVkMessage(fromId, list, keyboard)
         }
-        return new NextResponse('ok', { status: 200 })
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 
       // Parse with AI
       const parsedItems = await parseIntentWithGroq(effectiveText)
       if (!parsedItems || parsedItems.length === 0) {
         await sendVkMessage(fromId, '💭 Зафиксировал, но не нашел конкретных задач. Отправь мне задачу или открой Zerf App!', keyboard)
-        return new NextResponse('ok', { status: 200 })
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 
       let responseMsg = userVoiceText ? `🎙 Распознано: «${userVoiceText}»\n\n` : ''
@@ -139,13 +149,13 @@ export async function POST(req: NextRequest) {
       responseMsg += `Сохранено в твоем аккаунте Zerf AI!`
       await sendVkMessage(fromId, responseMsg, keyboard)
 
-      return new NextResponse('ok', { status: 200 })
+      return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
     }
 
-    return new NextResponse('ok', { status: 200 })
+    return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
   } catch (err) {
     console.error('VK Callback Error:', err)
-    return new NextResponse('ok', { status: 200 })
+    return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
   }
 }
 
