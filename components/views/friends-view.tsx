@@ -207,17 +207,23 @@ export function FriendsView() {
     friend: Friend
     schedule: any | null
     loading: boolean
+    daysCount: number
   } | null>(null)
 
-  const handleOpenSchedule = async (friend: Friend) => {
-    setScheduleModal({ friend, schedule: null, loading: true })
+  const handleOpenSchedule = async (friend: Friend, daysCount: number = 1) => {
+    setScheduleModal(prev => ({
+      friend,
+      schedule: prev?.friend?.id === friend.id ? prev.schedule : null,
+      loading: true,
+      daysCount
+    }))
     try {
       const targetId = friend.chatId || friend.id
-      const res = await fetch(`/api/friends/schedule?friendId=${encodeURIComponent(targetId)}`, {
+      const res = await fetch(`/api/friends/schedule?friendId=${encodeURIComponent(targetId)}&days=${daysCount}`, {
         headers: getAuthHeaders()
       })
       const data = await res.json()
-      setScheduleModal({ friend, schedule: data, loading: false })
+      setScheduleModal({ friend, schedule: data, loading: false, daysCount })
     } catch {
       setScheduleModal(prev => prev ? { ...prev, loading: false } : null)
     }
@@ -613,6 +619,28 @@ export function FriendsView() {
 
               {/* Modal Body */}
               <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                {/* Period Selector Tabs */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted/60 border border-border/60 text-xs">
+                  {[
+                    { count: 1, label: 'Сегодня' },
+                    { count: 3, label: '3 дня' },
+                    { count: 7, label: 'Неделя' },
+                  ].map(tab => (
+                    <button
+                      key={tab.count}
+                      onClick={() => handleOpenSchedule(scheduleModal.friend, tab.count)}
+                      className={cn(
+                        'flex-1 py-1.5 rounded-lg font-semibold transition-all text-center text-[11px]',
+                        (scheduleModal.daysCount || 1) === tab.count
+                          ? 'bg-card text-primary shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
                 {scheduleModal.loading ? (
                   <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                     <RefreshCw className="w-6 h-6 animate-spin text-primary" />
@@ -622,68 +650,95 @@ export function FriendsView() {
                   <div className="py-8 text-center text-xs text-muted-foreground">
                     Не удалось получить график пользователя.
                   </div>
+                ) : scheduleModal.schedule.allowed === false ? (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-2.5">
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-xs">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>Доступ к расписанию закрыт</span>
+                    </div>
+                    <p className="text-[12px] text-muted-foreground leading-relaxed">
+                      <strong>{scheduleModal.friend.name}</strong> отключил(а) доступ к своему расписанию и приём задач от вас.
+                    </p>
+                    <div className="p-3 rounded-xl bg-card border border-border/80 text-[11px] text-foreground space-y-1 mt-1">
+                      <p className="font-semibold text-primary flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" /> Как открыть доступ:
+                      </p>
+                      <p className="text-muted-foreground">
+                        Попросите <strong>{scheduleModal.friend.name}</strong> зайти во вкладку <strong>«Команда»</strong> и включить тумблер <em>«Разрешить задачи от этого человека»</em> на вашей карточке.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <>
-                    {/* Free windows banner */}
-                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2.5">
-                      <Sparkles className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs font-bold text-foreground">Свободные окна для задач:</p>
-                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-medium">
-                          {scheduleModal.schedule.freeWindows?.length > 0
-                            ? scheduleModal.schedule.freeWindows.join(', ')
-                            : 'Весь день свободен'
-                          }
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Timeline / Slots */}
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                        Запланированные дела ({scheduleModal.schedule.slots?.length || 0})
-                      </p>
-
-                      {(!scheduleModal.schedule.slots || scheduleModal.schedule.slots.length === 0) ? (
-                        <div className="py-6 text-center rounded-xl bg-muted/20 border border-border/50">
-                          <p className="text-xs text-muted-foreground">✨ На сегодня задач нет. Человек полностью свободен!</p>
+                    {/* Days Rendering */}
+                    {(scheduleModal.schedule.days || [
+                      {
+                        date: scheduleModal.schedule.date,
+                        dateLabel: 'Сегодня',
+                        slots: scheduleModal.schedule.slots || [],
+                        freeWindows: scheduleModal.schedule.freeWindows || []
+                      }
+                    ]).map((day: any, dIdx: number) => (
+                      <div key={day.date || dIdx} className="space-y-2.5 p-3 rounded-2xl bg-muted/20 border border-border/60">
+                        {/* Day Title & Free Windows */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-primary" />
+                            <span>{day.dateLabel}</span>
+                            <span className="text-[10px] text-muted-foreground font-normal">({day.date})</span>
+                          </span>
                         </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {scheduleModal.schedule.slots.map((s: any, idx: number) => (
-                            <div
-                              key={s.id || idx}
-                              className={cn(
-                                'p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs transition-all',
-                                s.isPrivate
-                                  ? 'bg-muted/30 border-border/60 text-muted-foreground'
-                                  : 'bg-primary/5 border-primary/20 text-foreground font-medium'
-                              )}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                {s.isPrivate ? (
-                                  <Lock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                ) : (
-                                  <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+
+                        {/* Free windows */}
+                        {day.freeWindows?.length > 0 && (
+                          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                            <Sparkles className="w-3 h-3 shrink-0" />
+                            <span>Свободно: {day.freeWindows.join(', ')}</span>
+                          </div>
+                        )}
+
+                        {/* Slots */}
+                        {(!day.slots || day.slots.length === 0) ? (
+                          <p className="text-[11px] text-muted-foreground py-1">
+                            ✨ На этот день задач нет, весь день свободен!
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {day.slots.map((s: any, idx: number) => (
+                              <div
+                                key={s.id || idx}
+                                className={cn(
+                                  'p-2 rounded-xl border flex items-center justify-between gap-2 text-xs',
+                                  s.isPrivate
+                                    ? 'bg-muted/40 border-border/50 text-muted-foreground'
+                                    : 'bg-primary/5 border-primary/20 text-foreground font-medium'
                                 )}
-                                <span className="truncate">
-                                  {s.isPrivate ? '🔒 Занято (Личное дело)' : s.title}
-                                </span>
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {s.isPrivate ? (
+                                    <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                                  ) : (
+                                    <Users className="w-3 h-3 text-primary shrink-0" />
+                                  )}
+                                  <span className="truncate text-[11px]">
+                                    {s.isPrivate ? '🔒 Задача' : s.title}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 text-[10px] font-semibold text-muted-foreground">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  <span>{s.dueTime || 'В течение дня'}</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-semibold text-muted-foreground">
-                                <Clock className="w-3 h-3" />
-                                <span>{s.dueTime || 'В течение дня'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
 
                     {/* Privacy Note */}
-                    <div className="p-3 rounded-xl bg-muted/40 border border-border/40 flex items-start gap-2 text-[11px] text-muted-foreground">
-                      <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                      <span>Личные задачи скрыты ради приватности. Открытые и совместные проекты отображаются с названиями.</span>
+                    <div className="p-2.5 rounded-xl bg-muted/40 border border-border/40 flex items-start gap-2 text-[10px] text-muted-foreground">
+                      <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                      <span>Приватные задачи скрыты под замком (🔒 Задача). Открытые задачи и общие проекты видны с названиями, чтобы согласовать время.</span>
                     </div>
                   </>
                 )}

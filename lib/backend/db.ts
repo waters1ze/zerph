@@ -831,126 +831,227 @@ export interface FriendScheduleSlot {
   status: string
 }
 
+export interface FriendDaySchedule {
+  date: string
+  dateLabel: string
+  slots: FriendScheduleSlot[]
+  busySummary: string
+  freeWindows: string[]
+}
+
 export interface FriendScheduleResult {
+  allowed: boolean
+  isFriend: boolean
+  allowTasks: boolean
+  reason?: 'ok' | 'not_friend' | 'tasks_disallowed' | 'not_found'
   friend: {
     chatId: string
     name: string
     username: string | null
   }
+  daysCount: number
+  days: FriendDaySchedule[]
   date: string
   slots: FriendScheduleSlot[]
   busySummary: string
   freeWindows: string[]
-  isFriend: boolean
 }
 
 export async function getFriendSchedule(
   viewerChatId: number | bigint | string,
   targetFriendChatId: number | bigint | string,
-  dateStr?: string
+  dateStr?: string,
+  daysCount: number = 1
 ): Promise<FriendScheduleResult | null> {
   const vCid = BigInt(viewerChatId)
   const tCid = BigInt(targetFriendChatId)
-
-  // 1. Verify friendship
-  const friendship = await prisma.friendship.findFirst({
-    where: {
-      userChatId: vCid,
-      friendChatId: tCid,
-      status: 'accepted'
-    }
-  })
-
-  // Also allow if root admin or same user
-  const isAllowed = Boolean(friendship) || vCid === tCid
 
   const friendUser = await prisma.telegramChat.findUnique({
     where: { chatId: tCid }
   })
   if (!friendUser) return null
 
-  const targetDate = dateStr || new Date().toISOString().slice(0, 10)
+  const friendName = [friendUser.firstName, friendUser.lastName].filter(Boolean).join(' ') || friendUser.firstName || friendUser.username || 'Друг'
 
-  // Fetch friend's tasks for that date
-  const tasks = await prisma.task.findMany({
+  // 1. Verify friendship and allowTasks permission
+  const friendships = await prisma.friendship.findMany({
+    where: {
+      OR: [
+        { userChatId: vCid, friendChatId: tCid },
+        { userChatId: tCid, friendChatId: vCid },
+      ]
+    }
+  })
+
+  const isFriend = friendships.some(f => f.status === 'accepted') || vCid === tCid
+  // The toggle "Разрешить задачи от этого человека" must be true for task & schedule sharing
+  const allowsTasks = friendships.some(f => f.status === 'accepted' && f.allowTasks === true) || vCid === tCid
+
+  if (!isFriend) {
+    return {
+      allowed: false,
+      isFriend: false,
+      allowTasks: false,
+      reason: 'not_friend',
+      friend: {
+        chatId: String(friendUser.chatId),
+        name: friendName,
+        username: friendUser.username ? `@${friendUser.username.replace(/^@/, '')}` : null,
+      },
+      daysCount: 1,
+      days: [],
+      date: dateStr || new Date().toISOString().slice(0, 10),
+      slots: [],
+      busySummary: 'Не в команде',
+      freeWindows: []
+    }
+  }
+
+  if (!allowsTasks) {
+    return {
+      allowed: false,
+      isFriend: true,
+      allowTasks: false,
+      reason: 'tasks_disallowed',
+      friend: {
+        chatId: String(friendUser.chatId),
+        name: friendName,
+        username: friendUser.username ? `@${friendUser.username.replace(/^@/, '')}` : null,
+      },
+      daysCount: 1,
+      days: [],
+      date: dateStr || new Date().toISOString().slice(0, 10),
+      slots: [],
+      busySummary: 'Доступ закрыт',
+      freeWindows: []
+    }
+  }
+
+  // 2. Generate date list
+  const count = Math.min(Math.max(1, daysCount || 1), 14)
+  const baseDate = dateStr ? new Date(dateStr) : new Date()
+  const validBase = isNaN(baseDate.getTime()) ? new Date() : baseDate
+
+  const dates: string[] = []
+  for (let i = 0; i < count; i++) {
+    const d = new Date(validBase)
+    d.setDate(validBase.getDate() + i)
+    dates.push(d.toISOString().slice(0, 10))
+  }
+
+  // 3. Fetch friend's active tasks across all target dates
+  const allTasks = await prisma.task.findMany({
     where: {
       ownerChatId: tCid,
-      dueDate: targetDate,
+      dueDate: { in: dates },
       status: { notIn: ['done', 'draft'] }
     },
     orderBy: { dueTime: 'asc' }
   })
 
-  const slots: FriendScheduleSlot[] = tasks.map(t => {
-    // Check if task is shared or public to the viewer
-    const isSharedWithViewer =
-      t.isShared ||
-      t.authorChatId === vCid ||
-      (Array.isArray(t.assignees) && t.assignees.includes(String(vCid)))
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const tomorrowDate = new Date()
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const tomorrowStr = tomorrowDate.toISOString().slice(0, 10)
+
+  const days: FriendDaySchedule[] = dates.map(currentDate => {
+    const dayTasks = allTasks.filter(t => t.dueDate === currentDate)
+
+    const slots: FriendScheduleSlot[] = dayTasks.map(t => {
+      // Accessible if: task is public, shared, created by viewer, or assigned to viewer
+      const isAccessible =
+        t.visibility === 'public' ||
+        t.isShared ||
+        t.authorChatId === vCid ||
+        (Array.isArray(t.assignees) && t.assignees.includes(String(vCid)))
+
+      return {
+        id: t.id,
+        title: isAccessible ? t.title : '🔒 Задача',
+        dueTime: t.dueTime || null,
+        isPrivate: !isAccessible,
+        priority: isAccessible ? t.priority : undefined,
+        status: t.status,
+      }
+    })
+
+    // Calculate free windows between 09:00 and 21:00
+    const timedSlots = slots
+      .filter(s => s.dueTime && /^\d{2}:\d{2}$/.test(s.dueTime))
+      .map(s => {
+        const [h, m] = (s.dueTime as string).split(':').map(Number)
+        return { start: h * 60 + m, end: h * 60 + m + 60, title: s.title, isPrivate: s.isPrivate }
+      })
+      .sort((a, b) => a.start - b.start)
+
+    const dayStart = 9 * 60 // 09:00
+    const dayEnd = 21 * 60  // 21:00
+
+    const freeWindows: string[] = []
+    let currentCursor = dayStart
+
+    for (const slot of timedSlots) {
+      if (slot.start > currentCursor + 30) {
+        const startH = Math.floor(currentCursor / 60)
+        const startM = currentCursor % 60
+        const endH = Math.floor(slot.start / 60)
+        const endM = slot.start % 60
+        freeWindows.push(
+          `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')} - ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
+        )
+      }
+      if (slot.end > currentCursor) {
+        currentCursor = slot.end
+      }
+    }
+
+    if (currentCursor < dayEnd) {
+      const startH = Math.floor(currentCursor / 60)
+      const startM = currentCursor % 60
+      freeWindows.push(`после ${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`)
+    }
+
+    if (timedSlots.length === 0 && slots.length === 0) {
+      freeWindows.push('Весь день свободен')
+    }
+
+    let dateLabel = currentDate
+    if (currentDate === todayStr) {
+      dateLabel = 'Сегодня'
+    } else if (currentDate === tomorrowStr) {
+      dateLabel = 'Завтра'
+    } else {
+      const dObj = new Date(currentDate + 'T00:00:00')
+      dateLabel = dObj.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' })
+    }
 
     return {
-      id: t.id,
-      title: isSharedWithViewer ? t.title : 'Занято',
-      dueTime: t.dueTime || null,
-      isPrivate: !isSharedWithViewer,
-      priority: isSharedWithViewer ? t.priority : undefined,
-      status: t.status,
+      date: currentDate,
+      dateLabel,
+      slots,
+      busySummary: slots.length === 0 ? 'Свободен весь день' : `Запланировано ${slots.length} задач(и)`,
+      freeWindows
     }
   })
 
-  // Calculate free windows between 09:00 and 21:00
-  const timedSlots = slots
-    .filter(s => s.dueTime && /^\d{2}:\d{2}$/.test(s.dueTime))
-    .map(s => {
-      const [h, m] = (s.dueTime as string).split(':').map(Number)
-      return { start: h * 60 + m, end: h * 60 + m + 60, title: s.title, isPrivate: s.isPrivate }
-    })
-    .sort((a, b) => a.start - b.start)
-
-  const dayStart = 9 * 60 // 09:00
-  const dayEnd = 21 * 60  // 21:00
-
-  const freeWindows: string[] = []
-  let currentCursor = dayStart
-
-  for (const slot of timedSlots) {
-    if (slot.start > currentCursor + 30) {
-      const startH = Math.floor(currentCursor / 60)
-      const startM = currentCursor % 60
-      const endH = Math.floor(slot.start / 60)
-      const endM = slot.start % 60
-      freeWindows.push(
-        `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')} - ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
-      )
-    }
-    if (slot.end > currentCursor) {
-      currentCursor = slot.end
-    }
-  }
-
-  if (currentCursor < dayEnd) {
-    const startH = Math.floor(currentCursor / 60)
-    const startM = currentCursor % 60
-    freeWindows.push(`после ${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`)
-  }
-
-  if (timedSlots.length === 0 && slots.length === 0) {
-    freeWindows.push('Весь день свободен')
-  }
-
-  const friendName = [friendUser.firstName, friendUser.lastName].filter(Boolean).join(' ') || friendUser.firstName || 'Друг'
+  const firstDay = days[0]
 
   return {
+    allowed: true,
+    isFriend: true,
+    allowTasks: true,
+    reason: 'ok',
     friend: {
       chatId: String(friendUser.chatId),
       name: friendName,
       username: friendUser.username ? `@${friendUser.username.replace(/^@/, '')}` : null,
     },
-    date: targetDate,
-    slots,
-    busySummary: slots.length === 0 ? 'Свободен весь день' : `Запланировано ${slots.length} задач(и)`,
-    freeWindows,
-    isFriend: isAllowed,
+    daysCount: count,
+    days,
+    date: firstDay?.date || dates[0],
+    slots: firstDay?.slots || [],
+    busySummary: firstDay?.busySummary || 'Свободен весь день',
+    freeWindows: firstDay?.freeWindows || ['Весь день свободен'],
   }
 }
 

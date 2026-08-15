@@ -1356,6 +1356,14 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         continue
       }
 
+      if (item.type === 'schedule') {
+        const queryName = item.recipientName || ''
+        const dateStr = item.dueDate || undefined
+        const daysCount = item.daysCount || 1
+        await handleScheduleCommand(chatId, queryName, dateStr, daysCount)
+        continue
+      }
+
       const targets = item.isPluralRecipient ? allowedMatches : allowedMatches.slice(0, 1)
 
       // Execute for target matches
@@ -2095,9 +2103,59 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
   await send(senderChatId, `✅ Задача *«${escMd(item.title || taskText)}»* мгновенно отправлена *${escMd(targetUser.firstName || cleanUsername)}*!`)
 }
 
-// ── Schedule Command ───────────────────────────────────────────────────────────
+function parseScheduleQueryArgs(queryStr: string): { targetName: string; dateStr?: string; daysCount: number } {
+  let text = queryStr.trim()
+  let daysCount = 1
+  let dateStr: string | undefined = undefined
 
-async function handleScheduleCommand(senderChatId: number, targetQuery?: string) {
+  // Check for week
+  if (/\b(?:на\s+)?(?:неделю|неделя|week|7\s*дней)\b/i.test(text)) {
+    daysCount = 7
+    text = text.replace(/\b(?:на\s+)?(?:неделю|неделя|week|7\s*дней)\b/ig, '').trim()
+  } else if (/\b(?:на\s+)?(\d+)\s*(?:дня|дней|дн|days)\b/i.test(text)) {
+    const m = text.match(/\b(?:на\s+)?(\d+)\s*(?:дня|дней|дн|days)\b/i)
+    if (m) {
+      daysCount = Math.min(Math.max(1, parseInt(m[1], 10)), 14)
+      text = text.replace(m[0], '').trim()
+    }
+  } else if (/\b(?:на\s+)?(?:завтра|tomorrow)\b/i.test(text)) {
+    const tom = new Date()
+    tom.setDate(tom.getDate() + 1)
+    dateStr = tom.toISOString().slice(0, 10)
+    text = text.replace(/\b(?:на\s+)?(?:завтра|tomorrow)\b/ig, '').trim()
+  } else if (/\b(?:на\s+)?(?:послезавтра)\b/i.test(text)) {
+    const afterTom = new Date()
+    afterTom.setDate(afterTom.getDate() + 2)
+    dateStr = afterTom.toISOString().slice(0, 10)
+    text = text.replace(/\b(?:на\s+)?(?:послезавтра)\b/ig, '').trim()
+  } else if (/\b(?:на\s+)?(?:сегодня|today)\b/i.test(text)) {
+    dateStr = new Date().toISOString().slice(0, 10)
+    text = text.replace(/\b(?:на\s+)?(?:сегодня|today)\b/ig, '').trim()
+  } else {
+    // Check specific date DD.MM or DD.MM.YYYY
+    const dateMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b/)
+    if (dateMatch) {
+      const day = parseInt(dateMatch[1], 10)
+      const month = parseInt(dateMatch[2], 10) - 1
+      const year = dateMatch[3] ? (dateMatch[3].length === 2 ? 2000 + parseInt(dateMatch[3], 10) : parseInt(dateMatch[3], 10)) : new Date().getFullYear()
+      const d = new Date(year, month, day)
+      if (!isNaN(d.getTime())) {
+        dateStr = d.toISOString().slice(0, 10)
+      }
+      text = text.replace(dateMatch[0], '').trim()
+    }
+  }
+
+  text = text.replace(/\bна\b/ig, '').replace(/[,.?!]+/g, '').trim()
+  return { targetName: text, dateStr, daysCount }
+}
+
+async function handleScheduleCommand(
+  senderChatId: number,
+  targetQuery?: string,
+  explicitDate?: string,
+  explicitDaysCount?: number
+) {
   const cid = BigInt(senderChatId)
 
   // Fetch user's friends list
@@ -2137,7 +2195,7 @@ async function handleScheduleCommand(senderChatId: number, targetQuery?: string)
 
     await send(senderChatId,
       `📅 *График и доступность участников команды*\n\n` +
-      `Использование: \`/schedule [имя или @username]\`\n(например: \`/schedule Лера\` или \`/график Артем\`)\n\n` +
+      `Использование: \`/schedule [имя] [сегодня / завтра / на 3 дня / на неделю / дата]\`\n(например: \`/schedule Лера завтра\` или \`/график Артем на неделю\`)\n\n` +
       `Или выберите участника ниже:`,
       {
         reply_markup: {
@@ -2148,8 +2206,13 @@ async function handleScheduleCommand(senderChatId: number, targetQuery?: string)
     return
   }
 
+  const parsed = parseScheduleQueryArgs(targetQuery)
+  const targetName = parsed.targetName || targetQuery
+  const dateStr = explicitDate || parsed.dateStr
+  const daysCount = explicitDaysCount || parsed.daysCount || 1
+
   // Find target friend
-  const cleanQ = targetQuery.replace(/^@/, '').toLowerCase().trim()
+  const cleanQ = targetName.replace(/^@/, '').toLowerCase().trim()
   const matched = friendUsers.find(u => {
     const fn = (u.firstName || '').toLowerCase()
     const ln = (u.lastName || '').toLowerCase()
@@ -2160,43 +2223,83 @@ async function handleScheduleCommand(senderChatId: number, targetQuery?: string)
 
   if (!matched) {
     await send(senderChatId,
-      `🔍 Участник *«${escMd(targetQuery)}»* не найден среди ваших друзей.\n\n` +
+      `🔍 Участник *«${escMd(targetName)}»* не найден среди ваших друзей.\n\n` +
       `Используйте \`/schedule\` для списка всех участников или \`/invite @username\` для добавления.`
     )
     return
   }
 
   const { getFriendSchedule } = await import('@/lib/backend/db')
-  const sched = await getFriendSchedule(senderChatId, matched.chatId)
+  const sched = await getFriendSchedule(senderChatId, matched.chatId, dateStr, daysCount)
 
   if (!sched) {
     await send(senderChatId, `⚠️ Не удалось получить график пользователя.`)
     return
   }
 
-  let msg = `📅 *График и занятость:* *${escMd(sched.friend.name)}* ${sched.friend.username ? `(${sched.friend.username})` : ''}\n`
-  msg += `📆 *Дата:* Сегодня (${new Date().toLocaleDateString('ru-RU')})\n\n`
+  if (!sched.allowed) {
+    if (sched.reason === 'tasks_disallowed') {
+      await send(senderChatId,
+        `⚠️ *${escMd(sched.friend.name)}* отключил(а) доступ к своему расписанию и приём задач от вас.\n\n` +
+        `💡 Чтобы открыть доступ, пользователь должен включить тумблер *«Разрешить задачи от этого человека»* во вкладке *Команда* на сайте или в приложении Zerf.`
+      )
+      return
+    }
+    await send(senderChatId, `⚠️ Доступ к графику пользователя закрыт.`)
+    return
+  }
 
-  if (sched.slots.length === 0) {
-    msg += `✨ *Весь день свободен!* Нет запланированных задач.\n\n`
-  } else {
-    msg += `📊 *Расписание на сегодня:*\n`
-    sched.slots.forEach(s => {
-      const timeStr = s.dueTime ? `\`${s.dueTime}\`` : `_в течение дня_`
-      if (s.isPrivate) {
-        msg += `• ${timeStr} — 🔒 *Занято* _(личное дело)_\n`
+  const friendDisplayName = `${sched.friend.name}${sched.friend.username ? ` (${sched.friend.username})` : ''}`
+
+  let msg = `📅 *График и доступность:* *${escMd(friendDisplayName)}*\n`
+
+  if (sched.days && sched.days.length > 1) {
+    msg += `📆 *Период:* ${sched.days.length} дн.\n\n`
+
+    sched.days.forEach(day => {
+      msg += `🗓 *${day.dateLabel} (${day.date}):*\n`
+      if (day.slots.length === 0) {
+        msg += `✨ Весь день свободен\n`
       } else {
-        msg += `• ${timeStr} — 👥 *${escMd(s.title)}*\n`
+        day.slots.forEach(s => {
+          const timeStr = s.dueTime ? `\`${s.dueTime}\`` : `_в течение дня_`
+          if (s.isPrivate) {
+            msg += `• ${timeStr} — 🔒 *Задача*\n`
+          } else {
+            msg += `• ${timeStr} — 👥 *${escMd(s.title)}*\n`
+          }
+        })
+        if (day.freeWindows.length > 0) {
+          msg += `✨ _Свободно:_ ${day.freeWindows.join(', ')}\n`
+        }
       }
+      msg += `\n`
     })
-    msg += `\n`
+  } else {
+    const singleDay = (sched.days && sched.days[0]) || { date: sched.date, dateLabel: 'Сегодня', slots: sched.slots, freeWindows: sched.freeWindows }
+    msg += `📆 *Дата:* ${singleDay.dateLabel} (${singleDay.date})\n\n`
 
-    if (sched.freeWindows.length > 0) {
-      msg += `✨ *Свободные окна:* ${sched.freeWindows.join(', ')}\n\n`
+    if (singleDay.slots.length === 0) {
+      msg += `✨ *Весь день свободен!* Нет запланированных задач.\n\n`
+    } else {
+      msg += `📊 *Расписание:*\n`
+      singleDay.slots.forEach(s => {
+        const timeStr = s.dueTime ? `\`${s.dueTime}\`` : `_в течение дня_`
+        if (s.isPrivate) {
+          msg += `• ${timeStr} — 🔒 *Задача*\n`
+        } else {
+          msg += `• ${timeStr} — 👥 *${escMd(s.title)}*\n`
+        }
+      })
+      msg += `\n`
+
+      if (singleDay.freeWindows.length > 0) {
+        msg += `✨ *Свободные окна:* ${singleDay.freeWindows.join(', ')}\n\n`
+      }
     }
   }
 
-  msg += `💡 _Личные дела скрыты для приватности, открытые командные задачи видны с названием._`
+  msg += `💡 _Личные дела скрыты (🔒 Задача) ради приватности, открытые командные задачи видны с названиями._`
 
   await send(senderChatId, msg, {
     reply_markup: {

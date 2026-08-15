@@ -6,15 +6,16 @@
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
 
 export interface ParsedItem {
-  type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate'
-  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday'
+  type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate' | 'schedule'
+  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday' | 'get_schedule'
   targetId?: string | null
   title: string
   summary: string
   priority: 'urgent' | 'high' | 'medium' | 'low'
   dueDate?: string | null
   dueTime?: string | null       // HH:MM — extracted from "at 12:00", "в 15:30" etc.
-  recipientName?: string | null // Extracted name if sending a message to a contact e.g. "Артем", "Мама"
+  daysCount?: number | null     // 1 for 1 day, 7 for week, etc.
+  recipientName?: string | null // Extracted name if sending a message to a contact or asking schedule e.g. "Лера", "Артем"
   isPluralRecipient?: boolean   // True if sending to multiple people e.g. "Артемам"
   targetTitle?: string          // for 'completion' type — the task being marked done
   projectId?: string | null
@@ -111,6 +112,13 @@ ${friendsContext}
   2. "recipientName": "имя получателя" (например: "Вова", "Лера")
   3. "title": "Суть поручаемого действия"
   4. "summary": "Подробное описание поручения"
+
+- Запрос расписания / графика другого человека:
+  Если пользователь спрашивает график, расписание, планы или занятость участника команды (например: "какой график у Леры на завтра", "расписание Артема на неделю", "график Вани на 3 дня", "какие дела у Леры 18 августа"):
+  1. "type": "schedule"
+  2. "recipientName": "имя или @username человека" (например: "Лера", "Артем")
+  3. "dueDate": "YYYY-MM-DD" (дата начала)
+  4. "daysCount": 1 | 3 | 7 (1 для одного дня/завтра/даты, 7 для недели, N для нескольких дней)
 ══════════════════════════════════════════`
 
   prompt += `\n\n══════════════════════════════════════════
@@ -150,18 +158,19 @@ Always respond with ONLY valid JSON:
 {
   "items": [
     {
-      "action": "create" | "update" | "delete" | "delete_all" | "completion" | "set_my_birthday",
+      "action": "create" | "update" | "delete" | "delete_all" | "completion" | "set_my_birthday" | "get_schedule",
       "targetId": "ID элемента если action update/delete" | null,
-      "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate",
+      "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate" | "schedule",
       "title": "Понятное, информативное название с сутью действия",
       "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями)",
       "priority": "urgent" | "high" | "medium" | "low",
       "dueDate": "YYYY-MM-DD" | null,
       "dueTime": "HH:MM" | null,
+      "daysCount": 1 | 3 | 7 | null,
       "repeat": "yearly" | "monthly" | "weekly" | "weekdays" | "daily" | null,
       "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
       "targetTitle": "для типа completion или delete: название задачи" | null,
-      "recipientName": "строка с именем друга, кому отправляется элемент (задача, заметка, цель). Обязательно укажи, если пользователь просит создать что-то для ДРУГОГО человека (например: 'Лера', 'Мама'). Иначе null",
+      "recipientName": "строка с именем друга, кому отправляется элемент (задача, заметка, цель) или чей график запрашивается. Иначе null",
       "isPluralRecipient": "true, если пользователь обращается ко множеству людей (например, 'артемам', 'друзьям'), и false, если к одному ('артему'). По умолчанию false",
       "projectId": null,
       "goalId": null,

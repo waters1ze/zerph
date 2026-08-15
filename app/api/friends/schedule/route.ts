@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const friendId = searchParams.get('friendId') || searchParams.get('chatId')
   const date = searchParams.get('date') || undefined
+  const daysCount = parseInt(searchParams.get('days') || searchParams.get('daysCount') || '1', 10)
 
   if (!friendId) {
     return NextResponse.json({ error: 'friendId is required' }, { status: 400 })
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: 'Invalid friendId' }, { status: 400 })
     }
-    const schedule = await getFriendSchedule(authUser.chatId, targetCid, date)
+    const schedule = await getFriendSchedule(authUser.chatId, targetCid, date, isNaN(daysCount) ? 1 : daysCount)
     if (!schedule) {
       return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 })
     }
