@@ -95,7 +95,8 @@ export async function sendVoiceResponse(chatId: string | number | bigint, text: 
       where: { chatId: BigInt(chatId) },
       select: { ttsEnabled: true }
     })
-    if (user && user.ttsEnabled === false) return
+    // Disabled by default unless user explicitly turned it ON
+    if (!user || user.ttsEnabled !== true) return
 
     const audioBuf = await generateTtsAudio(text)
     if (audioBuf) {

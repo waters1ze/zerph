@@ -712,7 +712,7 @@ export function SettingsView() {
       <Section title="AI & Integrations">
         <Row label="🎙️ Голосовые ответы бота (TTS)" description="Бот присылает короткие голосовые сообщения в ответ на голосовые">
           <Toggle
-            checked={settings.voiceSettings?.ttsResponseEnabled ?? true}
+            checked={settings.voiceSettings?.ttsResponseEnabled ?? false}
             onChange={v => update({
               voiceSettings: { ttsResponseEnabled: v }
             })}

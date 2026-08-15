@@ -171,11 +171,12 @@ export async function runReminderCheck() {
         const isFinal = nextSentCount >= repeatCount || actualDiffMin <= 0
 
         if (isFinal) {
-          await updateTask(task.id, {
-            remindersSentCount: nextSentCount,
-            reminderSent: true,
-            status: 'done',
-            completedAt: new Date()
+          await prisma.task.update({
+            where: { id: task.id },
+            data: {
+              remindersSentCount: nextSentCount,
+              reminderSent: true,
+            }
           })
         } else {
           await prisma.task.update({

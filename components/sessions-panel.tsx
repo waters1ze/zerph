@@ -172,9 +172,9 @@ export function SessionsPanel() {
       {!loading && currentSession && (
         <div>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 font-semibold">Текущая сессия</p>
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <DeviceIcon type={currentSession.deviceType} className="text-primary" />
+          <div className="flex items-center gap-3.5 p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="w-9 h-9 rounded-md bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
+              <DeviceIcon type={currentSession.deviceType} className="w-4 h-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium text-foreground truncate">{currentSession.deviceName}</p>
@@ -209,10 +209,10 @@ export function SessionsPanel() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border/60 hover:border-border transition-colors group"
+                  className="flex items-center gap-3.5 p-3 rounded-lg bg-card border border-border/60 hover:border-border transition-colors group"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                    <DeviceIcon type={session.deviceType} className="text-muted-foreground" />
+                  <div className="w-9 h-9 rounded-md bg-muted/60 border border-border/40 flex items-center justify-center shrink-0">
+                    <DeviceIcon type={session.deviceType} className="w-4 h-4 text-muted-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium text-foreground truncate">{session.deviceName}</p>

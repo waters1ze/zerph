@@ -24,6 +24,7 @@ import { runReminderCheck, startFocusSession, stopFocusSession, getFocusSession 
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
+import { recordChannelComment } from '@/lib/backend/comment-analyzer'
 import { getSiriUserKey } from '@/app/api/shortcuts/route'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)
@@ -2824,17 +2825,18 @@ export async function POST(req: NextRequest) {
     // Track every group message sender → builds complete member list over time
     if (isGroup && senderId && senderId !== chatId) {
       trackGroupMember(chatId, senderId).catch(() => {})
+    }
 
-      // Save user comment from channel discussion group for AI sentiment & feature analysis
-      if (text && !text.startsWith('/')) {
-        import('@/lib/backend/comment-analyzer').then(({ recordChannelComment }) => {
-          const channelPostId = msg.reply_to_message?.forward_from_message_id || msg.reply_to_message?.message_id
-          recordChannelComment({
-            channelPostId,
-            chatId: senderId,
-            userName: [firstName, lastName].filter(Boolean).join(' ') || username || 'Подписчик',
-            text,
-          }).catch(() => {})
+    // Save user comment from channel discussion group / replies for AI sentiment & feature analysis
+    if (text && !text.startsWith('/')) {
+      const isChannelDiscussion = isGroup || Boolean(msg.reply_to_message) || Boolean(msg.forward_from_chat)
+      if (isChannelDiscussion) {
+        const channelPostId = msg.reply_to_message?.forward_from_message_id || msg.reply_to_message?.message_id
+        await recordChannelComment({
+          channelPostId,
+          chatId: senderId,
+          userName: [firstName, lastName].filter(Boolean).join(' ') || (username ? `@${username}` : 'Подписчик'),
+          text,
         }).catch(() => {})
       }
     }

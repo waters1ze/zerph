@@ -37,7 +37,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   userPlan: 'free',
   focusSettings: { defaultDurationMinutes: 25, breakDurationMinutes: 5 },
   eveningReview: { enabled: true, time: '21:00' },
-  voiceSettings: { ttsResponseEnabled: true },
+  voiceSettings: { ttsResponseEnabled: false },
 }
 
 // ─── State & Actions ──────────────────────────────────────────────────────────

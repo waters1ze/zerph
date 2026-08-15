@@ -1331,7 +1331,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               isAdmin: false,
               streakDays: 0,
               lastStreakDate: null,
-              ttsEnabled: true,
+              ttsEnabled: false,
               addedAt: new Date(),
             }
           }

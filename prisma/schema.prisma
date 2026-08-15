@@ -99,7 +99,7 @@ model TelegramChat {
   isAdmin                Boolean   @default(false) // Admin privilege
   streakDays             Int       @default(0)     // Consecutive days completed tasks
   lastStreakDate         String?   // YYYY-MM-DD
-  ttsEnabled             Boolean   @default(true)  // TTS Voice replies enabled
+  ttsEnabled             Boolean   @default(false) // TTS Voice replies disabled by default
   addedAt                DateTime  @default(now())
 }
 
