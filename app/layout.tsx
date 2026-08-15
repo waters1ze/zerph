@@ -57,6 +57,10 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION || process.env.GOOGLE_SITE_VERIFICATION || '',
+    yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION || process.env.YANDEX_VERIFICATION || '',
+  },
   openGraph: {
     type: 'website',
     locale: 'ru_RU',
