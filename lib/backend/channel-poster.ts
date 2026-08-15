@@ -109,6 +109,15 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force 
         }
       })
       console.log(`[Zerf Channel] Weekly Poll posted to ${channelId}:`, question)
+
+      // Duplicate poll to VK Community Wall
+      const vkPollText = `✦ ВОПРОС ДНЯ | ОПРОС СООБЩЕСТВА\n\n` +
+        `❓ ${question}\n\n` +
+        options.map((o, idx) => `▫️ ${idx + 1}. ${o}`).join('\n') +
+        `\n\n💬 Пишите свой вариант ответа в комментариях!\n` +
+        `📱 Открыть Zerf: https://vk.com/app54000000`
+      postToVkWall(vkPollText).catch(err => console.error('[VK Poll Crosspost Error]:', err))
+
       return true
     }
     console.error('Telegram sendPoll response:', tgRes)
