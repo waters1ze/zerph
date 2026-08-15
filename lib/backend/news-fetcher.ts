@@ -9,6 +9,12 @@
  * Filters: Only headlines published today or yesterday.
  */
 
+export interface NewsItem {
+  title: string
+  summary: string
+  source?: string
+}
+
 export interface NewsDigestContext {
   date: string
   rates: {
@@ -18,8 +24,22 @@ export interface NewsDigestContext {
     btc?: string
     ton?: string
   }
+  news: NewsItem[]
   headlines: string[]
   sources: string[]
+}
+
+function cleanHtmlText(raw: string): string {
+  return raw
+    .replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
@@ -32,8 +52,8 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
   }).format(now)
 
   const rates: { usd?: string; eur?: string; cny?: string; btc?: string; ton?: string } = {}
-  const headlines: string[] = []
-  const sources: string[] = ['Центральный Банк РФ', 'CoinGecko', 'Хабр', 'РБК Технологии']
+  const newsItems: NewsItem[] = []
+  const sources: string[] = ['Центральный Банк РФ', 'CoinGecko', 'Хабр', 'РБК Tech']
 
   // 1. Fetch Central Bank of Russia rates
   try {
@@ -68,11 +88,11 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
       }
     }
   } catch (e) {
-    rates.btc = '$60,000+'
-    rates.ton = '$6.50'
+    rates.btc = '$62,900'
+    rates.ton = '$1.33'
   }
 
-  // 3. Fetch latest Tech & AI News RSS (Habr)
+  // 3. Fetch latest AI & Tech News RSS (Habr AI) with rich descriptions
   try {
     const rssRes = await fetch('https://habr.com/ru/rss/hub/artificial_intelligence/all/?fl=ru', {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -80,19 +100,27 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     })
     if (rssRes.ok) {
       const xml = await rssRes.text()
-      const titles = Array.from(xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g))
-        .map(m => (m[1] || m[2] || '').trim())
-        .filter(t => t && !t.includes('Хабр') && !t.includes('Habr') && t.length > 15)
-        .slice(0, 6)
+      const itemBlocks = xml.split('<item>').slice(1)
 
-      headlines.push(...titles)
+      for (const block of itemBlocks) {
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+
+        if (titleMatch) {
+          const title = cleanHtmlText(titleMatch[1])
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+            newsItems.push({ title, summary, source: 'Хабр AI' })
+          }
+        }
+      }
     }
   } catch (e) {
     console.error('Habr RSS fetch error:', e)
   }
 
-  // 4. Fallback/supplementary feed (Tech/Dev articles)
-  if (headlines.length < 3) {
+  // 4. Supplementary feed (Tech/Dev articles)
+  if (newsItems.length < 4) {
     try {
       const generalRss = await fetch('https://habr.com/ru/rss/articles/?fl=ru', {
         headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -100,24 +128,28 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
       })
       if (generalRss.ok) {
         const xml = await generalRss.text()
-        const titles = Array.from(xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g))
-          .map(m => (m[1] || m[2] || '').trim())
-          .filter(t => t && !t.includes('Хабр') && !t.includes('Habr') && t.length > 15)
-          .slice(0, 4)
-
-        headlines.push(...titles)
+        const itemBlocks = xml.split('<item>').slice(1)
+        for (const block of itemBlocks) {
+          const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+          const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+          if (titleMatch) {
+            const title = cleanHtmlText(titleMatch[1])
+            const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+            if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+              newsItems.push({ title, summary, source: 'IT Новости' })
+            }
+          }
+        }
       }
     } catch {}
   }
 
+  const finalNews = newsItems.slice(0, 5)
   return {
     date: dateStr,
     rates,
-    headlines: headlines.length > 0 ? headlines.slice(0, 5) : [
-      'Новейшие разработки в сфере больших языковых моделей и AI-агентов',
-      'Инструменты автоматизации рабочего процесса и персональной эффективности',
-      'Тренды развития облачных сервисов и веб-технологий в 2026 году'
-    ],
+    news: finalNews,
+    headlines: finalNews.map(n => n.title),
     sources
   }
 }

@@ -178,7 +178,7 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
   }
 }
 
-/** 3. Post 09:00 MSK Morning News Digest (Minimalist B&W with Live Rates & Tech News for yesterday/today) */
+/** 3. Post Morning News Digest (Detailed, Informative, Minimalist B&W with Live Rates & Tech News) */
 export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   if (!GROQ_API_KEY) return false
 
@@ -192,33 +192,33 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
       context.rates.ton ? `💎 ${context.rates.ton}` : '',
     ].filter(Boolean).join('  |  ')
 
+    const newsData = context.news && context.news.length > 0
+      ? context.news.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   Контекст/Суть: ${n.summary || 'Актуальное технологическое событие'}`).join('\n\n')
+      : context.headlines.slice(0, 4).join('\n')
+
     const prompt =
-      `Ты — редактор официального Telegram-канала Zerf AI (@zerph_off).\n` +
-      `Напиши ОДНИМ лаконичным, емким и стильным сообщением утреннюю выжимку актуальных новостей за вчера и сегодня.\n\n` +
-      `Актуальные данные (${context.date}):\n` +
-      `- Главные свежие заголовки: ${context.headlines.slice(0, 4).join('; ')}\n` +
-      `- Курсы валют и крипты: ${ratesStr || '$ 90.5 ₽ | € 98.2 ₽ | ₿ $60,000+ | 💎 $6.50'}\n\n` +
-      `СТРОГАЯ ИЕРАРХИЯ СТРУКТУРЫ:\n` +
-      `1. Заголовок: ✦ <b>ГЛАВНОЕ НА СЕГОДНЯ | ${context.date}</b>\n` +
-      `2. Блок главных новостей за вчера/сегодня (ПЕРВЫМ ДЕЛОМ):\n` +
-      `   ◈ <b>Ключевые события:</b>\n` +
-      `   ▪ [Самая важная технологическая или IT-новость коротко]\n` +
-      `   ▪ [Вторая важная новость]\n` +
-      `   ▪ [Третья новость]\n` +
-      `3. Блок продуктивности:\n` +
-      `   <blockquote><b>Фокус дня:</b> [Одна полезная мысль по планированию или концентрации]</blockquote>\n` +
-      `4. Сводка рынков:\n` +
-      `   ▪ <b>Курсы:</b> <code>${ratesStr}</code>\n` +
-      `   ▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>\n\n` +
-      `ПРАВИЛА:\n` +
-      `- Без цветных эмодзи. Только ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>.\n` +
-      `- Текст должен быть емким (до 150-200 слов), актуальным и легко читаемым.`
+      `Ты — главный редактор официального Telegram-канала Zerf AI (@zerph_off).\n` +
+      `Напиши ПОДРОБНУЮ, глубокую и качественную утреннюю сводку ключевых новостей из мира IT, технологий и искусственного интеллекта за вчера и сегодня (${context.date}).\n\n` +
+      `Свежие материалы для анализа:\n${newsData}\n\n` +
+      `Курсы валют и активов: ${ratesStr || '$ 84.5 ₽ | € 97.5 ₽ | ¥ 12.5 ₽ | ₿ $62,900 | 💎 $1.33'}\n\n` +
+      `ТРЕБОВАНИЯ К СОДЕРЖАНИЮ:\n` +
+      `- НЕ пиши одни сухие заголовки! По каждому событию дай емкое раскрытие (1-2 содержательных предложения): что произошло, главные цифры, технологии или практический эффект.\n` +
+      `- Строгий минимализм: без разноцветных эмодзи (никаких 🚀🔥⚡️📱). Используй только благородные ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>, <a>.\n\n` +
+      `СТРОГАЯ СТРУКТУРА СООБЩЕНИЯ:\n` +
+      `✦ <b>ГЛАВНОЕ НА СЕГОДНЯ | ${context.date}</b>\n\n` +
+      `◈ <b>Ключевые события:</b>\n` +
+      `▪ <b>[Точный заголовок первой новости]</b> — [Подробное объяснение сути новости, факты, почему это важно]\n\n` +
+      `▪ <b>[Точный заголовок второй новости]</b> — [Подробное объяснение сути новости, факты, почему это важно]\n\n` +
+      `▪ <b>[Точный заголовок третьей новости]</b> — [Подробное объяснение сути новости, факты, почему это важно]\n\n` +
+      `<blockquote><b>Фокус дня:</b> [Практичный и глубокий совет по концентрации, тайм-менеджменту или системной работе]</blockquote>\n\n` +
+      `▪ <b>Курсы:</b> <code>${ratesStr}</code>\n` +
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
     const result = await callGroqChatCompletion({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.65,
-      max_tokens: 700,
+      temperature: 0.6,
+      max_tokens: 1200,
     })
 
     const text = result.content?.trim()
@@ -230,6 +230,15 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     })
+
+    if (!tgRes?.ok) {
+      const cleanText = text.replace(/<[^>]*>/g, '')
+      await callTg('sendMessage', {
+        chat_id: channelId,
+        text: cleanText,
+        disable_web_page_preview: true,
+      })
+    }
     return tgRes?.ok ?? false
   } catch (err) {
     console.error('postDailyMorningPostToChannel error:', err)
@@ -237,29 +246,34 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
   }
 }
 
-/** 4. Post 21:00 MSK Evening News Digest & Reflection (Minimalist B&W) */
+/** 4. Post 21:00 MSK Evening News Digest & Reflection (Detailed, Minimalist B&W) */
 export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   try {
     const context = await fetchMorningNewsContext()
+    const newsData = context.news && context.news.length > 0
+      ? context.news.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''}`).join('\n')
+      : context.headlines.slice(0, 3).join('\n')
+
     const prompt =
       `Ты — автор официального Telegram-канала Zerf AI (@zerph_off).\n` +
-      `Напиши вечерний дайджест итогов дня за сегодня (${context.date}) для подписчиков.\n\n` +
-      `Свежие темы дня:\n` +
-      `${context.headlines.slice(0, 3).map(h => `- ${h}`).join('\n')}\n\n` +
+      `Напиши подробный вечерний дайджест итогов дня за сегодня (${context.date}) для подписчиков.\n\n` +
+      `Темы дня:\n${newsData}\n\n` +
       `СТРОГИЕ ПРАВИЛА СТИЛЯ:\n` +
       `1. НЕ ИСПОЛЬЗУЙ цветные эмодзи. Только строгие ч/б символы: ✦, ◈, ▪, ▫, <blockquote>, <b>, <i>, <code>.\n` +
       `2. Структура поста:\n` +
-      `   • <b>◈ ИТОГИ ДНЯ | ВЕЧЕРНЯЯ СВОДКА</b>\n` +
-      `   • Краткая выжимка ключевых событий дня (1-2 пункта).\n` +
-      `   • 1 абзац о важности подведения итогов дня и выгрузки задач из памяти в систему Zerf AI перед сном.\n` +
-      `   • <blockquote>❝ [Лаконичная цитата или мысль вечера] </blockquote>\n` +
-      `   • Ссылка на <a href="https://t.me/Zerph_bot">@Zerph_bot</a>.`
+      `   • ✦ <b>ИТОГИ ДНЯ | ВЕЧЕРНЯЯ СВОДКА</b>\n\n` +
+      `   • ◈ <b>Главные инсайты дня:</b>\n` +
+      `     ▪ <b>[Тема 1]</b> — развернутый итог или следствие события.\n` +
+      `     ▪ <b>[Тема 2]</b> — развернутый итог или технологический вывод.\n\n` +
+      `   • <b>Рефлексия продуктивности:</b> 1-2 предложения о важности фиксации сделанного и очистки ума перед сном в Zerf AI.\n\n` +
+      `   • <blockquote>❝ [Вдохновляющая мысль о дисциплине и системности]</blockquote>\n\n` +
+      `   • <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
     const result = await callGroqChatCompletion({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 600,
+      temperature: 0.65,
+      max_tokens: 900,
     })
 
     const text = result.content?.trim()
