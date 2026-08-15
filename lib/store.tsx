@@ -228,15 +228,32 @@ export function getTgChatId(): string | null {
       return tgId
     }
 
-    // 2. One-time login token from bot (/login command) — verified server-side and consumed
     const urlParams = new URLSearchParams(window.location.search)
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+
+    // 2. VK Mini App launch context (vk_user_id from launch URL)
+    const vkUserId =
+      urlParams.get('vk_user_id') ||
+      hashParams.get('vk_user_id') ||
+      urlParams.get('userId') ||
+      urlParams.get('user_id')
+    if (vkUserId) {
+      const vkId = String(vkUserId)
+      try {
+        localStorage.setItem('zerf_chat_id', vkId)
+        setPermanentCookie('zerf_chat_id', vkId)
+      } catch {}
+      return vkId
+    }
+
+    // 3. One-time login token from bot (/login command) — verified server-side and consumed
     const loginToken = urlParams.get('login_token')
     if (loginToken) {
       // Immediately clean URL so token can't be copied/forwarded
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname)
       }
-      // Verify + consume one-time token server-side (async, non-blocking on initial render)
+      // Verify + consume one-time token server-side
       fetch(`/api/auth/login-token?token=${loginToken}`)
         .then(r => r.json())
         .then(data => {
@@ -244,19 +261,17 @@ export function getTgChatId(): string | null {
             const chatId = String(data.chatId)
             try {
               localStorage.setItem('zerf_chat_id', chatId)
-              localStorage.removeItem('zerf_cached_state') // clear any previous user's cache
+              localStorage.removeItem('zerf_cached_state')
               setPermanentCookie('zerf_chat_id', chatId)
-              // Save the long-lived session token so root user stays authenticated
               if (data.sessionToken) {
                 localStorage.setItem('zerf_auth_token', data.sessionToken)
                 setPermanentCookie('zerf_auth_token', data.sessionToken)
               }
             } catch {}
-            window.location.reload() // reload with correct identity
+            window.location.replace('/')
           }
         })
         .catch(() => {})
-      // While verifying, return whatever is already stored
     }
 
     // Always strip any query params from address bar immediately to prevent accidental link forwarding

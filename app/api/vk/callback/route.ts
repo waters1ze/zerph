@@ -159,7 +159,18 @@ export async function POST(req: NextRequest) {
       const cmd = parts[0].toLowerCase()
 
       // ── 1. /start & /login ───────────────────────────────────────────────────
-      if (cmd === '/start' || cmd === '/login' || lower === 'начать' || lower === 'старт' || lower === 'привет') {
+      if (
+        cmd === '/start' ||
+        cmd === '/login' ||
+        lower === 'начать' ||
+        lower === 'старт' ||
+        lower === 'привет' ||
+        lower === 'start' ||
+        lower === 'hello' ||
+        lower === 'hi' ||
+        lower === 'меню' ||
+        lower === 'войти'
+      ) {
         const { generateOnetimeToken } = await import('@/lib/backend/auth')
         const token = generateOnetimeToken()
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
@@ -172,11 +183,12 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        const loginUrl = `${APP_URL}/?login_token=${token}`
+        const loginUrl = `${APP_URL}/api/auth/login-token?token=${token}&redirect=true`
 
         const welcome =
           `👋 Привет, ${vkFirstName}! Я — Zerf AI, твой умный ассистент продуктивности во ВКонтакте.\n\n` +
           `✨ Твой аккаунт успешно подключен!\n\n` +
+          `ℹ️ Введи /start в любой момент для вызова главного меню и синхронизации.\n\n` +
           `📌 *БЫСТРЫЕ КОМАНДЫ:*\n` +
           `• /today — Задачи на сегодня\n` +
           `• /week — План на 7 дней\n` +
@@ -186,7 +198,7 @@ export async function POST(req: NextRequest) {
           `• /matrix — Матрица Эйзенхауэра\n` +
           `• /send @username [текст] — Дать задачу другу\n` +
           `• /help — Полное руководство\n\n` +
-          `🌐 Ссылка для безопасного входа на сайте (Safari / Chrome):\n` +
+          `🌐 Ссылка для моментального входа на сайте (Safari / Chrome):\n` +
           `${loginUrl}\n` +
           `⏱ Действует 10 минут.\n\n` +
           `💡 Ты можешь просто прислать голосовое 🎙 или текст в свободной форме: «Позвонить врачу завтра в 14:00»!`

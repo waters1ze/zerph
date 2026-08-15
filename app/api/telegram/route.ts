@@ -3216,7 +3216,7 @@ export async function POST(req: NextRequest) {
             body: JSON.stringify({ chatId, secret: ADMIN_SECRET }),
           })
           const tokenData = await tokenRes.json()
-          const loginUrl = tokenData.token ? `${APP_URL}/?login_token=${tokenData.token}` : APP_URL
+          const loginUrl = tokenData.token ? `${APP_URL}/api/auth/login-token?token=${tokenData.token}&redirect=true` : APP_URL
 
           await send(chatId,
             `🔐 *Безопасный вход в Zerf*\n\n` +

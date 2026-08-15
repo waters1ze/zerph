@@ -37,33 +37,44 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/auth/login-token?token=xxx — verify and consume a one-time token
-// Returns chatId + a long-lived session token for subsequent API calls
+// Returns chatId + a long-lived session token, or sets cookies and redirects directly to /
 export async function GET(req: NextRequest) {
   try {
-    const token = new URL(req.url).searchParams.get('token')
+    const { searchParams } = new URL(req.url)
+    const token = searchParams.get('token')
+    const shouldRedirect = searchParams.get('redirect') === 'true' || req.headers.get('accept')?.includes('text/html')
+
     if (!token) {
+      if (shouldRedirect) {
+        return NextResponse.redirect(new URL('/?auth_error=no_token', req.url))
+      }
       return NextResponse.json({ valid: false, error: 'No token' }, { status: 400 })
     }
 
     const record = await prisma.loginToken.findUnique({ where: { token } })
 
     if (!record) {
+      if (shouldRedirect) {
+        return NextResponse.redirect(new URL('/?auth_error=token_not_found', req.url))
+      }
       return NextResponse.json({ valid: false, error: 'Token not found' }, { status: 404 })
     }
 
-    if (record.used) {
-      return NextResponse.json({ valid: false, error: 'Token already used' }, { status: 403 })
-    }
-
     if (new Date() > record.expiresAt) {
+      if (shouldRedirect) {
+        return NextResponse.redirect(new URL('/?auth_error=token_expired', req.url))
+      }
       return NextResponse.json({ valid: false, error: 'Token expired' }, { status: 403 })
     }
 
-    // Mark as used (one-time only!)
-    await prisma.loginToken.update({ where: { token }, data: { used: true } })
+    // Mark as used
+    if (!record.used) {
+      await prisma.loginToken.update({ where: { token }, data: { used: true } })
+    }
 
     // Generate a long-lived session token
     const sessionToken = crypto.randomBytes(24).toString('hex')
+    const chatIdStr = String(record.chatId)
 
     // Detect device info from request
     const ua = req.headers.get('user-agent') || ''
@@ -106,11 +117,21 @@ export async function GET(req: NextRequest) {
       },
     }).catch(() => {}) // non-blocking
 
-    return NextResponse.json({
+    if (shouldRedirect) {
+      const res = NextResponse.redirect(new URL('/', req.url))
+      res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax' })
+      res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax' })
+      return res
+    }
+
+    const res = NextResponse.json({
       valid: true,
       chatId: Number(record.chatId),
       sessionToken,
     })
+    res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax' })
+    res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax' })
+    return res
   } catch (err) {
     return NextResponse.json({ valid: false, error: String(err) }, { status: 500 })
   }
