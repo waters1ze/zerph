@@ -303,5 +303,67 @@ export async function callGroqWhisper(options: {
     }
   }
 
-  throw lastError || new Error('All Groq Whisper keys and models failed.')
+  // ── Multi-Provider Secondary Fallbacks (Hugging Face / OpenAI / Cloudflare) ──
+
+  // 1. Hugging Face Inference API (Free & Serverless)
+  const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGINGFACE_TOKEN || process.env.HF_API_KEY
+  if (hfToken) {
+    const hfModels = [
+      'openai/whisper-large-v3-turbo',
+      'openai/whisper-large-v3',
+      'openai/whisper-small',
+    ]
+
+    for (const hfModel of hfModels) {
+      try {
+        console.log(`[Whisper Fallback] Attempting Hugging Face with model ${hfModel}...`)
+        const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${hfToken}`,
+            'Content-Type': mimeType,
+          },
+          body: options.audioBuffer,
+        })
+
+        if (hfRes.ok) {
+          const hfData = await hfRes.json()
+          const transcribed = (hfData.text || '').trim()
+          if (transcribed) {
+            return { text: transcribed, keyUsed: 'huggingface_token', modelUsed: hfModel }
+          }
+        }
+      } catch (hfErr) {
+        console.warn(`[HF-Whisper] Model ${hfModel} error:`, hfErr)
+      }
+    }
+  }
+
+  // 2. OpenAI Whisper API (if OPENAI_API_KEY is configured)
+  const openAiKey = process.env.OPENAI_API_KEY
+  if (openAiKey) {
+    try {
+      console.log(`[Whisper Fallback] Attempting OpenAI Whisper API...`)
+      const openAiFormData = new FormData()
+      openAiFormData.append('file', new Blob([options.audioBuffer], { type: mimeType }), options.filename)
+      openAiFormData.append('model', 'whisper-1')
+
+      const openAiRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${openAiKey}` },
+        body: openAiFormData,
+      })
+
+      if (openAiRes.ok) {
+        const oData = await openAiRes.json()
+        if (oData.text) {
+          return { text: oData.text, keyUsed: 'openai_key', modelUsed: 'whisper-1' }
+        }
+      }
+    } catch (oErr) {
+      console.warn('[OpenAI-Whisper] error:', oErr)
+    }
+  }
+
+  throw lastError || new Error('All Groq Whisper keys and fallback providers failed.')
 }
