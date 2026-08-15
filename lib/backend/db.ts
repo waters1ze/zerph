@@ -1218,6 +1218,9 @@ export async function saveParsedItemToDb(
       }
     }
 
+    const baseTags = item.recipientName ? [...(item.tags || []), item.recipientName] : (item.tags || [])
+    const categorizedTags = autoCategorizeTags(item.title, desc, baseTags)
+
     await createTask({
       title: item.title,
       description: desc,
@@ -1226,7 +1229,7 @@ export async function saveParsedItemToDb(
       dueTime: extractedTime,
       repeat: finalRepeat,
       reminderOffsetMinutes: item.reminderOffsetMinutes || 0,
-      tags: item.recipientName ? [...(item.tags || []), item.recipientName] : item.tags,
+      tags: categorizedTags,
       aiGenerated: true,
       source: item.rawText,
       ownerChatId: ownerChatId || null,
@@ -1241,6 +1244,43 @@ export async function saveParsedItemToDb(
   }
 
   return { item }
+}
+
+export function autoCategorizeTags(title: string, summary: string = '', currentTags: string[] = []): string[] {
+  const fullText = `${title} ${summary} ${currentTags.join(' ')}`.toLowerCase()
+  const tagsSet = new Set(currentTags)
+
+  // Sport keywords (including chess as intellectual sport)
+  if (/(?:спорт|тренировк|зал|фитнес|бег|пробежк|плавани|бассейн|шахмат|футбол|баскетбол|турник|отжимания|воркаут|матч|растяжк|йог[аеи]|велосипед|гантел|жим)/i.test(fullText)) {
+    tagsSet.add('спорт')
+  }
+
+  // Study / Education keywords (including chess lessons / classes / tutoring)
+  if (/(?:учеб|заняти|урок|домашк|дз|репетитор|экзамен|сесси|лекци|семинар|курс|интенсив|шахмат|английск|язык|книг|чтени|конспект|лабораторн|диплом|курсов)/i.test(fullText)) {
+    tagsSet.add('учеба')
+  }
+
+  // Work keywords
+  if (/(?:работ|созвон|митинг|клиент|отчет|договор|презентаци|дедлайн|коллег|начальник|зарплат|сервер|баг|заказ|код|релиз)/i.test(fullText)) {
+    tagsSet.add('работа')
+  }
+
+  // Ideas keywords
+  if (/(?:иде[яи]|мысл|инсайт|придум|сценари|концепт|стартап|план\sна\sбудущее|задумк)/i.test(fullText)) {
+    tagsSet.add('идеи')
+  }
+
+  // Urgent keywords
+  if (/(?:срочн|важн|горит|немедленно|как\sможно\sбыстрее|asap)/i.test(fullText)) {
+    tagsSet.add('срочно')
+  }
+
+  // Personal / Life keywords
+  if (/(?:покупк|купи|магазин|аптек|врач|поликлиник|семь[яе]|мам[ае]|пап[ае]|дом|уборк|стирк|готовк|ужин|обед|завтрак|друг|др|день\sрождения|подарок)/i.test(fullText)) {
+    tagsSet.add('личное')
+  }
+
+  return Array.from(tagsSet)
 }
 
 async function fetchTelegramUserProfile(chatId: bigint | number): Promise<{ firstName?: string; lastName?: string; username?: string } | null> {
