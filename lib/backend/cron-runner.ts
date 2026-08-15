@@ -319,8 +319,8 @@ export async function runEveningReview() {
     const hour = parseInt(getPart('hour'), 10)
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Fire between 21:00 and 23:59 MSK, exactly once per day (persisted in DB)
-    if (hour < 21) return
+    // Fire starting at 20:00 (8 PM) MSK to 23:59 MSK, exactly once per day (persisted in DB)
+    if (hour < 20) return
 
     const lastSent = await getConfig('last_evening_review_date')
     if (lastSent === todayStr) return
@@ -486,8 +486,8 @@ export async function runChannelAndAiCron() {
       }
     }
 
-    // 4. Every Day 21:00-23:59 MSK: Evening News Digest & Daily Reflection
-    if (hour >= 21) {
+    // 4. Every Day 20:00 (8 PM) - 23:59 MSK: Evening News Digest & Daily Reflection
+    if (hour >= 20) {
       const lastEvening = await getConfig('last_channel_evening_post_date')
       if (lastEvening !== todayStr) {
         const ok = await postDailyEveningPostToChannel()
