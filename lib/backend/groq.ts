@@ -6,8 +6,8 @@
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
 
 export interface ParsedItem {
-  type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate' | 'schedule'
-  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday' | 'get_schedule'
+  type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate' | 'schedule' | 'answer'
+  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday' | 'get_schedule' | 'reply'
   targetId?: string | null
   title: string
   summary: string
@@ -148,6 +148,14 @@ ${friendsContext}
      • "спорт" — спорт, тренировки, зал, фитнес, бег, плавание, шахматы, упражнения.
    - Плюс добавляй тематические теги (например, для шахмат: ["спорт", "учеба", "шахматы", "занятия"]).
 ══════════════════════════════════════════
+💡 ПРАВИЛА ОТВЕТОВ НА ВОПРОСЫ И СОВЕТОВ (HIGHEST PRIORITY)
+══════════════════════════════════════════
+- Если пользователь ЗАДАЕТ ВОПРОС, просит совет, объяснение, рекомендацию по продуктивности, учебе, спорту или жизни (например: "как мне лучше распланировать день", "посоветуй как не прокрастинировать", "что такое закон Парето", "объясни правило 2 минут", "почему я устаю", "как быстрее выучить язык", "дай совет", "что делать если нет сил"):
+  1. "type": "answer"
+  2. "action": "reply"
+  3. "title": "Вопрос пользователя"
+  4. "summary": "Прямой, экспертный, емкий и полезный ответ на русском языке (2-3 емких предложения без лишней воды), идеальный для четкого озвучивания голосом через Siri и Android TTS!"
+══════════════════════════════════════════
 
 ## Intent Detection & Actions
 
@@ -160,9 +168,9 @@ Always respond with ONLY valid JSON:
 {
   "items": [
     {
-      "action": "create" | "update" | "delete" | "delete_all" | "completion" | "set_my_birthday" | "get_schedule",
+      "action": "create" | "update" | "delete" | "delete_all" | "completion" | "set_my_birthday" | "get_schedule" | "reply",
       "targetId": "ID элемента если action update/delete" | null,
-      "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate" | "schedule",
+      "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate" | "schedule" | "answer",
       "title": "Понятное, информативное название с сутью действия",
       "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями)",
       "priority": "urgent" | "high" | "medium" | "low",

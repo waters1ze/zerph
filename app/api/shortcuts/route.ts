@@ -196,19 +196,24 @@ export async function POST(req: NextRequest) {
     const spokenText = createSpokenSummary(items)
 
     // Send confirmation in Telegram
-    let tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
-    items.forEach((item, idx) => {
-      if (item.action === 'delete') {
-        tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
-      } else if (item.action === 'delete_all') {
-        tgMsg += `▪ *Все задачи очищены*\n`
-      } else if (item.action === 'completion' || item.type === 'completion') {
-        tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
-      } else {
-        const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-        tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
-      }
-    })
+    let tgMsg = ''
+    if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
+      tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
+    } else {
+      tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
+      items.forEach((item, idx) => {
+        if (item.action === 'delete') {
+          tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
+        } else if (item.action === 'delete_all') {
+          tgMsg += `▪ *Все задачи очищены*\n`
+        } else if (item.action === 'completion' || item.type === 'completion') {
+          tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
+        } else {
+          const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+          tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+        }
+      })
+    }
 
     // Send confirmation in Telegram or VK if applicable
     try {
@@ -341,19 +346,24 @@ export async function GET(req: NextRequest) {
   const spokenText = createSpokenSummary(items)
 
   // Send confirmation in Telegram
-  let tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
-  items.forEach((item, idx) => {
-    if (item.action === 'delete') {
-      tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
-    } else if (item.action === 'delete_all') {
-      tgMsg += `▪ *Все задачи очищены*\n`
-    } else if (item.action === 'completion' || item.type === 'completion') {
-      tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
-    } else {
-      const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-      tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
-    }
-  })
+  let tgMsg = ''
+  if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
+    tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
+  } else {
+    tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
+    items.forEach((item, idx) => {
+      if (item.action === 'delete') {
+        tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
+      } else if (item.action === 'delete_all') {
+        tgMsg += `▪ *Все задачи очищены*\n`
+      } else if (item.action === 'completion' || item.type === 'completion') {
+        tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
+      } else {
+        const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+        tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+      }
+    })
+  }
   // Send confirmation in Telegram or VK if applicable
   try {
     const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })

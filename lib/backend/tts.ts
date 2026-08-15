@@ -60,6 +60,10 @@ export function createSpokenSummary(items: any[]): string {
   if (!items || items.length === 0) return 'Готово.'
   const first = items[0]
 
+  if (first.type === 'answer' || first.action === 'reply') {
+    return first.summary || first.title || 'Вот ответ на ваш вопрос.'
+  }
+
   if (first.action === 'delete_all') {
     return 'Все задачи успешно удалены.'
   }

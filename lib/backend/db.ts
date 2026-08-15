@@ -1174,6 +1174,10 @@ export async function saveParsedItemToDb(
   completedTask?: DbTask | null
   updatedItem?: boolean
 }> {
+  if (item.type === 'answer' || item.action === 'reply') {
+    return { item, updatedItem: false }
+  }
+
   // Delete all tasks action - STRICT CHECK (prevent accidental deletion from generic "удали")
   const textLower = (item.rawText || item.title || '').toLowerCase().trim()
   const isStrictDeleteAll = /\b(?:удали|удалить|очисти|очистить)\s+(?:все|всё)\s*(?:задачи|дела|заметки|список|тодо)?\b/i.test(textLower)
