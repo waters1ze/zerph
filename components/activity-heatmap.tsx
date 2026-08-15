@@ -113,7 +113,7 @@ export function ActivityHeatmap({ completedDates = [], totalCompleted = 0, curre
       </div>
 
       {/* Grid Container */}
-      <div className="overflow-x-auto pb-2 scrollbar-thin">
+      <div className="overflow-x-auto pb-3 pt-1 scrollbar-thin scroll-smooth">
         <div className="flex gap-1 min-w-[700px]">
           {gridWeeks.map((week, wIdx) => {
             const labelMonth = week.find(d => d.monthName)?.monthName

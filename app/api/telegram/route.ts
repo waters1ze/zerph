@@ -3377,7 +3377,7 @@ export async function POST(req: NextRequest) {
         if (!rawInput) {
           await send(chatId, `👤 *Смена имени и даты рождения*\n\nИспользование: \`/name Ваше Имя Фамилия [ДД.ММ.ГГГГ]\`\n\nПример: \`/name Кирилл Перекатнов 03.04.2010\``)
         } else {
-          const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+          const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
           const dateMatch = rawInput.match(/\b(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\b/)
           const parsedBday = dateMatch ? parseBirthday(dateMatch[1]) : null
           const cleanName = rawInput.replace(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/g, '').trim()
@@ -3386,20 +3386,17 @@ export async function POST(req: NextRequest) {
           const first = nameParts[0] || firstName
           const last = nameParts.slice(1).join(' ') || null
 
-          const updateData: any = { firstName: first, lastName: last }
-          if (parsedBday) updateData.birthday = parsedBday.iso
-
-          await prisma.telegramChat.upsert({
-            where: { chatId: BigInt(chatId) },
-            update: updateData,
-            create: { chatId: BigInt(chatId), ...updateData },
-          })
+          await updateUserNameCascade(BigInt(chatId), first, last)
 
           if (parsedBday) {
+            await prisma.telegramChat.update({
+              where: { chatId: BigInt(chatId) },
+              data: { birthday: parsedBday.iso },
+            }).catch(() => {})
             await broadcastMyBirthdayToFriends(chatId)
           }
 
-          let respText = `✅ *Ваш профиль успешно обновлен!*\n• *Имя:* ${first}${last ? ' ' + last : ''}`
+          let respText = `✅ *Ваш профиль успешно обновлен во всей системе!*\n• *Имя:* ${first}${last ? ' ' + last : ''}`
           if (parsedBday) {
             respText += `\n• *День рождения:* ${String(parsedBday.day).padStart(2, '0')}.${String(parsedBday.month).padStart(2, '0')}${parsedBday.year ? `.${parsedBday.year}` : ''} 🎉`
           }

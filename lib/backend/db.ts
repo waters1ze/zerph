@@ -2368,3 +2368,44 @@ export async function setConfig(key: string, value: string): Promise<boolean> {
   }
 }
 
+/** Cascade update user's name across profile and all friends' birthday reminders */
+export async function updateUserNameCascade(chatId: string | bigint, newFirstName: string, newLastName?: string | null) {
+  try {
+    const cid = BigInt(chatId)
+    const firstName = newFirstName.trim()
+    const lastName = newLastName?.trim() || null
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || firstName
+
+    // 1. Update TelegramChat table
+    await prisma.telegramChat.upsert({
+      where: { chatId: cid },
+      update: { firstName, lastName },
+      create: { chatId: cid, firstName, lastName },
+    })
+
+    // 2. Cascade update all birthday tasks across the whole system where this user is the friend
+    const friendCidStr = String(cid)
+    const bdayTasks = await prisma.task.findMany({
+      where: {
+        tags: { has: 'день рождения' },
+        assignees: { has: friendCidStr },
+      }
+    })
+
+    for (const t of bdayTasks) {
+      await prisma.task.update({
+        where: { id: t.id },
+        data: {
+          title: `🎂 День рождения: ${fullName}`,
+          description: `Не забудь поздравить ${fullName} с Днём рождения! 🎉`,
+        }
+      }).catch(() => {})
+    }
+
+    return { success: true, fullName }
+  } catch (err) {
+    console.error('updateUserNameCascade error:', err)
+    return { success: false, error: String(err) }
+  }
+}
+

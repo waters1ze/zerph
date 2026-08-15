@@ -8,6 +8,8 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || ''
 
 import { callGroqChatCompletion } from './groq-pool'
 
+import { postToVkWall } from './vk'
+
 async function callTg(method: string, payload: Record<string, any>) {
   if (!BOT_TOKEN) return null
   try {
@@ -244,6 +246,10 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
         disable_web_page_preview: true,
       })
     }
+
+    // Duplicate to VK Community Wall
+    postToVkWall(text).catch(err => console.error('[VK Crosspost Morning Error]:', err))
+
     return tgRes?.ok ?? false
   } catch (err) {
     console.error('postDailyMorningPostToChannel error:', err)
@@ -291,6 +297,10 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL)
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     })
+
+    // Duplicate to VK Community Wall
+    postToVkWall(text).catch(err => console.error('[VK Crosspost Evening Error]:', err))
+
     return tgRes?.ok ?? false
   } catch (err) {
     console.error('postDailyEveningPostToChannel error:', err)

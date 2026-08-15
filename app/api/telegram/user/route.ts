@@ -60,28 +60,31 @@ export async function POST(req: NextRequest) {
     const { birthday, name } = await req.json()
     const userCid = BigInt(cid)
 
-    const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+    const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
 
     const updateData: any = {}
     if (birthday !== undefined) {
       const parsed = parseBirthday(birthday)
       updateData.birthday = parsed ? parsed.iso : (birthday || null)
     }
+
     if (name !== undefined) {
       const trimmed = name.trim()
       const parts = trimmed.split(/\s+/)
-      updateData.firstName = parts[0] || trimmed
-      updateData.lastName = parts.slice(1).join(' ') || null
+      const firstName = parts[0] || trimmed
+      const lastName = parts.slice(1).join(' ') || null
+      await updateUserNameCascade(userCid, firstName, lastName)
     }
 
-    await prisma.telegramChat.upsert({
-      where: { chatId: userCid },
-      update: updateData,
-      create: { chatId: userCid, ...updateData },
-    })
-
-    if (updateData.birthday) {
-      await broadcastMyBirthdayToFriends(userCid)
+    if (updateData.birthday !== undefined) {
+      await prisma.telegramChat.upsert({
+        where: { chatId: userCid },
+        update: updateData,
+        create: { chatId: userCid, ...updateData },
+      })
+      if (updateData.birthday) {
+        await broadcastMyBirthdayToFriends(userCid)
+      }
     }
 
     return NextResponse.json({ success: true, birthday: updateData.birthday || null })
