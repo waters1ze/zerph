@@ -41,14 +41,16 @@ async function getAdminChatIds(): Promise<number[]> {
 }
 
 /** 1. Post Weekly Friday 09:00 MSK Poll to Channel (Minimalist B&W) */
-export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
+export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<boolean> {
   const { mskDate } = getMskDateTime()
 
   try {
-    const existing = await prisma.channelPoll.findFirst({
-      where: { date: mskDate, channelId }
-    })
-    if (existing) return false
+    if (!force) {
+      const existing = await prisma.channelPoll.findFirst({
+        where: { date: mskDate, channelId }
+      })
+      if (existing) return false
+    }
 
     let question = '✦ Какое улучшение или функцию добавить в Zerf AI?'
     let options = [
@@ -86,8 +88,8 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
     const tgRes = await callTg('sendPoll', {
       chat_id: channelId,
       question,
-      options: JSON.stringify(options),
-      is_anonymous: false,
+      options,
+      is_anonymous: true,
       allows_multiple_answers: false,
     })
 
@@ -107,6 +109,7 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
       console.log(`[Zerf Channel] Weekly Poll posted to ${channelId}:`, question)
       return true
     }
+    console.error('Telegram sendPoll response:', tgRes)
     return false
   } catch (err) {
     console.error('postDailyPollToChannel error:', err)
