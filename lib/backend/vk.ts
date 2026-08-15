@@ -14,21 +14,21 @@ const VK_API_VERSION = '5.199'
 const VK_API_BASE = 'https://api.vk.com/method'
 
 export function getVkGroupToken(): string | null {
-  return process.env.VK_GROUP_TOKEN || process.env.VK_API_KEY || null
+  return process.env.VK_GROUP_TOKEN || process.env.VK_API_KEY || 'vk1.a.2llizaJb8VJzeQRuMv8dE5U6oPzKt-ddt1Y72K6cO6TE5QyLHhesPGT8_NR3r2cHIu5PzKy-kSdgugxPZqB-MxwV-IWFcIxamvKiemieJ5flWzvNvvPG-heOaNJJU6nHwX2GCO2O897NbPlbArw-SJQZTpbTsmp2pjVk3TWxrNjRZTbX6NidGYfWTHDRUWyROyayfkXTJ4v_1UcgvmfyDg'
 }
 
 export function getVkGroupId(): string | null {
-  const raw = process.env.VK_GROUP_ID || null
+  const raw = process.env.VK_GROUP_ID || '240878278'
   if (!raw) return null
   return raw.replace(/^-/, '') // ensure positive group id
 }
 
 export function getVkConfirmationCode(): string {
-  return process.env.VK_CONFIRMATION_CODE || 'zerf_vk_confirm_code'
+  return process.env.VK_CONFIRMATION_CODE || '6942605c'
 }
 
 export function getVkSecretKey(): string | null {
-  return process.env.VK_SECRET_KEY || null
+  return process.env.VK_SECRET_KEY || 'aaQ13axAPQEcczQa'
 }
 
 /** Call any VK API method */
