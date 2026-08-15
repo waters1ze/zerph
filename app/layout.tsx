@@ -134,6 +134,22 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <Script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js" strategy="beforeInteractive" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (window.vkBridge) {
+                  window.vkBridge.send('VKWebAppInit');
+                }
+                if (window.parent && window.parent !== window) {
+                  window.parent.postMessage(JSON.stringify({ type: 'VKWebAppInit', data: {} }), '*');
+                  window.parent.postMessage({ type: 'VKWebAppInit', data: {} }, '*');
+                }
+              } catch(e) {}
+            `,
+          }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

@@ -12,22 +12,51 @@ export default function VkPage() {
 
     if (typeof window !== 'undefined') {
       try {
-        // Parse VK Mini App launch parameters from search or hash
+        // 1. Immediately signal VK Bridge initialization
+        const initBridge = () => {
+          const vkBridge = (window as any).vkBridge
+          if (vkBridge && typeof vkBridge.send === 'function') {
+            vkBridge.send('VKWebAppInit').catch(() => {})
+          }
+          if (window.parent && window.parent !== window) {
+            try {
+              window.parent.postMessage(JSON.stringify({ type: 'VKWebAppInit', data: {} }), '*')
+              window.parent.postMessage({ type: 'VKWebAppInit', data: {} }, '*')
+            } catch {}
+          }
+        }
+
+        initBridge()
+        // Retry shortly in case script loaded async
+        setTimeout(initBridge, 100)
+        setTimeout(initBridge, 500)
+
+        // 2. Parse launch parameters from URL search / hash
         const urlParams = new URLSearchParams(window.location.search)
         const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
 
-        const vkUserId = urlParams.get('vk_user_id') || hashParams.get('vk_user_id') || urlParams.get('userId')
-        const vkAppId = urlParams.get('vk_app_id') || hashParams.get('vk_app_id')
+        const vkUserId =
+          urlParams.get('vk_user_id') ||
+          hashParams.get('vk_user_id') ||
+          urlParams.get('userId') ||
+          urlParams.get('user_id')
 
         if (vkUserId) {
           localStorage.setItem('zerf_chat_id', vkUserId)
           document.cookie = `zerf_chat_id=${vkUserId}; path=/; max-age=31536000`
         }
 
-        // Initialize VK Bridge if available
+        // 3. Subscribe to VK Bridge events for appearance/theme
         const vkBridge = (window as any).vkBridge
-        if (vkBridge) {
-          vkBridge.send('VKWebAppInit').catch(() => {})
+        if (vkBridge && typeof vkBridge.subscribe === 'function') {
+          vkBridge.subscribe((e: any) => {
+            if (e.detail?.type === 'VKWebAppUpdateConfig') {
+              const scheme = e.detail?.data?.scheme
+              if (scheme && (scheme.includes('dark') || scheme.includes('space'))) {
+                document.documentElement.classList.add('dark')
+              }
+            }
+          })
         }
       } catch (e) {
         console.error('VK Mini App initialization error:', e)
