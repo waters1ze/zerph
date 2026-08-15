@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -11,39 +11,55 @@ import remarkGfm from 'remark-gfm'
 import {
   FileText, Plus, Folder, Pin, Tag, Edit3, Save,
   Trash2, Search, Calendar as CalendarIcon,
-  ChevronLeft, BookOpen, Users, Sparkles, Loader2, Check, X
+  ChevronLeft, BookOpen, Users, Sparkles, Loader2, Check, X, FolderPlus
 } from 'lucide-react'
 import type { Note, NoteType } from '@/lib/types'
 
-const CATEGORIES = [
-  { id: 'all', label: 'Все заметки', icon: Folder },
-  { id: 'dated', label: 'С датой', icon: CalendarIcon },
-  { id: 'pinned', label: 'Закрепленные', icon: Pin },
-  { id: 'note', label: 'Заметки', icon: FileText },
-  { id: 'journal', label: 'Дневник', icon: BookOpen },
-  { id: 'meeting', label: 'Встречи', icon: Users },
+const FIXED_TAGS = [
+  { id: 'all', label: 'Все' },
+  { id: 'работа', label: '💼 Работа' },
+  { id: 'личное', label: '👤 Личное' },
+  { id: 'срочно', label: '⚡ Срочно' },
+  { id: 'идеи', label: '💡 Идеи' },
+  { id: 'учеба', label: '🎓 Учеба' },
+  { id: 'спорт', label: '🏃 Спорт' },
 ]
+
+const DEFAULT_FOLDERS = ['Общее', 'Работа', 'Личное', 'Идеи', 'Учеба', 'Проекты']
 
 export function NotesView() {
   const { state, dispatch } = useApp()
   const { notes, tasks } = state
 
   const [selectedFolder, setSelectedFolder] = useState('all')
+  const [selectedTag, setSelectedTag] = useState('all')
   const [selectedId, setSelectedId] = useState<string | null>(notes[0]?.id || null)
   const [search, setSearch] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showMobileList, setShowMobileList] = useState(true)
   const [isAiProcessing, setIsAiProcessing] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false)
 
   // Draft state for note editing
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [editType, setEditType] = useState<NoteType>('note')
+  const [editFolder, setEditFolder] = useState<string>('Общее')
   const [editDueDate, setEditDueDate] = useState<string>('')
   const [editTaskIds, setEditTaskIds] = useState<string[]>([])
   const [editTags, setEditTags] = useState<string[]>([])
   const [editVisibility, setEditVisibility] = useState<'private' | 'public'>('private')
   const [newTagInput, setNewTagInput] = useState('')
+
+  // Derive unique folders list
+  const allFolders = useMemo(() => {
+    const set = new Set(DEFAULT_FOLDERS)
+    notes.forEach(n => {
+      if (n.folder && n.folder.trim()) set.add(n.folder.trim())
+    })
+    return Array.from(set)
+  }, [notes])
 
   const activeNote = notes.find(n => n.id === selectedId) || notes[0] || null
 
@@ -52,6 +68,7 @@ export function NotesView() {
       setEditTitle(activeNote.title)
       setEditContent(activeNote.content)
       setEditType(activeNote.type || 'note')
+      setEditFolder(activeNote.folder || 'Общее')
       setEditDueDate(activeNote.dueDate || '')
       setEditTaskIds(activeNote.taskIds || [])
       setEditTags(activeNote.tags || [])
@@ -68,22 +85,39 @@ export function NotesView() {
 
     if (!matchesSearch) return false
 
+    // Tag filter
+    if (selectedTag !== 'all') {
+      const match = selectedTag === 'срочно'
+        ? n.tags.some(t => t.toLowerCase().includes('срочн'))
+        : n.tags.some(t => t.toLowerCase().includes(selectedTag))
+      if (!match) return false
+    }
+
+    // Folder / Category filter
+    if (selectedFolder === 'all') return true
     if (selectedFolder === 'pinned') return n.pinned
     if (selectedFolder === 'dated') return !!n.dueDate
-    if (selectedFolder === 'note' || selectedFolder === 'journal' || selectedFolder === 'meeting') {
+    if (selectedFolder === 'journal' || selectedFolder === 'meeting') {
       return n.type === selectedFolder
     }
 
-    return true
+    // Specific named folder
+    const noteFolder = n.folder || 'Общее'
+    return noteFolder.toLowerCase() === selectedFolder.toLowerCase()
   })
 
   // Create new note
   const handleCreateNote = () => {
+    const targetFolder = (selectedFolder !== 'all' && selectedFolder !== 'pinned' && selectedFolder !== 'dated')
+      ? selectedFolder
+      : 'Общее'
+
     const newNote: Note = {
       id: `n-${Date.now()}`,
       title: 'Новая заметка',
       content: '',
       type: 'note',
+      folder: targetFolder,
       tags: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -104,6 +138,7 @@ export function NotesView() {
         title: editTitle.trim() || 'Без названия',
         content: editContent,
         type: editType,
+        folder: editFolder || 'Общее',
         dueDate: editDueDate || undefined,
         taskIds: editTaskIds,
         tags: editTags,
@@ -122,16 +157,18 @@ export function NotesView() {
     try {
       const apiKey = state.settings.integrations.groqApiKey
       const prompt = `Проанализируй этот текст заметки и верни JSON со свойствами:
-1. "type": из ["note", "journal", "meeting"]
+1. "folder": определи наиболее подходящую папку из [${allFolders.map(f => `"${f}"`).join(', ')}] или предложи короткое название папки (1 слово)
+2. "type": из ["note", "journal", "meeting"]
    - "journal" если это личные мысли, дневник, рефлексия
    - "meeting" если это созвон, встреча, договорённость, протокол
    - "note" если это обычная бытовая или рабочая заметка
-2. "dueDate": дата в формате YYYY-MM-DD если в тексте есть привязка к конкретному дню, иначе null
-3. "tags": массив из 1-3 тегов на русском языке
+3. "dueDate": дата в формате YYYY-MM-DD если в тексте есть привязка к конкретному дню, иначе null
+4. "tags": массив из 1-3 тегов на русском языке
 
 Текст заметки:
 ${editTitle}
 ${editContent}`
+
       const tgWindow = window as any
       const ownerChatId = tgWindow?.Telegram?.WebApp?.initDataUnsafe?.user?.id || null
 
@@ -154,6 +191,7 @@ ${editContent}`
         const jsonMatch = data.content.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.folder) setEditFolder(parsed.folder)
           if (parsed.type) setEditType(parsed.type)
           if (parsed.dueDate) setEditDueDate(parsed.dueDate)
           if (Array.isArray(parsed.tags)) setEditTags(parsed.tags)
@@ -163,6 +201,7 @@ ${editContent}`
             type: 'UPDATE_NOTE',
             id: activeNote.id,
             updates: {
+              folder: parsed.folder || editFolder || 'Общее',
               type: parsed.type || editType,
               dueDate: parsed.dueDate || editDueDate || undefined,
               tags: parsed.tags || editTags,
@@ -175,16 +214,22 @@ ${editContent}`
       // Fallback: heuristic classification
       const text = (editTitle + ' ' + editContent).toLowerCase()
       let detectedType: NoteType = 'note'
+      let detectedFolder = 'Общее'
       if (text.includes('встреч') || text.includes('созвон') || text.includes('протокол') || text.includes('обсудили')) {
         detectedType = 'meeting'
+        detectedFolder = 'Работа'
       } else if (text.includes('дневник') || text.includes('мысли') || text.includes('сегодня я') || text.includes('настроение')) {
         detectedType = 'journal'
+        detectedFolder = 'Личное'
+      } else if (text.includes('идея') || text.includes('стартап') || text.includes('придумал')) {
+        detectedFolder = 'Идеи'
       }
       setEditType(detectedType)
+      setEditFolder(detectedFolder)
       dispatch({
         type: 'UPDATE_NOTE',
         id: activeNote.id,
-        updates: { type: detectedType },
+        updates: { type: detectedType, folder: detectedFolder },
       })
     } finally {
       setIsAiProcessing(false)
@@ -233,38 +278,100 @@ ${editContent}`
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden rounded-2xl border border-border shadow-2xl font-sans">
-      {/* ── 1. Clean Vector Folder Sidebar ── */}
-      <div className="hidden lg:flex flex-col w-52 bg-muted/30 border-r border-border p-3 select-none shrink-0">
-        <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-          Папки
-        </p>
-        <div className="space-y-1 mt-1">
-          {CATEGORIES.map(cat => {
-            const Icon = cat.icon
-            const count = notes.filter(n => {
-              if (cat.id === 'all') return true
-              if (cat.id === 'pinned') return n.pinned
-              if (cat.id === 'dated') return !!n.dueDate
-              return n.type === cat.id
-            }).length
+      {/* ── 1. Vector Folder Sidebar ── */}
+      <div className="hidden lg:flex flex-col w-56 bg-muted/30 border-r border-border p-3 select-none shrink-0">
+        <div className="flex items-center justify-between px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+            Папки
+          </p>
+          <button
+            onClick={() => setShowNewFolderModal(true)}
+            className="text-muted-foreground hover:text-primary transition-colors p-1 rounded-md hover:bg-muted/60"
+            title="Создать папку"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-            const isActive = selectedFolder === cat.id
+        <div className="space-y-0.5 mt-1 overflow-y-auto flex-1 pr-1">
+          {/* Main views */}
+          <button
+            onClick={() => setSelectedFolder('all')}
+            className={cn(
+              'w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-[12px] font-medium transition-all',
+              selectedFolder === 'all'
+                ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
+                : 'text-foreground/80 hover:bg-muted/60'
+            )}
+          >
+            <div className="flex items-center gap-2.5">
+              <Folder className={cn('w-3.5 h-3.5 shrink-0', selectedFolder === 'all' ? 'text-primary' : 'text-muted-foreground')} />
+              <span>Все заметки</span>
+            </div>
+            <span className="text-[11px] font-bold text-muted-foreground/60">{notes.length}</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedFolder('pinned')}
+            className={cn(
+              'w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-[12px] font-medium transition-all',
+              selectedFolder === 'pinned'
+                ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
+                : 'text-foreground/80 hover:bg-muted/60'
+            )}
+          >
+            <div className="flex items-center gap-2.5">
+              <Pin className={cn('w-3.5 h-3.5 shrink-0', selectedFolder === 'pinned' ? 'text-primary' : 'text-muted-foreground')} />
+              <span>Закрепленные</span>
+            </div>
+            <span className="text-[11px] font-bold text-muted-foreground/60">
+              {notes.filter(n => n.pinned).length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedFolder('dated')}
+            className={cn(
+              'w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-[12px] font-medium transition-all',
+              selectedFolder === 'dated'
+                ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
+                : 'text-foreground/80 hover:bg-muted/60'
+            )}
+          >
+            <div className="flex items-center gap-2.5">
+              <CalendarIcon className={cn('w-3.5 h-3.5 shrink-0', selectedFolder === 'dated' ? 'text-primary' : 'text-muted-foreground')} />
+              <span>С датой</span>
+            </div>
+            <span className="text-[11px] font-bold text-muted-foreground/60">
+              {notes.filter(n => !!n.dueDate).length}
+            </span>
+          </button>
+
+          <div className="my-2 border-t border-border/50" />
+          <p className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">
+            Категории
+          </p>
+
+          {allFolders.map(folder => {
+            const count = notes.filter(n => (n.folder || 'Общее').toLowerCase() === folder.toLowerCase()).length
+            const isActive = selectedFolder.toLowerCase() === folder.toLowerCase()
+
             return (
               <button
-                key={cat.id}
-                onClick={() => setSelectedFolder(cat.id)}
+                key={folder}
+                onClick={() => setSelectedFolder(folder)}
                 className={cn(
-                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all',
+                  'w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-[12px] font-medium transition-all',
                   isActive
                     ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
                     : 'text-foreground/80 hover:bg-muted/60'
                 )}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
-                  <span>{cat.label}</span>
+                <div className="flex items-center gap-2.5 truncate">
+                  <Folder className={cn('w-3.5 h-3.5 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
+                  <span className="truncate">{folder}</span>
                 </div>
-                <span className="text-[11px] font-bold text-muted-foreground/60">{count}</span>
+                <span className="text-[11px] font-bold text-muted-foreground/60 shrink-0 ml-1.5">{count}</span>
               </button>
             )
           })}
@@ -279,9 +386,9 @@ ${editContent}`
         )}
       >
         {/* Top Header */}
-        <div className="p-4 border-b border-border/60 flex flex-col gap-3">
+        <div className="p-3.5 border-b border-border/60 flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight text-foreground font-sans">
+            <h2 className="text-lg font-bold tracking-tight text-foreground font-sans">
               Заметки
             </h2>
             <button
@@ -295,14 +402,35 @@ ${editContent}`
 
           {/* Search bar */}
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Поиск по заметкам…"
-              className="w-full h-8 pl-9 pr-3 rounded-xl bg-muted/50 border border-border/60 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
+              className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/50 border border-border/60 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
             />
+          </div>
+
+          {/* Tag Filters Bar */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar select-none">
+            {FIXED_TAGS.map(tag => {
+              const isActive = selectedTag === tag.id
+              return (
+                <button
+                  key={tag.id}
+                  onClick={() => setSelectedTag(tag.id)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all border shrink-0',
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold'
+                      : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  {tag.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -344,13 +472,18 @@ ${editContent}`
                   </p>
 
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground/70">
-                    <span>{format(parseISO(n.updatedAt), 'd MMM HH:mm', { locale: ru })}</span>
-                    {n.dueDate && (
-                      <span className="flex items-center gap-1 text-primary font-semibold bg-primary/10 px-1.5 py-0.5 rounded-md">
-                        <CalendarIcon className="w-2.5 h-2.5" />
-                        {n.dueDate}
-                      </span>
-                    )}
+                    <span className="px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground font-medium">
+                      {n.folder || 'Общее'}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span>{format(parseISO(n.updatedAt), 'd MMM HH:mm', { locale: ru })}</span>
+                      {n.dueDate && (
+                        <span className="flex items-center gap-0.5 text-primary font-semibold bg-primary/10 px-1 py-0.5 rounded">
+                          <CalendarIcon className="w-2.5 h-2.5" />
+                          {n.dueDate}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
@@ -393,13 +526,7 @@ ${editContent}`
                 </button>
 
                 <button
-                  onClick={() => {
-                    if (state.settings.userPlan === 'free') {
-                      alert('AI Сортировка доступна только в Premium версии. Пожалуйста, приобретите Premium через бота.')
-                      return
-                    }
-                    handleAiClassify()
-                  }}
+                  onClick={handleAiClassify}
                   disabled={isAiProcessing}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-[12px] font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
                   title="Определить папку и привязать дату с помощью AI"
@@ -422,7 +549,7 @@ ${editContent}`
                 ) : (
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted border border-border text-[12px] font-medium text-foreground transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted border border-border text-[12px] font-medium text-foreground transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                     Править
@@ -462,17 +589,17 @@ ${editContent}`
                   <span className="text-muted-foreground font-medium">Папка:</span>
                   {isEditing ? (
                     <select
-                      value={editType}
-                      onChange={e => setEditType(e.target.value as NoteType)}
+                      value={editFolder}
+                      onChange={e => setEditFolder(e.target.value)}
                       className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none"
                     >
-                      <option value="note">Заметки</option>
-                      <option value="journal">Дневник</option>
-                      <option value="meeting">Встречи</option>
+                      {allFolders.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
                     </select>
                   ) : (
-                    <span className="font-semibold text-primary capitalize">
-                      {editType === 'journal' ? 'Дневник' : editType === 'meeting' ? 'Встречи' : 'Заметки'}
+                    <span className="font-semibold text-primary">
+                      {activeNote.folder || 'Общее'}
                     </span>
                   )}
                 </div>
@@ -607,6 +734,57 @@ ${editContent}`
           </div>
         )}
       </div>
+
+      {/* Modal for creating a new folder */}
+      {showNewFolderModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <FolderPlus className="w-4 h-4 text-primary" />
+                Новая папка
+              </h3>
+              <button
+                onClick={() => { setShowNewFolderModal(false); setNewFolderName('') }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              placeholder="Название папки (например: Учеба, Работа)..."
+              className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs focus:outline-none focus:border-primary text-foreground"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowNewFolderModal(false); setNewFolderName('') }}
+                className="flex-1 h-9 rounded-xl bg-muted hover:bg-muted/80 text-xs font-semibold text-foreground transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  const f = newFolderName.trim()
+                  if (f) {
+                    setSelectedFolder(f)
+                    setEditFolder(f)
+                    setShowNewFolderModal(false)
+                    setNewFolderName('')
+                  }
+                }}
+                disabled={!newFolderName.trim()}
+                className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 transition-all disabled:opacity-50"
+              >
+                Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

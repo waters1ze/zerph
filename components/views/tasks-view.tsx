@@ -19,10 +19,30 @@ export function TasksView() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [sortKey, setSortKey] = useState<SortKey>('dueDate')
   const [filterProject, setFilterProject] = useState<string>('all')
+  const [selectedTag, setSelectedTag] = useState<string>('all')
+
+  const FIXED_TAGS = [
+    { id: 'all', label: 'Все' },
+    { id: 'работа', label: '💼 Работа' },
+    { id: 'личное', label: '👤 Личное' },
+    { id: 'срочно', label: '⚡ Срочно' },
+    { id: 'идеи', label: '💡 Идеи' },
+    { id: 'учеба', label: '🎓 Учеба' },
+    { id: 'спорт', label: '🏃 Спорт' },
+  ]
+
+  const matchesTag = (t: { tags?: string[]; priority?: string }) => {
+    if (selectedTag === 'all') return true
+    if (selectedTag === 'срочно') {
+      return t.priority === 'urgent' || t.tags?.some(tag => tag.toLowerCase().includes('срочн'))
+    }
+    return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
+  }
 
   const filtered = state.tasks
     .filter(t => filterStatus === 'all' || t.status === filterStatus)
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
+    .filter(matchesTag)
     .filter(isBirthdayVisible)
     .filter(t => {
       if (!state.searchQuery) return true
@@ -40,15 +60,36 @@ export function TasksView() {
     })
 
   const statusTabs: { id: FilterStatus; label: string; count: number }[] = [
-    { id: 'all', label: 'All', count: state.tasks.length },
-    { id: 'todo', label: 'To do', count: state.tasks.filter(t => t.status === 'todo').length },
-    { id: 'inprogress', label: 'In progress', count: state.tasks.filter(t => t.status === 'inprogress').length },
-    { id: 'done', label: 'Done', count: state.tasks.filter(t => t.status === 'done').length },
-    { id: 'overdue', label: 'Overdue', count: state.tasks.filter(t => t.status === 'overdue').length },
+    { id: 'all', label: 'Все', count: state.tasks.filter(matchesTag).length },
+    { id: 'todo', label: 'К выполнению', count: state.tasks.filter(t => t.status === 'todo').filter(matchesTag).length },
+    { id: 'inprogress', label: 'В процессе', count: state.tasks.filter(t => t.status === 'inprogress').filter(matchesTag).length },
+    { id: 'done', label: 'Готово', count: state.tasks.filter(t => t.status === 'done').filter(matchesTag).length },
+    { id: 'overdue', label: 'Просрочено', count: state.tasks.filter(t => t.status === 'overdue').filter(matchesTag).length },
   ]
 
   return (
     <div className="flex flex-col gap-4 max-w-2xl">
+      {/* Tag Filters Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar select-none">
+        {FIXED_TAGS.map(tag => {
+          const isActive = selectedTag === tag.id
+          return (
+            <button
+              key={tag.id}
+              onClick={() => setSelectedTag(tag.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
+                isActive
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
+                  : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              {tag.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border w-fit">
         {statusTabs.map(tab => (

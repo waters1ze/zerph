@@ -608,9 +608,10 @@ export async function createNote(data: {
   dueDate?: string | null
   dueTime?: string | null
   aiGenerated?: boolean
+  folder?: string | null
   ownerChatId?: number | bigint | string | null
 }) {
-  return prisma.note.create({
+  const note = await prisma.note.create({
     data: {
       title: data.title,
       content: data.content,
@@ -620,9 +621,16 @@ export async function createNote(data: {
       dueDate: data.dueDate || null,
       dueTime: data.dueTime || null,
       aiGenerated: data.aiGenerated || false,
+      folder: data.folder || 'Общее',
       ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
+
+  if (data.ownerChatId) {
+    await incrementUserUsage(data.ownerChatId, 'note').catch(() => {})
+  }
+
+  return note
 }
 
 export async function updateNote(id: string, data: Partial<{
@@ -633,6 +641,7 @@ export async function updateNote(id: string, data: Partial<{
   dueDate: string | null
   dueTime: string | null
   pinned: boolean
+  folder: string | null
 }>) {
   return prisma.note.update({ where: { id }, data })
 }
@@ -963,7 +972,7 @@ export async function saveParsedItemToDb(
     if (ownerChatId) {
       const limits = await getUserUsageAndLimits(ownerChatId)
       if (!limits.canCreateNote) {
-        item.title = `❌ Дневной лимит заметок исчерпан (5 в день). Оформите Zerf Premium для безлимита!`
+        item.title = `❌ Дневной лимит бесплатных заметок исчерпан (10 в день). Оформите Zerf Premium для безлимита!`
         return { item, updatedItem: true }
       }
     }
@@ -979,6 +988,7 @@ export async function saveParsedItemToDb(
       type: 'note',
       tags: item.tags || [],
       aiGenerated: true,
+      folder: (item as any).folder || 'Общее',
       ownerChatId,
     })
 
@@ -1729,12 +1739,14 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
     }
 
     const voiceMax = isPremium ? Infinity : 5
-    const voiceMaxSeconds = isPremium ? 900 : 180 // 15 min for premium, 3 min for free
-    const notesMax = isPremium ? Infinity : 5
+    const voiceMaxSeconds = isPremium ? 1200 : 300 // 20 min for premium, 5 min for free (1 min per message)
+    const notesMax = isPremium ? Infinity : 10
     const chatMax = isPremium ? Infinity : 20
 
-    const canSendVoice = isPremium ? true : (chat.voiceCountToday < 5)
-    const canCreateNote = isPremium ? true : (chat.notesCountToday < 5)
+    const canSendVoice = isPremium
+      ? (chat.voiceSecondsToday < 1200)
+      : (chat.voiceCountToday < 5 && chat.voiceSecondsToday < 300)
+    const canCreateNote = isPremium ? true : (chat.notesCountToday < 10)
     const canSendChatMessage = isPremium ? true : (chat.chatMessagesToday < 20)
 
     return {
@@ -1748,7 +1760,7 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       },
       notes: {
         used: chat.notesCountToday,
-        max: isPremium ? Infinity : 5,
+        max: isPremium ? Infinity : 10,
       },
       chat: {
         used: chat.chatMessagesToday,

@@ -188,8 +188,8 @@ async function runMorningGreeting() {
     const minute = getPart('minute')
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Fire at 08:00 MSK, once per day
-    if (hour !== '08' || minute !== '00') return
+    // Fire at 09:00 MSK, once per day
+    if (hour !== '09' || minute !== '00') return
     if (morningGreetingSentDate === todayStr) return
     morningGreetingSentDate = todayStr
 

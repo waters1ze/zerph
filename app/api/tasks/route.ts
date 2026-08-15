@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
         dueDate: body.dueDate || null,
         dueTime: body.dueTime || null,
         aiGenerated: body.aiGenerated || false,
+        folder: body.folder || 'Общее',
         ownerChatId: ownerChatId,
       })
 

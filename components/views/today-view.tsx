@@ -20,6 +20,25 @@ export function TodayView() {
   const today = new Date().toISOString().slice(0, 10)
   const [context, setContext] = useState<DailyContext | null>(null)
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
+  const [selectedTag, setSelectedTag] = useState<string>('all')
+
+  const FIXED_TAGS = [
+    { id: 'all', label: 'Все' },
+    { id: 'работа', label: '💼 Работа' },
+    { id: 'личное', label: '👤 Личное' },
+    { id: 'срочно', label: '⚡ Срочно' },
+    { id: 'идеи', label: '💡 Идеи' },
+    { id: 'учеба', label: '🎓 Учеба' },
+    { id: 'спорт', label: '🏃 Спорт' },
+  ]
+
+  const matchesTag = (t: { tags?: string[]; priority?: string }) => {
+    if (selectedTag === 'all') return true
+    if (selectedTag === 'срочно') {
+      return t.priority === 'urgent' || t.tags?.some(tag => tag.toLowerCase().includes('срочн'))
+    }
+    return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
+  }
 
   // Fetch daily context on mount
   useEffect(() => {
@@ -29,10 +48,11 @@ export function TodayView() {
       .catch(() => {})
   }, [])
 
-  const todayTasks = state.tasks.filter(t => {
+  const rawTodayTasks = state.tasks.filter(t => {
     if (t.dueDate) return t.dueDate === today
     return isToday(parseISO(t.createdAt))
   })
+  const todayTasks = rawTodayTasks.filter(matchesTag)
   const doneTasks = todayTasks.filter(t => t.status === 'done')
   const activeTasks = todayTasks.filter(t => t.status !== 'done')
   const overdueTasks = state.tasks.filter(t => t.status === 'overdue')
@@ -215,6 +235,27 @@ export function TodayView() {
           </div>
         </div>
       )}
+
+      {/* Tag Filters Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+        {FIXED_TAGS.map(tag => {
+          const isActive = selectedTag === tag.id
+          return (
+            <button
+              key={tag.id}
+              onClick={() => setSelectedTag(tag.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
+                isActive
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
+                  : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              {tag.label}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Today tasks */}
       <div>

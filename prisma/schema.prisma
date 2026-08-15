@@ -74,6 +74,7 @@ model Note {
   updatedAt    DateTime @updatedAt
   aiGenerated  Boolean  @default(false)
   pinned       Boolean  @default(false)
+  folder       String?  @default("Общее")
   ownerChatId  BigInt?
 }
 

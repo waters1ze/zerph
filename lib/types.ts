@@ -111,6 +111,7 @@ export interface Note {
   updatedAt: string
   aiGenerated?: boolean
   pinned?: boolean
+  folder?: string
   visibility?: 'private' | 'public'
 }
 

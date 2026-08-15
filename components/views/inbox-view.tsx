@@ -1,27 +1,70 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { Inbox, Users, Bell } from 'lucide-react'
+import { Inbox, Users, Tag } from 'lucide-react'
+import { cn, isBirthdayTask } from '@/lib/utils'
 
-import { isBirthdayTask } from '@/lib/utils'
+const FIXED_TAGS = [
+  { id: 'all', label: 'Все' },
+  { id: 'работа', label: '💼 Работа' },
+  { id: 'личное', label: '👤 Личное' },
+  { id: 'срочно', label: '⚡ Срочно' },
+  { id: 'идеи', label: '💡 Идеи' },
+  { id: 'учеба', label: '🎓 Учеба' },
+  { id: 'спорт', label: '🏃 Спорт' },
+]
 
 export function InboxView() {
   const { state } = useApp()
+  const [selectedTag, setSelectedTag] = useState<string>('all')
 
-  const uncategorized = state.tasks.filter(t => !t.projectId && !t.goalId && !isBirthdayTask(t))
-  const sharedWithMe = state.tasks.filter(t => t.isShared && !isBirthdayTask(t))
+  const matchesTag = (t: { tags?: string[]; priority?: string }) => {
+    if (selectedTag === 'all') return true
+    if (selectedTag === 'срочно') {
+      return t.priority === 'urgent' || t.tags?.some(tag => tag.toLowerCase().includes('срочн'))
+    }
+    return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
+  }
+
+  const rawUncategorized = state.tasks.filter(t => !t.projectId && !t.goalId && !isBirthdayTask(t))
+  const rawSharedWithMe = state.tasks.filter(t => t.isShared && !isBirthdayTask(t))
+
+  const uncategorized = rawUncategorized.filter(matchesTag)
+  const sharedWithMe = rawSharedWithMe.filter(matchesTag)
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-5 max-w-2xl">
+      {/* Tag Filters Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+        {FIXED_TAGS.map(tag => {
+          const isActive = selectedTag === tag.id
+          return (
+            <button
+              key={tag.id}
+              onClick={() => setSelectedTag(tag.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
+                isActive
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
+                  : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              {tag.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Shared tasks */}
       {sharedWithMe.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2.5">
             <Users className="w-3.5 h-3.5 text-primary" />
             <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-              🤝 Поручения и совместные задачи — {sharedWithMe.length}
+              Поручения и совместные задачи — {sharedWithMe.length}
             </h2>
           </div>
           <div className="space-y-0.5">
@@ -35,7 +78,7 @@ export function InboxView() {
         <div className="flex items-center gap-2 mb-2.5">
           <Inbox className="w-3.5 h-3.5 text-muted-foreground" />
           <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-            📥 Входящие задачи — {uncategorized.length}
+            Входящие задачи — {uncategorized.length}
           </h2>
         </div>
         {uncategorized.length === 0 ? (
@@ -46,7 +89,9 @@ export function InboxView() {
           >
             <Inbox className="w-10 h-10 text-muted-foreground/20" />
             <p className="text-sm font-medium text-muted-foreground">Входящие чисты</p>
-            <p className="text-xs text-muted-foreground/60">Все задачи привязаны к проектам или выполнены</p>
+            <p className="text-xs text-muted-foreground/60">
+              {selectedTag !== 'all' ? 'Нет задач с выбранным тегом' : 'Все задачи привязаны к проектам или выполнены'}
+            </p>
           </motion.div>
         ) : (
           <div className="space-y-0.5">
@@ -54,7 +99,6 @@ export function InboxView() {
           </div>
         )}
       </div>
-
     </div>
   )
 }

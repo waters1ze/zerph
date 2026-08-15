@@ -1682,15 +1682,33 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
   }
 
   const limits = await getUserUsageAndLimits(chatId)
-  if (!limits.canSendVoice) {
+
+  // Free tariff single voice length limit: 1 minute (60 seconds)
+  if (limits.plan === 'free' && duration > 60) {
+    const mins = Math.floor(duration / 60)
+    const secs = duration % 60
     await send(chatId,
-      limits.plan === 'premium'
-        ? 'Достигнут дневной лимит записи голоса (15 минут). Сброс наступит завтра!'
-        : 'Достигнут дневной лимит бесплатных голосовых сообщений (5 в день по 3 мин). Оформите подписку Zerf Premium за 99 руб для безлимита!',
+      `⏱ *Длительность одного голосового на бесплатном тарифе ограничена 1 минутой* (ваше сообщение длилось ${mins} мин ${secs} сек).\n\nОформите Zerf Premium за 99 ₽, чтобы отправлять длинные голосовые без ограничений!`,
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: 'Оформить подписку (99 руб)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
+            { text: '⭐ Подключить Zerf Premium (99 ₽)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
+          ]]
+        }
+      }
+    )
+    return
+  }
+
+  if (!limits.canSendVoice) {
+    await send(chatId,
+      limits.plan === 'premium'
+        ? '⏳ *Достигнут дневной лимит записи голоса (20 минут в день)*. Сброс наступит завтра в полночь!'
+        : '⏳ *Достигнут дневной лимит бесплатных голосовых сообщений (5 в день до 1 минуты каждое)*.\n\nОформите подписку Zerf Premium за 99 ₽ для расширенного лимита и безлимитных заметок!',
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '⭐ Оформить подписку (99 руб)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
           ]]
         }
       }

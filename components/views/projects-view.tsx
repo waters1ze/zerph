@@ -698,7 +698,7 @@ function ProjectModal({
             </div>
           </div>
 
-          {/* Add Members by Username or from Friends */}
+            {/* Add Members by Username or from Friends */}
           <div>
             <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
               Участники (Telegram username)
@@ -720,8 +720,50 @@ function ProjectModal({
               </button>
             </div>
 
+            {/* Quick Friend Selector from Team */}
+            {state.friends && state.friends.length > 0 && (
+              <div className="mt-2.5">
+                <p className="text-[10px] text-muted-foreground font-medium mb-1.5 flex items-center gap-1">
+                  <Users className="w-3 h-3 text-primary/80" />
+                  <span>Выбрать из Команды:</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                  {state.friends.map(f => {
+                    const cleanU = (f.username || f.name).replace(/^@/, '')
+                    const isSelected = members.includes(cleanU)
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setMembers(members.filter(m => m !== cleanU))
+                          } else {
+                            setMembers([...members, cleanU])
+                          }
+                        }}
+                        className={cn(
+                          'px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all',
+                          isSelected
+                            ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold'
+                            : 'bg-muted/50 border-border text-foreground hover:bg-muted hover:border-border/80'
+                        )}
+                      >
+                        <span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold shrink-0">
+                          {f.name?.[0] || 'U'}
+                        </span>
+                        <span>{f.name}</span>
+                        {f.username && <span className="text-[10px] opacity-70">@{cleanU}</span>}
+                        {isSelected ? <Check className="w-3 h-3 ml-0.5" /> : <Plus className="w-3 h-3 ml-0.5 opacity-60" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {members.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
                 {members.map(u => (
                   <span key={u} className="px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-medium text-primary flex items-center gap-1">
                     @{u}
