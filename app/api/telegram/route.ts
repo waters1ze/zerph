@@ -123,23 +123,21 @@ async function ensureBotCommandsRegistered() {
   try {
     await tgApi('setMyCommands', {
       commands: [
-        { command: 'today',      description: '📅 Задачи и цели на сегодня' },
+        { command: 'schedule',   description: '📅 График и свободные окна участников' },
+        { command: 'today',      description: '📋 Задачи и цели на сегодня' },
+        { command: 'invite',     description: '🤝 Пригласить в команду' },
+        { command: 'shared',     description: '👥 Порученные и командные задачи' },
         { command: 'matrix',     description: '🎯 Матрица Эйзенхауэра (Фокус дня)' },
-        { command: 'login',      description: '🔑 Вход на сайт (ПК/браузер)' },
-        { command: 'cleanup',    description: '🌙 Вечерний перенос задач на завтра' },
-        { command: 'inbox',      description: '📥 Входящие и неразобранное' },
-        { command: 'shared',     description: '👥 Порученные задачи коллегам' },
-        { command: 'p',          description: '📁 Фильтр по проекту или тегу' },
-        { command: 'reschedule', description: '🧠 ИИ-перепланирование дня' },
-        { command: 'stats',      description: '📊 Аналитика и стрики' },
+        { command: 'siri',       description: '🍏 Голосовой ввод Apple Shortcuts' },
         { command: 'focus',      description: '🔥 Режим фокуса / Помодоро' },
-        { command: 'siri',       description: '🍏 Настройка Siri и кнопок телефона' },
-        { command: 'goals',      description: '🎯 Активные цели' },
-        { command: 'notes',      description: '📝 Мои заметки' },
+        { command: 'birthday',   description: '🎂 Установить День рождения' },
         { command: 'report',     description: '📈 Недельный AI-отчет' },
+        { command: 'inbox',      description: '📥 Входящие задачи' },
+        { command: 'cleanup',    description: '🌙 Вечерний перенос задач на завтра' },
+        { command: 'stats',      description: '📊 Аналитика и стрики' },
+        { command: 'login',      description: '🔑 Вход на сайт (ПК/браузер)' },
         { command: 'settings',   description: '⚙️ Настройки напоминаний' },
-        { command: 'buy',        description: '⭐ Zerf Premium (99 ₽/мес)' },
-        { command: 'help',       description: '❓ Полное руководство' },
+        { command: 'help',       description: '❓ Все команды и руководство' },
       ],
       scope: { type: 'all_private_chats' },
     })
@@ -1775,6 +1773,7 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
 // ── Group & Friend Handlers ──────────────────────────────────────────────────────────
 
 async function handleStart(chatId: number, firstName: string) {
+  ensureBotCommandsRegistered().catch(() => {})
   const regRes = await registerChatId(chatId, firstName)
   const dbUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
 
@@ -1787,31 +1786,31 @@ async function handleStart(chatId: number, firstName: string) {
     : ``
 
   await send(chatId,
-    `🎉 *Профиль успешно привязан!*\n\n` +
+    `🎉 *Добро пожаловать в Zerf AI!*\n\n` +
     trialNotice +
-    `Привет, *${escMd(firstName)}*! Теперь твой Telegram-аккаунт на 100% синхронизирован с Zerf AI.\n` +
-    `🔒 *Все твои задачи строго конфиденциальны* и сохраняются только в твоем личном списке.` +
+    `Привет, *${escMd(firstName)}*! Твой Telegram-аккаунт синхронизирован с персональным ИИ-ассистентом.\n` +
+    `🔒 *Все твои задачи строго приватны* и видны только тебе.` +
     nameNotice +
-    `\n\n✨ *Быстрый старт (ИИ-ассистент):*\n` +
-    `🎙️ *Голосовой и текстовый ввод* — просто надиктуй или напиши боту:\n` +
-    `  • _"Напомни купить молоко в 18:00"_\n` +
-    `  • _"Дай задачу Вове подготовить отчет"_\n` +
-    `  • _"Добавь цель: Выучить английский до зимы"_\n` +
-    `  • _"Запиши идею для стартапа"_\n\n` +
-    `⚙️ *Доступные команды:*\n` +
-    `/login — 🔑 Вход в Zerf на компьютере (веб-версия)\n` +
-    `/today — 📅 Твои задачи и цели на сегодня\n` +
+    `\n\n✨ *Что умеет ИИ (Голосом или Текстом):*\n` +
+    `🎙️ *Голосовой ввод* — просто надиктуй боту:\n` +
+    `  • _"Напомни позвонить в банк завтра в 12:00"_\n` +
+    `  • _"Дай задачу Вове подготовить презентацию"_\n` +
+    `  • _"Какой график у Леры на завтра?"_\n` +
+    `  • _"Расписание Артема на неделю"_\n` +
+    `  • _"Запиши идею: концепт нового мобильного приложения"_\n\n` +
+    `🚀 *Команды ассистента:*\n` +
+    `/schedule — 📅 График и свободные окна участников (\`/schedule Лера завтра\`)\n` +
+    `/invite — 🤝 Пригласить друга или коллегу в команду\n` +
+    `/today — 📋 Твои задачи и цели на сегодня\n` +
+    `/shared — 👥 Порученные и командные задачи\n` +
     `/matrix — 🎯 Матрица Эйзенхауэра (Фокус дня)\n` +
-    `/cleanup — 🌙 Вечерний перенос задач на завтра\n` +
-    `/inbox — 📥 Входящие задачи от других\n` +
-    `/shared — 👥 Задачи, порученные другим\n` +
-    `/p <Название> — 📁 Задачи по проекту\n` +
-    `/reschedule — 🧠 Умное ИИ-перепланирование\n` +
-    `/stats — 📊 Статистика и стрики\n` +
-    `/focus [мин] — 🔥 Таймер Помодоро\n` +
-    `/siri — 🍏 Синхронизация с Siri и Календарем\n` +
-    `/settings — ⚙️ Настройки и интервалы\n\n` +
-    `Жми кнопки ниже, чтобы открыть приложение или перейти на сайт:`,
+    `/siri — 🍏 Настройка голосового ввода Siri и кнопки Action\n` +
+    `/focus — 🔥 Таймер фокуса Pomodoro (\`/focus 25\`)\n` +
+    `/birthday — 🎂 Установить дату рождения (\`/birthday 03.04.2000\`)\n` +
+    `/report — 📈 Еженедельный AI-отчет продуктивности\n` +
+    `/login — 🔑 Вход в Zerf на компьютере (веб-версия)\n` +
+    `/help — ❓ Все возможности и руководство\n\n` +
+    `Жми кнопки ниже, чтобы открыть приложение:`,
     { reply_markup: miniAppKeyboard(chatId) }
   )
 }
@@ -2054,6 +2053,20 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
 
   const targetId = Number(targetUser.chatId)
 
+  // Check friendship & allowTasks
+  const friendship = await prisma.friendship.findFirst({
+    where: {
+      userChatId: BigInt(targetId),
+      friendChatId: BigInt(senderChatId),
+      status: 'accepted'
+    }
+  })
+
+  if (friendship && friendship.allowTasks === false) {
+    await send(senderChatId, `⚠️ *${escMd(targetUser.firstName || cleanUsername)}* отключил(а) получение задач от вас в разделе «Команда» на сайте/в приложении.`)
+    return
+  }
+
   // Parse task with AI
   const key = process.env.GROQ_API_KEY || ''
   const items = key ? await parseIntentWithGroq(taskText, key) : []
@@ -2063,6 +2076,25 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
     priority: 'medium',
     dueDate: new Date().toISOString().slice(0, 10),
     tags: [],
+  }
+
+  // Check collision if dueTime is set
+  let conflictNotice = ''
+  let notifyConflictNotice = ''
+  if (item.dueTime) {
+    const conflict = await prisma.task.findFirst({
+      where: {
+        ownerChatId: BigInt(targetId),
+        dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+        dueTime: item.dueTime,
+        status: { notIn: ['done', 'draft'] }
+      }
+    })
+    if (conflict) {
+      const conflictTitle = conflict.isShared ? `«${conflict.title}»` : '🔒 Занято (личное дело)'
+      conflictNotice = `\n⚠️ *Внимание:* У *${escMd(targetUser.firstName || cleanUsername)}* на ${item.dueTime} уже запланировано: ${conflictTitle}.`
+      notifyConflictNotice = `\n⚠️ _(Внимание: в это время у вас уже запланировано другое дело)_`
+    }
   }
 
   // Save task to recipient
@@ -2084,10 +2116,10 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
 
   // Notify recipient
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
-  let notifyMsg = `📨 *${escMd(senderName)}* мгновенно передал(а) тебе задачу!\n\n`
+  let notifyMsg = `📨 *${escMd(senderName)}* передал(а) тебе задачу!\n\n`
   notifyMsg += `📌 *${escMd(item.title || taskText)}*\n`
   if (item.summary && item.summary !== item.title) notifyMsg += `📝 ${escMd(item.summary)}\n`
-  if (item.dueDate) notifyMsg += `📅 Срок: ${item.dueDate}${item.dueTime ? ` ${item.dueTime}` : ''}\n`
+  if (item.dueDate) notifyMsg += `📅 Срок: ${item.dueDate}${item.dueTime ? ` в ${item.dueTime}` : ''}${notifyConflictNotice}\n`
 
   await send(targetId, notifyMsg, {
     reply_markup: {
@@ -2100,7 +2132,7 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
     }
   })
 
-  await send(senderChatId, `✅ Задача *«${escMd(item.title || taskText)}»* мгновенно отправлена *${escMd(targetUser.firstName || cleanUsername)}*!`)
+  await send(senderChatId, `✅ Задача *«${escMd(item.title || taskText)}»* отправлена *${escMd(targetUser.firstName || cleanUsername)}*!${conflictNotice}`)
 }
 
 function parseScheduleQueryArgs(queryStr: string): { targetName: string; dateStr?: string; daysCount: number } {
@@ -3347,8 +3379,8 @@ export async function POST(req: NextRequest) {
         const trimmed = text.trim()
         const lowerText = trimmed.toLowerCase()
 
-        // 0. Natural team schedule query ("график лера", "расписание артем", "занятость никита", "график команды", "график")
-        const scheduleMatch = trimmed.match(/^(?:график|расписание|занятость|свободное время)(?:\s+(.+))?$/i)
+        // 0. Natural team schedule query ("график лера", "покажи график леры на завтра", "какой график у артема", "расписание артем", "график")
+        const scheduleMatch = trimmed.match(/^(?:покажи\s+|какой\s+|посмотреть\s+|глянуть\s+)?(?:график|расписание|занятость|свободное время)(?:\s+у)?(?:\s+(.+))?$/i)
         if (scheduleMatch) {
           const target = (scheduleMatch[1] || '').trim()
           await handleScheduleCommand(senderId, target || undefined)
