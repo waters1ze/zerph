@@ -7,7 +7,7 @@
  *    — personalized by their recent tasks + notes via Groq AI
  */
 
-import { getAllTasks, updateTask, getAllNotes } from './db'
+import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig } from './db'
 import { generateMorningGreeting, generateEveningReview } from './groq'
 import { prisma } from './prisma'
 
@@ -191,11 +191,9 @@ export async function runReminderCheck() {
   }
 }
 
-// ── Morning greeting — 08:00 MSK to all users ────────────────────────────────
+// ── Morning greeting — 08:00-12:00 MSK to all users ────────────────────────────
 
-let morningGreetingSentDate = ''
-
-async function runMorningGreeting() {
+export async function runMorningGreeting() {
   try {
     const now = new Date()
     const mskFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -206,14 +204,15 @@ async function runMorningGreeting() {
     const parts = mskFormatter.formatToParts(now)
     const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-    const hour = getPart('hour')
-    const minute = getPart('minute')
+    const hour = parseInt(getPart('hour'), 10)
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Fire at 09:00 MSK, once per day
-    if (hour !== '09' || minute !== '00') return
-    if (morningGreetingSentDate === todayStr) return
-    morningGreetingSentDate = todayStr
+    // Fire between 08:00 and 13:00 MSK, exactly once per day (persisted in DB)
+    if (hour < 8 || hour >= 13) return
+
+    const lastSent = await getConfig('last_morning_greeting_date')
+    if (lastSent === todayStr) return
+    await setConfig('last_morning_greeting_date', todayStr)
 
     const chats = await prisma.telegramChat.findMany()
     if (!chats.length) return
@@ -265,23 +264,21 @@ async function runMorningGreeting() {
           await sendTelegramMessage(chatId, greeting)
         }
 
-        await new Promise(r => setTimeout(r, 300))
+        await new Promise(r => setTimeout(r, 250))
       } catch (userErr) {
         console.error('Morning greeting error for user:', userErr)
       }
     }
 
-    console.log(`[Zerf Cron] Morning greeting sent to ${chats.length} users at ${todayStr} 08:00 MSK`)
+    console.log(`[Zerf Cron] Morning greeting sent to ${chats.length} users at ${todayStr} MSK`)
   } catch (err) {
     console.error('Morning greeting cron error:', err)
   }
 }
 
-// ── Evening Review — 21:00 MSK to all users ──────────────────────────────────
+// ── Evening Review — 21:00-23:59 MSK to all users ────────────────────────────
 
-let eveningReviewSentDate = ''
-
-async function runEveningReview() {
+export async function runEveningReview() {
   try {
     const now = new Date()
     const mskFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -292,14 +289,15 @@ async function runEveningReview() {
     const parts = mskFormatter.formatToParts(now)
     const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-    const hour = getPart('hour')
-    const minute = getPart('minute')
+    const hour = parseInt(getPart('hour'), 10)
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Fire at 21:00 MSK, once per day
-    if (hour !== '21' || minute !== '00') return
-    if (eveningReviewSentDate === todayStr) return
-    eveningReviewSentDate = todayStr
+    // Fire between 21:00 and 23:59 MSK, exactly once per day (persisted in DB)
+    if (hour < 21) return
+
+    const lastSent = await getConfig('last_evening_review_date')
+    if (lastSent === todayStr) return
+    await setConfig('last_evening_review_date', todayStr)
 
     const chats = await prisma.telegramChat.findMany()
     if (!chats.length) return
@@ -346,7 +344,7 @@ async function runEveningReview() {
           await sendTelegramMessage(chatId, reviewText, replyMarkup)
         }
 
-        await new Promise(r => setTimeout(r, 300))
+        await new Promise(r => setTimeout(r, 250))
       } catch (userErr) {
         console.error('Evening review error for user:', userErr)
       }
@@ -386,7 +384,7 @@ export function getFocusSession(chatId: number): FocusSession | undefined {
   return activeFocusSessions.get(chatId)
 }
 
-async function runFocusCheck() {
+export async function runFocusCheck() {
   const now = Date.now()
   for (const [chatId, session] of Array.from(activeFocusSessions.entries())) {
     if (now >= session.expiresAt) {
@@ -417,12 +415,6 @@ import {
   generateAndSendFridayAiProposal
 } from './channel-poster'
 
-let lastChannelPollDate = ''
-let lastMorningPostDate = ''
-let lastClosePollDate = ''
-let lastEveningPostDate = ''
-let lastFridayProposalDate = ''
-
 export async function runChannelAndAiCron() {
   try {
     const now = new Date()
@@ -439,41 +431,69 @@ export async function runChannelAndAiCron() {
     const day = getPart('weekday').toLowerCase() // 'fri', 'mon', etc.
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // 1. Friday 09:00 MSK: Weekly Poll on Improvements and New Features
-    if (day === 'fri' && hour === 9 && lastChannelPollDate !== todayStr) {
-      lastChannelPollDate = todayStr
-      postDailyPollToChannel().catch(() => {})
+    // 1. Friday 08:00-20:59 MSK: Weekly Poll on Improvements and New Features
+    if (day === 'fri' && hour >= 8 && hour < 21) {
+      const lastPoll = await getConfig('last_channel_poll_date')
+      if (lastPoll !== todayStr) {
+        const ok = await postDailyPollToChannel()
+        if (ok) await setConfig('last_channel_poll_date', todayStr)
+      }
     }
 
-    // 2. Monday-Thursday & Saturday-Sunday 09:00 MSK: Morning News Digest (2 posts/day schedule)
-    if (day !== 'fri' && hour === 9 && lastMorningPostDate !== todayStr) {
-      lastMorningPostDate = todayStr
-      postDailyMorningPostToChannel().catch(() => {})
+    // 2. Daily (Mon-Thu, Sat-Sun) 08:00-14:00 MSK: Morning News Digest
+    if (day !== 'fri' && hour >= 8 && hour < 14) {
+      const lastPost = await getConfig('last_channel_morning_post_date')
+      if (lastPost !== todayStr) {
+        const ok = await postDailyMorningPostToChannel()
+        if (ok) await setConfig('last_channel_morning_post_date', todayStr)
+      }
     }
 
-    // 3. Friday 21:00 MSK (9:00 вечера): Close Weekly Poll & Send Results STRICTLY to Owner & Admins
-    if (day === 'fri' && hour === 21 && lastClosePollDate !== todayStr) {
-      lastClosePollDate = todayStr
-      closeDailyPollAndNotifyAdmins().catch(() => {})
+    // 3. Friday 21:00-23:59 MSK: Close Weekly Poll & Send Results STRICTLY to Owner & Admins
+    if (day === 'fri' && hour >= 21) {
+      const lastClose = await getConfig('last_channel_close_poll_date')
+      if (lastClose !== todayStr) {
+        const ok = await closeDailyPollAndNotifyAdmins()
+        if (ok) await setConfig('last_channel_close_poll_date', todayStr)
+      }
     }
 
-    // 4. Every Day 21:00 MSK: Evening News Digest & Daily Reflection (on Friday it's the 1x news post)
-    if (hour === 21 && lastEveningPostDate !== todayStr) {
-      lastEveningPostDate = todayStr
-      postDailyEveningPostToChannel().catch(() => {})
+    // 4. Every Day 21:00-23:59 MSK: Evening News Digest & Daily Reflection
+    if (hour >= 21) {
+      const lastEvening = await getConfig('last_channel_evening_post_date')
+      if (lastEvening !== todayStr) {
+        const ok = await postDailyEveningPostToChannel()
+        if (ok) await setConfig('last_channel_evening_post_date', todayStr)
+      }
     }
 
-    // 5. Friday 00:00 MSK: AI Autonomous Feature Evolution Proposal to Admins
-    if (day === 'fri' && hour === 0 && lastFridayProposalDate !== todayStr) {
-      lastFridayProposalDate = todayStr
-      generateAndSendFridayAiProposal().catch(() => {})
+    // 5. Friday 00:00-07:59 MSK: AI Autonomous Feature Evolution Proposal to Admins
+    if (day === 'fri' && hour >= 0 && hour < 8) {
+      const lastProp = await getConfig('last_friday_proposal_date')
+      if (lastProp !== todayStr) {
+        const ok = await generateAndSendFridayAiProposal()
+        if (ok) await setConfig('last_friday_proposal_date', todayStr)
+      }
     }
   } catch (err) {
     console.error('Channel cron error:', err)
   }
 }
 
-// ── Global daemon ─────────────────────────────────────────────────────────────
+/**
+ * Main Cron Entrypoint — Called by /api/cron/reminders and webhook updates
+ */
+export async function runAllCronTasks() {
+  await Promise.allSettled([
+    runReminderCheck(),
+    runFocusCheck(),
+    runMorningGreeting(),
+    runEveningReview(),
+    runChannelAndAiCron(),
+  ])
+}
+
+// ── Global daemon (Node.js runtime) ──────────────────────────────────────────
 
 const globalObj = globalThis as unknown as { __reminderCronStarted?: boolean }
 
@@ -486,12 +506,12 @@ if (!globalObj.__reminderCronStarted) {
     runFocusCheck().catch(() => {})
   }, 10_000)
 
-  // Morning greeting check: every 30 seconds (fires at 08:00 MSK)
+  // Morning greeting check: every 30 seconds
   setInterval(() => {
     runMorningGreeting().catch(() => {})
   }, 30_000)
 
-  // Evening review check: every 30 seconds (fires at 21:00 MSK)
+  // Evening review check: every 30 seconds
   setInterval(() => {
     runEveningReview().catch(() => {})
   }, 30_000)

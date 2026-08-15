@@ -20,7 +20,7 @@ import {
   getUserProductivityStats, completeTask,
 } from '@/lib/backend/db'
 import { getUserAuthToken } from '@/lib/backend/auth'
-import { runReminderCheck, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
+import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
@@ -3245,8 +3245,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Trigger instant check for due reminders
-    runReminderCheck().catch(() => {})
+    // Trigger instant check for due reminders & scheduled posts
+    runAllCronTasks().catch(() => {})
 
     return NextResponse.json({ ok: true })
   } catch (err) {
