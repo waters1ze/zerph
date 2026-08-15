@@ -48,7 +48,43 @@ export async function POST(req: NextRequest) {
       return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
     }
 
-    // 3. New message from VK user
+    // 3. Inline Button Callback (message_event)
+    if (body.type === 'message_event') {
+      const obj = body.object || {}
+      const userId = obj.user_id || obj.peer_id
+      const eventId = obj.event_id
+      let payload = obj.payload
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload) } catch {}
+      }
+
+      const rawAction = typeof payload === 'object' ? (payload.command || payload.button || payload.action || '') : String(payload || '')
+
+      if (rawAction.startsWith('rem_done_') || rawAction.startsWith('done_')) {
+        const taskId = rawAction.replace('rem_done_', '').replace('done_', '')
+        try {
+          const { completeTask } = await import('@/lib/backend/db')
+          await completeTask(taskId)
+          await callVkApi('messages.sendMessageEventAnswer', {
+            event_id: eventId,
+            user_id: userId,
+            peer_id: obj.peer_id || userId,
+            event_data: JSON.stringify({ type: 'show_snackbar', text: '✅ Задача отмечена выполненной!' }),
+          })
+        } catch {}
+      } else {
+        await callVkApi('messages.sendMessageEventAnswer', {
+          event_id: eventId,
+          user_id: userId,
+          peer_id: obj.peer_id || userId,
+          event_data: JSON.stringify({ type: 'show_snackbar', text: '👌 Действие выполнено' }),
+        }).catch(() => {})
+      }
+
+      return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    }
+
+    // 4. New message from VK user
     if (body.type === 'message_new') {
       const message = body.object?.message || body.object
       if (!message) return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })

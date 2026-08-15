@@ -110,8 +110,11 @@ export async function runReminderCheck() {
       const expectedDiffMin = remainingStages * intervalMinutes
       const actualDiffMin = targetTotalMin - currentTotalMin
 
-      // Check if current time matches the scheduled stage
-      if (actualDiffMin <= expectedDiffMin && actualDiffMin >= expectedDiffMin - 1) {
+      // Check if current time matches scheduled stage or catch up missed overdue reminders (within 15m)
+      const isWindowMatch = actualDiffMin <= expectedDiffMin && actualDiffMin >= expectedDiffMin - 1
+      const isCatchUp = actualDiffMin <= 0 && actualDiffMin >= -15 && sentCount === 0 && !task.reminderSent
+
+      if (isWindowMatch || isCatchUp) {
         const isRecipientMsg =
           task.description?.includes('📩 Отправить') ||
           task.title?.toLowerCase().includes('отправь') ||
