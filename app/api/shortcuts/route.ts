@@ -159,21 +159,20 @@ export async function POST(req: NextRequest) {
     const spokenText = createSpokenSummary(items)
 
     // Send confirmation in Telegram
-    let tgMsg = `🍏 *Голосовой ввод через Siri / Быстрые команды*\n\n`
+    let tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
     items.forEach((item, idx) => {
       if (item.action === 'delete') {
-        tgMsg += `${idx + 1}. 🗑️ *Удалено:* ${item.targetTitle || item.title}\n`
+        tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
       } else if (item.action === 'delete_all') {
-        tgMsg += `🗑️ *Все задачи очищены*\n`
+        tgMsg += `▪ *Все задачи очищены*\n`
       } else if (item.action === 'completion' || item.type === 'completion') {
-        tgMsg += `${idx + 1}. ✅ *Выполнено:* ${item.targetTitle || item.title}\n`
+        tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
       } else {
         const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-        tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
+        tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
       }
     })
     sendTgNotification(chatId, tgMsg).catch(() => {})
-    sendVoiceResponse(chatId, spokenText).catch(() => {})
 
     return NextResponse.json({
       success: true,
@@ -260,20 +259,19 @@ export async function GET(req: NextRequest) {
   }
 
   const spokenText = createSpokenSummary(items)
-  sendVoiceResponse(chatId, spokenText).catch(() => {})
 
   // Send confirmation in Telegram
-  let tgMsg = `🍏 *Голосовой ввод через Siri / Быстрые команды*\n\n`
+  let tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
   items.forEach((item, idx) => {
     if (item.action === 'delete') {
-      tgMsg += `${idx + 1}. 🗑️ *Удалено:* ${item.targetTitle || item.title}\n`
+      tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
     } else if (item.action === 'delete_all') {
-      tgMsg += `🗑️ *Все задачи очищены*\n`
+      tgMsg += `▪ *Все задачи очищены*\n`
     } else if (item.action === 'completion' || item.type === 'completion') {
-      tgMsg += `${idx + 1}. ✅ *Выполнено:* ${item.targetTitle || item.title}\n`
+      tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
     } else {
       const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-      tgMsg += `${idx + 1}. 📌 *${item.title}*${due}\n`
+      tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
     }
   })
   sendTgNotification(chatId, tgMsg).catch(() => {})

@@ -1075,6 +1075,20 @@ export async function saveParsedItemToDb(
       ownerChatId,
     })
   } else if (item.type === 'note') {
+    const rawLower = (item.rawText || item.title || '').toLowerCase().trim()
+    const isExplicitNote = rawLower.startsWith('заметк') || rawLower.includes('запиши заметку') || rawLower.includes('сохрани заметку') || rawLower.includes('в заметки')
+
+    // If it's not explicitly a note request and has dummy placeholder content, treat as task instead!
+    if (!isExplicitNote && (item.summary?.includes('Нет информации') || item.title === 'Новая заметка' || !item.summary || item.summary === item.title)) {
+      item.type = 'task'
+      if (item.title === 'Новая заметка' && item.rawText && item.rawText !== 'Новая заметка') {
+        item.title = item.rawText
+        item.summary = item.rawText
+      }
+    }
+  }
+
+  if (item.type === 'note') {
     if (ownerChatId) {
       const limits = await getUserUsageAndLimits(ownerChatId)
       if (!limits.canCreateNote) {
