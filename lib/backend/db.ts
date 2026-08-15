@@ -709,7 +709,7 @@ export async function checkGroupOrUserHasPremium(
     const idsToCheck = [senderChatId, ...memberChatIds].filter(Boolean).map(id => BigInt(id))
 
     for (const cid of idsToCheck) {
-      if (String(cid) === '6136950061') {
+      if (ROOT_ADMIN_IDS.includes(String(cid))) {
         return { hasPremium: true, premiumPayerId: cid }
       }
       const limits = await getUserUsageAndLimits(cid)
@@ -733,6 +733,67 @@ export async function checkGroupOrUserHasPremium(
     }
   } catch {}
   return { hasPremium: false }
+}
+
+/**
+ * Deduct usage for group requests:
+ * 1. If Root Owner (6136950061) is in the group -> 100% deducted from Owner (infinite limits, members are untouched)
+ * 2. If Owner is NOT in the group -> divided and deducted evenly among all active Premium members in the group
+ * 3. If no Premium members -> distributed evenly among registered members
+ */
+export async function deductGroupUsage(
+  senderChatId: number | bigint | string,
+  groupChatId?: number | bigint | string,
+  memberChatIds: (number | bigint | string)[] = [],
+  type: 'voice' | 'note' | 'chat' = 'voice',
+  durationSeconds: number = 15
+): Promise<{ payerId: bigint; distributedCount: number; isOwner: boolean }> {
+  try {
+    const rawIds = [senderChatId, ...memberChatIds].filter(Boolean)
+    const uniqueIds = Array.from(new Set(rawIds.map(id => String(id).trim()))).filter(id => !id.startsWith('-'))
+
+    // 1. Check if Root Admin / Owner is in group
+    const ownerId = uniqueIds.find(id => ROOT_ADMIN_IDS.includes(id))
+    if (ownerId) {
+      await incrementUserUsage(ownerId, type, durationSeconds)
+      return { payerId: BigInt(ownerId), distributedCount: 1, isOwner: true }
+    }
+
+    // 2. Find Premium members
+    const premiumMembers: string[] = []
+    const freeMembers: string[] = []
+
+    for (const idStr of uniqueIds) {
+      try {
+        const limits = await getUserUsageAndLimits(idStr)
+        if (limits.plan === 'premium') {
+          premiumMembers.push(idStr)
+        } else {
+          freeMembers.push(idStr)
+        }
+      } catch {}
+    }
+
+    if (premiumMembers.length > 0) {
+      const perUserSec = Math.max(1, Math.ceil(durationSeconds / premiumMembers.length))
+      for (const pId of premiumMembers) {
+        await incrementUserUsage(pId, type, perUserSec)
+      }
+      return { payerId: BigInt(premiumMembers[0]), distributedCount: premiumMembers.length, isOwner: false }
+    }
+
+    // 3. Fallback to free members
+    const targetGroup = freeMembers.length > 0 ? freeMembers : [String(senderChatId)]
+    const perUserSec = Math.max(1, Math.ceil(durationSeconds / targetGroup.length))
+    for (const fId of targetGroup) {
+      await incrementUserUsage(fId, type, perUserSec)
+    }
+    return { payerId: BigInt(targetGroup[0]), distributedCount: targetGroup.length, isOwner: false }
+  } catch (err) {
+    console.error('deductGroupUsage error:', err)
+    await incrementUserUsage(senderChatId, type, durationSeconds).catch(() => {})
+    return { payerId: BigInt(senderChatId), distributedCount: 1, isOwner: false }
+  }
 }
 
 export async function autoAddFriends(chatId1: number | bigint, chatId2: number | bigint) {

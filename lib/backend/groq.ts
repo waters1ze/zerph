@@ -31,6 +31,7 @@ export interface ParsedItem {
   originalText?: string         // same as rawText, for notes
   isShared?: boolean
   assignees?: string[]
+  source?: string | null
   repeat?: string | null
   reminderOffsetMinutes?: number | null
   tasksToCreate?: { title: string; dueDate: string | null; dueTime: string | null }[]

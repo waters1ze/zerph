@@ -14,7 +14,7 @@ import {
   saveParsedItemToDb,
   getAllTasks, getAllGoals, getAllNotes,
   registerChatId, getExistingItemsContext,
-  getUserUsageAndLimits, incrementUserUsage,
+  getUserUsageAndLimits, incrementUserUsage, deductGroupUsage,
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
   getUserProductivityStats, completeTask,
@@ -1904,7 +1904,7 @@ async function handleGroupAddCommand(msg: any) {
             const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
             targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
             const duration = targetVoice.duration || 15
-            await incrementUserUsage(senderId, 'voice', duration)
+            await deductGroupUsage(senderId, groupChatId, allAssignees, 'voice', duration)
           }
         } catch (err) {
           await safeEditOrSend(groupChatId, statusMsgId, `❌ Ошибка в группе: Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
@@ -1938,11 +1938,12 @@ async function handleGroupAddCommand(msg: any) {
         items = [items[0]]
       }
 
-      // 5. Save task ONCE for creator (senderId) with all assignees — NO DUPLICATES!
+      // 5. Save task ONCE for creator (senderId) with all assignees and group chat source — NO DUPLICATES!
       let groupMsg = '✅ *Групповая задача создана:*\n\n'
       for (const item of items) {
         item.isShared = true
         item.assignees = allAssignees
+        item.source = `group:${groupChatId}`
         item.type = 'task' // Force task type in group processing (never note!)
         try { 
           await saveParsedItemToDb(item, senderId) 

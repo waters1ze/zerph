@@ -15,6 +15,7 @@ import {
   registerChatId,
   getExistingItemsContext,
   autoAddFriends,
+  deductGroupUsage,
 } from '@/lib/backend/db'
 import { getUserAuthToken } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
@@ -109,6 +110,8 @@ export async function POST(req: NextRequest) {
         const audioRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`)
         const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
         targetText = await transcribeAudioWithGroq(audioBuffer, 'group_voice.ogg', key)
+        const estimatedDuration = Math.max(5, Math.ceil(audioBuffer.length / 4000))
+        await deductGroupUsage(senderId, groupChatId, allAssignees, 'voice', estimatedDuration)
       } catch (err) {
         await safeEditOrSend(groupChatId, statusMsgId, `Ошибка при расшифровке голосового: ${String(err).slice(0, 100)}`)
         return NextResponse.json({ ok: true })
@@ -163,10 +166,11 @@ export async function POST(req: NextRequest) {
       if (replySenderId && mid !== replySenderId && mid > 0) autoAddFriends(replySenderId, mid).catch(() => {})
     }
 
-    // Step 5: Save task ONCE for creator with all assignees (no duplicate items created!)
+    // Step 5: Save task ONCE for creator with all assignees and group chat source (no duplicate items created!)
     for (const item of items) {
       item.isShared = true
       item.assignees = finalAssignees
+      item.source = `group:${groupChatId}`
       item.type = 'task' // Force task, never note!
       try { await saveParsedItemToDb(item, senderId) } catch {}
     }

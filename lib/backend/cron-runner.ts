@@ -13,10 +13,10 @@ import { prisma } from './prisma'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
 
-async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: any) {
+async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any) {
   try {
     const payload: Record<string, any> = {
-      chat_id: chatId,
+      chat_id: String(chatId),
       text,
       parse_mode: 'Markdown'
     }
@@ -94,56 +94,77 @@ export async function runReminderCheck() {
 
       // Check if current time matches the scheduled stage
       if (actualDiffMin <= expectedDiffMin && actualDiffMin >= expectedDiffMin - 1) {
-        if (ownerChatId) {
-          const isRecipientMsg =
-            task.description?.includes('📩 Отправить') ||
-            task.title?.toLowerCase().includes('отправь') ||
-            task.title?.toLowerCase().includes('напиши')
+        const isRecipientMsg =
+          task.description?.includes('📩 Отправить') ||
+          task.title?.toLowerCase().includes('отправь') ||
+          task.title?.toLowerCase().includes('напиши')
 
-          let stageText = 'СЕЙЧАС'
-          if (actualDiffMin > 0) {
-            stageText = `за ${actualDiffMin} мин`
-          }
+        let stageText = 'СЕЙЧАС'
+        if (actualDiffMin > 0) {
+          stageText = `за ${actualDiffMin} мин`
+        }
 
-          const text = isRecipientMsg
-            ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
-              `📌 *Сообщение:* ${task.title}\n` +
-              (task.description ? `_«${task.description}»_\n\n` : '\n') +
-              `⏰ *Время:* ${task.dueTime}\n` +
-              `✨ _Отправлено из Zerf AI_`
-            : `⏰ *НАПОМИНАНИЕ (${stageText.toUpperCase()})!*\n\n` +
-              `📌 *${task.title}*\n` +
-              (task.description ? `\n${task.description}\n\n` : '\n') +
-              `📍 *Срок:* ${task.dueTime}\n` +
-              `✨ _Отправлено из Zerf AI_`
+        const isGroupTask = task.source && task.source.startsWith('group:')
+        const groupHeader = isGroupTask ? '👥 *ГРУППОВОЕ НАПОМИНАНИЕ*\n' : ''
 
-          // Check for linked notes
-          const linkedNoteIds = (task as any).linkedNoteIds as string[] || []
-          let linkedNotesText = ''
-          if (linkedNoteIds.length > 0) {
-            try {
-              const notes = await prisma.note.findMany({
-                where: { id: { in: linkedNoteIds } },
-                select: { id: true, title: true }
-              })
-              if (notes.length > 0) {
-                linkedNotesText = `\n\n📎 *Связанные заметки:*\n` + notes.map((n: any) => `• ${n.title}`).join('\n')
-              }
-            } catch {}
-          }
+        const text = isRecipientMsg
+          ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
+            `📌 *Сообщение:* ${task.title}\n` +
+            (task.description ? `_«${task.description}»_\n\n` : '\n') +
+            `⏰ *Время:* ${task.dueTime}\n` +
+            `✨ _Отправлено из Zerf AI_`
+          : `${groupHeader}⏰ *НАПОМИНАНИЕ (${stageText.toUpperCase()})!*\n\n` +
+            `📌 *${task.title}*\n` +
+            (task.description ? `\n${task.description}\n\n` : '\n') +
+            `📍 *Срок:* ${task.dueTime}\n` +
+            `✨ _Отправлено из Zerf AI_`
 
-          const finalText = text + linkedNotesText
-          const replyMarkup = {
-            inline_keyboard: [
-              [
-                { text: '✅ Выполнено', callback_data: `rem_done_${task.id}` },
-                { text: '⏳ +15 мин', callback_data: `rem_snooze_${task.id}_15` },
-                { text: '⏳ +1 час', callback_data: `rem_snooze_${task.id}_60` },
-              ]
+        // Check for linked notes
+        const linkedNoteIds = (task as any).linkedNoteIds as string[] || []
+        let linkedNotesText = ''
+        if (linkedNoteIds.length > 0) {
+          try {
+            const notes = await prisma.note.findMany({
+              where: { id: { in: linkedNoteIds } },
+              select: { id: true, title: true }
+            })
+            if (notes.length > 0) {
+              linkedNotesText = `\n\n📎 *Связанные заметки:*\n` + notes.map((n: any) => `• ${n.title}`).join('\n')
+            }
+          } catch {}
+        }
+
+        const finalText = text + linkedNotesText
+        const replyMarkup = {
+          inline_keyboard: [
+            [
+              { text: '✅ Выполнено', callback_data: `rem_done_${task.id}` },
+              { text: '⏳ +15 мин', callback_data: `rem_snooze_${task.id}_15` },
+              { text: '⏳ +1 час', callback_data: `rem_snooze_${task.id}_60` },
             ]
-          }
+          ]
+        }
 
-          await sendTelegramMessage(ownerChatId, finalText, replyMarkup)
+        // Collect all recipients: Group chat + Owner + all assignees
+        const recipients = new Set<string | number>()
+        if (ownerChatId) recipients.add(ownerChatId)
+
+        if (isGroupTask) {
+          const gId = task.source!.replace('group:', '').trim()
+          if (gId) recipients.add(gId)
+        }
+
+        if (Array.isArray(task.assignees)) {
+          for (const a of task.assignees) {
+            if (a && a !== 'undefined' && a !== 'null') {
+              recipients.add(a)
+            }
+          }
+        }
+
+        // Broadcast reminder to all targets
+        for (const recipient of Array.from(recipients)) {
+          await sendTelegramMessage(recipient, finalText, replyMarkup).catch(() => {})
         }
 
         const nextSentCount = sentCount + 1
