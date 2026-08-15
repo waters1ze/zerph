@@ -810,14 +810,33 @@ function ProjectDetail({
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [modalParentId, setModalParentId] = useState<string | undefined>(undefined)
   const [modalStatus, setModalStatus] = useState<string>('todo')
+  const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all')
+  const [copiedLink, setCopiedLink] = useState(false)
 
-  const done = project.tasks.filter(t => t.status === 'done').length
-  const total = project.tasks.length
+  const myChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
+
+  const filteredTasks = useMemo(() => {
+    if (selectedMemberFilter === 'all') return project.tasks
+    if (selectedMemberFilter === 'mine') {
+      return project.tasks.filter(t => (t.assignees && t.assignees.includes(myChatId)) || t.authorChatId === myChatId)
+    }
+    return project.tasks.filter(t => t.assignees && t.assignees.includes(selectedMemberFilter))
+  }, [project.tasks, selectedMemberFilter, myChatId])
+
+  const done = filteredTasks.filter(t => t.status === 'done').length
+  const total = filteredTasks.length
 
   const handleOpenCreate = (parentId?: string, status = 'todo') => {
     setModalParentId(parentId)
     setModalStatus(status)
     setShowCreateModal(true)
+  }
+
+  const handleShareProject = () => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/share/project/${project.id}`
+    navigator.clipboard.writeText(url)
+    setCopiedLink(true)
+    setTimeout(() => setCopiedLink(false), 2500)
   }
 
   const handleUpdateTaskStatus = async (taskId: string, newStatus: string) => {
@@ -908,6 +927,16 @@ function ProjectDetail({
             </button>
           </div>
 
+          {/* Share Link Button */}
+          <button
+            onClick={handleShareProject}
+            className="px-3 py-2 rounded-xl bg-muted/70 hover:bg-muted text-foreground text-xs font-semibold border border-border transition-all flex items-center gap-1.5"
+            title="Скопировать ссылку на проект"
+          >
+            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5" />}
+            <span>{copiedLink ? 'Скопировано!' : 'Поделиться'}</span>
+          </button>
+
           {/* Create Task Button */}
           <button
             onClick={() => handleOpenCreate()}
@@ -926,23 +955,48 @@ function ProjectDetail({
         </div>
       </div>
 
-      {/* Members Bar */}
+      {/* Members Bar with Filter Tabs */}
       {project.members.length > 0 && (
         <div className="px-5 py-3 rounded-2xl bg-card border border-border flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Команда:</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Исполнитель:</span>
             <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setSelectedMemberFilter('all')}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors',
+                  selectedMemberFilter === 'all' ? 'bg-primary text-primary-foreground border-primary font-bold' : 'bg-muted/50 border-border text-foreground hover:bg-muted'
+                )}
+              >
+                Все ({project.tasks.length})
+              </button>
+              <button
+                onClick={() => setSelectedMemberFilter('mine')}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors',
+                  selectedMemberFilter === 'mine' ? 'bg-primary text-primary-foreground border-primary font-bold' : 'bg-muted/50 border-border text-foreground hover:bg-muted'
+                )}
+              >
+                Мои задачи
+              </button>
               {project.members.map(m => (
-                <div key={m.chatId} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 text-xs text-foreground">
-                  <MemberAvatar member={m} size={5} />
+                <button
+                  key={m.chatId}
+                  onClick={() => setSelectedMemberFilter(m.chatId)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition-colors',
+                    selectedMemberFilter === m.chatId ? 'bg-primary text-primary-foreground border-primary font-bold' : 'bg-muted/50 border-border text-foreground hover:bg-muted'
+                  )}
+                >
+                  <MemberAvatar member={m} size={4} />
                   <span>{m.name}</span>
-                </div>
+                </button>
               ))}
             </div>
           </div>
           <button onClick={onEdit} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
             <UserPlus className="w-3.5 h-3.5" />
-            <span>Пригласить</span>
+            <span>Пригласить участника</span>
           </button>
         </div>
       )}
@@ -951,7 +1005,7 @@ function ProjectDetail({
       {viewMode === 'tree' ? (
         <ProjectTreeCanvas
           project={project}
-          tasks={project.tasks}
+          tasks={filteredTasks}
           onOpenCreateTask={handleOpenCreate}
           onUpdateTaskStatus={handleUpdateTaskStatus}
           onDeleteTask={handleDeleteTask}
@@ -959,7 +1013,7 @@ function ProjectDetail({
       ) : viewMode === 'kanban' ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {STATUS_COLUMNS.map(col => {
-            const colTasks = project.tasks.filter(t => t.status === col.id)
+            const colTasks = filteredTasks.filter(t => t.status === col.id)
             return (
               <div key={col.id} className={cn('rounded-2xl border p-4 flex flex-col gap-3', col.bg, col.border)}>
                 <div className="flex items-center justify-between pb-2 border-b border-border/50">

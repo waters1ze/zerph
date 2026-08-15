@@ -22,5 +22,35 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Новая задача",
+      "short_name": "+ Задача",
+      "description": "Быстро создать новую задачу",
+      "url": "/?action=new_task",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Голосовой ввод",
+      "short_name": "🎙 Голос",
+      "description": "Надиктовать задачу голосом",
+      "url": "/?action=voice",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Задачи на сегодня",
+      "short_name": "📋 Сегодня",
+      "description": "Открыть список дел на сегодня",
+      "url": "/?view=today",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Мои цели",
+      "short_name": "🎯 Цели",
+      "description": "Прогресс по целям",
+      "url": "/?view=goals",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

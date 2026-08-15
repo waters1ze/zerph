@@ -58,6 +58,25 @@ export function AppShell() {
     return () => window.removeEventListener('zerf:open-voice', handleVoice)
   }, [])
 
+  // Handle PWA shortcut action / view query params on launch
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const action = params.get('action')
+      const view = params.get('view')
+
+      if (action === 'new_task') {
+        setTimeout(() => handleOpenNewTask(), 300)
+      } else if (action === 'voice') {
+        setTimeout(() => handleOpenVoice(), 300)
+      }
+
+      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'projects', 'settings'].includes(view)) {
+        dispatch({ type: 'SET_VIEW', view: view as any })
+      }
+    }
+  }, [])
+
   // Close mobile sidebar when view changes
   useEffect(() => {
     setMobileSidebarOpen(false)

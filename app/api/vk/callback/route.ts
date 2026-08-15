@@ -271,6 +271,14 @@ export async function POST(req: NextRequest) {
         return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 
+      // ── 2.5 /listen & /озвучь ─────────────────────────────────────────────────
+      if (cmd === '/listen' || cmd === '/audio' || cmd === '/voice' || cmd === '/озвучь' || cmd === '/голос' || cmd === '/брифинг') {
+        const { generateUserDailyAudioBriefing } = await import('@/lib/backend/tts')
+        const briefing = await generateUserDailyAudioBriefing(vkChatId, vkFirstName)
+        await sendVkMessage(fromId, `🔊 *Твой персональный аудио-брифинг Zerf AI:*\n\n${briefing.text}`, mainKeyboard)
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+      }
+
       // ── 3. /today & /tasks ───────────────────────────────────────────────────
       if (cmd === '/today' || cmd === '/tasks' || lower === 'задачи' || lower === 'сегодня' || lower === '📋 задачи на сегодня') {
         const tasks = await getAllTasks(vkChatId)

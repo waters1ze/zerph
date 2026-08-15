@@ -3238,6 +3238,19 @@ export async function POST(req: NextRequest) {
         } catch {
           await send(chatId, '❌ Не удалось сгенерировать ссылку для входа. Попробуйте снова.')
         }
+      } else if (cmd === '/listen' || cmd === '/audio' || cmd === '/voice' || cmd === '/озвучь' || cmd === '/голос' || cmd === '/брифинг') {
+        try {
+          const { generateUserDailyAudioBriefing, sendTelegramVoice } = await import('@/lib/backend/tts')
+          await send(chatId, '🎙 *Генерирую персональный голосовой брифинг на сегодня...*')
+          const briefing = await generateUserDailyAudioBriefing(chatId, firstName || 'друг')
+          if (briefing.audioBuffer) {
+            await sendTelegramVoice(chatId, briefing.audioBuffer, `🔊 *Голосовой брифинг Zerf AI*`)
+          } else {
+            await send(chatId, `🔊 *Твой брифинг на сегодня:*\n\n${briefing.text}`)
+          }
+        } catch {
+          await send(chatId, '❌ Не удалось сформировать голосовой брифинг.')
+        }
       } else if (cmd === '/start' && param?.startsWith('invite_')) {
         await handleStart(chatId, firstName)
         const inviterId = Number(param.split('_')[1])

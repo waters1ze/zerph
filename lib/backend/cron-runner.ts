@@ -423,6 +423,123 @@ export async function runEveningReview() {
   }
 }
 
+// ── Sunday Weekly Infographic Report — 20:00-23:59 MSK to all users ───────────
+let inMemoryWeeklyReportDate: string | null = null
+
+export async function runWeeklySundayReport() {
+  try {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', weekday: 'short',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+
+    const hour = parseInt(getPart('hour'), 10)
+    const day = getPart('weekday').toLowerCase() // 'sun'
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+
+    // Only fire on Sunday starting at 20:00 MSK
+    if (day !== 'sun' || hour < 20) return
+    if (inMemoryWeeklyReportDate === todayStr) return
+
+    const lastSent = await getConfig('last_weekly_report_date')
+    if (lastSent === todayStr) {
+      inMemoryWeeklyReportDate = todayStr
+      return
+    }
+
+    inMemoryWeeklyReportDate = todayStr
+    await setConfig('last_weekly_report_date', todayStr)
+
+    const chats = await prisma.telegramChat.findMany()
+    if (!chats.length) return
+
+    const seenChatIds = new Set<string>()
+    const uniqueChats = chats.filter(c => {
+      const idStr = String(c.chatId)
+      if (idStr.startsWith('-') || Number(c.chatId) < 0) return false
+      if (seenChatIds.has(idStr)) return false
+      seenChatIds.add(idStr)
+      return true
+    })
+
+    const allTasks = await getAllTasks()
+    const allGoals = await prisma.goal.findMany()
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+    for (const chat of uniqueChats) {
+      try {
+        const chatId = Number(chat.chatId)
+
+        const userTasks = allTasks.filter(t => {
+          const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
+          return !ownerId || Number(ownerId) === chatId
+        })
+
+        const userGoals = allGoals.filter(g => {
+          const ownerId = (g as { ownerChatId?: bigint | null }).ownerChatId
+          return !ownerId || Number(ownerId) === chatId
+        })
+
+        const weekCompleted = userTasks.filter(t => {
+          if (t.status !== 'done') return false
+          const compDate = t.completedAt ? new Date(t.completedAt) : (t.updatedAt ? new Date(t.updatedAt) : null)
+          return compDate && compDate >= oneWeekAgo
+        })
+
+        const weekTotal = userTasks.filter(t => {
+          const crDate = new Date(t.createdAt)
+          return crDate >= oneWeekAgo || t.status === 'todo'
+        })
+
+        const completionPct = weekTotal.length > 0 ? Math.round((weekCompleted.length / weekTotal.length) * 100) : 0
+        const hoursSaved = (weekCompleted.length * 0.5).toFixed(1)
+
+        // Count completions by day of week
+        const dayCounts: Record<string, number> = { 'Пн': 0, 'Вт': 0, 'Ср': 0, 'Чт': 0, 'Пт': 0, 'Сб': 0, 'Вс': 0 }
+        const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+        weekCompleted.forEach(t => {
+          const d = t.completedAt ? new Date(t.completedAt).getDay() : new Date().getDay()
+          const name = dayNames[d] || 'Пн'
+          dayCounts[name] = (dayCounts[name] || 0) + 1
+        })
+
+        const topDays = Object.entries(dayCounts)
+          .sort((a, b) => b[1] - a[1])
+          .filter(e => e[1] > 0)
+          .slice(0, 2)
+          .map(([d, c], i) => `${i === 0 ? '🥇' : '🥈'} ${d}: ${c} ${c === 1 ? 'задача' : 'задачи'}`)
+          .join(', ')
+
+        const filled = Math.min(10, Math.max(0, Math.round(completionPct / 10)))
+        const progressBar = `[${'▓'.repeat(filled)}${'░'.repeat(10 - filled)}]`
+
+        const reportMsg =
+          `📊 *ТВОЙ ИТОГ НЕДЕЛИ В ZERF AI*\n\n` +
+          `🏆 *Продуктивность за 7 дней:*\n` +
+          `• Закрыто задач: *${weekCompleted.length}* из ${weekTotal.length}\n` +
+          `• Эффективность: ${progressBar} *${completionPct}%*\n` +
+          `• Сберегли времени: *~${hoursSaved} ч* фокуса\n` +
+          `• Стрик дисциплины: *${(chat as any).streakDays || 1}* дн. подряд 🔥\n\n` +
+          (topDays ? `📅 *Пик активности:* ${topDays}\n` : '') +
+          (userGoals.length > 0 ? `🎯 *Активных целей:* ${userGoals.length}\n` : '') +
+          `\n✨ _Отличная работа! Отдохни и спланируй новую неделю в Zerf AI._`
+
+        await sendTelegramMessage(chatId, reportMsg)
+        await new Promise(r => setTimeout(r, 200))
+      } catch (userErr) {
+        console.error('Weekly report error for user:', userErr)
+      }
+    }
+  } catch (err) {
+    console.error('Weekly Sunday report cron error:', err)
+  }
+}
+
 // ── Focus / Pomodoro Session Tracking ─────────────────────────────────────────
 
 interface FocusSession {
@@ -572,6 +689,7 @@ export async function runAllCronTasks() {
     runFocusCheck(),
     runMorningGreeting(),
     runEveningReview(),
+    runWeeklySundayReport(),
     runChannelAndAiCron(),
   ])
 }
@@ -594,9 +712,10 @@ if (!globalObj.__reminderCronStarted) {
     runMorningGreeting().catch(() => {})
   }, 30_000)
 
-  // Evening review check: every 30 seconds
+  // Evening review & Sunday weekly report check: every 30 seconds
   setInterval(() => {
     runEveningReview().catch(() => {})
+    runWeeklySundayReport().catch(() => {})
   }, 30_000)
 
   // Channel posts, polls & Friday AI proposal: every 30 seconds
@@ -604,5 +723,5 @@ if (!globalObj.__reminderCronStarted) {
     runChannelAndAiCron().catch(() => {})
   }, 30_000)
 
-  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review + Channel Daemon started.')
+  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review + Sunday Report + Channel Daemon started.')
 }

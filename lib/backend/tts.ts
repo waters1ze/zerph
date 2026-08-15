@@ -106,3 +106,39 @@ export async function sendVoiceResponse(chatId: string | number | bigint, text: 
     console.error('sendVoiceResponse error:', err)
   }
 }
+
+export async function generateUserDailyAudioBriefing(
+  chatId: string | number | bigint,
+  firstName: string
+): Promise<{ text: string; audioBuffer: Buffer | null }> {
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const userTasks = await prisma.task.findMany({
+      where: {
+        ownerChatId: BigInt(chatId),
+        status: { not: 'done' },
+        OR: [
+          { dueDate: todayStr },
+          { dueDate: null }
+        ]
+      },
+      take: 5,
+      orderBy: { createdAt: 'desc' }
+    })
+
+    const pendingTitles = userTasks.map(t => t.title).join(', ')
+
+    let spokenScript = ''
+    if (userTasks.length === 0) {
+      spokenScript = `Привет, ${firstName}! На сегодня у тебя нет незавершенных задач. Отличный момент для отдыха или планирования новых целей в Zerf AI!`
+    } else {
+      spokenScript = `Привет, ${firstName}! Твой краткий голосовой брифинг на сегодня: у тебя запланировано ${userTasks.length} задач. Главные из них: ${pendingTitles.slice(0, 150)}. Продуктивного и успешного дня!`
+    }
+
+    const audioBuffer = await generateTtsAudio(spokenScript)
+    return { text: spokenScript, audioBuffer }
+  } catch (err) {
+    console.error('generateUserDailyAudioBriefing error:', err)
+    return { text: `Привет, ${firstName}! Успешного и продуктивного дня!`, audioBuffer: null }
+  }
+}
