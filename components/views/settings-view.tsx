@@ -798,7 +798,7 @@ export function SettingsView() {
               </div>
 
               <a
-                href="https://www.icloud.com/shortcuts/f0143b9430e64942b63ba87b47182861"
+                href="https://www.icloud.com/shortcuts/3d56a887eab84805808f984b93c50a97"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"

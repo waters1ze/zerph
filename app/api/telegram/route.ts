@@ -610,7 +610,7 @@ async function handleSiriSetup(chatId: number) {
 
   const replyMarkup = {
     inline_keyboard: [
-      [{ text: '🍏 Установить на iPhone в 1 клик', url: 'https://www.icloud.com/shortcuts/f0143b9430e64942b63ba87b47182861' }],
+      [{ text: '🍏 Установить на iPhone в 1 клик', url: 'https://www.icloud.com/shortcuts/3d56a887eab84805808f984b93c50a97' }],
       [
         { text: '🧪 Проверить шлюз', url: testUrl },
         { text: '📱 Открыть настройки', web_app: { url: `${MINIAPP_URL}?chatId=${chatId}` } }
