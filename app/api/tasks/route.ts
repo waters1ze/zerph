@@ -16,7 +16,6 @@ import {
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
-import { runAllCronTasks } from '@/lib/backend/cron-runner'
 
 startReminderScheduler()
 
@@ -40,7 +39,6 @@ async function getOwnerChatId(req: NextRequest): Promise<string | null> {
 
 export async function GET(req: NextRequest) {
   try {
-    runAllCronTasks().catch(() => {})
     const ownerChatId = await getOwnerChatId(req)
     if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     

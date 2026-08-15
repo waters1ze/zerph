@@ -3586,9 +3586,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Trigger instant check for due reminders & scheduled posts
-    runAllCronTasks().catch(() => {})
-
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Telegram webhook error:', err)

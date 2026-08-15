@@ -19,13 +19,11 @@ import {
   getUserProductivityStats,
 } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
-import { runAllCronTasks } from '@/lib/backend/cron-runner'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
 export async function POST(req: NextRequest) {
   try {
-    runAllCronTasks().catch(() => {})
     const rawText = await req.text()
     let body: any = {}
     try {

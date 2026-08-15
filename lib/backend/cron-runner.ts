@@ -218,6 +218,13 @@ export async function runReminderCheck() {
   }
 }
 
+// In-memory locks to prevent duplicate executions within the same process / day
+let inMemoryMorningGreetingDate: string | null = null
+let inMemoryEveningReviewDate: string | null = null
+let inMemoryChannelMorningDate: string | null = null
+let inMemoryChannelEveningDate: string | null = null
+let inMemoryChannelPollDate: string | null = null
+
 // ── Morning greeting — 08:00-12:00 MSK to all users ────────────────────────────
 
 export async function runMorningGreeting() {
@@ -236,9 +243,15 @@ export async function runMorningGreeting() {
 
     // Fire between 08:00 and 13:00 MSK, exactly once per day (persisted in DB)
     if (hour < 8 || hour >= 13) return
+    if (inMemoryMorningGreetingDate === todayStr) return
 
     const lastSent = await getConfig('last_morning_greeting_date')
-    if (lastSent === todayStr) return
+    if (lastSent === todayStr) {
+      inMemoryMorningGreetingDate = todayStr
+      return
+    }
+
+    inMemoryMorningGreetingDate = todayStr
     await setConfig('last_morning_greeting_date', todayStr)
 
     const chats = await prisma.telegramChat.findMany()
@@ -321,9 +334,15 @@ export async function runEveningReview() {
 
     // Fire starting at 20:00 (8 PM) MSK to 23:59 MSK, exactly once per day (persisted in DB)
     if (hour < 20) return
+    if (inMemoryEveningReviewDate === todayStr) return
 
     const lastSent = await getConfig('last_evening_review_date')
-    if (lastSent === todayStr) return
+    if (lastSent === todayStr) {
+      inMemoryEveningReviewDate = todayStr
+      return
+    }
+
+    inMemoryEveningReviewDate = todayStr
     await setConfig('last_evening_review_date', todayStr)
 
     const chats = await prisma.telegramChat.findMany()
@@ -460,19 +479,29 @@ export async function runChannelAndAiCron() {
 
     // 1. Friday 08:00-20:59 MSK: Weekly Poll on Improvements and New Features
     if (day === 'fri' && hour >= 8 && hour < 21) {
-      const lastPoll = await getConfig('last_channel_poll_date')
-      if (lastPoll !== todayStr) {
-        const ok = await postDailyPollToChannel()
-        if (ok) await setConfig('last_channel_poll_date', todayStr)
+      if (inMemoryChannelPollDate !== todayStr) {
+        const lastPoll = await getConfig('last_channel_poll_date')
+        if (lastPoll !== todayStr) {
+          inMemoryChannelPollDate = todayStr
+          await setConfig('last_channel_poll_date', todayStr)
+          await postDailyPollToChannel()
+        } else {
+          inMemoryChannelPollDate = todayStr
+        }
       }
     }
 
     // 2. Daily (Mon-Thu, Sat-Sun) 08:00-14:00 MSK: Morning News Digest
     if (day !== 'fri' && hour >= 8 && hour < 14) {
-      const lastPost = await getConfig('last_channel_morning_post_date')
-      if (lastPost !== todayStr) {
-        const ok = await postDailyMorningPostToChannel()
-        if (ok) await setConfig('last_channel_morning_post_date', todayStr)
+      if (inMemoryChannelMorningDate !== todayStr) {
+        const lastPost = await getConfig('last_channel_morning_post_date')
+        if (lastPost !== todayStr) {
+          inMemoryChannelMorningDate = todayStr
+          await setConfig('last_channel_morning_post_date', todayStr)
+          await postDailyMorningPostToChannel()
+        } else {
+          inMemoryChannelMorningDate = todayStr
+        }
       }
     }
 
@@ -480,18 +509,23 @@ export async function runChannelAndAiCron() {
     if (day === 'fri' && hour >= 21) {
       const lastClose = await getConfig('last_channel_close_poll_date')
       if (lastClose !== todayStr) {
-        const ok = await closeDailyPollAndNotifyAdmins()
+        await setConfig('last_channel_close_poll_date', todayStr)
+        await closeDailyPollAndNotifyAdmins()
         await sendCommentReportToAdminsTelegram().catch(() => {})
-        if (ok) await setConfig('last_channel_close_poll_date', todayStr)
       }
     }
 
     // 4. Every Day 20:00 (8 PM) - 23:59 MSK: Evening News Digest & Daily Reflection
     if (hour >= 20) {
-      const lastEvening = await getConfig('last_channel_evening_post_date')
-      if (lastEvening !== todayStr) {
-        const ok = await postDailyEveningPostToChannel()
-        if (ok) await setConfig('last_channel_evening_post_date', todayStr)
+      if (inMemoryChannelEveningDate !== todayStr) {
+        const lastEvening = await getConfig('last_channel_evening_post_date')
+        if (lastEvening !== todayStr) {
+          inMemoryChannelEveningDate = todayStr
+          await setConfig('last_channel_evening_post_date', todayStr)
+          await postDailyEveningPostToChannel()
+        } else {
+          inMemoryChannelEveningDate = todayStr
+        }
       }
     }
 
