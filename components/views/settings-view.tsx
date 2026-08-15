@@ -811,31 +811,34 @@ export function SettingsView() {
                 <div className="space-y-1.5 pl-1">
                   <div className="flex items-start gap-1.5">
                     <span className="font-bold text-foreground">1.</span>
-                    <span>Нажмите синюю кнопку выше ➔ в окне нажмите <b>«Добавить команду»</b>.</span>
+                    <span>Нажмите кнопку выше ➔ в окне на iPhone нажмите <b>«Добавить команду»</b>.</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <span className="font-bold text-foreground">2.</span>
-                    <span>Во 2-м блоке *(«Получить содержимое URL»)* вставьте ваш <b>Chat ID</b> сразу после <code>chatId=</code>:</span>
+                    <span>В 3-м блоке *(«Получить содержимое URL»)* проверьте ваш <b>Chat ID</b> после <code>chatId=</code>.</span>
                   </div>
                 </div>
 
                 {/* Visual Blueprint matching iOS screenshot */}
                 <div className="p-2.5 rounded-xl bg-muted/60 border border-border space-y-1.5 font-mono text-[10px]">
                   <div className="text-foreground font-bold font-sans text-[11px] flex items-center gap-1 mb-1">
-                    <span>📱</span> Структура команды (как на фото):
+                    <span>📱</span> Правильная структура команды на iPhone:
                   </div>
                   <div className="p-1.5 rounded bg-card/80 border border-border/60 text-sky-500 font-sans">
                     🎤 <b>1. Продиктовать текст</b> (Язык: Русский)
                   </div>
+                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-indigo-400 font-sans">
+                    🔗 <b>2. URL Кодировать:</b> <span className="text-sky-500 font-bold">[Продиктованный текст]</span>
+                  </div>
                   <div className="p-1.5 rounded bg-card/80 border border-border/60 text-emerald-500 break-all">
-                    🌐 <b>2. Получить содержимое URL:</b><br />
-                    <code>https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || 'ВАШ_ID'}&text=</code><span className="text-sky-500 font-bold">[Продиктованный текст]</span>
+                    🌐 <b>3. Получить содержимое URL:</b><br />
+                    <code>https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || 'ВАШ_ID'}&text=</code><span className="text-indigo-400 font-bold">[Кодированный в URL текст]</span>
                   </div>
                   <div className="p-1.5 rounded bg-card/80 border border-border/60 text-rose-500 font-sans">
-                    🔊 <b>3. Произнести текст:</b> [Содержимое URL]
+                    🔊 <b>4. Произнести текст:</b> [Содержимое URL]
                   </div>
                   <div className="p-1.5 rounded bg-card/80 border border-border/60 text-amber-500 font-sans">
-                    ⏰ <b>4. Выбрать из меню:</b> <i>Включить напоминание?</i> ➔ Да (Поставить будильник) / Нет
+                    ⏰ <b>5. Выбрать из меню:</b> <i>Включить напоминание?</i> ➔ Да (Поставить будильник) / Нет
                   </div>
                 </div>
 
