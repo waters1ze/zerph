@@ -817,6 +817,8 @@ export async function autoAddFriends(chatId1: number | bigint, chatId2: number |
       update: { status: 'accepted' },
       create: { userChatId: c2, friendChatId: c1, status: 'accepted' }
     })
+    await syncFriendBirthdays(c1).catch(() => {})
+    await syncFriendBirthdays(c2).catch(() => {})
   } catch {}
 }
 
