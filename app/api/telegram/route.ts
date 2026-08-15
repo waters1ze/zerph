@@ -2853,6 +2853,7 @@ export async function POST(req: NextRequest) {
 
     // In Official Channel Discussion group: remain 100% passive & silent (no command triggers, no task hints)
     if (isDiscussionGroup) {
+      tgApi('setMyCommands', { commands: [], scope: { type: 'chat', chat_id: chatId } }).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 
