@@ -10,7 +10,7 @@ import { format, parseISO } from 'date-fns'
 import {
   X, Tag, FolderKanban, Sparkles,
   Trash2, ChevronDown, Target, Edit3, Check,
-  Clock, Bell
+  Clock, Bell, Mic
 } from 'lucide-react'
 import type { Priority, TaskStatus } from '@/lib/types'
 import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
@@ -383,7 +383,8 @@ export function TaskDetail() {
               className="w-full flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
             >
               <span className="flex items-center gap-1.5">
-                🎙️ Исходная голосовая запись
+                <Mic className="w-3.5 h-3.5 text-primary" />
+                <span>Исходная голосовая запись</span>
               </span>
               <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showSource && 'rotate-180')} />
             </button>

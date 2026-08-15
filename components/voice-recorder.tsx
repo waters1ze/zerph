@@ -36,7 +36,7 @@ const PRIORITY_DOT: Record<string, string> = {
 }
 
 const TYPE_EMOJI: Record<string, string> = {
-  task: '✅', goal: '🎯', note: '📌', project: '📁', reminder: '⏰', completion: '✔️',
+  task: '▪', goal: '★', note: '▫', project: '◈', reminder: '✦', completion: '✓',
 }
 
 export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
@@ -71,7 +71,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
   }, [])
 
   useEffect(() => { if (!open) reset() }, [open, reset])
-  useEffect(() => { if (stage === 'recording' && duration >= 120) stopRecording() }, [duration, stage])
+  useEffect(() => { if (stage === 'recording' && duration >= 300) stopRecording() }, [duration, stage])
 
   const startRecording = async () => {
     setStage('requesting')
