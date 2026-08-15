@@ -1176,32 +1176,15 @@ async function findFriendMatches(userChatId: number | bigint, recipientName: str
     let isAllowed = false
     let reason = ''
 
-    try {
-      const sharedProj = await prisma.projectDB.findFirst({
-        where: {
-          OR: [
-            { ownerChatId: cid, memberIds: { has: fId } },
-            { ownerChatId: fId, memberIds: { has: cid } },
-            { AND: [{ memberIds: { has: cid } }, { memberIds: { has: fId } }] }
-          ]
-        }
-      })
-      if (sharedProj) { isAllowed = true; reason = 'project' }
-    } catch {}
-
-    if (!isAllowed) {
-      const sharedGroup = await prisma.groupMembership.findFirst({
-        where: { memberChatId: fId, groupChatId: { in: groupChatIds } }
-      })
-      if (sharedGroup) { isAllowed = true; reason = 'group' }
-    }
-
-    if (!isAllowed) {
-      const fs = friendships.find((f: any) =>
-        (f.userChatId === fId && f.friendChatId === cid) ||
-        (f.friendChatId === fId && f.userChatId === cid)
-      )
-      if (fs && fs.allowTasks) { isAllowed = true; reason = 'friendship' }
+    // SECURITY: ONLY allowTasks=true in friendship allows task sending.
+    // Shared projects or groups do NOT grant task delegation permission.
+    const fs = friendships.find((f: any) =>
+      (f.userChatId === fId && f.friendChatId === cid) ||
+      (f.friendChatId === fId && f.userChatId === cid)
+    )
+    if (fs && fs.status === 'accepted' && fs.allowTasks === true) {
+      isAllowed = true
+      reason = 'friendship'
     }
 
     results.push({ friend, isAllowed, reason })
@@ -1323,8 +1306,10 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         continue
       }
 
-      if (allowedMatches.length > 1 && !item.isPluralRecipient) {
-        // Disambiguation among allowed recipients
+      // SECURITY: isPluralRecipient is COMPLETELY DISABLED — AI must never broadcast tasks to multiple users.
+      // If multiple matches found, always show disambiguation buttons.
+      if (allowedMatches.length > 1) {
+        // Disambiguation among allowed recipients — always ask, never auto-broadcast
         const draftTask = await prisma.task.create({
           data: {
             title: `[DRAFT] ${item.title}`,
@@ -1335,7 +1320,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           }
         })
 
-        let amMsg = `🤔 Найдено несколько человек по запросу *«${escMd(item.recipientName)}»*. Уточни фамилию или выбери нужного человека:\n`
+        let amMsg = `🤔 Найдено несколько человек по запросу *«${escMd(item.recipientName)}»*. Уточни, кому именно поручаешь задачу:\n`
         
         const inlineKeyboard = []
         for (const m of allowedMatches) {
@@ -1362,7 +1347,8 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         continue
       }
 
-      const targets = item.isPluralRecipient ? allowedMatches : allowedMatches.slice(0, 1)
+      // SECURITY: Always take ONLY the first (most specific) match — never broadcast to all
+      const targets = allowedMatches.slice(0, 1)
 
       // Execute for target matches
       for (const match of targets) {
