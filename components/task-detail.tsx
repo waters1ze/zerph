@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import {
   X, Tag, FolderKanban, Sparkles,
-  Trash2, ChevronDown, Target, Edit3, Check
+  Trash2, ChevronDown, Target, Edit3, Check,
+  Clock, Bell
 } from 'lucide-react'
 import type { Priority, TaskStatus } from '@/lib/types'
 import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
@@ -198,26 +199,28 @@ export function TaskDetail() {
           {/* Due Time */}
           {state.settings.userPlan === 'premium' ? (
             <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
-                ⏰ ВРЕМЯ НАПОМИНАНИЯ
+              <p className="text-[10px] uppercase tracking-widest text-foreground/80 font-semibold flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-primary" />
+                <span>ВРЕМЯ НАПОМИНАНИЯ</span>
               </p>
               <input
                 type="time"
                 value={task.dueTime ?? ''}
                 onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
-                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-pointer"
+                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-border text-foreground outline-none font-mono cursor-pointer"
               />
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 opacity-60" onClick={() => alert('Точное время напоминания доступно только в Premium версии. Пожалуйста, приобретите Premium через бота.')}>
-              <p className="text-[10px] uppercase tracking-widest text-amber-400/90 font-semibold flex items-center gap-1">
-                ⏰ ВРЕМЯ (PREMIUM)
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-muted-foreground" />
+                <span>ВРЕМЯ (PREMIUM)</span>
               </p>
               <input
                 type="time"
                 disabled
                 value={task.dueTime ?? ''}
-                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-amber-500/30 text-amber-400 outline-none font-mono cursor-not-allowed pointer-events-none"
+                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-border text-muted-foreground outline-none font-mono cursor-not-allowed pointer-events-none"
               />
             </div>
           )}
@@ -225,17 +228,19 @@ export function TaskDetail() {
 
         {/* Live Notification Countdown */}
         {task.dueTime && !isDone && (
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wide">
-                🔔 Telegram Напоминание
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-primary" />
+                <span>Telegram Напоминание</span>
               </p>
-              <p className="text-xs text-foreground/80 mt-0.5">
-                Прийдёт в Telegram ровно в <strong className="text-amber-400 font-mono">{task.dueTime}</strong>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Придёт в Telegram ровно в <strong className="text-foreground font-mono">{task.dueTime}</strong>
               </p>
             </div>
-            <div className="px-2.5 py-1 rounded-lg bg-black/40 border border-amber-500/30 text-amber-400 font-mono text-xs font-bold">
-              ⏰ {task.dueTime}
+            <div className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground font-mono text-xs font-bold flex items-center gap-1">
+              <Clock className="w-3 h-3 text-primary" />
+              <span>{task.dueTime}</span>
             </div>
           </div>
         )}

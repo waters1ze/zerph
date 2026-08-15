@@ -192,7 +192,18 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const rawCid = searchParams.get('chatId') || searchParams.get('chat_id')
-  const text = searchParams.get('text') || searchParams.get('q') || searchParams.get('query')
+  let text = searchParams.get('text') || searchParams.get('q') || searchParams.get('query') || ''
+  if (!text) {
+    const rawQuery = req.url.split('?')[1] || ''
+    const match = rawQuery.match(/(?:text|q|query)=([^&]+)/i)
+    if (match) {
+      try {
+        text = decodeURIComponent(match[1])
+      } catch {
+        text = match[1]
+      }
+    }
+  }
   const format = searchParams.get('format')
   const providedKey = searchParams.get('key')
 
