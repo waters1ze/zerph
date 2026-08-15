@@ -6,6 +6,8 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const DEFAULT_CHANNEL = process.env.TELEGRAM_CHANNEL_ID || '@zerph_off'
 const GROQ_API_KEY = process.env.GROQ_API_KEY || ''
 
+import { callGroqChatCompletion } from './groq-pool'
+
 async function callTg(method: string, payload: Record<string, any>) {
   if (!BOT_TOKEN) return null
   try {
@@ -57,39 +59,29 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL): Promi
       '▪ Синхронизация с Notion и Obsidian'
     ]
 
-    if (GROQ_API_KEY) {
-      try {
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${GROQ_API_KEY}`,
-            'Content-Type': 'application/json',
+    try {
+      const result = await callGroqChatCompletion({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content: 'Ты — комьюнити-менеджер Telegram-канала экосистемы Zerf AI (@zerph_off). Создай 1 лаконичный опрос для пользователей с выбором самого ожидаемого улучшения или функции сервиса. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪). Верни строго JSON: {"question": "...", "options": ["...", "..."]}'
           },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              {
-                role: 'system',
-                content: 'Ты — комьюнити-менеджер Telegram-канала экосистемы Zerf AI (@zerph_off). Создай 1 лаконичный опрос для пользователей с выбором самого ожидаемого улучшения или функции сервиса. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪). Верни строго JSON: {"question": "...", "options": ["...", "..."]}'
-              },
-              {
-                role: 'user',
-                content: `Дата: ${mskDate}. Сгенерируй еженедельный пятничный опрос по улучшению функционала Zerf AI.`
-              }
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.7,
-            max_tokens: 300,
-          }),
-        })
-        const groqData = await groqRes.json()
-        const parsed = JSON.parse(groqData.choices?.[0]?.message?.content || '{}')
-        if (parsed.question && Array.isArray(parsed.options) && parsed.options.length >= 2) {
-          question = parsed.question.slice(0, 250)
-          options = parsed.options.slice(0, 5).map((o: string) => o.slice(0, 60))
-        }
-      } catch {}
-    }
+          {
+            role: 'user',
+            content: `Дата: ${mskDate}. Сгенерируй еженедельный пятничный опрос по улучшению функционала Zerf AI.`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        max_tokens: 300,
+      })
+      const parsed = JSON.parse(result.content || '{}')
+      if (parsed.question && Array.isArray(parsed.options) && parsed.options.length >= 2) {
+        question = parsed.question.slice(0, 250)
+        options = parsed.options.slice(0, 5).map((o: string) => o.slice(0, 60))
+      }
+    } catch {}
 
     const tgRes = await callTg('sendPoll', {
       chat_id: channelId,
@@ -222,22 +214,14 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
       `- Без цветных эмодзи. Только ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>.\n` +
       `- Текст должен быть емким (до 150-200 слов), актуальным и легко читаемым.`
 
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.65,
-        max_tokens: 700,
-      }),
+    const result = await callGroqChatCompletion({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.65,
+      max_tokens: 700,
     })
 
-    const data = await groqRes.json()
-    const text = data.choices?.[0]?.message?.content?.trim()
+    const text = result.content?.trim()
     if (!text) return false
 
     const tgRes = await callTg('sendMessage', {
@@ -255,8 +239,6 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
 
 /** 4. Post 21:00 MSK Evening News Digest & Reflection (Minimalist B&W) */
 export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
-  if (!GROQ_API_KEY) return false
-
   try {
     const context = await fetchMorningNewsContext()
     const prompt =
@@ -273,22 +255,14 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL)
       `   • <blockquote>❝ [Лаконичная цитата или мысль вечера] </blockquote>\n` +
       `   • Ссылка на <a href="https://t.me/Zerph_bot">@Zerph_bot</a>.`
 
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 600,
-      }),
+    const result = await callGroqChatCompletion({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 600,
     })
 
-    const data = await groqRes.json()
-    const text = data.choices?.[0]?.message?.content?.trim()
+    const text = result.content?.trim()
     if (!text) return false
 
     const tgRes = await callTg('sendMessage', {
@@ -306,8 +280,6 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL)
 
 /** 5. Friday 00:00 MSK — AI Autonomous Feature Proposal (Minimalist B&W) */
 export async function generateAndSendFridayAiProposal(): Promise<boolean> {
-  if (!GROQ_API_KEY) return false
-
   try {
     const totalUsers = await prisma.telegramChat.count()
     const totalTasks = await prisma.task.count()
@@ -344,22 +316,14 @@ export async function generateAndSendFridayAiProposal(): Promise<boolean> {
       `3. Архитектура и интерфейс.\n` +
       `4. Прогноз удержания (Retention).`
 
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 900,
-      }),
+    const result = await callGroqChatCompletion({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 900,
     })
 
-    const groqData = await groqRes.json()
-    const proposal = groqData.choices?.[0]?.message?.content?.trim()
+    const proposal = result.content?.trim()
     if (!proposal) return false
 
     const adminIds = await getAdminChatIds()
@@ -385,8 +349,6 @@ export async function generateAndSendFridayAiProposal(): Promise<boolean> {
 
 /** 6. Post Welcome Intro Post in Minimalist Monochrome (B&W) HTML */
 export async function postWelcomeIntroToChannel(channelId = DEFAULT_CHANNEL): Promise<{ ok: boolean; text?: string; error?: string }> {
-  if (!GROQ_API_KEY) return { ok: false, error: 'GROQ_API_KEY is not configured' }
-
   try {
     const prompt =
       `Ты — главный редактор официального Telegram-канала Zerf AI (@zerph_off).\n` +
@@ -415,22 +377,14 @@ export async function postWelcomeIntroToChannel(channelId = DEFAULT_CHANNEL): Pr
       `  ▪ <b>Веб-версия:</b> <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>\n` +
       `- Напиши готовый HTML пост без лишних вступительных фраз.`
 
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.6,
-        max_tokens: 1100,
-      }),
+    const result = await callGroqChatCompletion({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.6,
+      max_tokens: 1100,
     })
 
-    const groqData = await groqRes.json()
-    const text = groqData.choices?.[0]?.message?.content?.trim()
+    const text = result.content?.trim()
     if (!text) return { ok: false, error: 'Empty AI response' }
 
     const tgRes = await callTg('sendMessage', {

@@ -1,7 +1,7 @@
 import { prisma } from './prisma'
+import { callGroqChatCompletion } from './groq-pool'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const GROQ_API_KEY = process.env.GROQ_API_KEY || ''
 
 export interface CommentAnalysisResult {
   totalAnalyzed: number
@@ -60,42 +60,31 @@ export async function generateCommentAnalysisReport(limit = 50): Promise<Comment
   }
 
   const commentTexts = comments.map(c => `${c.userName || 'User'}: ${c.text}`).join('\n')
-
   let analysis: any = null
 
-  if (GROQ_API_KEY) {
-    try {
-      const prompt =
-        `Ты — ведущий продуктовый аналитик экосистемы Zerf AI. Проанализируй комментарии подписчиков под постами Telegram-канала @zerph_off:\n\n` +
-        `${commentTexts}\n\n` +
-        `Верни строго JSON со следующей структурой:\n` +
-        `{\n` +
-        `  "sentiment": { "positivePercent": 75, "neutralPercent": 20, "negativePercent": 5 },\n` +
-        `  "topRequests": ["Запрос 1", "Запрос 2", "Запрос 3"],\n` +
-        `  "mainIssuesOrQuestions": ["Вопрос/проблема 1", "Вопрос 2"],\n` +
-        `  "executiveSummary": "Краткая выжимка (2-3 предложения) настроений аудитории и ключевых инсайтов."\n` +
-        `}`
+  try {
+    const prompt =
+      `Ты — ведущий продуктовый аналитик экосистемы Zerf AI. Проанализируй комментарии подписчиков под постами Telegram-канала @zerph_off:\n\n` +
+      `${commentTexts}\n\n` +
+      `Верни строго JSON со следующей структурой:\n` +
+      `{\n` +
+      `  "sentiment": { "positivePercent": 75, "neutralPercent": 20, "negativePercent": 5 },\n` +
+      `  "topRequests": ["Запрос 1", "Запрос 2", "Запрос 3"],\n` +
+      `  "mainIssuesOrQuestions": ["Вопрос/проблема 1", "Вопрос 2"],\n` +
+      `  "executiveSummary": "Краткая выжимка (2-3 предложения) настроений аудитории и ключевых инсайтов."\n` +
+      `}`
 
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' },
-          temperature: 0.3,
-          max_tokens: 800,
-        }),
-      })
+    const result = await callGroqChatCompletion({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      max_tokens: 800,
+    })
 
-      const data = await groqRes.json()
-      analysis = JSON.parse(data.choices?.[0]?.message?.content || '{}')
-    } catch (e) {
-      console.error('Groq comment analysis error:', e)
-    }
+    analysis = JSON.parse(result.content || '{}')
+  } catch (e) {
+    console.error('Groq comment analysis error:', e)
   }
 
   return {
