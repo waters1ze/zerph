@@ -209,7 +209,17 @@ export async function POST(req: NextRequest) {
         tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
       }
     })
-    sendTgNotification(chatId, tgMsg).catch(() => {})
+
+    // Send confirmation in Telegram or VK if applicable
+    try {
+      const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+      if (userRec?.authProvider === 'vk') {
+        const { sendVkMessage } = await import('@/lib/backend/vk')
+        await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
+      } else if (!userRec || userRec.authProvider === 'telegram') {
+        sendTgNotification(chatId, tgMsg).catch(() => {})
+      }
+    } catch {}
 
     if (format === 'json' || req.headers.get('accept')?.includes('application/json')) {
       return NextResponse.json({
@@ -344,7 +354,16 @@ export async function GET(req: NextRequest) {
       tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
     }
   })
-  sendTgNotification(chatId, tgMsg).catch(() => {})
+  // Send confirmation in Telegram or VK if applicable
+  try {
+    const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+    if (userRec?.authProvider === 'vk') {
+      const { sendVkMessage } = await import('@/lib/backend/vk')
+      await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
+    } else if (!userRec || userRec.authProvider === 'telegram') {
+      sendTgNotification(chatId, tgMsg).catch(() => {})
+    }
+  } catch {}
 
   if (format === 'json') {
     return NextResponse.json({
