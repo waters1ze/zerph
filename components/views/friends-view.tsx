@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import {
   Users, UserPlus, Trash2, CheckSquare, Circle,
   X, Mail, Send, Copy, Check, Share2, UserCheck, AlertCircle, Sparkles, RefreshCw,
-  Clock, Calendar, CalendarDays, Lock, ShieldCheck, Plus
+  Clock, Calendar, CalendarDays, Lock, ShieldCheck, Plus, Flame, CheckCircle2
 } from 'lucide-react'
 import type { Friend } from '@/lib/types'
 
@@ -29,10 +29,12 @@ function FriendCard({
   friend,
   onRemove,
   onSchedule,
+  onProfile,
 }: {
   friend: Friend
   onRemove: () => void
   onSchedule: (friend: Friend) => void
+  onProfile: (friend: Friend) => void
 }) {
   const { state } = useApp()
   const sharedTasks = state.tasks.filter((t: any) => 
@@ -80,7 +82,11 @@ function FriendCard({
     >
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="relative shrink-0">
+        <div 
+          onClick={() => onProfile(friend)}
+          className="relative shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+          title="Открыть профиль"
+        >
           <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center border border-primary/20">
             <span className="text-sm font-bold text-primary">
               {friend.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -92,7 +98,11 @@ function FriendCard({
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between">
-            <div>
+            <div 
+              onClick={() => onProfile(friend)}
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+              title="Открыть профиль"
+            >
               <p className="text-[13px] font-bold text-foreground">{friend.name}</p>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Mail className="w-3 h-3" />
@@ -100,6 +110,14 @@ function FriendCard({
               </p>
             </div>
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onProfile(friend)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-[11px] font-semibold transition-all active:scale-95 shadow-sm"
+                title="Посмотреть профиль пользователя"
+              >
+                <Users className="w-3 h-3 text-primary" />
+                <span>Профиль</span>
+              </button>
               <button
                 onClick={() => onSchedule(friend)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-semibold transition-all active:scale-95 shadow-sm"
@@ -209,6 +227,25 @@ export function FriendsView() {
     loading: boolean
     daysCount: number
   } | null>(null)
+  const [profileModal, setProfileModal] = useState<{
+    friend: Friend
+    profile: any | null
+    loading: boolean
+  } | null>(null)
+
+  const handleOpenProfile = async (friend: Friend) => {
+    setProfileModal({ friend, profile: null, loading: true })
+    try {
+      const targetId = friend.chatId || friend.id
+      const res = await fetch(`/api/friends/profile?chatId=${encodeURIComponent(targetId)}`, {
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      setProfileModal({ friend, profile: data, loading: false })
+    } catch {
+      setProfileModal(prev => prev ? { ...prev, loading: false } : null)
+    }
+  }
 
   const handleOpenSchedule = async (friend: Friend, daysCount: number = 1) => {
     setScheduleModal(prev => ({
@@ -561,6 +598,7 @@ export function FriendsView() {
             <FriendCard
               key={f.id}
               friend={f}
+              onProfile={handleOpenProfile}
               onSchedule={handleOpenSchedule}
               onRemove={async () => {
                 dispatch({ type: 'REMOVE_FRIEND', id: f.id })
@@ -575,6 +613,186 @@ export function FriendsView() {
           ))}
         </div>
       )}
+
+      {/* User Profile Modal */}
+      <AnimatePresence>
+        {profileModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden font-sans flex flex-col max-h-[85vh]"
+            >
+              {/* Profile Header */}
+              <div className="p-5 border-b border-border flex items-start justify-between bg-gradient-to-br from-primary/10 via-muted/30 to-card">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-13 h-13 rounded-2xl bg-primary/20 text-primary flex items-center justify-center font-bold text-lg border border-primary/30 shadow-inner">
+                    {profileModal.friend.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                      <span>{profileModal.profile?.user?.name || profileModal.friend.name}</span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <span>{profileModal.profile?.user?.username || profileModal.friend.username || profileModal.friend.email}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setProfileModal(null)}
+                  className="w-8 h-8 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Profile Body */}
+              <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                {profileModal.loading ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+                    <p className="text-xs">Загрузка профиля...</p>
+                  </div>
+                ) : !profileModal.profile ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    Не удалось загрузить данные профиля.
+                  </div>
+                ) : (
+                  <>
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="p-3 rounded-xl bg-muted/40 border border-border/60 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-orange-500/15 text-orange-500 flex items-center justify-center shrink-0">
+                          <Flame className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">
+                            {profileModal.profile.user?.streakDays || 0} дн.
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Серия продуктивности</p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-muted/40 border border-border/60 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">
+                            {profileModal.profile.user?.totalCompletedTasks || 0}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Выполнено задач</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Birthday display */}
+                    {profileModal.profile.user?.birthday && (
+                      <div className="p-3 rounded-xl bg-card border border-border/70 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <span>🎂</span> День рождения
+                        </span>
+                        <span className="font-semibold text-foreground">
+                          {profileModal.profile.user.birthday}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Task Delegation Permission Status */}
+                    <div className={cn(
+                      'p-3.5 rounded-xl border flex items-start gap-2.5 text-xs',
+                      profileModal.profile.allowTasks
+                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-300'
+                    )}>
+                      {profileModal.profile.allowTasks ? (
+                        <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
+                      ) : (
+                        <Lock className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+                      )}
+                      <div>
+                        <p className="font-bold text-[12px]">
+                          {profileModal.profile.allowTasks ? 'Отправка задач разрешена' : 'Отправка задач закрыта'}
+                        </p>
+                        <p className="text-[11px] opacity-90 mt-0.5">
+                          {profileModal.profile.allowTasks
+                            ? 'Вы можете поручать задачи этому пользователю и смотреть его график.'
+                            : 'Пользователь отключил прием задач от вас. Для открытия доступа он должен включить тумблер в своей вкладке «Команда».'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Shared Tasks List */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-primary" />
+                          <span>Совместные задачи ({profileModal.profile.sharedTasks?.length || 0})</span>
+                        </p>
+                      </div>
+
+                      {(!profileModal.profile.allowTasks) ? (
+                        <div className="p-4 rounded-xl bg-muted/20 border border-border/40 text-center text-xs text-muted-foreground flex flex-col items-center gap-1">
+                          <Lock className="w-5 h-5 text-muted-foreground/40 mb-1" />
+                          <span>Задачи скрыты настройками приватности пользователя</span>
+                        </div>
+                      ) : (!profileModal.profile.sharedTasks || profileModal.profile.sharedTasks.length === 0) ? (
+                        <div className="p-4 rounded-xl bg-muted/20 border border-border/40 text-center text-xs text-muted-foreground">
+                          ✨ Нет совместных задач
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {profileModal.profile.sharedTasks.map((t: any) => (
+                            <div
+                              key={t.id}
+                              className={cn(
+                                'p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs',
+                                t.status === 'done'
+                                  ? 'bg-muted/20 border-border/40 text-muted-foreground line-through'
+                                  : 'bg-card border-border/80 text-foreground'
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="truncate text-[12px] font-medium">{t.title}</span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 text-[10px] text-muted-foreground">
+                                {t.dueDate && <span>{t.dueDate}</span>}
+                                {t.dueTime && <span>{t.dueTime}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Profile Footer */}
+              <div className="p-3.5 border-t border-border bg-muted/20 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => {
+                    const f = profileModal.friend
+                    setProfileModal(null)
+                    handleOpenSchedule(f)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Открыть график</span>
+                </button>
+                <button
+                  onClick={() => setProfileModal(null)}
+                  className="px-3.5 py-1.5 rounded-xl border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Schedule & Availability Modal */}
       <AnimatePresence>

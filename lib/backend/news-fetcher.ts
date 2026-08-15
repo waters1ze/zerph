@@ -12,6 +12,7 @@
 export interface NewsItem {
   title: string
   summary: string
+  url?: string
   source?: string
 }
 
@@ -92,7 +93,7 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     rates.ton = '$1.33'
   }
 
-  // 3. Fetch latest AI & Tech News RSS (Habr AI) with rich descriptions
+  // 3. Fetch latest AI & Tech News RSS (Habr AI) with rich descriptions & URLs
   try {
     const rssRes = await fetch('https://habr.com/ru/rss/hub/artificial_intelligence/all/?fl=ru', {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -105,12 +106,14 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
       for (const block of itemBlocks) {
         const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
         const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+        const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
 
         if (titleMatch) {
           const title = cleanHtmlText(titleMatch[1])
           const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const url = linkMatch ? linkMatch[1].trim() : undefined
           if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
-            newsItems.push({ title, summary, source: 'Хабр AI' })
+            newsItems.push({ title, summary, url, source: 'Хабр AI' })
           }
         }
       }
@@ -132,11 +135,13 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
         for (const block of itemBlocks) {
           const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
           const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+          const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
           if (titleMatch) {
             const title = cleanHtmlText(titleMatch[1])
             const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+            const url = linkMatch ? linkMatch[1].trim() : undefined
             if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
-              newsItems.push({ title, summary, source: 'IT Новости' })
+              newsItems.push({ title, summary, url, source: 'IT Новости' })
             }
           }
         }

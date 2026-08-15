@@ -297,6 +297,45 @@ export function calculateNextRecurrenceDate(currentDueDate: string | null | unde
   return `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
 }
 
+export async function notifyAuthorTaskCompleted(task: any) {
+  try {
+    if (!task || !task.authorChatId || !task.ownerChatId) return
+    if (String(task.authorChatId) === String(task.ownerChatId)) return
+
+    const [doer, author] = await Promise.all([
+      prisma.telegramChat.findUnique({ where: { chatId: BigInt(task.ownerChatId) } }),
+      prisma.telegramChat.findUnique({ where: { chatId: BigInt(task.authorChatId) } }),
+    ])
+
+    if (!author) return
+
+    const doerName = doer
+      ? [doer.firstName, doer.lastName].filter(Boolean).join(' ') || (doer.username ? `@${doer.username}` : 'Твой друг')
+      : 'Твой друг'
+
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+    if (!BOT_TOKEN) return
+
+    const msg = `🎉 *Порученная задача выполнена!*\n\n` +
+      `👤 *${doerName}* выполнил(а) задачу:\n` +
+      `📌 *«${task.title}»*\n` +
+      (task.dueTime ? `⏰ Время: ${task.dueTime}\n` : '') +
+      `\n✨ _Уведомление от Zerf AI_`
+
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: String(task.authorChatId),
+        text: msg,
+        parse_mode: 'Markdown',
+      }),
+    }).catch(() => {})
+  } catch (err) {
+    console.error('Error notifying author of task completion:', err)
+  }
+}
+
 export async function updateTask(id: string, data: Partial<{
   status: string
   priority: string
@@ -333,8 +372,13 @@ export async function updateTask(id: string, data: Partial<{
       data = { ...data, repeat: null } as any
     }
 
-    if (existing && data.status === 'done' && existing.ownerChatId) {
-      recordTaskCompletionStreak(existing.ownerChatId).catch(() => {})
+    if (existing && data.status === 'done' && existing.status !== 'done') {
+      if (existing.ownerChatId) {
+        recordTaskCompletionStreak(existing.ownerChatId).catch(() => {})
+      }
+      if (existing.authorChatId && existing.ownerChatId && String(existing.authorChatId) !== String(existing.ownerChatId)) {
+        notifyAuthorTaskCompleted(existing).catch(() => {})
+      }
     }
   }
   return prisma.task.update({ where: { id }, data })

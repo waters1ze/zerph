@@ -28,7 +28,7 @@ import { ClockView } from '@/components/views/clock-view'
 import { AuthGateModal } from '@/components/auth-gate-modal'
 
 export function AppShell() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -82,7 +82,7 @@ export function AppShell() {
   const isFullHeight = state.currentView === 'notes'
 
   return (
-    <div className="app-shell flex h-screen bg-background overflow-hidden relative">
+    <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]">
       {/* ── Mobile sidebar overlay ── */}
       <AnimatePresence>
         {mobileSidebarOpen && (
@@ -124,13 +124,13 @@ export function AppShell() {
           onMenuOpen={() => setMobileSidebarOpen(true)}
         />
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative">
           {/* View */}
           <main
             className={
               isFullHeight
-                ? 'app-main flex-1 min-w-0 overflow-hidden px-4 sm:px-6 py-4 sm:py-5 flex flex-col'
-                : 'app-main flex-1 min-w-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5'
+                ? 'app-main flex-1 min-w-0 overflow-hidden px-3.5 sm:px-6 py-3.5 sm:py-5 flex flex-col'
+                : 'app-main flex-1 min-w-0 overflow-y-auto px-3.5 sm:px-6 py-3.5 sm:py-5'
             }
           >
             <AnimatePresence mode="wait">
@@ -147,19 +147,30 @@ export function AppShell() {
             </AnimatePresence>
           </main>
 
-          {/* Task detail drawer */}
+          {/* Task detail drawer — responsive overlay on mobile, inline panel on desktop */}
           <AnimatePresence>
             {state.isDetailOpen && state.selectedTaskId && (
-              <motion.div
-                key="detail"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 360, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="shrink-0 h-full overflow-hidden"
-              >
-                <TaskDetail />
-              </motion.div>
+              <>
+                {/* Mobile backdrop for detail */}
+                <motion.div
+                  key="detail-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => dispatch({ type: 'TOGGLE_DETAIL', open: false })}
+                  className="fixed inset-0 bg-black/60 z-40 sm:hidden backdrop-blur-xs"
+                />
+                <motion.div
+                  key="detail"
+                  initial={{ x: '100%', opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: '100%', opacity: 0 }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  className="fixed sm:static right-0 top-0 bottom-0 z-50 sm:z-auto w-full max-w-[420px] sm:w-[360px] h-full shrink-0 overflow-hidden bg-card border-l border-border shadow-2xl sm:shadow-none"
+                >
+                  <TaskDetail />
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
         </div>

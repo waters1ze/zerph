@@ -17,7 +17,7 @@ import {
   getUserUsageAndLimits, incrementUserUsage, deductGroupUsage,
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
-  getUserProductivityStats, completeTask,
+  getUserProductivityStats, completeTask, updateTask,
 } from '@/lib/backend/db'
 import { getUserAuthToken } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
@@ -1352,6 +1352,8 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             }
           }
 
+          const isBothShared = item.isShared || (item.rawText && /(?:нам с|для нас с|общая задача|совместн\w*)/i.test(item.rawText))
+
           const newTask = await prisma.task.create({
             data: {
               title: item.title,
@@ -1361,7 +1363,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
               dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
               dueTime: item.dueTime || null,
               repeat: item.repeat || null,
-              tags: item.tags || [],
+              tags: isBothShared ? ['общая', ...(item.tags || [])] : (item.tags || []),
               ownerChatId: friend.chatId,
               authorChatId: BigInt(chatId),
               assignees: [String(chatId)],
@@ -1369,7 +1371,29 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             } as any
           })
 
-          let notifyMsg = `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
+          if (isBothShared) {
+            // Also create a linked copy for the author so it appears in author's calendar and dashboard
+            await prisma.task.create({
+              data: {
+                title: item.title,
+                description: item.summary || '',
+                priority: item.priority || 'medium',
+                status: 'todo',
+                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                dueTime: item.dueTime || null,
+                repeat: item.repeat || null,
+                tags: ['общая', ...(item.tags || [])],
+                ownerChatId: BigInt(chatId),
+                authorChatId: BigInt(chatId),
+                assignees: [String(friend.chatId)],
+                isShared: true,
+              } as any
+            })
+          }
+
+          let notifyMsg = isBothShared
+            ? `🤝 *${escMd(senderName)}* создал(а) совместную задачу для вас двоих!\n\n`
+            : `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
           notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
           if (item.summary) {
             notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
@@ -1377,12 +1401,12 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           if (item.dueTime) {
             notifyMsg += `⏰ *Время:* ${item.dueTime}${notifyConflictNotice}\n`
           }
-          notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
+          notifyMsg += `\n_Задача добавлена в ваши «Входящие» и календарь на сайте Zerf AI_`
 
           await send(Number(friend.chatId), notifyMsg, {
             reply_markup: {
               inline_keyboard: [
-                [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
+                [{ text: '📱 Открыть в Zerf App', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
                 [
                   { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
                   { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
@@ -1390,7 +1414,9 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
               ]
             }
           })
-          msg += `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
+          msg += isBothShared
+            ? `🤝 Совместная задача *«${escMd(item.title)}»* создана у вас и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
+            : `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
         } else {
           // Note or Goal
           await saveParsedItemToDb(item, friend.chatId, chatId)
@@ -2869,10 +2895,7 @@ export async function POST(req: NextRequest) {
         const taskId = data.replace('rem_done_', '')
         const task = await prisma.task.findUnique({ where: { id: taskId } })
         if (task) {
-          await prisma.task.update({
-            where: { id: taskId },
-            data: { status: 'done', completedAt: new Date(), reminderSent: true }
-          })
+          await updateTask(taskId, { status: 'done', completedAt: new Date(), reminderSent: true })
           await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: '✅ Задача выполнена!' })
           await safeEditOrSend(chatId, cb.message.message_id, `✅ *Задача выполнена:* ~${escMd(task.title)}~ 🎉`)
         } else {
@@ -3196,15 +3219,18 @@ export async function POST(req: NextRequest) {
           const loginUrl = tokenData.token ? `${APP_URL}/?login_token=${tokenData.token}` : APP_URL
 
           await send(chatId,
-            `🔐 *Безопасный вход в Zerf на устройстве*\n\n` +
-            `Нажмите на кнопку ниже, чтобы автоматически войти в свой профиль.\n\n` +
-            `⏱ Ссылка действует *10 минут* и только для одного входа.\n` +
-            `⚠️ *Никому не пересылайте эту ссылку — она предназначена исключительно для вас.*`,
+            `🔐 *Безопасный вход в Zerf*\n\n` +
+            `Для входа в Safari на iPhone или в браузере на компьютере используйте ссылку ниже:\n\n` +
+            `🌐 *Ссылка для входа (нажмите, чтобы скопировать):*\n` +
+            `\`${loginUrl}\`\n\n` +
+            `⏱ Ссылка действует *10 минут* и предназначена для одного входа.\n` +
+            `💡 _Совет для iPhone:_ нажмите на ссылку в рамке выше, чтобы скопировать её, и откройте в браузере *Safari*.\n\n` +
+            `Либо нажмите на кнопку:`,
             {
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: '🔑 Войти в Zerf на устройстве', url: loginUrl }],
-                  [{ text: '📱 Открыть в Telegram', web_app: { url: MINIAPP_URL } }],
+                  [{ text: '🔑 Открыть Zerf в браузере', url: loginUrl }],
+                  [{ text: '📱 Открыть в Telegram Mini App', web_app: { url: MINIAPP_URL } }],
                 ]
               }
             }
