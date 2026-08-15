@@ -749,73 +749,127 @@ export function SettingsView() {
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-2 text-[12px]">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Ваш персональный Chat ID:</span>
-              <span className="font-mono font-bold text-foreground bg-card px-2 py-0.5 rounded border border-border">
-                {currentChatId || 'Не привязан (введите выше)'}
-              </span>
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-2.5 text-[12px]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Ваш персональный Chat ID:</span>
+                <span className="font-mono font-bold text-foreground bg-card px-2 py-0.5 rounded border border-border">
+                  {currentChatId || 'Не привязан (введите выше)'}
+                </span>
+              </div>
+              {currentChatId && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentChatId)
+                    alert('✅ Chat ID скопирован в буфер обмена!')
+                  }}
+                  className="text-xs text-primary font-medium hover:underline flex items-center gap-1 shrink-0"
+                >
+                  Скопировать Chat ID 📋
+                </button>
+              )}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">API Шлюз для Быстрых команд:</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-border/40">
+              <span className="text-muted-foreground truncate">Персональная ссылка для Быстрых команд:</span>
               <button
                 onClick={() => {
                   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
                   const url = `${origin}/api/shortcuts?chatId=${currentChatId || 'ВАШ_ID'}&text=`
                   navigator.clipboard.writeText(url)
-                  alert('✅ Ссылка скопирована в буфер обмена!')
+                  alert('✅ Персональная ссылка скопирована!')
                 }}
-                className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
+                className="text-xs text-primary font-medium hover:underline flex items-center gap-1 shrink-0"
               >
-                Скопировать ссылку 📋
+                Скопировать полную ссылку 📋
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
-            <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2.5">
+            {/* iPhone Siri Card */}
+            <div className="p-4 rounded-xl bg-card border border-border/80 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="font-semibold text-foreground flex items-center gap-1.5">
-                  <span>🍎</span> Для iPhone (Siri & Action Button)
+                <p className="font-semibold text-foreground flex items-center gap-1.5 text-[13px]">
+                  <span>🍏</span> Для iPhone (Siri & Action Button)
                 </p>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
-                  1-клик
+                  Шаблон в 1 клик
                 </span>
               </div>
+
               <a
                 href="https://www.icloud.com/shortcuts/f0143b9430e64942b63ba87b47182861"
                 target="_blank"
                 rel="noreferrer"
-                className="w-full py-2 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
+                className="w-full py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
               >
-                <span>🍏 Установить команду в 1 клик</span>
+                <span>🍏 Установить команду на iPhone</span>
               </a>
-              <div className="pt-1 text-[11px] text-muted-foreground space-y-1">
-                <p><b>Как это работает:</b></p>
-                <ol className="list-decimal list-inside space-y-0.5">
-                  <li>Нажмите <b>«Скопировать ссылку»</b> выше.</li>
-                  <li>Нажмите <b>«Установить команду в 1 клик»</b> ➔ <b>«Добавить»</b>.</li>
-                  <li>Во 2-м блоке вставьте вашу ссылку с <b>[Продиктованный текст]</b> в конце.</li>
-                </ol>
+
+              <div className="space-y-2 text-[11px] text-muted-foreground">
+                <p className="font-medium text-foreground">Как настроить за 2 шага:</p>
+                <div className="space-y-1.5 pl-1">
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-bold text-foreground">1.</span>
+                    <span>Нажмите синюю кнопку выше ➔ в окне нажмите <b>«Добавить команду»</b>.</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-bold text-foreground">2.</span>
+                    <span>Во 2-м блоке *(«Получить содержимое URL»)* вставьте ваш <b>Chat ID</b> сразу после <code>chatId=</code>:</span>
+                  </div>
+                </div>
+
+                {/* Visual Blueprint matching iOS screenshot */}
+                <div className="p-2.5 rounded-xl bg-muted/60 border border-border space-y-1.5 font-mono text-[10px]">
+                  <div className="text-foreground font-bold font-sans text-[11px] flex items-center gap-1 mb-1">
+                    <span>📱</span> Структура команды (как на фото):
+                  </div>
+                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-sky-500 font-sans">
+                    🎤 <b>1. Продиктовать текст</b> (Язык: Русский)
+                  </div>
+                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-emerald-500 break-all">
+                    🌐 <b>2. Получить содержимое URL:</b><br />
+                    <code>https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || 'ВАШ_ID'}&text=</code><span className="text-sky-500 font-bold">[Продиктованный текст]</span>
+                  </div>
+                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-rose-500 font-sans">
+                    🔊 <b>3. Произнести текст:</b> [Содержимое URL]
+                  </div>
+                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-amber-500 font-sans">
+                    ⏰ <b>4. Выбрать из меню:</b> <i>Включить напоминание?</i> ➔ Да (Поставить будильник) / Нет
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-muted-foreground pt-1">
+                  💡 <i>Привяжите к кнопке Action Button на iPhone 15/16 Pro или к «Двойному постукиванию по крышке» в Настройки ➔ Универсальный доступ ➔ Касание.</i>
+                </p>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-2">
-              <p className="font-semibold text-foreground flex items-center gap-1.5">
-                <span>🤖</span> Для Android (Виджет в 1 клик)
-              </p>
-              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>Установите <b>HTTP Shortcuts</b> из Google Play</li>
-                <li>Нажмите <b>+</b> ➔ Создайте <b>Обычный ярлык</b></li>
-                <li>В <i>«Переменные»</i> добавьте <b>voice_input</b> с типом <i>Голосовой ввод</i></li>
-                <li>В поле <b>URL</b> укажите ссылку со своей переменной в конце:
-                  <div className="text-[11px] font-mono bg-muted/60 p-1.5 rounded my-1 break-all">
-                    https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || '12345'}&text={'{voice_input}'}
-                  </div>
-                </li>
-                <li>В <i>«Ответ»</i> включите <b>Озвучивать текст (TTS)</b></li>
-                <li>Вынесите виджет на рабочий стол — нажал, надиктовал, задача создана!</li>
-              </ol>
+            {/* Android Card */}
+            <div className="p-4 rounded-xl bg-card border border-border/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-foreground flex items-center gap-1.5 text-[13px]">
+                  <span>🤖</span> Для Android (Виджет в 1 клик)
+                </p>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium border border-emerald-500/20">
+                  Виджет
+                </span>
+              </div>
+
+              <div className="space-y-2 text-[11px] text-muted-foreground">
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Установите бесплатное приложение <b>HTTP Shortcuts</b> из Google Play.</li>
+                  <li>Нажмите <b>+</b> ➔ Создайте <b>Обычный ярлык</b>.</li>
+                  <li>В разделе <i>«Переменные»</i> создайте <b>voice_input</b> с типом <i>Голосовой ввод</i>.</li>
+                  <li>В поле <b>URL</b> укажите ссылку:
+                    <div className="text-[10px] font-mono bg-muted/80 p-2 rounded-lg my-1 break-all border border-border">
+                      https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || 'ВАШ_ID'}&text={'{voice_input}'}
+                    </div>
+                  </li>
+                  <li>В разделе <i>«Ответ»</i> включите <b>Озвучивать текст (TTS)</b>.</li>
+                  <li>Вынесите созданный виджет на рабочий стол — нажали, надиктовали, задача создана!</li>
+                </ol>
+              </div>
             </div>
           </div>
         </div>
