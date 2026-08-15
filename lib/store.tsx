@@ -19,7 +19,7 @@ const SEED_HABITS: Habit[] = []
 const SEED_CHAT: ChatMessage[] = [
   {
     id: 'c1', role: 'assistant',
-    content: 'Hello! I\'m your Zerf AI assistant. I can help you manage tasks, summarize notes, create plans, and answer questions about your projects. What would you like to do today?',
+    content: 'Привет! Я твой ассистент Zerf Note. Помогу расставить задачи, записать заметки, спланировать день и ответить на любые вопросы. Чем займёмся сегодня?',
     createdAt: today + 'T08:00:00Z',
   },
 ]

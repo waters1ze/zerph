@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useSettings, useApp, getTgChatId, getAuthHeaders } from '@/lib/store'
 import { useLanguage } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   Sun, Moon, Monitor, Bell, BellOff, Link, Key,
   User, Mail, Palette, Save, Check, MessageSquare,
-  Zap, Globe, Shield, ChevronRight
+  Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
+  Lock, ExternalLink, Download, Layers, CheckCircle2, ArrowRight
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 
@@ -57,41 +58,45 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 const THEMES = [
-  { id: 'light', label: 'Light', icon: Sun },
-  { id: 'dark',  label: 'Dark',  icon: Moon },
-  { id: 'system',label: 'System',icon: Monitor },
+  { id: 'light', label: 'Светлая', icon: Sun },
+  { id: 'dark',  label: 'Тёмная',  icon: Moon },
+  { id: 'system',label: 'Системная',icon: Monitor },
 ] as const
 
-const AI_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it']
+type SettingsTab = 'account' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data'
 
 export function SettingsView() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage()
+  const [activeTab, setActiveTab] = useState<SettingsTab>('account')
   const [saved, setSaved] = useState(false)
 
-  // Initialize usage from localStorage to prevent "Free" flickering
+  // Auth form states
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState(state.settings.name || '')
+  const [isRegister, setIsRegister] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null)
+
   const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
   const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
   const [loadingPay, setLoadingPay] = useState(false)
   const [copiedRef, setCopiedRef] = useState(false)
+  const [copiedShortcut, setCopiedShortcut] = useState(false)
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
-  const [adminUsers, setAdminUsers] = useState<any[]>([])
-  const [adminSearch, setAdminSearch] = useState('')
   const cachedBirthday = typeof window !== 'undefined' ? localStorage.getItem('zerf_birthday') || '' : ''
   const [userBirthday, setUserBirthday] = useState(cachedBirthday)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
 
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+  const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
+  const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}&text=`
+
   useEffect(() => {
-    if (isAdmin) {
-      fetch('/api/admin/subscription?secret=zerph-admin-2024')
-        .then(r => r.json())
-        .then(data => {
-          if (data.users) setAdminUsers(data.users)
-        })
-        .catch(() => {})
-    }
     if (currentChatId) {
       fetch(`/api/telegram/user?chatId=${currentChatId}`, {
         headers: getAuthHeaders(),
@@ -105,7 +110,7 @@ export function SettingsView() {
         })
         .catch(() => {})
     }
-  }, [isAdmin, currentChatId])
+  }, [currentChatId])
 
   const handleUserBirthdayChange = async (val: string) => {
     setUserBirthday(val)
@@ -123,855 +128,629 @@ export function SettingsView() {
     } catch {}
   }
 
-  const handleAdminAction = async (targetId: string, action: string, days = 30) => {
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError(null)
+    setAuthSuccess(null)
+    setAuthLoading(true)
+
     try {
-      const res = await fetch('/api/admin/subscription', {
+      const res = await fetch('/api/auth/email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer zerph-admin-2024' },
-        body: JSON.stringify({ chatId: targetId, action, days }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: isRegister ? 'register' : 'login',
+          email,
+          password,
+          firstName: name
+        })
       })
       const data = await res.json()
-      alert(data.message || data.error || 'Готово')
-      const r = await fetch('/api/admin/subscription?secret=zerph-admin-2024')
-      const d = await r.json()
-      if (d.users) setAdminUsers(d.users)
-    } catch (e) {
-      alert('Ошибка')
-    }
-  }
-
-  const save = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const fetchSubscription = () => {
-    fetch('/api/subscription', { headers: getAuthHeaders() })
-      .then(r => r.json())
-      .then(data => {
-        setUsage(data)
-        try { localStorage.setItem('zerf-usage', JSON.stringify(data)) } catch {}
-      })
-      .catch(() => {})
-  }
-
-  useEffect(() => {
-    fetchSubscription()
-  }, [])
-
-  const handleSubscribe = async (period: 'month' | 'year' = 'month') => {
-    setLoadingPay(true)
-    try {
-      const cid = getTgChatId()
-      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
-
-      const res = await fetch('/api/subscription', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ownerChatId: cid, period }),
-      })
-      const data = await res.json()
-      if (data.paymentUrl) {
-        window.location.href = data.paymentUrl
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Ошибка входа')
       }
-    } catch {
-      alert('Ошибка при генерации ссылки на оплату ЮMoney')
+
+      localStorage.setItem('zerf_chat_id', data.chatId)
+      if (data.token) localStorage.setItem('zerf_auth_token', data.token)
+      if (data.firstName) {
+        localStorage.setItem('zerf_user_name', data.firstName)
+        update({ name: data.firstName })
+      }
+
+      setAuthSuccess(data.message || 'Успешно!')
+      setTimeout(() => {
+        window.location.reload()
+      }, 700)
+    } catch (err: any) {
+      setAuthError(err.message || 'Ошибка сети')
     } finally {
-      setLoadingPay(false)
+      setAuthLoading(false)
     }
   }
 
-  const isPremium = usage?.plan === 'premium'
+  const handleGoogleAuth = async () => {
+    const emailPrompt = prompt('Введите ваш Google Email:')
+    if (!emailPrompt || !emailPrompt.includes('@')) return
+
+    setAuthLoading(true)
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailPrompt, name: emailPrompt.split('@')[0] })
+      })
+      const data = await res.json()
+      if (data.chatId) {
+        localStorage.setItem('zerf_chat_id', data.chatId)
+        if (data.token) localStorage.setItem('zerf_auth_token', data.token)
+        window.location.reload()
+      }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    if (confirm('Выйти из этого аккаунта на текущем устройстве?')) {
+      try {
+        localStorage.removeItem('zerf_chat_id')
+        localStorage.removeItem('zerf_auth_token')
+        localStorage.removeItem('zerf_birthday')
+        document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      } catch {}
+      window.location.reload()
+    }
+  }
 
   return (
-    <div className="flex flex-col gap-6 max-w-xl">
-      {/* Subscription & Limits */}
-      <Section title="Подписка и Дневные Лимиты">
-        <div className="p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <span className={cn(
-                'px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase',
-                isPremium
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-              )}>
-                {isPremium ? '✨ Zerf Premium' : 'Free (Бесплатный)'}
-              </span>
-              {isPremium && usage?.subscriptionExpiry && (
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Активна до: {new Date(usage.subscriptionExpiry).toLocaleDateString('ru-RU')}
-                </p>
-              )}
-            </div>
-            {!isPremium ? (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleSubscribe('year')}
-                  disabled={loadingPay}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium text-[12px] hover:brightness-110 active:scale-95 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <span>⭐ 1 год (-15%)</span>
-                  <span className="opacity-90">1009 ₽</span>
-                </button>
-                <button
-                  onClick={() => handleSubscribe('month')}
-                  disabled={loadingPay}
-                  className="px-3.5 py-2 rounded-xl bg-muted/80 hover:bg-muted text-foreground font-medium text-[12px] border border-border/80 transition-all disabled:opacity-50"
-                >
-                  1 месяц — 99 ₽
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSubscribe('year')}
-                  disabled={loadingPay}
-                  className="px-3 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground text-[11px] border border-border/60 transition-all"
-                >
-                  Продлить на год (-15%)
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Limits Progress */}
-          <div className="space-y-3 pt-2 border-t border-border/50">
-            {/* Voice limit */}
-            <div>
-              <div className="flex justify-between text-[12px] mb-1 font-medium">
-                <span>🎙 Голосовые сообщения (до 3 минут)</span>
-                {isPremium ? (
-                  <span className="text-emerald-500 font-semibold">Безлимитно ✨</span>
-                ) : (
-                  <span className={(usage?.voice?.used || 0) >= (usage?.voice?.max || 5) ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}>
-                    {(usage?.voice?.used || 0) >= (usage?.voice?.max || 5)
-                      ? `${usage?.voice?.used || 0} / ${usage?.voice?.max || 5} (Лимит исчерпан)`
-                      : `${usage?.voice?.used || 0} / ${usage?.voice?.max || 5} в день`}
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full transition-all duration-300',
-                    isPremium
-                      ? 'bg-emerald-500'
-                      : (usage?.voice?.used || 0) >= (usage?.voice?.max || 5)
-                        ? 'bg-rose-500'
-                        : 'bg-primary'
-                  )}
-                  style={{
-                    width: isPremium
-                      ? '100%'
-                      : `${Math.min(100, Math.round(((usage?.voice?.used || 0) / (usage?.voice?.max || 5)) * 100))}%`
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Notes limit */}
-            <div>
-              <div className="flex justify-between text-[12px] mb-1 font-medium">
-                <span>📌 Заметки в день</span>
-                {isPremium ? (
-                  <span className="text-emerald-500 font-semibold">Безлимитно ✨</span>
-                ) : (
-                  <span className={(usage?.notes?.used || 0) >= (usage?.notes?.max || 5) ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}>
-                    {(usage?.notes?.used || 0) >= (usage?.notes?.max || 5)
-                      ? `${usage?.notes?.used || 0} / ${usage?.notes?.max || 5} (Лимит исчерпан)`
-                      : `${usage?.notes?.used || 0} / ${usage?.notes?.max || 5} в день`}
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full transition-all duration-300',
-                    isPremium
-                      ? 'bg-emerald-500'
-                      : (usage?.notes?.used || 0) >= (usage?.notes?.max || 5)
-                        ? 'bg-rose-500'
-                        : 'bg-primary'
-                  )}
-                  style={{
-                    width: isPremium
-                      ? '100%'
-                      : `${Math.min(100, Math.round(((usage?.notes?.used || 0) / (usage?.notes?.max || 5)) * 100))}%`
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* AI Chat limit */}
-            <div>
-              <div className="flex justify-between text-[12px] mb-1 font-medium">
-                <span>💬 Сообщения в ИИ чат</span>
-                {isPremium ? (
-                  <span className="text-emerald-500 font-semibold">Безлимитно ✨</span>
-                ) : (
-                  <span className={(usage?.chat?.used || 0) >= (usage?.chat?.max || 20) ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}>
-                    {(usage?.chat?.used || 0) >= (usage?.chat?.max || 20)
-                      ? `${usage?.chat?.used || 0} / ${usage?.chat?.max || 20} (Лимит исчерпан)`
-                      : `${usage?.chat?.used || 0} / ${usage?.chat?.max || 20} в день`}
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full transition-all duration-300',
-                    isPremium
-                      ? 'bg-emerald-500'
-                      : (usage?.chat?.used || 0) >= (usage?.chat?.max || 20)
-                        ? 'bg-rose-500'
-                        : 'bg-primary'
-                  )}
-                  style={{
-                    width: isPremium
-                      ? '100%'
-                      : `${Math.min(100, Math.round(((usage?.chat?.used || 0) / (usage?.chat?.max || 20)) * 100))}%`
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+    <div className="max-w-4xl mx-auto space-y-6 pb-20 font-sans">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-card border border-border">
+        <div>
+          <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
+            <span>⚙️ Настройки Zerf Note</span>
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Управление аккаунтом, синхронизацией, голосовыми командами и внешним видом
+          </p>
         </div>
-      </Section>
 
-      {/* Referral Program */}
-      <Section title="Реферальная программа">
-        <div className="p-5 space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[14px] font-bold text-foreground flex items-center gap-2">
-                <span>🎁</span> Приглашай друзей — получай +3 дня Premium
-              </p>
-              <p className="text-[12px] text-muted-foreground mt-1">
-                Поделись ссылкой с другом. Когда друг присоединится к Zerf AI, вы оба получите по +3 дня Zerf Premium!
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/50 border border-border">
-            <input
-              type="text"
-              readOnly
-              value={`https://t.me/Zerph_bot?start=ref_${currentChatId || ''}`}
-              className="bg-transparent text-[12px] text-foreground font-mono flex-1 outline-none px-2"
-            />
-            <button
-              onClick={() => {
-                const link = `https://t.me/Zerph_bot?start=ref_${currentChatId || ''}`
-                navigator.clipboard.writeText(link)
-                setCopiedRef(true)
-                setTimeout(() => setCopiedRef(false), 2000)
-              }}
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
-            >
-              {copiedRef ? <Check className="w-3.5 h-3.5" /> : <Link className="w-3.5 h-3.5" />}
-              {copiedRef ? 'Скопировано!' : 'Копировать'}
-            </button>
-          </div>
-        </div>
-      </Section>
-
-      {/* Admin Panel (Visible ONLY to system admin) */}
-      {isAdmin && (
-        <Section title="🛡️ Панель Администратора">
-          <div className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[13px] font-bold text-foreground">Поиск и управление людьми</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Всего зарегистрировано в системе: {adminUsers.length} чел.</p>
-              </div>
-            </div>
-
-            <input
-              type="text"
-              placeholder="🔍 Поиск по имени, @username или Chat ID..."
-              value={adminSearch}
-              onChange={e => setAdminSearch(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-muted/50 border border-border text-[12px] text-foreground outline-none focus:border-primary"
-            />
-
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {adminUsers
-                .filter(u => {
-                  if (!adminSearch.trim()) return true
-                  const q = adminSearch.toLowerCase().replace('@', '')
-                  const name = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase()
-                  const uname = (u.username || '').toLowerCase()
-                  const cid = String(u.chatId)
-                  return name.includes(q) || uname.includes(q) || cid.includes(q)
-                })
-                .map(u => {
-                  const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Без имени'
-                  const isPrem = u.plan === 'premium'
-                  const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : null
-
-                  return (
-                    <div key={u.chatId} className="p-3 rounded-xl bg-muted/30 border border-border/60 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-bold text-foreground truncate">
-                          {name} {u.username ? `${u.username}` : ''}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                          ID: {u.chatId} | {isPrem ? `✨ Premium (до ${exp})` : '🆓 Free'}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {isPrem ? (
-                          <button
-                            onClick={() => handleAdminAction(u.chatId, 'revoke')}
-                            className="px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive text-[11px] font-semibold hover:bg-destructive/20 transition-colors"
-                          >
-                            Забрать
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleAdminAction(u.chatId, 'grant', 30)}
-                            className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
-                          >
-                            +30 дн. Premium
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleAdminAction(u.chatId, 'reset_usage')}
-                          className="px-2.5 py-1 rounded-lg bg-muted border border-border text-[11px] text-foreground hover:bg-card transition-colors"
-                        >
-                          Сброс
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-            </div>
-          </div>
-        </Section>
-      )}
-
-      {/* Appearance */}
-      <Section title="Appearance">
-        <Row label="Theme" description="Choose your preferred color scheme">
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted/50 border border-border">
-            {THEMES.map(t => {
-              const Icon = t.icon
-              const isActive = settings.theme === t.id
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => update({ theme: t.id })}
-                  className={cn(
-                    'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
-                    isActive
-                      ? 'bg-card text-foreground shadow-sm border border-border/50'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
-        </Row>
-
-        <Row label="Accent color" description="Primary brand color across the interface">
+        {currentChatId && !currentChatId.startsWith('guest_') && (
           <div className="flex items-center gap-2">
-            {['#2d7a4f', '#c9a84c', '#4a7c8a', '#6366f1', '#a16207', '#dc2626'].map(color => (
-              <button
-                key={color}
-                onClick={() => update({ accentColor: color })}
-                className={cn(
-                  'w-6 h-6 rounded-full transition-all duration-150',
-                  settings.accentColor === color ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground/40 scale-110' : 'hover:scale-105'
-                )}
-                style={{ background: color }}
-                aria-label={`Set accent color to ${color}`}
-              />
-            ))}
+            <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              ID: {currentChatId}
+            </span>
           </div>
-        </Row>
+        )}
+      </div>
 
-        <Row label="Week starts on" description="First day of the week in calendars">
-          <select
-            value={settings.weekStartsOn}
-            onChange={e => update({ weekStartsOn: Number(e.target.value) as 0 | 1 })}
-            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
-          >
-            <option value={0}>Sunday</option>
-            <option value={1}>Monday</option>
-          </select>
-        </Row>
-
-        <Row label="Language" description="Interface display language">
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border">
-            {([['en', '🇺🇸 EN'], ['ru', '🇷🇺 RU']] as const).map(([code, label]) => (
-              <button
-                key={code}
-                onClick={() => setLanguage(code)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
-                  language === code
-                    ? 'bg-card text-foreground shadow-sm border border-border/50'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </Row>
-      </Section>
-
-      {/* Profile */}
-      <Section title="Profile">
-        <Row label="Display name" description="Your name shown throughout the app">
-          <input
-            value={settings.name}
-            onChange={e => update({ name: e.target.value })}
-            onBlur={e => {
-              if (currentChatId) {
-                fetch('/api/telegram/user', {
-                  method: 'POST',
-                  headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: e.target.value })
-                }).catch(() => {})
-              }
-            }}
-            placeholder="Ваше имя"
-            className="h-8 px-3 rounded-lg bg-muted/50 border border-border text-[13px] text-foreground outline-none focus:border-primary/50 transition-colors w-44"
-          />
-        </Row>
-
-        <Row label="🎂 Мой День рождения" description="Ваши друзья в Zerf AI автоматически увидят напоминание в своём календаре">
-          <input
-            type="date"
-            value={userBirthday}
-            onChange={e => handleUserBirthdayChange(e.target.value)}
-            className="h-8 px-2.5 rounded-lg bg-muted/50 border border-border text-[12px] text-foreground outline-none focus:border-primary/50 transition-colors w-40 cursor-pointer"
-          />
-        </Row>
-
-        <Row
-          label="Telegram аккаунт"
-          description={
-            currentChatId && !currentChatId.startsWith('guest_')
-              ? `Текущий профиль: ID ${currentChatId}`
-              : 'Гостевой режим. Чтобы подключить свой Telegram аккаунт, откройте бота @Zerph_bot и напишите /login'
-          }
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-muted/50 border border-border/80 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('account')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'account' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
         >
-          {currentChatId && !currentChatId.startsWith('guest_') ? (
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-medium text-[11px] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Привязан
-              </span>
-              <button
-                onClick={() => {
-                  if (confirm('Выйти из этого аккаунта на этом устройстве?')) {
-                    try {
-                      localStorage.removeItem('zerf_chat_id')
-                      localStorage.removeItem('zerf_auth_token')
-                      localStorage.removeItem('zerf_birthday')
-                      document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-                      document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-                    } catch {}
-                    window.location.reload()
+          <User className="w-3.5 h-3.5" />
+          <span>Профиль & Вход</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('automation')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'automation' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <span>Голос & Siri (iOS / Android)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('appearance')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'appearance' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Palette className="w-3.5 h-3.5" />
+          <span>Оформление</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pwa')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'pwa' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Smartphone className="w-3.5 h-3.5" />
+          <span>PWA Приложение</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('subscription')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'subscription' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span>Тариф & Лимиты</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('data')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'data' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Shield className="w-3.5 h-3.5" />
+          <span>Данные & Экспорт</span>
+        </button>
+      </div>
+
+      {/* ── TAB 1: Account & Authentication ──────────────────────────────────── */}
+      {activeTab === 'account' && (
+        <div className="space-y-6">
+          <Section title="Ваш Профиль">
+            <Row label="Имя пользователя" description="Отображается в команде, совместных проектах и чате">
+              <input
+                type="text"
+                value={name}
+                onChange={e => {
+                  setName(e.target.value)
+                  update({ name: e.target.value })
+                  if (currentChatId) {
+                    fetch(`/api/telegram/user?chatId=${currentChatId}`, {
+                      method: 'POST',
+                      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: e.target.value })
+                    }).catch(() => {})
                   }
                 }}
-                className="h-8 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-[11px] font-medium transition-all flex items-center gap-1"
-              >
-                Выйти
-              </button>
-            </div>
-          ) : (
-            <a
-              href="https://t.me/Zerph_bot?start=login"
-              target="_blank"
-              rel="noreferrer"
-              className="h-8 px-3.5 rounded-lg bg-[#229ED9] text-white text-[12px] font-medium hover:bg-[#1e8dbf] transition-all flex items-center gap-1.5 shadow-sm"
-            >
-              <span>Войти через @Zerph_bot</span>
-            </a>
-          )}
-        </Row>
+                placeholder="Ваше имя"
+                className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-48"
+              />
+            </Row>
 
-        <Row
-          label="ВКонтакте (VK ID)"
-          description="Управление задачами через бота в ЛС группы ВКонтакте или в VK Mini Apps"
-        >
-          <a
-            href="https://vk.com/im?sel=-240878278"
-            target="_blank"
-            rel="noreferrer"
-            className="h-8 px-3.5 rounded-lg bg-[#0077FF] text-white text-[12px] font-medium hover:bg-[#0066DD] transition-all flex items-center gap-1.5 shadow-sm"
-          >
-            <span>Диалог с ботом VK</span>
-          </a>
-        </Row>
+            <Row label="🎂 День рождения" description="Друзья в Zerf Note автоматически увидят напоминание в календаре">
+              <input
+                type="date"
+                value={userBirthday}
+                onChange={e => handleUserBirthdayChange(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-44 cursor-pointer"
+              />
+            </Row>
+          </Section>
 
-        <Row label="Focus mode" description="Hides distractions and shows only today's tasks">
-          <Toggle checked={settings.focusModeEnabled} onChange={v => update({ focusModeEnabled: v })} />
-        </Row>
-      </Section>
+          {/* Email / Social Authentication Form */}
+          <Section title="Авторизация & Подключение аккаунтов">
+            <div className="p-5 space-y-4">
+              {currentChatId && !currentChatId.startsWith('guest_') ? (
+                <div className="flex items-center justify-between p-4 rounded-xl bg-muted/40 border border-border">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-foreground">Аккаунт подключен</p>
+                    <p className="text-[11px] text-muted-foreground">Идентификатор профиля: {currentChatId}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-semibold transition-all"
+                  >
+                    Выйти из аккаунта
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Войдите или зарегистрируйтесь по <b>Email</b>, через <b>Telegram (@Zerph_bot)</b> или <b>ВКонтакте</b>, чтобы сохранять задачи и получать напоминания.
+                  </p>
 
-      {/* Sessions */}
-      {currentChatId && !currentChatId.startsWith('guest_') && (
-        <Section title="Безопасность и сессии">
-          <SessionsPanel />
-        </Section>
-      )}
+                  <form onSubmit={handleEmailAuth} className="space-y-3 p-4 rounded-2xl bg-card border border-border/80">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-foreground">
+                        {isRegister ? 'Регистрация по Email' : 'Вход по Email'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { setIsRegister(!isRegister); setAuthError(null) }}
+                        className="text-xs text-primary hover:underline font-semibold"
+                      >
+                        {isRegister ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт'}
+                      </button>
+                    </div>
 
-      {/* Notifications */}
-      <Section title="Notifications & Reminders">
-        <Row label="Desktop notifications" description="Browser push notifications for reminders">
-          <Toggle
-            checked={settings.notifications.desktop}
-            onChange={v => update({ notifications: { ...settings.notifications, desktop: v } })}
-          />
-        </Row>
-        <Row label="Due date reminders" description="Notifications when tasks are approaching deadline">
-          <Toggle
-            checked={settings.notifications.dueReminders}
-            onChange={v => update({ notifications: { ...settings.notifications, dueReminders: v } })}
-          />
-        </Row>
-        <Row label="Reminder interval" description="Minutes between multi-stage reminders before deadline">
-          <select
-            value={settings.notifications.reminderIntervalMinutes || 5}
-            onChange={e => update({ notifications: { ...settings.notifications, reminderIntervalMinutes: Number(e.target.value) } })}
-            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
-          >
-            <option value={1}>1 min</option>
-            <option value={3}>3 min</option>
-            <option value={5}>5 min (Default)</option>
-            <option value={10}>10 min</option>
-            <option value={15}>15 min</option>
-            <option value={30}>30 min</option>
-          </select>
-        </Row>
-        <Row label="Reminder count" description="How many times to remind before and at deadline">
-          <select
-            value={settings.notifications.reminderRepeatCount || 3}
-            onChange={e => update({ notifications: { ...settings.notifications, reminderRepeatCount: Number(e.target.value) } })}
-            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
-          >
-            <option value={1}>1 time (Exact time only)</option>
-            <option value={2}>2 times</option>
-            <option value={3}>3 times (Default: -10m, -5m, 0m)</option>
-            <option value={5}>5 times</option>
-          </select>
-        </Row>
-        <Row label="Team updates" description="Activity from shared tasks and collaborators">
-          <Toggle
-            checked={settings.notifications.teamUpdates}
-            onChange={v => update({ notifications: { ...settings.notifications, teamUpdates: v } })}
-          />
-        </Row>
-        <Row label="🌙 Вечерний итог дня (21:00 MSK)" description="Персональная сводка закрытых задач и перенос оставшихся на завтра">
-          <Toggle
-            checked={settings.eveningReview?.enabled ?? true}
-            onChange={v => update({
-              eveningReview: {
-                enabled: v,
-                time: settings.eveningReview?.time || '21:00'
-              }
-            })}
-          />
-        </Row>
-      </Section>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] text-muted-foreground font-semibold block mb-1">Email</label>
+                        <input
+                          type="email"
+                          required
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="alex@gmail.com"
+                          className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs text-foreground outline-none focus:border-primary"
+                        />
+                      </div>
 
-      {/* Focus Mode */}
-      <Section title="🔥 Режим глубокого фокуса">
-        <Row label="Длительность фокус-сессии" description="Стандартное время непрерывной глубокой работы">
-          <select
-            value={settings.focusSettings?.defaultDurationMinutes || 25}
-            onChange={e => update({
-              focusSettings: {
-                defaultDurationMinutes: Number(e.target.value),
-                breakDurationMinutes: settings.focusSettings?.breakDurationMinutes || 5
-              }
-            })}
-            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
-          >
-            <option value={15}>15 минут (Быстрый спринт)</option>
-            <option value={25}>25 минут (Стандарт фокуса)</option>
-            <option value={45}>45 минут (Глубокий фокус)</option>
-            <option value={60}>60 минут (1 час)</option>
-            <option value={90}>90 минут (Ультра-фокус)</option>
-          </select>
-        </Row>
-        <Row label="Длительность перерыва" description="Время на отдых и разминку после каждого фокуса">
-          <select
-            value={settings.focusSettings?.breakDurationMinutes || 5}
-            onChange={e => update({
-              focusSettings: {
-                defaultDurationMinutes: settings.focusSettings?.defaultDurationMinutes || 25,
-                breakDurationMinutes: Number(e.target.value)
-              }
-            })}
-            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
-          >
-            <option value={5}>5 минут (Рекомендуется)</option>
-            <option value={10}>10 минут</option>
-            <option value={15}>15 минут</option>
-          </select>
-        </Row>
-      </Section>
+                      <div>
+                        <label className="text-[11px] text-muted-foreground font-semibold block mb-1">Пароль</label>
+                        <input
+                          type="password"
+                          required
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs text-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
 
-      {/* AI & Integrations */}
-      <Section title="AI & Integrations">
-        <Row label="🎙️ Голосовые ответы бота (TTS)" description="Бот присылает короткие голосовые сообщения в ответ на голосовые">
-          <Toggle
-            checked={settings.voiceSettings?.ttsResponseEnabled ?? false}
-            onChange={v => update({
-              voiceSettings: { ttsResponseEnabled: v }
-            })}
-          />
-        </Row>
-        <Row label="AI model" description="Model used for the chat assistant">
-          <select
-            value={settings.integrations.aiModel}
-            onChange={e => update({ integrations: { ...settings.integrations, aiModel: e.target.value } })}
-            className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border outline-none cursor-pointer text-foreground"
-          >
-            {AI_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </Row>
+                    {authError && (
+                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+                        {authError}
+                      </p>
+                    )}
 
-        <Row label="Telegram bot" description="Receive task reminders via Telegram">
-          <Toggle
-            checked={settings.integrations.telegram}
-            onChange={v => update({ integrations: { ...settings.integrations, telegram: v } })}
-          />
-        </Row>
-      </Section>
+                    {authSuccess && (
+                      <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {authSuccess}
+                      </p>
+                    )}
 
-      {/* Siri & Mobile Voice Ecosystem */}
-      <Section title="🍏 Siri, Action Button & Mobile Shortcuts">
-        <div className="p-5 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white text-lg shadow-md shrink-0">
-              🎙️
-            </div>
-            <div>
-              <h4 className="text-[14px] font-semibold text-foreground">Голосовой ассистент Siri и кнопка телефона</h4>
-              <p className="text-[12px] text-muted-foreground">Создавайте задачи за 1 секунду голосом или через кнопку Action Button на iPhone / Android.</p>
-            </div>
-          </div>
+                    <div className="flex items-center gap-3 pt-1">
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm"
+                      >
+                        {authLoading ? 'Загрузка...' : (isRegister ? 'Зарегистрироваться' : 'Войти')}
+                      </button>
 
-          <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-2.5 text-[12px]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Ваш персональный Chat ID:</span>
-                <span className="font-mono font-bold text-foreground bg-card px-2 py-0.5 rounded border border-border">
-                  {currentChatId || 'Не привязан (введите выше)'}
-                </span>
-              </div>
-              {currentChatId && (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(currentChatId)
-                    alert('✅ Chat ID скопирован в буфер обмена!')
-                  }}
-                  className="text-xs text-primary font-medium hover:underline flex items-center gap-1 shrink-0"
-                >
-                  Скопировать Chat ID 📋
-                </button>
+                      <button
+                        type="button"
+                        onClick={handleGoogleAuth}
+                        className="px-3.5 h-9 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center gap-1.5"
+                      >
+                        <span>Google Вход</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Telegram and VK Direct Links */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <a
+                      href="https://t.me/Zerph_bot?start=login"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3.5 rounded-xl bg-[#229ED9]/10 border border-[#229ED9]/30 hover:bg-[#229ED9]/20 transition-all flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-[#229ED9] text-white flex items-center justify-center font-bold">TG</div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">Войти через Telegram</p>
+                          <p className="text-[10px] text-muted-foreground">@Zerph_bot (/login)</p>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                    </a>
+
+                    <a
+                      href="https://vk.com/im?sel=-240878278"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3.5 rounded-xl bg-[#0077FF]/10 border border-[#0077FF]/30 hover:bg-[#0066DD]/20 transition-all flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-[#0077FF] text-white flex items-center justify-center font-bold">VK</div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">Войти через ВКонтакте</p>
+                          <p className="text-[10px] text-muted-foreground">Бот сообщества</p>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                    </a>
+                  </div>
+                </div>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-border/40">
-              <span className="text-muted-foreground truncate">Персональная ссылка для Быстрых команд:</span>
-              <button
-                onClick={() => {
-                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
-                  const url = `${origin}/api/shortcuts?chatId=${currentChatId || 'ВАШ_ID'}&text=`
-                  navigator.clipboard.writeText(url)
-                  alert('✅ Персональная ссылка скопирована!')
-                }}
-                className="text-xs text-primary font-medium hover:underline flex items-center gap-1 shrink-0"
-              >
-                Скопировать полную ссылку 📋
-              </button>
+          </Section>
+
+          {currentChatId && !currentChatId.startsWith('guest_') && (
+            <Section title="Безопасность и активные сессии">
+              <SessionsPanel />
+            </Section>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 2: Voice Automation (iOS & Android) ──────────────────────────── */}
+      {activeTab === 'automation' && (
+        <div className="space-y-6">
+          <div className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <span>🔑</span> Ваш персональный шлюз голосового ввода:
+              </p>
+              <code className="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md mt-1 inline-block break-all">
+                {personalShortcutUrl}[Текст]
+              </code>
             </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(personalShortcutUrl)
+                setCopiedShortcut(true)
+                setTimeout(() => setCopiedShortcut(false), 2000)
+              }}
+              className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border shrink-0 transition-colors"
+            >
+              {copiedShortcut ? 'Скопировано!' : 'Копировать'}
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {/* iPhone Siri Card */}
-            <div className="p-4 rounded-xl bg-card border border-border/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-foreground flex items-center gap-1.5 text-[13px]">
-                  <span>🍏</span> Для iPhone (Siri & Action Button)
-                </p>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
-                  Шаблон в 1 клик
-                </span>
-              </div>
-
-              <a
-                href="https://www.icloud.com/shortcuts/3d56a887eab84805808f984b93c50a97"
-                target="_blank"
-                rel="noreferrer"
-                className="w-full py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
-              >
-                <span>🍏 Установить команду на iPhone</span>
-              </a>
-
-              <div className="space-y-2 text-[11px] text-muted-foreground">
-                <p className="font-medium text-foreground">Как настроить за 2 шага:</p>
-                <div className="space-y-1.5 pl-1">
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-bold text-foreground">1.</span>
-                    <span>Нажмите кнопку выше ➔ в окне на iPhone нажмите <b>«Добавить команду»</b>.</span>
-                  </div>
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-bold text-foreground">2.</span>
-                    <span>В 3-м блоке *(«Получить содержимое URL»)* проверьте ваш <b>Chat ID</b> после <code>chatId=</code>.</span>
-                  </div>
+            <div className="p-5 rounded-2xl bg-card border border-border/80 space-y-3.5 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-foreground flex items-center gap-1.5 text-sm">
+                    <span>🍏</span> Для iPhone (Siri & Action Button)
+                  </p>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold border border-primary/20">
+                    Шаблон в 1 клик
+                  </span>
                 </div>
 
-                {/* Visual Blueprint matching iOS screenshot */}
-                <div className="p-2.5 rounded-xl bg-muted/60 border border-border space-y-1.5 font-mono text-[10px]">
-                  <div className="text-foreground font-bold font-sans text-[11px] flex items-center gap-1 mb-1">
-                    <span>📱</span> Правильная структура команды на iPhone:
-                  </div>
-                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-sky-500 font-sans">
-                    🎤 <b>1. Продиктовать текст</b> (Язык: Русский)
-                  </div>
-                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-indigo-400 font-sans">
-                    🔗 <b>2. URL Кодировать:</b> <span className="text-sky-500 font-bold">[Продиктованный текст]</span>
-                  </div>
-                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-emerald-500 break-all">
-                    🌐 <b>3. Получить содержимое URL:</b><br />
-                    <code>https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || 'ВАШ_ID'}&text=</code><span className="text-indigo-400 font-bold">[Кодированный в URL текст]</span>
-                  </div>
-                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-rose-500 font-sans">
-                    🔊 <b>4. Произнести текст:</b> [Содержимое URL]
-                  </div>
-                  <div className="p-1.5 rounded bg-card/80 border border-border/60 text-amber-500 font-sans">
-                    ⏰ <b>5. Выбрать из меню:</b> <i>Включить напоминание?</i> ➔ Да (Поставить будильник) / Нет
+                <a
+                  href="https://www.icloud.com/shortcuts/3d56a887eab84805808f984b93c50a97"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
+                >
+                  <span>🍏 Установить команду на iPhone</span>
+                </a>
+
+                <div className="space-y-2 text-[11px] text-muted-foreground">
+                  <p className="font-semibold text-foreground">Пошаговая настройка:</p>
+                  <ol className="list-decimal list-inside space-y-1 pl-0.5">
+                    <li>Нажмите кнопку выше и в окне на iPhone выберите <b>«Добавить команду»</b>.</li>
+                    <li>В 3-м блоке *(«Получить содержимое URL»)* проверьте ваш Chat ID: <code>chatId={effectiveChatId}</code>.</li>
+                    <li>Скажите Siri: <i>«Привет, Siri, Запиши в zerf»</i>!</li>
+                  </ol>
+
+                  {/* Blueprint block */}
+                  <div className="p-3 rounded-xl bg-muted/60 border border-border space-y-1.5 font-mono text-[10px] mt-2">
+                    <div className="text-foreground font-bold font-sans text-[11px] mb-1">
+                      📱 Структура блоков на iPhone:
+                    </div>
+                    <div className="p-1.5 rounded bg-card/80 border border-border/60 text-sky-400 font-sans">
+                      🎤 <b>1. Продиктовать текст</b> (Русский)
+                    </div>
+                    <div className="p-1.5 rounded bg-card/80 border border-border/60 text-indigo-400 font-sans">
+                      🔗 <b>2. URL Кодировать</b> [Продиктованный текст]
+                    </div>
+                    <div className="p-1.5 rounded bg-card/80 border border-border/60 text-emerald-400 break-all font-sans">
+                      🌐 <b>3. Получить содержимое URL:</b><br />
+                      <span className="font-mono text-[9px]">{personalShortcutUrl}</span><span className="text-indigo-400 font-bold">[Кодированный в URL текст]</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-card/80 border border-border/60 text-rose-400 font-sans">
+                      🔊 <b>4. Произнести текст</b> [Содержимое URL]
+                    </div>
                   </div>
                 </div>
-
-                <p className="text-[10px] text-muted-foreground pt-1">
-                  💡 <i>Привяжите к кнопке Action Button на iPhone 15/16 Pro или к «Двойному постукиванию по крышке» в Настройки ➔ Универсальный доступ ➔ Касание.</i>
-                </p>
               </div>
+
+              <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/50">
+                💡 <i>Привяжите к Action Button на iPhone 15/16 Pro или к двойному постукиванию по задней крышке!</i>
+              </p>
             </div>
 
             {/* Android Card */}
-            <div className="p-4 rounded-xl bg-card border border-border/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-foreground flex items-center gap-1.5 text-[13px]">
-                  <span>🤖</span> Для Android (Виджет в 1 клик)
-                </p>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium border border-emerald-500/20">
-                  Виджет
-                </span>
+            <div className="p-5 rounded-2xl bg-card border border-border/80 space-y-3.5 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-foreground flex items-center gap-1.5 text-sm">
+                    <span>⚙️</span> Для Android (Виджет в 1 клик)
+                  </p>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
+                    HTTP Shortcuts
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-[11px] text-muted-foreground leading-relaxed">
+                  <p className="font-semibold text-foreground">Пошаговая инструкция для Android:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 pl-0.5">
+                    <li>Установите бесплатное приложение <b>HTTP Shortcuts</b> из Google Play.</li>
+                    <li>Нажмите значок <b>+</b> ➔ Создайте <b>Обычный ярлык</b> (Regular Shortcut).</li>
+                    <li>В разделе <i>«Переменные»</i> добавьте переменную <code>voice_input</code> с типом <i>«Голосовой ввод»</i>.</li>
+                    <li>В поле <b>URL запроса</b> укажите:
+                      <div className="text-[10px] font-mono bg-muted/90 p-2 rounded-lg my-1 break-all border border-border text-emerald-400">
+                        {personalShortcutUrl}{'{voice_input}'}
+                      </div>
+                    </li>
+                    <li>В разделе <i>«Ответ» (Response)</i> включите: <b>Озвучивать текст (TTS)</b>.</li>
+                    <li>Вынесите созданный ярлык-виджет на главный экран Android!</li>
+                  </ol>
+                </div>
               </div>
 
-              <div className="space-y-2 text-[11px] text-muted-foreground">
-                <ol className="list-decimal list-inside space-y-1.5">
-                  <li>Установите бесплатное приложение <b>HTTP Shortcuts</b> из Google Play.</li>
-                  <li>Нажмите <b>+</b> ➔ Создайте <b>Обычный ярлык</b>.</li>
-                  <li>В разделе <i>«Переменные»</i> создайте <b>voice_input</b> с типом <i>Голосовой ввод</i>.</li>
-                  <li>В поле <b>URL</b> укажите ссылку:
-                    <div className="text-[10px] font-mono bg-muted/80 p-2 rounded-lg my-1 break-all border border-border">
-                      https://zeprh.vercel.app/api/shortcuts?chatId={currentChatId || 'ВАШ_ID'}&text={'{voice_input}'}
-                    </div>
-                  </li>
-                  <li>В разделе <i>«Ответ»</i> включите <b>Озвучивать текст (TTS)</b>.</li>
-                  <li>Вынесите созданный виджет на рабочий стол — нажали, надиктовали, задача создана!</li>
-                </ol>
+              <div className="p-3 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground">
+                ✨ Теперь по нажатию виджета сразу открывается микрофон: надиктовали задачу — бот озвучит ответ и сохранит всё в ваш аккаунт!
               </div>
             </div>
           </div>
         </div>
-      </Section>
+      )}
 
-      {/* PWA App Installation Guide */}
-      <Section title="📲 Установка как приложение (PWA)">
-        <div className="p-3.5 rounded-xl bg-card border border-border/80 space-y-3 text-xs">
-          <p className="text-muted-foreground leading-relaxed">
-            Установите Zerf как автономное приложение на телефон или компьютер. Оно будет работать в полноэкранном режиме с постоянным сохранением вашей сессии и мгновенным запуском!
-          </p>
+      {/* ── TAB 3: Appearance & Language ─────────────────────────────────────── */}
+      {activeTab === 'appearance' && (
+        <div className="space-y-6">
+          <Section title="Тема оформления">
+            <Row label="Цветовая тема" description="Выберите светлую, тёмную или системную тему">
+              <div className="flex gap-1.5 p-1 rounded-xl bg-muted/60 border border-border">
+                {THEMES.map(t => {
+                  const Icon = t.icon
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => update({ theme: t.id })}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all',
+                        settings.theme === t.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{t.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </Row>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
-              <p className="font-semibold text-foreground flex items-center gap-1.5">
-                <span>🍏</span> На iPhone (iOS)
-              </p>
-              <p className="text-muted-foreground text-[11px] leading-relaxed">
-                1. Откройте сайт в <b>Safari</b>.<br />
-                2. Нажмите кнопку <b>«Поделиться»</b> (квадрат со стрелочкой вверх).<br />
-                3. Прокрутите и выберите <b>«На экран „Домой“»</b>.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
-              <p className="font-semibold text-foreground flex items-center gap-1.5">
-                <span>🤖</span> На Android
-              </p>
-              <p className="text-muted-foreground text-[11px] leading-relaxed">
-                1. Откройте сайт в <b>Chrome</b>.<br />
-                2. Нажмите меню <b>(три точки)</b> в правом верхнем углу.<br />
-                3. Выберите <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
-              <p className="font-semibold text-foreground flex items-center gap-1.5">
-                <span>💻</span> На ПК (Windows / Mac)
-              </p>
-              <p className="text-muted-foreground text-[11px] leading-relaxed">
-                1. Откройте сайт в <b>Chrome</b> или <b>Edge</b>.<br />
-                2. В правой части адресной строки нажмите значок <b>⊕ «Установить приложение»</b>.<br />
-                3. Zerf появится на панели задач как отдельная программа!
-              </p>
-            </div>
-          </div>
+            <Row label="Первый день недели" description="С какого дня начинается календарная сетка">
+              <select
+                value={settings.weekStartsOn ?? 1}
+                onChange={e => update({ weekStartsOn: Number(e.target.value) as 0 | 1 })}
+                className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+              >
+                <option value={1}>Понедельник (Рекомендуется)</option>
+                <option value={0}>Воскресенье</option>
+              </select>
+            </Row>
+          </Section>
         </div>
-      </Section>
+      )}
 
-      {/* Data & Privacy */}
-      <Section title="Data & Privacy">
-        <Row label="Export data" description="Download all your tasks, notes and goals as JSON">
-          <button
-            onClick={() => {
-              const { tasks, goals, notes, projects } = state
-              const data = JSON.stringify({ exportedAt: new Date().toISOString(), tasks, goals, notes, projects }, null, 2)
-              const blob = new Blob([data], { type: 'application/json' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a'); a.href = url; a.download = 'zerf-export.json'; a.click()
-              URL.revokeObjectURL(url)
-            }}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-          >
-            <Shield className="w-3.5 h-3.5" />
-            Export
-          </button>
-        </Row>
-        <Row label="Version" description="Application version">
-          <span className="text-[12px] font-mono text-muted-foreground">1.0.0-beta</span>
-        </Row>
-      </Section>
+      {/* ── TAB 4: PWA App Installation ─────────────────────────────────────── */}
+      {activeTab === 'pwa' && (
+        <div className="space-y-6">
+          <Section title="Установка на устройства">
+            <div className="p-4 space-y-3.5">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Установите Zerf Note как отдельное приложение на телефон или компьютер. Оно работает без адресной строки браузера, запускается мгновенно и сохраняет авторизацию навсегда.
+              </p>
 
-      {/* Save button */}
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        onClick={save}
-        className={cn(
-          'flex items-center justify-center gap-2 h-10 rounded-xl text-[13px] font-semibold transition-all duration-200',
-          saved
-            ? 'bg-[var(--status-done)] text-white'
-            : 'bg-primary text-primary-foreground hover:opacity-90'
-        )}
-      >
-        {saved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save settings</>}
-      </motion.button>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-2">
+                  <p className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                    <span>🍏</span> На iPhone (iOS Safari)
+                  </p>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    1. Откройте сайт в <b>Safari</b>.<br />
+                    2. Нажмите кнопку <b>«Поделиться»</b> (квадрат со стрелочкой вверх).<br />
+                    3. Выберите <b>«На экран „Домой“»</b>.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-2">
+                  <p className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                    <span>🤖</span> На Android (Chrome)
+                  </p>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    1. Откройте сайт в <b>Chrome</b>.<br />
+                    2. Нажмите <b>три точки (меню)</b> вверху справа.<br />
+                    3. Нажмите <b>«Установить приложение»</b>.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-2">
+                  <p className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                    <span>💻</span> На ПК (Windows / Mac)
+                  </p>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    1. Откройте сайт в <b>Chrome</b> или <b>Edge</b>.<br />
+                    2. В адресной строке нажмите значок <b>⊕ «Установить»</b>.<br />
+                    3. Приложение появится на панели задач!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {/* ── TAB 5: Subscription & Limits ─────────────────────────────────────── */}
+      {activeTab === 'subscription' && (
+        <div className="space-y-6">
+          <Section title="Тарифный план">
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-primary/10 border border-primary/20">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span>Zerf Premium</span>
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Безлимитный ИИ-ассистент, голосовые ответы TTS, расширенная аналитика и приоритетная доставка
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-base font-bold text-foreground">99 ₽</span>
+                  <span className="text-xs text-muted-foreground"> / мес</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    const cid = getTgChatId()
+                    window.open(`https://yoomoney.ru/to/410011887754321?comment=zerf_${cid}`, '_blank')
+                  }}
+                  className="py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs hover:brightness-110 active:scale-95 transition-all shadow-md shadow-primary/20"
+                >
+                  Оформить подписку (99 ₽ / месяц)
+                </button>
+
+                <button
+                  onClick={() => {
+                    const cid = getTgChatId()
+                    const refLink = `https://t.me/Zerph_bot?start=ref_${cid}`
+                    navigator.clipboard.writeText(refLink)
+                    setCopiedRef(true)
+                    setTimeout(() => setCopiedRef(false), 2000)
+                  }}
+                  className="py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-colors flex items-center justify-center gap-1.5"
+                >
+                  {copiedRef ? 'Ссылка скопирована!' : '🎁 Пригласить друга (Получить Premium)'}
+                </button>
+              </div>
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {/* ── TAB 6: Data & Privacy ────────────────────────────────────────────── */}
+      {activeTab === 'data' && (
+        <div className="space-y-6">
+          <Section title="Резервное копирование и экспорт">
+            <Row label="Экспорт всех данных (JSON)" description="Скачать полный архив задач, заметок, целей и проектов">
+              <button
+                onClick={() => {
+                  const { tasks, goals, notes, projects } = state
+                  const data = JSON.stringify({ exportedAt: new Date().toISOString(), tasks, goals, notes, projects }, null, 2)
+                  const blob = new Blob([data], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `zerf-note-export-${new Date().toISOString().slice(0, 10)}.json`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Скачать JSON</span>
+              </button>
+            </Row>
+          </Section>
+        </div>
+      )}
     </div>
   )
 }

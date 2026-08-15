@@ -120,3 +120,25 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
   // No valid cryptographic or DB session found -> unauthenticated
   return null
 }
+
+export async function createServerSession(
+  chatId: bigint | number | string,
+  deviceName = 'Web Browser',
+  deviceType = 'web',
+  ipAddress?: string,
+  userAgent?: string
+): Promise<string> {
+  const sessionToken = crypto.randomBytes(32).toString('hex')
+  await prisma.userSession.create({
+    data: {
+      chatId: BigInt(chatId),
+      sessionToken,
+      deviceName,
+      deviceType,
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+    },
+  })
+  return sessionToken
+}
+

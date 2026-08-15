@@ -19,27 +19,26 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
   title: {
-    default: 'Zerf AI — Умный Планировщик Задач, Тайм-Менеджер и ИИ Ассистент',
-    template: '%s | Zerf AI'
+    default: 'Zerf Note — Умный Планировщик Задач, Заметки и ИИ-Ассистент',
+    template: '%s | Zerf Note'
   },
-  description: 'Экосистема персональной продуктивности: голосовые задачи, умные таймеры с обратным отсчетом, трекер целей, помодоро и синхронизация с Apple/Google Календарем.',
+  description: 'Экосистема персональной продуктивности: структурированные заметки, голосовые задачи, умные напоминания, трекер целей и синхронизация в реальном времени.',
   keywords: [
+    'Zerf Note',
     'планировщик задач',
+    'умные заметки',
     'таск менеджер',
     'умный таймер',
     'обратный отсчет до задачи',
-    'помодоро таймер онлайн',
     'ИИ ассистент',
     'голосовые напоминания',
     'тайм менеджмент',
-    'AI productivity',
-    'Zerf AI',
-    'Zerph',
-    'синхронизация с календарем'
+    'Zerf',
+    'Zerph'
   ],
-  authors: [{ name: 'Zerf AI Team' }],
-  creator: 'Zerf AI',
-  publisher: 'Zerf AI',
+  authors: [{ name: 'Zerf Note Team' }],
+  creator: 'Zerf Note',
+  publisher: 'Zerf Note',
   robots: {
     index: true,
     follow: true,
