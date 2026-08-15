@@ -498,8 +498,8 @@ export async function runChannelAndAiCron() {
     const day = getPart('weekday').toLowerCase() // 'fri', 'mon', etc.
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // 1. Friday 08:00-20:59 MSK: Weekly Poll on Improvements and New Features
-    if (day === 'fri' && hour >= 8 && hour < 21) {
+    // 1. Friday 09:00-20:59 MSK: Weekly Poll on Improvements and New Features
+    if (day === 'fri' && hour >= 9 && hour < 21) {
       if (inMemoryChannelPollDate !== todayStr) {
         const lastPoll = await getConfig('last_channel_poll_date')
         if (lastPoll !== todayStr) {
