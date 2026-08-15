@@ -13,8 +13,11 @@ export async function GET(req: NextRequest) {
     const todayStr = now.toISOString().slice(0, 10)
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0))
 
-    // Fetch all users
+    // Fetch all users (excluding system IDs like 777000 Telegram Notifications and 1087968824 Anonymous Bot)
     const users = await prisma.telegramChat.findMany({
+      where: {
+        chatId: { notIn: [BigInt(777000), BigInt(1087968824)] }
+      },
       orderBy: { lastActiveAt: 'desc' },
     })
 

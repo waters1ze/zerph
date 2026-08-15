@@ -664,6 +664,11 @@ export async function registerChatId(
 ): Promise<{ isNewUser: boolean }> {
   try {
     const cid = BigInt(chatId)
+    // Ignore Telegram system notification service (777000) and Anonymous Group Bot (1087968824)
+    if (cid === BigInt(777000) || cid === BigInt(1087968824)) {
+      return { isNewUser: false }
+    }
+
     const existing = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
 
     if (existing) {
