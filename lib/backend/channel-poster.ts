@@ -13,7 +13,7 @@ async function callTg(method: string, payload: Record<string, any>) {
   try {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(payload),
     })
     return await res.json()
