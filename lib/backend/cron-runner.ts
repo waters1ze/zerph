@@ -257,6 +257,15 @@ export async function runMorningGreeting() {
     const chats = await prisma.telegramChat.findMany()
     if (!chats.length) return
 
+    const seenChatIds = new Set<string>()
+    const uniqueChats = chats.filter(c => {
+      const idStr = String(c.chatId)
+      if (idStr.startsWith('-') || Number(c.chatId) < 0) return false
+      if (seenChatIds.has(idStr)) return false
+      seenChatIds.add(idStr)
+      return true
+    })
+
     const allTasks = await getAllTasks()
     const allNotes = await getAllNotes()
 
@@ -274,7 +283,7 @@ export async function runMorningGreeting() {
       .filter(t => t.status !== 'done' && t.dueDate === todayStr)
       .map(t => t.title)
 
-    for (const chat of chats) {
+    for (const chat of uniqueChats) {
       try {
         const chatId = Number(chat.chatId)
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
@@ -348,9 +357,18 @@ export async function runEveningReview() {
     const chats = await prisma.telegramChat.findMany()
     if (!chats.length) return
 
+    const seenChatIds = new Set<string>()
+    const uniqueChats = chats.filter(c => {
+      const idStr = String(c.chatId)
+      if (idStr.startsWith('-') || Number(c.chatId) < 0) return false
+      if (seenChatIds.has(idStr)) return false
+      seenChatIds.add(idStr)
+      return true
+    })
+
     const allTasks = await getAllTasks()
 
-    for (const chat of chats) {
+    for (const chat of uniqueChats) {
       try {
         const chatId = Number(chat.chatId)
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
