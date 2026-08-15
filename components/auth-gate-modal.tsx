@@ -89,17 +89,28 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                 href="https://t.me/Zerph_bot?start=login"
                 target="_blank"
                 rel="noreferrer"
-                className="h-12 rounded-2xl bg-[#229ED9] hover:bg-[#1e8dbf] text-white font-medium text-[14px] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#229ED9]/25 hover:shadow-xl"
+                className="h-11 rounded-2xl bg-[#229ED9] hover:bg-[#1e8dbf] text-white font-medium text-[13px] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#229ED9]/20"
               >
                 <Send className="w-4 h-4" />
-                <span>Войти через @Zerph_bot</span>
-                <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                <span>Войти через Telegram (@Zerph_bot)</span>
+                <ExternalLink className="w-3 h-3 opacity-80" />
+              </a>
+
+              <a
+                href="https://vk.com/im?sel=-240878278"
+                target="_blank"
+                rel="noreferrer"
+                className="h-11 rounded-2xl bg-[#0077FF] hover:bg-[#0066DD] text-white font-medium text-[13px] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#0077FF]/20"
+              >
+                <span className="font-bold text-sm">VK</span>
+                <span>Войти через ВКонтакте (бот сообщества)</span>
+                <ExternalLink className="w-3 h-3 opacity-80" />
               </a>
 
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="h-10 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground text-[13px] font-medium transition-colors"
+                  className="h-9 rounded-xl bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground text-[12px] font-medium transition-colors"
                 >
                   Закрыть
                 </button>

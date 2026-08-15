@@ -599,6 +599,20 @@ export function SettingsView() {
           )}
         </Row>
 
+        <Row
+          label="ВКонтакте (VK ID)"
+          description="Управление задачами через бота в ЛС группы ВКонтакте или в VK Mini Apps"
+        >
+          <a
+            href="https://vk.com/im?sel=-240878278"
+            target="_blank"
+            rel="noreferrer"
+            className="h-8 px-3.5 rounded-lg bg-[#0077FF] text-white text-[12px] font-medium hover:bg-[#0066DD] transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <span>Диалог с ботом VK</span>
+          </a>
+        </Row>
+
         <Row label="Focus mode" description="Hides distractions and shows only today's tasks">
           <Toggle checked={settings.focusModeEnabled} onChange={v => update({ focusModeEnabled: v })} />
         </Row>

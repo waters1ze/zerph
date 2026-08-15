@@ -9,6 +9,7 @@ import {
   getVkSecretKey,
   sendVkMessage,
   transcribeVkVoice,
+  callVkApi,
 } from '@/lib/backend/vk'
 import { parseIntentWithGroq } from '@/lib/backend/groq'
 import {
@@ -76,9 +77,78 @@ export async function POST(req: NextRequest) {
         return new NextResponse('ok', { status: 200 })
       }
 
-      // Auto-register VK User in database
+      // Auto-register VK User in database & fetch name if possible
       const vkChatId = BigInt(fromId)
-      await registerChatId(vkChatId, 'VK Пользователь')
+      let vkFirstName = 'VK Пользователь'
+      let vkLastName: string | undefined = undefined
+
+      try {
+        const vkUserRes = await callVkApi('users.get', { user_ids: fromId, fields: 'first_name,last_name' })
+        const vkUser = vkUserRes?.response?.[0]
+        if (vkUser?.first_name) {
+          vkFirstName = vkUser.first_name
+          vkLastName = vkUser.last_name || undefined
+        }
+      } catch {}
+
+      await registerChatId(vkChatId, vkFirstName, undefined, vkLastName)
+
+      // Command handling
+      const lower = effectiveText.toLowerCase()
+      if (lower === 'начать' || lower === '/start' || lower === 'привет' || lower === '/login' || lower === 'старт' || lower === 'start') {
+        const { generateOnetimeToken } = await import('@/lib/backend/auth')
+        const token = generateOnetimeToken()
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
+
+        await prisma.loginToken.create({
+          data: {
+            chatId: vkChatId,
+            token,
+            expiresAt,
+          },
+        })
+
+        const loginUrl = `${APP_URL}/?login_token=${token}`
+        const miniAppUrl = `${APP_URL}/vk?vk_user_id=${fromId}`
+
+        const keyboard = {
+          inline: true,
+          buttons: [
+            [
+              {
+                action: {
+                  type: 'open_link',
+                  link: miniAppUrl,
+                  label: '📱 Открыть в VK (Mini App)',
+                },
+              },
+            ],
+            [
+              {
+                action: {
+                  type: 'open_link',
+                  link: loginUrl,
+                  label: '🔑 Войти на сайте (в браузере)',
+                },
+              },
+            ],
+          ],
+        }
+
+        const welcome =
+          `👋 Привет, ${vkFirstName}! Я — Zerf AI, твой умный ассистент продуктивности во ВКонтакте.\n\n` +
+          `✨ Твой профиль успешно подключен к системе!\n\n` +
+          `🌐 Ссылка для входа в браузере (Safari / Chrome):\n` +
+          `${loginUrl}\n` +
+          `⏱ Действует 10 минут для безопасного входа на сайте.\n\n` +
+          `📱 Либо открой полноэкранный Zerf App прямо в VK (кнопка ниже).\n\n` +
+          `💡 Ты можешь прямо сюда отправлять голосовые 🎙 или текст, например:\n` +
+          `• «Позвонить врачу завтра в 14:00»\n` +
+          `• «Купить подарок маме в пятницу»`
+
+        await sendVkMessage(fromId, welcome, keyboard)
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+      }
 
       const miniAppUrl = `${APP_URL}/vk?vk_user_id=${fromId}`
       const keyboard = {
@@ -94,20 +164,6 @@ export async function POST(req: NextRequest) {
             },
           ],
         ],
-      }
-
-      // Command handling
-      const lower = effectiveText.toLowerCase()
-      if (lower === 'начать' || lower === '/start' || lower === 'привет') {
-        const welcome =
-          `👋 Привет! Я — Zerf AI, твой умный ассистент продуктивности во ВКонтакте.\n\n` +
-          `✨ Что я умею:\n` +
-          `• Отправь текст или голосовое: «Позвонить врачу завтра в 14:00», и я поставлю задачу с напоминанием.\n` +
-          `• Напиши заметку или цель — я структурирую и сохраню в твоем профиле.\n` +
-          `• Нажми кнопку ниже, чтобы открыть полноэкранный интерфейс в VK Mini Apps!`
-
-        await sendVkMessage(fromId, welcome, keyboard)
-        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 
       if (lower === 'задачи' || lower === 'сегодня' || lower === '/today') {
