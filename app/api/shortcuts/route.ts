@@ -6,11 +6,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { parseIntentWithGroq, transcribeAudioWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime } from '@/lib/backend/db'
+import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { GROQ_API_KEY } from '@/lib/config'
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
+
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+
+const NO_CACHE_HEADERS = {
+  'Content-Type': 'text/plain; charset=utf-8',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+}
 
 export function getSiriUserKey(chatId: number | string | bigint): string {
   const secret = process.env.TELEGRAM_BOT_TOKEN || 'zerf-siri-secret-key-2026'
@@ -30,13 +41,21 @@ async function sendTgNotification(chatId: number, text: string) {
 
 function isTodayQuery(text: string): boolean {
   const t = text.toLowerCase().trim()
+  
+  // If it has action verbs, colons, time or task creation markers, it is NEVER a query for reading tasks!
+  const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(t)
+  if (hasActionVerb || t.includes(':') || /\b\d{1,2}:\d{2}\b/.test(t) || t.length > 35) {
+    return false
+  }
+
   return (
-    t.includes('что на сегодня') ||
-    t.includes('задачи на сегодня') ||
-    t.includes('планы на сегодня') ||
-    t.includes('какие задачи') ||
-    t.includes('список на сегодня') ||
-    t.includes('что сегодня') ||
+    t === 'что на сегодня' ||
+    t === 'какие задачи на сегодня' ||
+    t === 'какие планы на сегодня' ||
+    t === 'прочитай задачи' ||
+    t === 'список на сегодня' ||
+    t === 'что у меня на сегодня' ||
+    t === 'какие задачи' ||
     t === 'сегодня' ||
     t === 'today'
   )
@@ -114,7 +133,7 @@ export async function POST(req: NextRequest) {
     if (providedKey) {
       const expectedKey = getSiriUserKey(chatId)
       if (providedKey !== expectedKey) {
-        return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403 })
+        return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403, headers: NO_CACHE_HEADERS })
       }
     }
 
@@ -122,10 +141,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: 'No text or audio provided',
         spokenResponse: 'Текст задачи не был получен. Попробуйте еще раз.'
-      }, { status: 400 })
+      }, { status: 400, headers: NO_CACHE_HEADERS })
     }
 
     await registerChatId(chatId)
+
+    // Limits check
+    const limits = await getUserUsageAndLimits(chatId)
+    if (!limits.canSendVoice) {
+      const limitMsg = '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте!'
+      if (format === 'json') {
+        return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
+      }
+      return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
+    }
 
     // 1. Check if user asked Siri "What's on today?"
     if (isTodayQuery(inputText)) {
@@ -137,7 +166,7 @@ export async function POST(req: NextRequest) {
         spokenResponse,
         result: spokenResponse,
         text: spokenResponse,
-      })
+      }, { headers: NO_CACHE_HEADERS })
     }
 
     // 2. Parse and save task/goal/note
@@ -151,12 +180,15 @@ export async function POST(req: NextRequest) {
         spokenResponse: failText,
         result: failText,
         text: failText,
-      })
+      }, { headers: NO_CACHE_HEADERS })
     }
 
     for (const item of items) {
       await saveParsedItemToDb(item, chatId)
     }
+
+    // Track usage
+    await incrementUserUsage(chatId, 'voice').catch(() => {})
 
     const spokenText = createSpokenSummary(items)
 
@@ -185,15 +217,15 @@ export async function POST(req: NextRequest) {
         result: spokenText,
         text: spokenText,
         items: items.map(i => ({ title: i.title, dueTime: i.dueTime, priority: i.priority }))
-      })
+      }, { headers: NO_CACHE_HEADERS })
     }
 
     return new NextResponse(spokenText, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: NO_CACHE_HEADERS,
     })
   } catch (err: unknown) {
     console.error('Shortcuts API error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: String(err) }, { status: 500, headers: NO_CACHE_HEADERS })
   }
 }
 
@@ -221,40 +253,50 @@ export async function GET(req: NextRequest) {
       name: 'Zerf AI Siri & Shortcuts Gateway',
       usage: 'GET /api/shortcuts?chatId=123456789&text=Напомни+позвонить+маме+в+19:00',
       iosShortcutGuide: 'Apple Shortcuts: Use "Get Contents of URL" with POST or GET to this endpoint.'
-    })
+    }, { headers: NO_CACHE_HEADERS })
   }
 
   if (!text || !text.trim()) {
-    const hintMsg = 'Текст задачи не был получен. Проверьте, что в Командах Apple в самый конец ссылки после text= добавлена переменная [Продиктованный текст].'
+    const hintMsg = 'Текст задачи не был получен. Проверьте, что в Командах Apple в самый конец ссылки после text= добавлена переменная [Кодированный в URL текст].'
     if (format === 'json') {
       return NextResponse.json({
         error: 'No text provided',
         spokenResponse: hintMsg,
         result: hintMsg,
         text: hintMsg,
-      }, { status: 400 })
+      }, { status: 400, headers: NO_CACHE_HEADERS })
     }
     return new NextResponse(hintMsg, {
       status: 200,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: NO_CACHE_HEADERS,
     })
   }
 
   const chatId = Number(rawCid)
   if (isNaN(chatId)) {
-    return NextResponse.json({ error: 'Invalid chatId' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid chatId' }, { status: 400, headers: NO_CACHE_HEADERS })
   }
 
   // Optional Key Verification
   if (providedKey) {
     const expectedKey = getSiriUserKey(chatId)
     if (providedKey !== expectedKey) {
-      return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403 })
+      return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403, headers: NO_CACHE_HEADERS })
     }
   }
 
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
   await registerChatId(chatId)
+
+  // Limits check
+  const limits = await getUserUsageAndLimits(chatId)
+  if (!limits.canSendVoice) {
+    const limitMsg = '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте!'
+    if (format === 'json') {
+      return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
+    }
+    return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
+  }
 
   // Check today query
   if (isTodayQuery(text)) {
@@ -265,9 +307,9 @@ export async function GET(req: NextRequest) {
         spokenResponse,
         result: spokenResponse,
         text: spokenResponse,
-      })
+      }, { headers: NO_CACHE_HEADERS })
     }
-    return new NextResponse(spokenResponse, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+    return new NextResponse(spokenResponse, { headers: NO_CACHE_HEADERS })
   }
 
   const context = await getExistingItemsContext(chatId)
@@ -276,6 +318,9 @@ export async function GET(req: NextRequest) {
   for (const item of items) {
     await saveParsedItemToDb(item, chatId)
   }
+
+  // Track usage
+  await incrementUserUsage(chatId, 'voice').catch(() => {})
 
   const spokenText = createSpokenSummary(items)
 
@@ -302,11 +347,11 @@ export async function GET(req: NextRequest) {
       result: spokenText,
       text: spokenText,
       items
-    })
+    }, { headers: NO_CACHE_HEADERS })
   }
 
   // Default for Apple Shortcuts is plain text — speak directly without dictionary parsing!
   return new NextResponse(spokenText, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: NO_CACHE_HEADERS,
   })
 }
