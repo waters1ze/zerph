@@ -100,6 +100,12 @@ export async function runReminderCheck() {
           task.title?.toLowerCase().includes('отправь') ||
           task.title?.toLowerCase().includes('напиши')
 
+        // For delegated tasks (isShared=true), skip the AI-generated description
+        // because it was written by the sender and may say "Ване необходимо..." in third person
+        const isSharedTask = (task as any).isShared === true
+        const authorChatId = (task as any).authorChatId
+        const hasDifferentAuthor = authorChatId && ownerChatId && String(authorChatId) !== String(ownerChatId)
+
         let stageText = 'СЕЙЧАС'
         if (actualDiffMin > 0) {
           stageText = `за ${actualDiffMin} мин`
@@ -108,6 +114,11 @@ export async function runReminderCheck() {
         const isGroupTask = task.source && task.source.startsWith('group:')
         const groupHeader = isGroupTask ? '👥 *ГРУППОВОЕ НАПОМИНАНИЕ*\n' : ''
 
+        // Build description line: skip for delegated tasks to avoid third-person text
+        const descLine = (!isSharedTask || !hasDifferentAuthor) && task.description
+          ? `\n${task.description}\n\n`
+          : '\n'
+
         const text = isRecipientMsg
           ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
             `📌 *Сообщение:* ${task.title}\n` +
@@ -115,8 +126,8 @@ export async function runReminderCheck() {
             `⏰ *Время:* ${task.dueTime}\n` +
             `✨ _Отправлено из Zerf AI_`
           : `${groupHeader}⏰ *НАПОМИНАНИЕ (${stageText.toUpperCase()})!*\n\n` +
-            `📌 *${task.title}*\n` +
-            (task.description ? `\n${task.description}\n\n` : '\n') +
+            `📌 *${task.title}*` +
+            descLine +
             `📍 *Срок:* ${task.dueTime}\n` +
             `✨ _Отправлено из Zerf AI_`
 
@@ -146,7 +157,10 @@ export async function runReminderCheck() {
           ]
         }
 
-        // Collect all recipients: Group chat + Owner + all assignees
+        // SECURITY FIX: Send reminder ONLY to the task owner (ownerChatId).
+        // assignees[] = chatId of whoever delegated the task — they must NOT receive
+        // reminders about tasks they assigned to someone else.
+        // Group chat gets a separate copy only if task came from a group.
         const recipients = new Set<string | number>()
         if (ownerChatId) recipients.add(ownerChatId)
 
@@ -155,13 +169,8 @@ export async function runReminderCheck() {
           if (gId) recipients.add(gId)
         }
 
-        if (Array.isArray(task.assignees)) {
-          for (const a of task.assignees) {
-            if (a && a !== 'undefined' && a !== 'null') {
-              recipients.add(a)
-            }
-          }
-        }
+        // NEVER add assignees to reminder recipients — assignees are the delegators, not the doers.
+        // Only ownerChatId is the person responsible for this task.
 
         // Broadcast reminder to all targets
         for (const recipient of Array.from(recipients)) {

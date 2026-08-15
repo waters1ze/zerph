@@ -58,21 +58,25 @@ export async function checkAndSendReminders() {
     const dueTasks = await getTasksDueNow()
     if (dueTasks.length === 0) return
 
-    const chatIds = await getAllChatIds()
-    if (chatIds.length === 0) return
-
     for (const task of dueTasks) {
-      const timeStr = task.dueTime || 'сейчас'
-      let msg = `НАПОМИНАНИЕ\n\n` +
-        `Задача: *${task.title}*\n`
-      if (task.description) {
-        msg += `Описание: ${task.description.slice(0, 150)}\n`
+      const ownerChatId = task.ownerChatId ? Number(task.ownerChatId) : null
+      if (!ownerChatId || isNaN(ownerChatId) || ownerChatId === 0) {
+        // No valid owner to notify
+        await markReminderSent(task.id)
+        continue
       }
-      msg += `Время: ${timeStr}`
 
-      for (const chatId of chatIds) {
-        await sendTgNotification(chatId, msg)
+      const timeStr = task.dueTime || 'сейчас'
+      let msg = `⏰ *НАПОМИНАНИЕ*\n\n` +
+        `📌 *${task.title}*\n`
+      if (task.description) {
+        msg += `\n${task.description.slice(0, 200)}\n`
       }
+      msg += `\n📍 *Время:* ${timeStr}\n` +
+        `✨ _Отправлено из Zerf AI_`
+
+      // Send STRICTLY to the owner of the task ONLY
+      await sendTgNotification(ownerChatId, msg)
 
       await markReminderSent(task.id)
     }
