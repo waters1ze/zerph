@@ -15,6 +15,7 @@ import { sendCommentReportToAdminsTelegram } from './comment-analyzer'
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
 
 async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any) {
+  let delivered = false
   try {
     const payload: Record<string, any> = {
       chat_id: String(chatId),
@@ -29,17 +30,33 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
       body: JSON.stringify(payload),
     })
     const data = await res.json()
-    if (!data.ok) {
+    if (data?.ok) {
+      delivered = true
+    } else {
       // Retry without Markdown formatting in case entity parsing failed
       payload.parse_mode = undefined
-      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      const retryRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      const retryData = await retryRes.json()
+      if (retryData?.ok) delivered = true
     }
   } catch (err) {
     console.error('Telegram send error:', err)
+  }
+
+  // If not delivered to Telegram (e.g. VK user), deliver to VK
+  if (!delivered) {
+    try {
+      const { sendVkMessage } = await import('./vk')
+      const cleanText = text
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/_([^_]+)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+      await sendVkMessage(String(chatId), cleanText)
+    } catch {}
   }
 }
 

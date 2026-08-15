@@ -314,7 +314,7 @@ export async function notifyAuthorTaskCompleted(task: any) {
       : 'Твой друг'
 
     const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-    if (!BOT_TOKEN) return
+    const authorCidStr = String(task.authorChatId)
 
     const msg = `🎉 *Порученная задача выполнена!*\n\n` +
       `👤 *${doerName}* выполнил(а) задачу:\n` +
@@ -322,15 +322,35 @@ export async function notifyAuthorTaskCompleted(task: any) {
       (task.dueTime ? `⏰ Время: ${task.dueTime}\n` : '') +
       `\n✨ _Уведомление от Zerf AI_`
 
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: String(task.authorChatId),
-        text: msg,
-        parse_mode: 'Markdown',
-      }),
-    }).catch(() => {})
+    let tgSent = false
+    if (BOT_TOKEN) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: authorCidStr,
+            text: msg,
+            parse_mode: 'Markdown',
+          }),
+        })
+        const data = await res.json()
+        if (data?.ok) tgSent = true
+      } catch {}
+    }
+
+    // If author is on VK or TG didn't deliver, notify in VK
+    if (!tgSent) {
+      try {
+        const { sendVkMessage } = await import('./vk')
+        const vkMsg = `🎉 Порученная задача выполнена!\n\n` +
+          `👤 ${doerName} выполнил(а) задачу:\n` +
+          `📌 «${task.title}»\n` +
+          (task.dueTime ? `⏰ Время: ${task.dueTime}\n` : '') +
+          `\n✨ Уведомление от Zerf AI`
+        await sendVkMessage(authorCidStr, vkMsg)
+      } catch {}
+    }
   } catch (err) {
     console.error('Error notifying author of task completion:', err)
   }
