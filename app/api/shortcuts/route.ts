@@ -197,12 +197,28 @@ export async function GET(req: NextRequest) {
   const format = searchParams.get('format')
   const providedKey = searchParams.get('key')
 
-  if (!rawCid || !text) {
+  if (!rawCid) {
     return NextResponse.json({
       status: 'active',
       name: 'Zerf AI Siri & Shortcuts Gateway',
       usage: 'GET /api/shortcuts?chatId=123456789&text=Напомни+позвонить+маме+в+19:00',
       iosShortcutGuide: 'Apple Shortcuts: Use "Get Contents of URL" with POST or GET to this endpoint.'
+    })
+  }
+
+  if (!text || !text.trim()) {
+    const hintMsg = 'Текст задачи не был получен. Проверьте, что в Командах Apple в самый конец ссылки после text= добавлена переменная [Продиктованный текст].'
+    if (format === 'json') {
+      return NextResponse.json({
+        error: 'No text provided',
+        spokenResponse: hintMsg,
+        result: hintMsg,
+        text: hintMsg,
+      }, { status: 400 })
+    }
+    return new NextResponse(hintMsg, {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
 
