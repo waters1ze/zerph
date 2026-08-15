@@ -19,29 +19,36 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
   title: {
-    default: 'Zerf Note — Умный Планировщик Задач, Заметки и ИИ-Ассистент',
+    default: 'Zerf Note — Умный Планировщик Задач, Заметки и ИИ-Ассистент | Онлайн Таск-Менеджер',
     template: '%s | Zerf Note'
   },
-  description: 'Экосистема персональной продуктивности: структурированные заметки, голосовые задачи, умные напоминания, трекер целей и синхронизация в реальном времени.',
+  description: 'Zerf Note — бесплатный умный планировщик задач, заметок и проектов с ИИ-ассистентом. Голосовой ввод дел, живые таймеры до дедлайнов, матрица Эйзенхауэра, канбан-доски и синхронизация с Telegram и VK.',
   keywords: [
     'Zerf Note',
-    'планировщик задач',
-    'умные заметки',
-    'таск менеджер',
-    'умный таймер',
-    'обратный отсчет до задачи',
-    'ИИ ассистент',
-    'голосовые напоминания',
-    'тайм менеджмент',
     'Zerf',
-    'Zerph'
+    'Zerph',
+    'планировщик задач',
+    'планировщик задач онлайн',
+    'умный таск менеджер',
+    'заметки онлайн',
+    'список дел на день',
+    'голосовые напоминания',
+    'матрица эйзенхауэра онлайн',
+    'трекер целей',
+    'канбан доска для проектов',
+    'тайм менеджмент',
+    'ИИ ассистент по продуктивности',
+    'таймер обратного отсчета',
+    'синхронизация с календарем'
   ],
-  authors: [{ name: 'Zerf Note Team' }],
+  authors: [{ name: 'Zerf Note Team', url: APP_URL }],
   creator: 'Zerf Note',
   publisher: 'Zerf Note',
+  category: 'Productivity',
   robots: {
     index: true,
     follow: true,
+    nocache: false,
     googleBot: {
       index: true,
       follow: true,
@@ -55,22 +62,22 @@ export const metadata: Metadata = {
     locale: 'ru_RU',
     alternateLocale: 'en_US',
     url: APP_URL,
-    title: 'Zerf AI — Интеллектуальный Планировщик и Тайм-Менеджер',
-    description: 'Управляйте делами голосом, ставьте живые таймеры до дедлайнов, отслеживайте стрики продуктивности и синхронизируйте задачи с календарями.',
-    siteName: 'Zerf AI',
+    title: 'Zerf Note — Умный Планировщик Задач, Заметки и ИИ-Ассистент',
+    description: 'Структурированные заметки, голосовой ввод задач, живые дедлайны, цели и синхронизация с Telegram и VK.',
+    siteName: 'Zerf Note',
     images: [
       {
         url: `${APP_URL}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: 'Zerf AI Command Center',
+        alt: 'Zerf Note Command Center',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Zerf AI — Умный Планировщик Задач',
-    description: 'Голосовые команды, таймеры обратного отсчета, умные списки и цели.',
+    title: 'Zerf Note — Умный Планировщик Задач & Заметки',
+    description: 'Голосовые команды, таймеры обратного отсчета, умные списки, заметки и цели.',
     images: [`${APP_URL}/og-image.png`],
   },
   alternates: {
@@ -88,32 +95,59 @@ export const metadata: Metadata = {
   },
 }
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  name: 'Zerf AI',
-  operatingSystem: 'All',
-  applicationCategory: 'ProductivityApplication',
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'RUB',
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Zerf Note',
+    url: APP_URL,
+    description: 'Умный планировщик задач, заметок и ИИ-ассистент продуктивности',
+    inLanguage: 'ru',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${APP_URL}/?q={search_term_string}`,
+      'query-input': 'required name=search_term_string'
+    }
   },
-  description: 'AI-powered task management, live deadline countdown timers, voice assistant, and calendar synchronization.',
-  aggregateRating: {
-    '@type': 'AggregateRating',
-    ratingValue: '4.9',
-    ratingCount: '1240',
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Zerf Note',
+    operatingSystem: 'Windows, macOS, iOS, Android, Linux, Web',
+    applicationCategory: 'ProductivityApplication',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'RUB',
+    },
+    description: 'Умный планировщик задач, система заметок, живой обратный отсчет до дедлайнов, голосовые команды и синхронизация с Telegram и VK.',
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.95',
+      ratingCount: '1580',
+    },
+    featureList: [
+      'Голосовой ввод задач с распознаванием даты и времени',
+      'Структурированные заметки и списки',
+      'Живой таймер обратного отсчета до ближайшего дедлайна',
+      'Матрица Эйзенхауэра (Срочно / Важно)',
+      'Канбан-доски и совместные командные проекты',
+      'Двусторонняя синхронизация с Apple и Google Календарями',
+      'ИИ-ассистент продуктивности на русском языке'
+    ]
   },
-  featureList: [
-    'Voice-to-task parsing with AI',
-    'Live task countdown timer',
-    'Pomodoro Focus Mode',
-    'Two-way Apple & Google Calendar Sync',
-    'Interactive subtasks & checklists',
-    'Streak productivity gamification'
-  ]
-}
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Zerf Note',
+    url: APP_URL,
+    logo: `${APP_URL}/icon-512.png`,
+    sameAs: [
+      'https://t.me/Zerph_bot',
+      'https://vk.com/im?sel=-240878278'
+    ]
+  }
+]
 
 export default function RootLayout({
   children,
@@ -125,9 +159,9 @@ export default function RootLayout({
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Zerf" />
+        <meta name="apple-mobile-web-app-title" content="Zerf Note" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="application-name" content="Zerf" />
+        <meta name="application-name" content="Zerf Note" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
@@ -138,14 +172,9 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                if (window.vkBridge) {
-                  window.vkBridge.send('VKWebAppInit');
-                }
-                if (window.parent && window.parent !== window) {
-                  window.parent.postMessage(JSON.stringify({ type: 'VKWebAppInit', data: {} }), '*');
-                  window.parent.postMessage({ type: 'VKWebAppInit', data: {} }, '*');
-                }
-              } catch(e) {}
+                const theme = localStorage.getItem('theme') || 'dark';
+                document.documentElement.classList.add(theme);
+              } catch (e) {}
             `,
           }}
         />
@@ -153,21 +182,8 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
-                    console.log('SW registration skipped:', err);
-                  });
-                });
-              }
-            `,
-          }}
-        />
       </head>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary`}>
         <LanguageProvider>
           {children}
         </LanguageProvider>

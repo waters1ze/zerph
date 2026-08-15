@@ -5,13 +5,24 @@ export async function requestNotificationPermission(): Promise<boolean> {
     return false
   }
 
+  // Register service worker if supported
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js')
+    } catch {}
+  }
+
   if (Notification.permission === 'granted') {
     return true
   }
 
   if (Notification.permission !== 'denied') {
-    const perm = await Notification.requestPermission()
-    return perm === 'granted'
+    try {
+      const perm = await Notification.requestPermission()
+      return perm === 'granted'
+    } catch {
+      return false
+    }
   }
 
   return false
@@ -27,40 +38,54 @@ export function showWebNotification(
     onClick?: () => void
   }
 ) {
-  if (typeof window === 'undefined' || !('Notification' in window)) return
+  if (typeof window === 'undefined') return
 
-  if (Notification.permission === 'granted') {
-    try {
-      const notif = new Notification(title, {
-        body: options?.body || 'Zerf AI Напоминание',
-        icon: options?.icon || '/icon-192.png',
-        tag: options?.tag || `zerf-${Date.now()}`,
-        requireInteraction: options?.requireInteraction ?? true,
-      })
+  const defaultBody = 'Zerf Note — Умное напоминание'
+  const defaultIcon = options?.icon || '/icon-192.png'
+  const tag = options?.tag || `zerf-${Date.now()}`
 
-      if (options?.onClick) {
-        notif.onclick = () => {
-          window.focus()
-          options.onClick!()
-          notif.close()
-        }
-      }
-    } catch {
-      // Fallback if ServiceWorker notification is required
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.ready.then(reg => {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    let shown = false
+
+    // Try service worker notification first (better background support on mobile & desktop)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then(reg => {
           reg.showNotification(title, {
-            body: options?.body || 'Zerf AI Напоминание',
-            icon: options?.icon || '/icon-192.png',
-            tag: options?.tag,
-          })
-        }).catch(() => {})
-      }
+            body: options?.body || defaultBody,
+            icon: defaultIcon,
+            badge: defaultIcon,
+            tag,
+            renotify: true,
+            requireInteraction: options?.requireInteraction ?? true,
+          } as any)
+          shown = true
+        })
+        .catch(() => {})
+    }
+
+    if (!shown) {
+      try {
+        const notif = new Notification(title, {
+          body: options?.body || defaultBody,
+          icon: defaultIcon,
+          tag,
+          requireInteraction: options?.requireInteraction ?? true,
+        })
+
+        if (options?.onClick) {
+          notif.onclick = () => {
+            window.focus()
+            options.onClick!()
+            notif.close()
+          }
+        }
+      } catch {}
     }
   }
 
-  // Trigger sound alarm & vibration
-  playAlarmChime()
+  // Trigger synthesized audio alarm & vibration
+  playAlarmChime('alarm')
   vibrateDevice([200, 100, 200, 100, 300])
 }
 
@@ -79,6 +104,10 @@ export function playAlarmChime(type: 'chime' | 'alarm' | 'complete' | 'tick' = '
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     if (!AudioCtx) return
     const ctx = new AudioCtx()
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
 
     if (type === 'tick') {
       const osc = ctx.createOscillator()
