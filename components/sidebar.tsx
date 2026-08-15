@@ -49,6 +49,7 @@ export function Sidebar() {
 
   const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
 
   useEffect(() => {
     // Check if user is Admin
@@ -115,6 +116,23 @@ export function Sidebar() {
     }
 
     fetchUserProfile()
+
+    // Fetch pending team invites count
+    const fetchPendingTeamRequests = async () => {
+      try {
+        const headers = getAuthHeaders()
+        if (Object.keys(headers).length > 0) {
+          const res = await fetch('/api/friends', { headers })
+          const data = await res.json()
+          if (Array.isArray(data.pendingRequests)) {
+            setPendingTeamRequestsCount(data.pendingRequests.length)
+          }
+        }
+      } catch {}
+    }
+    fetchPendingTeamRequests()
+    const interval = setInterval(fetchPendingTeamRequests, 20000)
+    return () => clearInterval(interval)
   }, [dispatch])
 
   const navItems: NavItem[] = isAdmin
@@ -183,6 +201,7 @@ export function Sidebar() {
                     item.id === 'today' ? (todayCount || undefined) :
                     item.id === 'inbox' ? (inboxCount || undefined) :
                     item.id === 'notes' ? (notesCount || undefined) :
+                    item.id === 'friends' ? (pendingTeamRequestsCount || undefined) :
                     item.badge
 
                   return (
@@ -203,7 +222,12 @@ export function Sidebar() {
                       )} strokeWidth={isActive ? 2.5 : 2} />
                       <span className="flex-1 text-left">{item.label}</span>
                       {badge !== undefined && badge > 0 && (
-                        <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                        <span className={cn(
+                          'flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-bold shadow-sm',
+                          item.id === 'friends'
+                            ? 'bg-amber-500 text-black animate-pulse'
+                            : 'bg-primary text-primary-foreground'
+                        )}>
                           {badge}
                         </span>
                       )}
