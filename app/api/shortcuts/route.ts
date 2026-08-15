@@ -149,7 +149,9 @@ export async function POST(req: NextRequest) {
     // Limits check
     const limits = await getUserUsageAndLimits(chatId)
     if (!limits.canSendVoice) {
-      const limitMsg = '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте!'
+      const limitMsg = limits.plan === 'premium'
+        ? '❌ Дневной лимит голосового ввода Premium исчерпан (20 минут в день).'
+        : '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте (20 минут в день)!'
       if (format === 'json') {
         return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
       }
@@ -188,7 +190,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Track usage
-    await incrementUserUsage(chatId, 'voice').catch(() => {})
+    const estimatedSec = Math.max(5, Math.round(inputText.length / 15))
+    await incrementUserUsage(chatId, 'voice', estimatedSec).catch(() => {})
 
     const spokenText = createSpokenSummary(items)
 
@@ -291,7 +294,9 @@ export async function GET(req: NextRequest) {
   // Limits check
   const limits = await getUserUsageAndLimits(chatId)
   if (!limits.canSendVoice) {
-    const limitMsg = '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте!'
+    const limitMsg = limits.plan === 'premium'
+      ? '❌ Дневной лимит голосового ввода Premium исчерпан (20 минут в день).'
+      : '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте (20 минут в день)!'
     if (format === 'json') {
       return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
     }
@@ -320,7 +325,8 @@ export async function GET(req: NextRequest) {
   }
 
   // Track usage
-  await incrementUserUsage(chatId, 'voice').catch(() => {})
+  const estimatedSec = Math.max(5, Math.round(text.length / 15))
+  await incrementUserUsage(chatId, 'voice', estimatedSec).catch(() => {})
 
   const spokenText = createSpokenSummary(items)
 
