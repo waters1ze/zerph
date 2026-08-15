@@ -34,29 +34,31 @@ export async function POST(req: NextRequest) {
     }
 
     const passHash = hashPassword(password)
+    const existingCid = req.headers.get('x-chat-id') || req.cookies.get('zerf_chat_id')?.value
 
-    if (action === 'register') {
+    if (action === 'register' || action === 'link') {
       const existing = await prisma.telegramChat.findUnique({
         where: { email: cleanEmail }
       })
 
-      if (existing) {
+      if (existing && String(existing.chatId) !== existingCid) {
         return NextResponse.json({ error: 'Пользователь с таким Email уже существует. Пожалуйста, выполните вход.' }, { status: 400 })
       }
 
-      const newChatId = generateDeterministicChatId(cleanEmail)
+      const targetChatId = (existingCid && !existingCid.startsWith('guest_'))
+        ? BigInt(existingCid)
+        : generateDeterministicChatId(cleanEmail)
 
       const user = await prisma.telegramChat.upsert({
-        where: { chatId: newChatId },
+        where: { chatId: targetChatId },
         update: {
           email: cleanEmail,
           passwordHash: passHash,
-          authProvider: 'email',
-          firstName: firstName || cleanEmail.split('@')[0],
+          firstName: firstName || undefined,
           lastActiveAt: new Date()
         },
         create: {
-          chatId: newChatId,
+          chatId: targetChatId,
           email: cleanEmail,
           passwordHash: passHash,
           authProvider: 'email',

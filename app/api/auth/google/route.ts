@@ -22,17 +22,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Некорректный Email от Google' }, { status: 400 })
     }
 
-    const deterministicId = generateDeterministicChatId(cleanEmail)
+    const existingCid = req.headers.get('x-chat-id') || req.cookies.get('zerf_chat_id')?.value
+    const deterministicId = (existingCid && !existingCid.startsWith('guest_'))
+      ? BigInt(existingCid)
+      : generateDeterministicChatId(cleanEmail)
+
+    const existingUser = await prisma.telegramChat.findUnique({
+      where: { email: cleanEmail }
+    })
+
+    const targetChatId = existingUser ? existingUser.chatId : deterministicId
 
     const user = await prisma.telegramChat.upsert({
-      where: { email: cleanEmail },
+      where: { chatId: targetChatId },
       update: {
-        firstName: name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        firstName: name || undefined,
         authProvider: 'google',
         lastActiveAt: new Date()
       },
       create: {
-        chatId: deterministicId,
+        chatId: targetChatId,
         email: cleanEmail,
         firstName: name || cleanEmail.split('@')[0],
         authProvider: 'google',
