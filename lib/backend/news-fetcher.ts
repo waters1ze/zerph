@@ -28,6 +28,9 @@ export interface NewsDigestContext {
   geoNews?: NewsItem[]
   techNews?: NewsItem[]
   eduNews?: NewsItem[]
+  devNews?: NewsItem[]
+  secNews?: NewsItem[]
+  sciNews?: NewsItem[]
   news: NewsItem[]
   headlines: string[]
   sources: string[]
@@ -229,7 +232,7 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
 
 /**
  * Evening News & Insights Context Fetcher
- * Distinct sources: Programming, CyberSecurity, Product Design & Popular Science.
+ * Distinct sources: Programming, CyberSecurity, Product Architecture & Popular Science.
  */
 export async function fetchEveningNewsContext(): Promise<NewsDigestContext> {
   const now = new Date()
@@ -240,10 +243,12 @@ export async function fetchEveningNewsContext(): Promise<NewsDigestContext> {
     year: 'numeric',
   }).format(now)
 
-  const newsItems: NewsItem[] = []
-  const sources: string[] = ['Хабр Разработка', 'Хабр Безопасность', 'Научпоп']
+  const devNews: NewsItem[] = []
+  const secNews: NewsItem[] = []
+  const sciNews: NewsItem[] = []
+  const sources: string[] = ['Хабр Разработка', 'Хабр Безопасность', 'Научпоп & Мышление']
 
-  // 1. Fetch Programming & Dev articles
+  // 1. Fetch Programming & Dev Architecture articles
   try {
     const devRss = await fetch('https://habr.com/ru/rss/hub/programming/all/?fl=ru', {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
@@ -259,10 +264,11 @@ export async function fetchEveningNewsContext(): Promise<NewsDigestContext> {
 
         if (titleMatch) {
           const title = cleanHtmlText(titleMatch[1])
-          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 600) : ''
           const url = linkMatch ? linkMatch[1].trim() : undefined
           if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
-            newsItems.push({ title, summary, url, source: 'Разработка' })
+            devNews.push({ title, summary, url, source: 'Разработка & Архитектура' })
+            if (devNews.length >= 3) break
           }
         }
       }
@@ -271,39 +277,71 @@ export async function fetchEveningNewsContext(): Promise<NewsDigestContext> {
     console.error('Evening dev RSS error:', e)
   }
 
-  // 2. Fetch CyberSecurity & Popular Science
-  if (newsItems.length < 5) {
-    try {
-      const secRss = await fetch('https://habr.com/ru/rss/hub/infosecurity/all/?fl=ru', {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        next: { revalidate: 1800 }
-      })
-      if (secRss.ok) {
-        const xml = await secRss.text()
-        const itemBlocks = xml.split('<item>').slice(1)
-        for (const block of itemBlocks) {
-          const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
-          const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
-          const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
-          if (titleMatch) {
-            const title = cleanHtmlText(titleMatch[1])
-            const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
-            const url = linkMatch ? linkMatch[1].trim() : undefined
-            if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
-              newsItems.push({ title, summary, url, source: 'Инфобезопасность' })
-            }
+  // 2. Fetch CyberSecurity & Infosec Investigations
+  try {
+    const secRss = await fetch('https://habr.com/ru/rss/hub/infosecurity/all/?fl=ru', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      next: { revalidate: 1800 }
+    })
+    if (secRss.ok) {
+      const xml = await secRss.text()
+      const itemBlocks = xml.split('<item>').slice(1)
+      for (const block of itemBlocks) {
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+        const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
+        if (titleMatch) {
+          const title = cleanHtmlText(titleMatch[1])
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 600) : ''
+          const url = linkMatch ? linkMatch[1].trim() : undefined
+          if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+            secNews.push({ title, summary, url, source: 'Кибербезопасность' })
+            if (secNews.length >= 3) break
           }
         }
       }
-    } catch {}
+    }
+  } catch (e) {
+    console.error('Evening sec RSS error:', e)
   }
 
-  const finalNews = newsItems.slice(0, 5)
+  // 3. Fetch Science, Cognitive Studies & Popular Science
+  try {
+    const sciRes = await fetch('https://habr.com/ru/rss/hub/popular_science/all/?fl=ru', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      next: { revalidate: 1800 }
+    })
+    if (sciRes.ok) {
+      const xml = await sciRes.text()
+      const itemBlocks = xml.split('<item>').slice(1)
+      for (const block of itemBlocks) {
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+        const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
+        if (titleMatch) {
+          const title = cleanHtmlText(titleMatch[1])
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 600) : ''
+          const url = linkMatch ? linkMatch[1].trim() : undefined
+          if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+            sciNews.push({ title, summary, url, source: 'Наука & Мышление' })
+            if (sciNews.length >= 3) break
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Evening sci RSS error:', e)
+  }
+
+  const combinedNews = [...devNews, ...secNews, ...sciNews]
   return {
     date: dateStr,
     rates: {},
-    news: finalNews,
-    headlines: finalNews.map(n => n.title),
+    devNews,
+    secNews,
+    sciNews,
+    news: combinedNews,
+    headlines: combinedNews.map(n => n.title),
     sources
   }
 }
