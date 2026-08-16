@@ -225,6 +225,27 @@ function getCookie(name: string): string | null {
   return null
 }
 
+
+/**
+ * Drop stale credentials after a 401 (e.g. the session DB was switched or the
+ * session was revoked) so the login screen appears instead of a dead UI.
+ * Guarded to run once per browser session to prevent reload loops.
+ */
+function forceLogoutOnDeadSession() {
+  if (typeof window === 'undefined') return
+  try {
+    if (sessionStorage.getItem('zerf_force_logout_done')) return
+    sessionStorage.setItem('zerf_force_logout_done', '1')
+    localStorage.removeItem('zerf_auth_token')
+    localStorage.removeItem('zerf_chat_id')
+    localStorage.removeItem('zerf_vk_launch')
+    localStorage.removeItem('zerf_cached_state')
+    document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    window.location.replace('/')
+  } catch {}
+}
+
 export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
     // 1. HIGHEST PRIORITY: Telegram WebApp context (cryptographically signed by Telegram servers)
@@ -565,6 +586,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       const res = await fetch('/api/tasks', { headers, cache: 'no-store' })
+      if (res.status === 401 && (headers['x-auth-token'] || headers['x-tg-init-data'] || headers['x-vk-launch'] || headers['x-chat-id'])) {
+        // Stale credentials (e.g. after a DB switch) — log out to the login screen
+        forceLogoutOnDeadSession()
+        return
+      }
       if (!res.ok) return
       const data = await res.json()
 
