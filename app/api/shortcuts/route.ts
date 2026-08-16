@@ -23,6 +23,41 @@ const NO_CACHE_HEADERS = {
   'Expires': '0',
 }
 
+export function cleanShortcutsInput(raw: string): string {
+  if (!raw) return ''
+  let cleaned = raw.trim()
+  
+  // Try decoding any lingering URL percent encodings (e.g. %20, %D0...)
+  try {
+    if (cleaned.includes('%')) {
+      cleaned = decodeURIComponent(cleaned)
+    }
+  } catch {}
+  
+  cleaned = cleaned.trim()
+
+  // Detect accidental duplicate variable concatenations in Apple Shortcuts:
+  // e.g. "купить яблоки купить яблоки" or "купить яблокикупить яблоки"
+  const words = cleaned.split(/\s+/).filter(Boolean)
+  if (words.length >= 2 && words.length % 2 === 0) {
+    const half = words.length / 2
+    const firstHalf = words.slice(0, half).join(' ')
+    const secondHalf = words.slice(half).join(' ')
+    if (firstHalf.toLowerCase() === secondHalf.toLowerCase()) {
+      cleaned = firstHalf
+    }
+  } else if (cleaned.length >= 4 && cleaned.length % 2 === 0) {
+    const halfLen = cleaned.length / 2
+    const firstPart = cleaned.slice(0, halfLen)
+    const secondPart = cleaned.slice(halfLen)
+    if (firstPart.toLowerCase() === secondPart.toLowerCase()) {
+      cleaned = firstPart
+    }
+  }
+
+  return cleaned.trim()
+}
+
 export function getSiriUserKey(chatId: number | string | bigint): string {
   const secret = process.env.TELEGRAM_BOT_TOKEN || 'zerf-siri-secret-key-2026'
   return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
@@ -119,6 +154,7 @@ export async function POST(req: NextRequest) {
       inputText = rawText || searchParams.get('text') || searchParams.get('q') || ''
     }
 
+    inputText = cleanShortcutsInput(inputText)
     const format = searchParams.get('format') || bodyObj.format
 
     if (!chatId || isNaN(chatId)) {
@@ -185,7 +221,13 @@ export async function POST(req: NextRequest) {
       }, { headers: NO_CACHE_HEADERS })
     }
 
+    // If item was classified as answer but prompt contains actionable intent, override to task
+    const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(inputText)
     for (const item of items) {
+      if (item.type === 'answer' && hasActionVerb) {
+        item.type = 'task'
+        item.action = 'create'
+      }
       await saveParsedItemToDb(item, chatId)
     }
 
@@ -262,6 +304,7 @@ export async function GET(req: NextRequest) {
       }
     }
   }
+  text = cleanShortcutsInput(text)
   const format = searchParams.get('format')
   const providedKey = searchParams.get('key')
 
@@ -335,7 +378,12 @@ export async function GET(req: NextRequest) {
   const context = await getExistingItemsContext(chatId)
   const items = await parseIntentWithGroq(text, key, undefined, context)
 
+  const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(text)
   for (const item of items) {
+    if (item.type === 'answer' && hasActionVerb) {
+      item.type = 'task'
+      item.action = 'create'
+    }
     await saveParsedItemToDb(item, chatId)
   }
 
