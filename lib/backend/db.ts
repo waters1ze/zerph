@@ -4,8 +4,10 @@
  */
 
 import { prisma } from './prisma'
-import { ParsedItem, stringSimilarity, generateReminderContext } from './groq'
+import { ParsedItem, stringSimilarity, generateReminderContext, extractCleanRecipientAndSharing } from './groq'
 import { ROOT_ADMIN_IDS } from './admin'
+import { tokenMatchesCandidateName } from './name-aliases'
+import { createServerSession } from './auth'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
@@ -2451,5 +2453,273 @@ export async function updateUserNameCascade(chatId: string | bigint, newFirstNam
     console.error('updateUserNameCascade error:', err)
     return { success: false, error: String(err) }
   }
+}
+
+export interface FriendMatch {
+  friend: any
+  isAllowed: boolean
+  reason: string
+}
+
+/**
+ * Universal intelligent friend matcher across friendships, shared groups, and shared projects
+ * Supports exact name, first/last name, username, Russian name clusters and case endings
+ */
+export async function findFriendMatches(
+  userChatId: number | bigint | string,
+  recipientName: string
+): Promise<FriendMatch[]> {
+  const cid = BigInt(userChatId)
+
+  // 1. Get all friendships
+  const friendships = await prisma.friendship.findMany({
+    where: { OR: [{ userChatId: cid }, { friendChatId: cid }] }
+  })
+  const friendIds = new Set<bigint>()
+  friendships.forEach((f: any) => friendIds.add(f.userChatId === cid ? f.friendChatId : f.userChatId))
+
+  // 2. Get all group members (shared groups)
+  const userGroups = await prisma.groupMembership.findMany({
+    where: { memberChatId: cid }
+  })
+  const groupChatIds = userGroups.map((g: any) => g.groupChatId)
+  if (groupChatIds.length > 0) {
+    const sharedGroupMembers = await prisma.groupMembership.findMany({
+      where: { groupChatId: { in: groupChatIds } }
+    })
+    sharedGroupMembers.forEach((m: any) => {
+      if (m.memberChatId !== cid) friendIds.add(m.memberChatId)
+    })
+  }
+
+  // 3. Get all project members (shared projects)
+  try {
+    const userProjects = await prisma.projectDB.findMany({
+      where: {
+        OR: [
+          { ownerChatId: cid },
+          { memberIds: { has: cid } }
+        ]
+      }
+    })
+    userProjects.forEach((p: any) => {
+      if (p.ownerChatId !== cid) friendIds.add(p.ownerChatId)
+      p.memberIds.forEach((mId: bigint) => {
+        if (mId !== cid) friendIds.add(mId)
+      })
+    })
+  } catch (e) {}
+
+  if (friendIds.size === 0) return []
+
+  const friendChats = await prisma.telegramChat.findMany({
+    where: { chatId: { in: Array.from(friendIds) } }
+  })
+
+  const rawQuery = recipientName.toLowerCase().trim().replace(/^@/, '')
+  const queryTokens = rawQuery.split(/\s+/).filter(Boolean)
+
+  const matchedChats = new Set<any>()
+
+  for (const f of friendChats) {
+    const fn = (f.firstName || '').toLowerCase()
+    const ln = (f.lastName || '').toLowerCase()
+    const un = (f.username || '').toLowerCase().replace(/^@/, '')
+    const fullName = `${fn} ${ln}`.trim()
+    const candidateNames = [fn, ln, un, fullName].filter(Boolean)
+
+    let isMatch = false
+    if (fullName.includes(rawQuery) || fn.includes(rawQuery) || ln.includes(rawQuery) || (un && un.includes(rawQuery))) {
+      isMatch = true
+    } else {
+      // If multi-word query (e.g. "вовчик береговой" / "вовчику береговому")
+      if (queryTokens.length >= 2) {
+        const matchToken1 = tokenMatchesCandidateName(queryTokens[0], [fn, un]) || fn.includes(queryTokens[0])
+        const matchToken2 = tokenMatchesCandidateName(queryTokens[1], [ln, un]) || ln.includes(queryTokens[1])
+        if (matchToken1 && matchToken2) {
+          isMatch = true
+        }
+      }
+
+      if (!isMatch) {
+        for (const token of queryTokens) {
+          if (fn.includes(token) || ln.includes(token) || (un && un.includes(token))) {
+            isMatch = true; break
+          }
+          if ((fn.length >= 3 && (token.includes(fn) || token.startsWith(fn.slice(0, 3)) || fn.startsWith(token.slice(0, 3)))) ||
+              (ln.length >= 3 && (token.includes(ln) || token.startsWith(ln.slice(0, 3)) || ln.startsWith(token.slice(0, 3))))) {
+            isMatch = true; break
+          }
+
+          // Cluster-based matching via comprehensive name-aliases.ts
+          if (tokenMatchesCandidateName(token, candidateNames)) {
+            isMatch = true; break
+          }
+        }
+      }
+    }
+
+    if (isMatch) matchedChats.add(f)
+  }
+
+  const results: FriendMatch[] = []
+  for (const friend of Array.from(matchedChats)) {
+    const fId = friend.chatId
+    let isAllowed = false
+    let reason = ''
+
+    // Target friend (fId) MUST have allowTasks=true for the sender (cid).
+    const fs = friendships.find((f: any) =>
+      f.userChatId === fId && f.friendChatId === cid
+    )
+    if (fs && fs.status === 'accepted' && fs.allowTasks === true) {
+      isAllowed = true
+      reason = 'friendship'
+    }
+
+    results.push({ friend, isAllowed, reason })
+  }
+
+  return results
+}
+
+/**
+ * Universal processor for parsed items supporting shared tasks, delegation, and personal tasks
+ */
+export async function processParsedItemWithDelegation(
+  item: ParsedItem,
+  authorChatId?: number | bigint | string | null
+): Promise<{ item: ParsedItem; delegated?: boolean; isBothShared?: boolean; friendName?: string; completedTask?: any }> {
+  if (!authorChatId) {
+    const res = await saveParsedItemToDb(item, null)
+    return { item: res.item, completedTask: res.completedTask }
+  }
+
+  const cid = BigInt(authorChatId)
+  const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+    item.rawText || item.title || '',
+    item.recipientName,
+    item.isBothShared
+  )
+
+  if (cleanRecName || item.type === 'delegate') {
+    const recName = cleanRecName || item.recipientName
+    if (recName) {
+      const matches = await findFriendMatches(cid, recName)
+      const allowedMatch = matches.find(m => m.isAllowed)
+
+      if (allowedMatch) {
+        const friend = allowedMatch.friend
+        const friendChatId = BigInt(friend.chatId)
+        const isBothShared = cleanIsBothShared
+
+        // Create task for Friend
+        const newTask = await prisma.task.create({
+          data: {
+            title: item.title,
+            description: item.summary || '',
+            priority: item.priority || 'medium',
+            status: 'todo',
+            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueTime: item.dueTime || null,
+            repeat: item.repeat || null,
+            tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
+            ownerChatId: friendChatId,
+            authorChatId: cid,
+            assignees: [String(cid)],
+            isShared: true,
+            aiGenerated: true,
+            source: item.rawText,
+          } as any
+        })
+
+        // If shared for both, also create linked copy for author
+        if (isBothShared) {
+          await prisma.task.create({
+            data: {
+              title: item.title,
+              description: item.summary || '',
+              priority: item.priority || 'medium',
+              status: 'todo',
+              dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+              dueTime: item.dueTime || null,
+              repeat: item.repeat || null,
+              tags: ['общая', ...(item.tags || [])],
+              ownerChatId: cid,
+              authorChatId: cid,
+              assignees: [String(friendChatId)],
+              isShared: true,
+              aiGenerated: true,
+              source: item.rawText,
+            } as any
+          })
+        }
+
+        // Send Telegram notification to friend if bot token is present
+        const botToken = process.env.TELEGRAM_BOT_TOKEN
+        if (botToken && friend.chatId) {
+          const sender = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
+          const senderName = [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.firstName || 'Коллега'
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+
+          let notifyMsg = isBothShared
+            ? `🤝 *${senderName}* создал(а) общую задачу для вас двоих!\n\n`
+            : `🤝 *${senderName}* поручил(а) тебе задачу!\n\n`
+          notifyMsg += `📌 *Задача:* ${item.title}\n`
+          if (item.summary && item.summary !== item.title) {
+            notifyMsg += `📝 *Описание:* ${item.summary}\n`
+          }
+          if (item.dueTime) {
+            notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
+          }
+          notifyMsg += isBothShared
+            ? `\n_Общая задача добавлена вам обоим в «Входящие» и календарь в Zerf AI_`
+            : `\n_Задача добавлена в ваши «Входящие» и календарь в Zerf AI_`
+
+          let webAppUrl = `${appUrl}/tg?chatId=${friend.chatId}`
+          try {
+            const sessionToken = await createServerSession(friend.chatId, 'Delegation Notification')
+            if (sessionToken) {
+              webAppUrl = `${appUrl}/tg?chat_id=${friend.chatId}&auth_token=${sessionToken}`
+            }
+          } catch (e) {}
+
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: Number(friend.chatId),
+              text: notifyMsg,
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '📱 Открыть в Zerf App', web_app: { url: webAppUrl } }],
+                  [
+                    { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
+                    { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
+                  ]
+                ]
+              }
+            })
+          }).catch(() => {})
+        }
+
+        return {
+          item: {
+            ...item,
+            isBothShared,
+            recipientName: friend.firstName || recName,
+          },
+          delegated: true,
+          isBothShared,
+          friendName: friend.firstName || recName,
+        }
+      }
+    }
+  }
+
+  // Otherwise, standard personal save
+  const res = await saveParsedItemToDb(item, authorChatId)
+  return { item: res.item, completedTask: res.completedTask }
 }
 

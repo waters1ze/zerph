@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { parseIntentWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb } from '@/lib/backend/db'
+import { processParsedItemWithDelegation, getExistingItemsContext, getFriends } from '@/lib/backend/db'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
@@ -24,12 +24,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Groq API Key is missing' }, { status: 400 })
     }
 
-    const parsedItems = await parseIntentWithGroq(text, groqApiKey)
+    const context = ownerChatId ? await getExistingItemsContext(ownerChatId) : undefined
+    const friends = ownerChatId ? await getFriends(ownerChatId) : []
+    const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+
+    const parsedItems = await parseIntentWithGroq(text, groqApiKey, undefined, context, friendsContext)
+    const results = []
     for (const item of parsedItems) {
-      await saveParsedItemToDb(item, ownerChatId)
+      const res = await processParsedItemWithDelegation(item, ownerChatId)
+      results.push(res)
     }
 
-    return NextResponse.json({ success: true, items: parsedItems, item: parsedItems[0] || null })
+    return NextResponse.json({
+      success: true,
+      items: results.map(r => r.item),
+      item: results[0]?.item || null,
+      delegated: results.some(r => r.delegated),
+      isBothShared: results.some(r => r.isBothShared),
+    })
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: errorMessage }, { status: 500 })

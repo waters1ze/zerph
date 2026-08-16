@@ -5,8 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { parseIntentWithGroq, transcribeAudioWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends } from '@/lib/backend/db'
+import { parseIntentWithGroq, transcribeAudioWithGroq, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
+import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends, findFriendMatches } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { prisma } from '@/lib/backend/prisma'
 import { createServerSession } from '@/lib/backend/auth'
@@ -140,29 +140,23 @@ async function processShortcutsItems(
     }
 
     // Check delegation / recipient match
-    let recipientCandidate: string | null = item.recipientName || null
-    if (!recipientCandidate) {
-      const match = inputText.toLowerCase().match(/(?:дай задачу|дать задачу|поручи|поручить|отправь задачу|передай задачу|передай|создай задачу для|задача для|назначь|кинь|скинь|напиши)\s+([а-яА-Яa-zA-Z0-9_@]+)/i)
-      if (match && match[1]) {
-        recipientCandidate = match[1].trim()
+    const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+      inputText,
+      item.recipientName,
+      item.isBothShared
+    )
+
+    let matchedFriend: any = null
+    if (cleanRecName) {
+      const matches = await findFriendMatches(chatId, cleanRecName)
+      const allowedMatch = matches.find(m => m.isAllowed) || matches[0]
+      if (allowedMatch) {
+        matchedFriend = allowedMatch.friend
       }
     }
 
-    let matchedFriend: any = null
-    if (recipientCandidate && friends.length > 0) {
-      const cleanCandidate = recipientCandidate.replace(/^@/, '').toLowerCase().trim()
-      matchedFriend = friends.find(f => {
-        const u = (f.username || '').toLowerCase()
-        const n = (f.name || '').toLowerCase()
-        if (u === cleanCandidate || n.includes(cleanCandidate)) return true
-        return tokenMatchesCandidateName(cleanCandidate, [f.name, f.username || '', ...(f.name?.split(/\s+/) || [])])
-      })
-    }
-
     if (matchedFriend) {
-      // Strict distinction: "нам" / "для нас" -> shared for BOTH vs "дай [Имя]" -> delegated to ONE person
-      const hasUsKeywords = /(?:^|[^а-яёa-z0-9])(?:нам|для нас|вместе|обоим|общая|совместная|совместно|для меня и)(?:[^а-яёa-z0-9]|$)/i.test(inputText)
-      const isBothShared = Boolean(item.isBothShared === true || (hasUsKeywords && item.isBothShared !== false))
+      const isBothShared = cleanIsBothShared
       const friendChatId = BigInt(matchedFriend.chatId)
 
       const newTask = await prisma.task.create({
@@ -208,7 +202,7 @@ async function processShortcutsItems(
 
       // Send Telegram notification to friend
       let notifyFriendMsg = isBothShared
-        ? `🤝 *${senderName}* создал(а) совместную задачу для вас двоих!\n\n`
+        ? `🤝 *${senderName}* создал(а) общую задачу для вас двоих!\n\n`
         : `🤝 *${senderName}* поручил(а) тебе задачу через Siri!\n\n`
       notifyFriendMsg += `📌 *Задача:* ${item.title}\n`
       if (item.summary && item.summary !== item.title) {
@@ -218,7 +212,7 @@ async function processShortcutsItems(
         notifyFriendMsg += `⏰ *Время:* ${item.dueTime}\n`
       }
       notifyFriendMsg += isBothShared
-        ? `\n_Совместная задача добавлена вам обоим в «Входящие» и календарь в Zerf AI_`
+        ? `\n_Общая задача добавлена вам обоим в «Входящие» и календарь в Zerf AI_`
         : `\n_Задача добавлена в ваши «Входящие» и календарь в Zerf AI_`
 
       let webAppUrl = `${appUrl}/tg?chatId=${friendChatId}`
@@ -241,10 +235,10 @@ async function processShortcutsItems(
         ]
       })
 
-      const friendDisplayName = matchedFriend.name?.split(' ')?.[0] || matchedFriend.name || recipientCandidate
+      const friendDisplayName = matchedFriend.name?.split(' ')?.[0] || matchedFriend.name || cleanRecName || 'коллеге'
       if (isBothShared) {
-        spokenParts.push(`Совместная задача «${item.title}» создана для вас двоих и отправлена ${friendDisplayName}`)
-        tgMsg += `🤝 Совместная задача *«${item.title}»* создана для вас двоих и отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
+        spokenParts.push(`Общая задача «${item.title}» создана для вас двоих и отправлена ${friendDisplayName}`)
+        tgMsg += `🤝 Общая задача *«${item.title}»* создана для вас двоих и отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
       } else {
         spokenParts.push(`Задача «${item.title}» отправлена ${friendDisplayName}`)
         tgMsg += `🤝 Задача *«${item.title}»* успешно отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
@@ -252,7 +246,7 @@ async function processShortcutsItems(
     } else {
       // Regular save to personal DB
       await saveParsedItemToDb(item, chatId)
-      if (recipientCandidate && friends.length === 0) {
+      if (cleanRecName && friends.length === 0) {
         spokenParts.push(`Контакт не найден в друзьях. Задача «${item.title}» сохранена в вашем личном списке.`)
       }
     }

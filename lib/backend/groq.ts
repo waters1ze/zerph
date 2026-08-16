@@ -102,26 +102,37 @@ ${friendsContext}
   }
 
   prompt += `\n\n══════════════════════════════════════════
-🤝 СТРОГИЕ ПРАВИЛА РАЗДЕЛЕНИЯ: «НАМ» (СОВМЕСТНАЯ) VS «КОМУ-ТО ОДНОМУ» (ПОРУЧЕНИЕ)
+🤝 СТРОГИЕ ПРАВИЛА РАЗДЕЛЕНИЯ: «НАМ» (СОВМЕСТНАЯ / ОБЩАЯ) VS «КОМУ-ТО ОДНОМУ» (ПОРУЧЕНИЕ)
 ══════════════════════════════════════════
-1. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ «НАМ» / «ДЛЯ НАС» / «ОБОИМ» / «ВМЕСТЕ» / «ОБЩАЯ ЗАДАЧА»:
-   Примеры: «дай нам задачу помыть посуду», «поставь нам задачу созвониться в 18:00», «задача нам с Лерой приготовить ужин», «создай нам с Ваней задачу»:
+1. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ «НАМ», «ДЛЯ НАС», «МНЕ И [ИМЯ]», «НАМ С [ИМЯ]», «ОБЩАЯ ЗАДАЧА», «ВМЕСТЕ С [ИМЯ]», «ОБОИМ»:
+   Примеры:
+   - «дай мне и вовчику береговому общую задачу поиграть в кс 2 в 21:00 сегодня» -> "type": "delegate", "isBothShared": true, "recipientName": "Вовчик Береговой"
+   - «дай нам с лерой задачу приготовить ужин» -> "type": "delegate", "isBothShared": true, "recipientName": "Лера"
+   - «поставь нам задачу созвониться в 18:00» -> "type": "delegate", "isBothShared": true, "recipientName": null
+   - «создай мне и артему совместную цель пробежать марафон» -> "type": "delegate", "isBothShared": true, "recipientName": "Артем"
+   - «общая задача для меня и вовы сделать отчет» -> "type": "delegate", "isBothShared": true, "recipientName": "Вова"
+   ПРАВИЛА ДЛЯ СОВМЕСТНОЙ / ОБЩЕЙ ЗАДАЧИ:
    - "type": "delegate"
    - "isBothShared": true
-   - "recipientName": "имя друга если названо" (например: "Лера", "Ваня")
-   - "title": "Суть совместного действия"
+   - "recipientName": "ИМЯ ДРУГА (БЕЗ 'мне и', ТОЛЬКО ИМЯ/ФАМИЛИЯ ДРУГА, например 'Вовчик Береговой', 'Лера')"
+   - "title": "Суть совместного действия (например: 'Играть в КС 2')"
    - Напоминание придет И АВТОРУ, И ДРУГУ ОДНОВРЕМЕННО в один момент!
 
-2. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ «ДАЙ [ИМЯ] ЗАДАЧУ» / «ПОРУЧИ [ИМЯ]» / «ПЕРЕДАЙ [ИМЯ]»:
-   Примеры: «дай задачу кирюхе поесть», «дай Лере задачу сделать отчет», «поручи Вове позвонить клиенту в 15:00»:
+2. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ «ДАЙ [ИМЯ] ЗАДАЧУ», «ПОРУЧИ [ИМЯ]», «ПЕРЕДАЙ [ИМЯ] ЗАДАЧУ», «ОТПРАВЬ [ИМЯ]»:
+   Примеры:
+   - «дай задачу кирюхе поесть» -> "type": "delegate", "isBothShared": false, "recipientName": "Кирилл"
+   - «дай лере задачу сделать презентацию» -> "type": "delegate", "isBothShared": false, "recipientName": "Лера"
+   - «поручи вове позвонить клиенту в 15:00» -> "type": "delegate", "isBothShared": false, "recipientName": "Вова"
+   - «передай артему купить кофе» -> "type": "delegate", "isBothShared": false, "recipientName": "Артем"
+   ПРАВИЛА ДЛЯ ПОРУЧЕНИЯ ОДНОМУ ДРУГУ:
    - "type": "delegate"
    - "isBothShared": false
-   - "recipientName": "имя друга" (например: "Кирилл", "Лера", "Вова")
+   - "recipientName": "Имя друга (например: 'Кирилл', 'Лера', 'Вова')"
    - "title": "Суть поручаемого действия"
-   - ЭТА ЗАДАЧА ПОРУЧАЕТСЯ ТОЛЬКО ПОЛУЧАТЕЛЮ. Автору задача в список не добавляется, и напоминание придет ТОЛЬКО ПОЛУЧАТЕЛЮ!
+   - ЭТА ЗАДАЧА ПОРУЧАЕТСЯ ТОЛЬКО ПОЛУЧАТЕЛЮ. Автору в личный список она не идет, и напоминание придет ТОЛЬКО ПОЛУЧАТЕЛЮ!
 
 3. Личные задачи пользователя (СТРОГО "recipientName": null, "type": "task", "isBothShared": false):
-   Если действие выполняет сам пользователь (например: "позвонить Артему", "купить подарок маме", "встреча с Леной в 15:00", "написать отчет для начальника"), это ЛИЧНАЯ задача пользователя! Установи "recipientName": null.
+   Если действие выполняет сам пользователь для себя (например: "позвонить Артему", "купить подарок маме", "встреча с Леной в 15:00", "написать отчет"), это ЛИЧНАЯ задача пользователя! Установи "recipientName": null.
 
 4. Запрос расписания / графика другого человека:
    Если пользователь спрашивает график, расписание, планы или занятость участника команды (например: "какой график у Леры на завтра", "расписание Артема на неделю", "график Вани на 3 дня", "какие дела у Леры 18 августа"):
@@ -302,30 +313,48 @@ export async function parseIntentWithGroq(
 
         if (rawItems.length === 0) return []
 
-        return rawItems.map((item: any) => ({
-          action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
-          targetId: item.targetId || null,
-          type: item.type || 'task',
-          title: item.title || text.slice(0, 50),
-          summary: item.summary || text,
-          priority: item.priority || 'medium',
-          dueDate: item.dueDate || null,
-          dueTime: item.dueTime || null,
-          repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
-          reminderOffsetMinutes: Number(item.reminderOffsetMinutes) || 0,
-          targetTitle: item.targetTitle || null,
-          projectId: item.projectId || null,
-          goalId: item.goalId || null,
-          tags: Array.isArray(item.tags) ? item.tags : [],
-          subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
-          milestones: Array.isArray(item.milestones) ? item.milestones : [],
-          motivation: item.motivation || null,
-          rawText: text,
-          originalText: text,
-        }))
+        return rawItems.map((item: any) => {
+          const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+            text,
+            item.recipientName,
+            item.isBothShared
+          )
+
+          const effectiveType = (cleanRecName || item.type === 'delegate') ? 'delegate' : (item.type || 'task')
+
+          return {
+            action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
+            targetId: item.targetId || null,
+            type: effectiveType,
+            title: item.title || text.slice(0, 50),
+            summary: item.summary || text,
+            priority: item.priority || 'medium',
+            dueDate: item.dueDate || null,
+            dueTime: item.dueTime || null,
+            daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
+            recipientName: cleanRecName,
+            isBothShared: cleanIsBothShared,
+            repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+            reminderOffsetMinutes: Number(item.reminderOffsetMinutes) || 0,
+            targetTitle: item.targetTitle || null,
+            projectId: item.projectId || null,
+            goalId: item.goalId || null,
+            folder: item.folder || null,
+            members: Array.isArray(item.members) ? item.members : null,
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
+            milestones: Array.isArray(item.milestones) ? item.milestones : [],
+            motivation: item.motivation || null,
+            rawText: text,
+            originalText: text,
+          }
+        })
       } catch {
+        const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(text)
         return [{
-          type: 'task',
+          type: cleanRecName ? 'delegate' : 'task',
+          recipientName: cleanRecName,
+          isBothShared: cleanIsBothShared,
           title: text.slice(0, 50),
           summary: text,
           priority: 'medium',
@@ -334,6 +363,76 @@ export async function parseIntentWithGroq(
           originalText: text,
         }]
       }
+}
+
+/**
+ * Universal recipient cleaner and shared status extractor from text and LLM output
+ */
+export function extractCleanRecipientAndSharing(
+  rawText: string,
+  itemRecipientName?: string | null,
+  itemIsBothShared?: boolean
+): { recipientName: string | null; isBothShared: boolean } {
+  let recName = itemRecipientName ? String(itemRecipientName).trim() : null
+  const text = rawText || ''
+
+  // Check if rawText contains "нам", "для нас", "общая", "совместная", "мне и", "нам с", "для меня и", "вместе", "обоим"
+  const hasUsKeywords = /(?:^|[^а-яёa-z0-9])(?:нам|для\s+нас|вместе|обоим|общая|совместная|совместно|мне\s+и|нам\s+с|для\s+меня\s+и|с\s+нами)(?:[^а-яёa-z0-9]|$)/i.test(text)
+
+  let isShared: boolean
+  if (itemIsBothShared !== undefined) {
+    isShared = Boolean(itemIsBothShared) || hasUsKeywords
+  } else {
+    isShared = hasUsKeywords
+  }
+
+  // Clean recName from "мне и X" / "нам с X" / "для меня и X"
+  if (recName) {
+    recName = recName
+      .replace(/^(?:мне\s+и|нам\s+с|для\s+меня\s+и|для\s+нас\s+с|я\s+и|с\s+)\s+/i, '')
+      .replace(/\s+(?:и\s+мне|и\s+я|со\s+мной|с\s+нами)$/i, '')
+      .replace(/^(?:для|кому|другу|коллеге)\s+/i, '')
+      .trim()
+  }
+
+  // If no recName was extracted by LLM, try regexes on rawText:
+  if (!recName && text) {
+    const patterns = [
+      // "дай мне и вовчику береговому общую задачу поиграть..."
+      // "создай нам с лерой задачу приготовить..."
+      /(?:дай|поставь|создай|назначь|запиши|добавь|сделай)\s+(?:мне\s+и|нам\s+с|для\s+меня\s+и|для\s+нас\s+с)\s+([а-яёa-z0-9_@\s]+?)\s+(?:общую\s+задачу|совместную\s+задачу|общую|совместную|задачу|цель|дело|напоминание|поиграть|сделать|созвониться|встретиться|пойти)/i,
+      // "общая задача мне и вове поиграть..."
+      /(?:общая|совместная)\s+(?:задача|цель|дело)\s+(?:для\s+)?(?:меня\s+и\s+|нам\s+с\s+|мне\s+и\s+)?([а-яёa-z0-9_@\s]+?)(?:,|$|\s+по|\s+на|\s+в\s+\d|\s+чтобы|\s+поиграть|\s+сделать)/i,
+      // "дай задачу вове позвонить..."
+      /(?:дай\s+задачу|поручи\s+задачу|передай\s+задачу|отправь\s+задачу|назначь\s+задачу|скинь\s+задачу|кинь\s+задачу)\s+([а-яёa-z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+в\s+\d|\s+по|\s+сделать|\s+поиграть)/i,
+      // "дай вове задачу..." / "поручи лере отчет..."
+      /(?:дай|поручи|передай|отправь|назначь|скинь|кинь)\s+([а-яёa-z0-9_@\s]+?)\s+(?:задачу|цель|дело|сделать|поиграть|созвониться|купить|написать|проверить|подготовить|встретиться|пойти|отчет)/i,
+      // "задача нам с лерой..."
+      /задача\s+(?:нам\s+с|мне\s+и)\s+([а-яёa-z0-9_@\s]+?)(?:,|$|\s+по|\s+на|\s+в\s+\d|\s+чтобы)/i,
+    ]
+
+    for (const pat of patterns) {
+      const m = text.match(pat)
+      if (m && m[1]) {
+        let candidate = m[1].trim()
+        candidate = candidate
+          .replace(/^(?:мне\s+и|нам\s+с|для\s+меня\s+и|для\s+нас\s+с)\s+/i, '')
+          .replace(/\s+(?:общую|совместную|задачу|цель|дело)$/i, '')
+          .trim()
+        if (candidate && candidate.length <= 40) {
+          recName = candidate
+          break
+        }
+      }
+    }
+  }
+
+  if (recName && (recName.toLowerCase() === 'мне' || recName.toLowerCase() === 'я' || recName.toLowerCase() === 'себе')) {
+    recName = null
+    isShared = false
+  }
+
+  return { recipientName: recName || null, isBothShared: Boolean(isShared) }
 }
 
 /**

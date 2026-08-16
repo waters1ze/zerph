@@ -11,12 +11,13 @@ import {
   transcribeVkVoice,
   callVkApi,
 } from '@/lib/backend/vk'
-import { parseIntentWithGroq } from '@/lib/backend/groq'
+import { parseIntentWithGroq, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
 import {
   saveParsedItemToDb,
   registerChatId,
   getAllTasks,
   getUserProductivityStats,
+  findFriendMatches,
 } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
 
@@ -570,57 +571,82 @@ export async function POST(req: NextRequest) {
       let responseMsg = userVoiceText ? `🎙 Распознано: «${userVoiceText}»\n\n` : ''
 
       for (const item of parsedItems) {
-        // If delegation detected via natural language e.g. "Дать задачу Владу..."
-        if ((item.type === 'delegate' || item.recipientName) && item.recipientName) {
-          const recName = item.recipientName.toLowerCase().trim()
-          const friendUser = await prisma.telegramChat.findFirst({
-            where: {
-              OR: [
-                { firstName: { contains: recName, mode: 'insensitive' } },
-                { username: { contains: recName, mode: 'insensitive' } },
-              ],
-            },
-          })
+        const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+          effectiveText,
+          item.recipientName,
+          item.isBothShared
+        )
 
-          if (friendUser && String(friendUser.chatId) !== String(vkChatId)) {
-            await prisma.task.create({
-              data: {
-                title: item.title,
-                description: item.summary,
-                priority: item.priority || 'medium',
-                status: 'todo',
-                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
-                dueTime: item.dueTime || null,
-                tags: item.tags || [],
-                ownerChatId: friendUser.chatId,
-                authorChatId: vkChatId,
-                assignees: [String(vkChatId)],
-                isShared: true,
-              } as any,
-            })
+        if (cleanRecName || item.type === 'delegate') {
+          const recName = cleanRecName || item.recipientName
+          if (recName) {
+            const matches = await findFriendMatches(vkChatId, recName)
+            const allowedMatch = matches.find(m => m.isAllowed) || matches[0]
 
-            const notifyMsg = `📨 *${vkFirstName}* передал(а) тебе задачу:\n📌 *«${item.title}»*\n` +
-              (item.dueDate ? `📅 Срок: ${item.dueDate}${item.dueTime ? ` в ${item.dueTime}` : ''}\n` : '')
+            if (allowedMatch && String(allowedMatch.friend.chatId) !== String(vkChatId)) {
+              const friendUser = allowedMatch.friend
+              const isBothShared = cleanIsBothShared
 
-            const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-            let tgDelivered = false
-            if (BOT_TOKEN) {
-              try {
-                const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ chat_id: String(friendUser.chatId), text: notifyMsg, parse_mode: 'Markdown' }),
+              await prisma.task.create({
+                data: {
+                  title: item.title,
+                  description: item.summary,
+                  priority: item.priority || 'medium',
+                  status: 'todo',
+                  dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                  dueTime: item.dueTime || null,
+                  tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
+                  ownerChatId: friendUser.chatId,
+                  authorChatId: vkChatId,
+                  assignees: [String(vkChatId)],
+                  isShared: true,
+                } as any,
+              })
+
+              if (isBothShared) {
+                await prisma.task.create({
+                  data: {
+                    title: item.title,
+                    description: item.summary,
+                    priority: item.priority || 'medium',
+                    status: 'todo',
+                    dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                    dueTime: item.dueTime || null,
+                    tags: ['общая', ...(item.tags || [])],
+                    ownerChatId: vkChatId,
+                    authorChatId: vkChatId,
+                    assignees: [String(friendUser.chatId)],
+                    isShared: true,
+                  } as any,
                 })
-                const tgData = await tgRes.json()
-                if (tgData?.ok) tgDelivered = true
-              } catch {}
-            }
-            if (!tgDelivered) {
-              await sendVkMessage(String(friendUser.chatId), notifyMsg.replace(/\*/g, ''))
-            }
+              }
 
-            responseMsg += `👥 Поручено ${friendUser.firstName || item.recipientName}: «${item.title}»\n`
-            continue
+              const notifyMsg = isBothShared
+                ? `🤝 *${vkFirstName}* создал(а) общую задачу для вас двоих:\n📌 *«${item.title}»*\n` + (item.dueDate ? `📅 Срок: ${item.dueDate}${item.dueTime ? ` в ${item.dueTime}` : ''}\n` : '')
+                : `📨 *${vkFirstName}* передал(а) тебе задачу:\n📌 *«${item.title}»*\n` + (item.dueDate ? `📅 Срок: ${item.dueDate}${item.dueTime ? ` в ${item.dueTime}` : ''}\n` : '')
+
+              const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+              let tgDelivered = false
+              if (BOT_TOKEN && friendUser.chatId) {
+                try {
+                  const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: String(friendUser.chatId), text: notifyMsg, parse_mode: 'Markdown' }),
+                  })
+                  const tgData = await tgRes.json()
+                  if (tgData?.ok) tgDelivered = true
+                } catch {}
+              }
+              if (!tgDelivered) {
+                await sendVkMessage(String(friendUser.chatId), notifyMsg.replace(/\*/g, ''))
+              }
+
+              responseMsg += isBothShared
+                ? `🤝 Общая задача создана для вас и ${friendUser.firstName || recName}: «${item.title}»\n`
+                : `👥 Поручено ${friendUser.firstName || recName}: «${item.title}»\n`
+              continue
+            }
           }
         }
 

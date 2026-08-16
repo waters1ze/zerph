@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
-import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem, generateSmartReschedulePlan } from '@/lib/backend/groq'
+import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem, generateSmartReschedulePlan, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
 import {
   saveParsedItemToDb,
   getAllTasks, getAllGoals, getAllNotes,
@@ -17,7 +17,7 @@ import {
   getUserUsageAndLimits, incrementUserUsage, deductGroupUsage,
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
-  getUserProductivityStats, completeTask, updateTask,
+  getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
 } from '@/lib/backend/db'
 import { getUserAuthToken, createServerSession } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
@@ -1046,124 +1046,7 @@ async function handleWeeklyReport(chatId: number, senderId: number) {
 // NAME_ALIASES is now imported from lib/backend/name-aliases.ts (comprehensive, 100+ names)
 // Used via tokenMatchesCandidateName() and NAME_TO_CLUSTER_MAP in findFriendMatches below.
 
-export interface FriendMatch {
-  friend: any; // TelegramChat
-  isAllowed: boolean;
-  reason?: string;
-}
-
-async function findFriendMatches(userChatId: number | bigint, recipientName: string): Promise<FriendMatch[]> {
-  const cid = BigInt(userChatId)
-  
-  // 1. Get all friendships
-  const friendships = await prisma.friendship.findMany({
-    where: { OR: [{ userChatId: cid }, { friendChatId: cid }] }
-  })
-  const friendIds = new Set<bigint>()
-  friendships.forEach((f: any) => friendIds.add(f.userChatId === cid ? f.friendChatId : f.userChatId))
-
-  // 2. Get all group members (shared groups)
-  const userGroups = await prisma.groupMembership.findMany({
-    where: { memberChatId: cid }
-  })
-  const groupChatIds = userGroups.map((g: any) => g.groupChatId)
-  const sharedGroupMembers = await prisma.groupMembership.findMany({
-    where: { groupChatId: { in: groupChatIds } }
-  })
-  sharedGroupMembers.forEach((m: any) => {
-    if (m.memberChatId !== cid) friendIds.add(m.memberChatId)
-  })
-
-  // 3. Get all project members (shared projects)
-  try {
-    const userProjects = await prisma.projectDB.findMany({
-      where: {
-        OR: [
-          { ownerChatId: cid },
-          { memberIds: { has: cid } }
-        ]
-      }
-    })
-    userProjects.forEach((p: any) => {
-      if (p.ownerChatId !== cid) friendIds.add(p.ownerChatId)
-      p.memberIds.forEach((mId: bigint) => {
-        if (mId !== cid) friendIds.add(mId)
-      })
-    })
-  } catch (e) {}
-
-  if (friendIds.size === 0) return []
-
-  const friendChats = await prisma.telegramChat.findMany({
-    where: { chatId: { in: Array.from(friendIds) } }
-  })
-
-  const rawQuery = recipientName.toLowerCase().trim().replace('@', '')
-  const queryTokens = rawQuery.split(/\s+/).filter(Boolean)
-
-  const matchedChats = new Set<any>()
-
-  for (const f of friendChats) {
-    const fn = (f.firstName || '').toLowerCase()
-    const ln = (f.lastName || '').toLowerCase()
-    const un = (f.username || '').toLowerCase()
-    const fullName = `${fn} ${ln}`.trim()
-
-    let isMatch = false
-    if (fullName.includes(rawQuery) || fn.includes(rawQuery) || ln.includes(rawQuery) || (un && un.includes(rawQuery))) {
-      isMatch = true
-    } else {
-      for (const token of queryTokens) {
-        if (fn.includes(token) || ln.includes(token) || (un && un.includes(token))) {
-          isMatch = true; break
-        }
-        if ((fn.length >= 3 && (token.includes(fn) || token.startsWith(fn.slice(0, 3)) || fn.startsWith(token.slice(0, 3)))) ||
-            (ln.length >= 3 && (token.includes(ln) || token.startsWith(ln.slice(0, 3)) || ln.startsWith(token.slice(0, 3))))) {
-          isMatch = true; break
-        }
-
-        // Cluster-based matching via comprehensive name-aliases.ts (100+ Russian names + all forms)
-        if (tokenMatchesCandidateName(token, [fn, ln, un].filter(Boolean))) {
-          isMatch = true; break
-        }
-      }
-    }
-
-    if (!isMatch) {
-      // Cluster-based alias matching via comprehensive name-aliases.ts (100+ Russian names)
-      const queryTokens2 = rawQuery.split(/\s+/).filter(Boolean)
-      for (const token of queryTokens2) {
-        const candidateNames = [fn, ln, un].filter(Boolean)
-        if (tokenMatchesCandidateName(token, candidateNames)) {
-          isMatch = true
-          break
-        }
-      }
-    }
-
-    if (isMatch) matchedChats.add(f)
-  }
-
-  const results: FriendMatch[] = []
-  for (const friend of Array.from(matchedChats)) {
-    const fId = friend.chatId
-    let isAllowed = false
-    let reason = ''
-
-    // SECURITY: Target friend (fId) MUST have allowTasks=true for the sender (cid).
-    const fs = friendships.find((f: any) =>
-      f.userChatId === fId && f.friendChatId === cid
-    )
-    if (fs && fs.status === 'accepted' && fs.allowTasks === true) {
-      isAllowed = true
-      reason = 'friendship'
-    }
-
-    results.push({ friend, isAllowed, reason })
-  }
-
-  return results
-}
+// findFriendMatches and FriendMatch are imported from lib/backend/db
 
 async function processText(chatId: number, text: string) {
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
@@ -1221,14 +1104,18 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       return
     }
 
-    // Fallback detection if delegation keywords are used in prompt text or if LLM missed recipientName
-    if ((item.type !== 'delegate' || !item.recipientName) && item.rawText) {
-      const lower = item.rawText.toLowerCase()
-      const match = lower.match(/(?:дай задачу|поручи|отправь задачу|передай задачу|создай задачу для|назначь|кинь|скинь|напиши|передай)\s+([а-яА-Яa-zA-Z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+через)/i)
-      if (match && match[1]) {
-        item.type = 'delegate'
-        item.recipientName = match[1].trim()
-      }
+    // Clean recipient name & shared status across all phrasing formats
+    const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+      item.rawText || '',
+      item.recipientName,
+      item.isBothShared
+    )
+    if (cleanRecName) {
+      item.recipientName = cleanRecName
+      item.isBothShared = cleanIsBothShared
+      item.type = 'delegate'
+    } else if (cleanIsBothShared) {
+      item.isBothShared = true
     }
 
     if (item.recipientName) {
@@ -1391,7 +1278,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           }
 
           let notifyMsg = isBothShared
-            ? `🤝 *${escMd(senderName)}* создал(а) совместную задачу для вас двоих!\n\n`
+            ? `🤝 *${escMd(senderName)}* создал(а) общую задачу для вас двоих!\n\n`
             : `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
           notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
           if (item.summary) {
@@ -1401,7 +1288,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             notifyMsg += `⏰ *Время:* ${item.dueTime}${notifyConflictNotice}\n`
           }
           notifyMsg += isBothShared
-            ? `\n_Совместная задача добавлена вам обоим в «Входящие» и календарь на сайте Zerf AI_`
+            ? `\n_Общая задача добавлена вам обоим в «Входящие» и календарь на сайте Zerf AI_`
             : `\n_Задача добавлена в ваши «Входящие» и календарь на сайте Zerf AI_`
 
           let webAppUrl = `${appUrl}/tg?chatId=${friend.chatId}`
@@ -1426,7 +1313,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             }
           })
           msg += isBothShared
-            ? `🤝 Совместная задача *«${escMd(item.title)}»* создана для вас двоих и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
+            ? `🤝 Общая задача *«${escMd(item.title)}»* создана для вас двоих и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
             : `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
         } else {
           // Note or Goal
@@ -1755,7 +1642,9 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
     await incrementUserUsage(chatId, 'voice', duration)
 
     const context = await getExistingItemsContext(chatId)
-    const items = await parseIntentWithGroq(transcript, key, undefined, context)
+    const friends = await getFriends(chatId)
+    const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+    const items = await parseIntentWithGroq(transcript, key, undefined, context, friendsContext)
 
     await saveAndRespondParsedItems(chatId, items, transcript)
 

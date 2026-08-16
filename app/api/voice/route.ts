@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb, getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
+import { processParsedItemWithDelegation, getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext, getFriends } from '@/lib/backend/db'
 import { GROQ_API_KEY } from '@/lib/config'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 
@@ -50,12 +50,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Provide audio file or text input.' }, { status: 400 })
     }
 
-    // Parse intent — detects task/goal/note/completion/reminder (can extract multiple items)
-    const parsedItems = await parseIntentWithGroq(transcript, apiKey)
+    // Parse intent — detects task/goal/note/completion/reminder/shared (can extract multiple items)
+    const context = ownerChatId ? await getExistingItemsContext(ownerChatId) : undefined
+    const friends = ownerChatId ? await getFriends(ownerChatId) : []
+    const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+
+    const parsedItems = await parseIntentWithGroq(transcript, apiKey, undefined, context, friendsContext)
     const results = []
 
     for (const item of parsedItems) {
-      const savedResult = await saveParsedItemToDb(item, ownerChatId)
+      const savedResult = await processParsedItemWithDelegation(item, ownerChatId)
       results.push(savedResult)
     }
 
