@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
+import { isCallerAdmin } from '@/lib/backend/admin'
 
 // GET /api/admin/promocode - list all promo codes
 export async function GET(req: NextRequest) {
   try {
+    const { isAdmin } = await isCallerAdmin(req)
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 })
+    }
+
     const promoCodes = await prisma.promoCode.findMany({
       orderBy: { createdAt: 'desc' },
     })
@@ -18,6 +24,11 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/promocode - create new promo code
 export async function POST(req: NextRequest) {
   try {
+    const { isAdmin } = await isCallerAdmin(req)
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 })
+    }
+
     const body = await req.json()
     const {
       code,
@@ -43,14 +54,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Промокод с таким кодом уже существует' }, { status: 400 })
     }
 
+    let parsedExpiry: Date | null = null
+    if (expiresAt) {
+      const d = new Date(expiresAt)
+      if (!isNaN(d.getTime())) {
+        parsedExpiry = d
+      }
+    }
+
     const newPromo = await prisma.promoCode.create({
       data: {
         code: cleanCode,
-        discountPercent: Number(discountPercent) || 100,
+        discountPercent: Math.min(100, Math.max(1, Number(discountPercent) || 100)),
         targetPlan: targetPlan || 'all',
-        durationDays: Number(durationDays) || 30,
-        maxActivations: Number(maxActivations) || 1,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        durationDays: Math.max(1, Number(durationDays) || 30),
+        maxActivations: Math.max(1, Number(maxActivations) || 1),
+        expiresAt: parsedExpiry,
+        usedByChatIds: [],
         isActive: true,
       },
     })
@@ -65,6 +85,11 @@ export async function POST(req: NextRequest) {
 // DELETE /api/admin/promocode - delete or deactivate promo code
 export async function DELETE(req: NextRequest) {
   try {
+    const { isAdmin } = await isCallerAdmin(req)
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
 
@@ -72,7 +97,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'ID промокода не передан' }, { status: 400 })
     }
 
-    await prisma.promoCode.delete({
+    await prisma.promoCode.deleteMany({
       where: { id },
     })
 

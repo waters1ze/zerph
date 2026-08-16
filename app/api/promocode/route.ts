@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
     const cleanCode = code.trim().toUpperCase()
     const numericChatId = BigInt(String(chatId).replace(/\D/g, '') || '0')
-    const strChatId = String(chatId)
+    const strChatId = numericChatId.toString()
 
     if (!numericChatId) {
       return NextResponse.json({ error: 'Неверный ID пользователя' }, { status: 400 })
@@ -37,17 +37,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Лимит активаций этого промокода исчерпан' }, { status: 400 })
     }
 
-    if (promo.usedByChatIds.includes(strChatId)) {
+    const usedList = promo.usedByChatIds || []
+    if (usedList.includes(strChatId)) {
       return NextResponse.json({ error: 'Вы уже активировали этот промокод' }, { status: 400 })
     }
-
-    // Determine target plan
-    const targetPlan = promo.targetPlan === 'unlimited' ? 'unlimited' : 'premium'
-    const daysToAdd = promo.durationDays || 30
 
     const user = await prisma.telegramChat.findUnique({
       where: { chatId: numericChatId },
     })
+
+    // Determine target plan without downgrading unlimited users
+    let targetPlan = promo.targetPlan === 'unlimited' ? 'unlimited' : 'premium'
+    if (user?.plan === 'unlimited' && targetPlan === 'premium') {
+      targetPlan = 'unlimited'
+    }
+
+    const daysToAdd = promo.durationDays || 30
 
     let newExpiry = new Date()
     if (user?.subscriptionExpiry && user.subscriptionExpiry > new Date()) {

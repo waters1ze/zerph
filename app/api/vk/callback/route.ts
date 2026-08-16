@@ -20,7 +20,7 @@ import {
   findFriendMatches,
 } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
-import { parseTimezoneInput } from '@/app/api/telegram/route'
+import { parseTimezoneInput } from '@/lib/backend/timezone'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
@@ -274,8 +274,12 @@ export async function POST(req: NextRequest) {
       }
 
       // ── 2.2 /timezone ────────────────────────────────────────────────────────
-      if (cmd === '/timezone' || cmd === '/tz' || lower.startsWith('часовой пояс') || lower.startsWith('мой часовой пояс')) {
-        const tzArg = parts.slice(1).join(' ').trim() || effectiveText.replace(/(?:мой\s+|установи\s+|поставь\s+|смени\s+)?часовой\s+пояс\s*(?:на|:)?/i, '').trim()
+      if (cmd === '/timezone' || cmd === '/tz' || lower.startsWith('часовой пояс') || lower.startsWith('мой часовой пояс') || lower.startsWith('установи часовой пояс') || lower.startsWith('поставь часовой пояс')) {
+        const isCmd = cmd === '/timezone' || cmd === '/tz'
+        const tzArg = isCmd
+          ? parts.slice(1).join(' ').trim()
+          : effectiveText.replace(/^(?:мой\s+|установи\s+|поставь\s+|смени\s+|измени\s+)?часовой\s+пояс\s*(?:на|:)?\s*/i, '').trim()
+
         if (!tzArg) {
           const current = await prisma.telegramChat.findUnique({
             where: { chatId: BigInt(vkChatId) },

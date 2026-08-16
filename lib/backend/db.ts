@@ -74,12 +74,22 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       })
     }
 
-    const seen = new Set<string>()
+    const seenIds = new Set<string>()
+    const seenSharedKeys = new Set<string>()
     const uniqueTasks = allTasks.filter(t => {
+      if (seenIds.has(t.id)) return false
+      seenIds.add(t.id)
+
       if (isBirthdayTitle(t.title)) {
         const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
-        if (seen.has(normKey)) return false
-        seen.add(normKey)
+        if (seenSharedKeys.has(`bday_${normKey}`)) return false
+        seenSharedKeys.add(`bday_${normKey}`)
+      } else if (t.isShared && t.authorChatId) {
+        // Deduplicate identical shared tasks created for author and friend
+        const normTitle = t.title.trim().toLowerCase()
+        const sharedKey = `shared_${normTitle}_${t.dueDate || ''}_${t.dueTime || ''}_${t.authorChatId}`
+        if (seenSharedKeys.has(sharedKey)) return false
+        seenSharedKeys.add(sharedKey)
       }
       return true
     })

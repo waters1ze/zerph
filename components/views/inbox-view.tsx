@@ -100,13 +100,13 @@ export function InboxView() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-500">
+                <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center text-foreground/80">
                   <Users className="w-3.5 h-3.5" />
                 </div>
                 <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">
                   Общие задачи
                 </h2>
-                <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-muted text-muted-foreground border border-border/50">
                   {commonSharedTasks.length}
                 </span>
               </div>
@@ -121,12 +121,12 @@ export function InboxView() {
                   <div className="flex items-center gap-2 px-1 py-1 select-none">
                     <div className={cn(
                       'flex items-center gap-1.5 text-[12px] font-bold tracking-tight uppercase',
-                      group.isToday ? 'text-emerald-500' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+                      group.isToday ? 'text-foreground' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
                     )}>
                       <Calendar className="w-3.5 h-3.5" />
                       <span>{group.label}</span>
                     </div>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">
                       {group.tasks.length}
                     </span>
                     <div className="flex-1 h-[1px] bg-border/40 ml-2" />
@@ -147,13 +147,13 @@ export function InboxView() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center text-foreground/80">
                   <UserCheck className="w-3.5 h-3.5" />
                 </div>
                 <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">
                   Порученные задачи
                 </h2>
-                <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-primary/10 text-primary border border-primary/20">
+                <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-muted text-muted-foreground border border-border/50">
                   {delegatedTasks.length}
                 </span>
               </div>
@@ -168,7 +168,7 @@ export function InboxView() {
                   <div className="flex items-center gap-2 px-1 py-1 select-none">
                     <div className={cn(
                       'flex items-center gap-1.5 text-[12px] font-bold tracking-tight uppercase',
-                      group.isToday ? 'text-primary' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+                      group.isToday ? 'text-foreground' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
                     )}>
                       <Calendar className="w-3.5 h-3.5" />
                       <span>{group.label}</span>

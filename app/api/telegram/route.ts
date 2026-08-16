@@ -48,24 +48,8 @@ const PRIORITY_RU: Record<string, string> = {
   low: 'Низкий',
 }
 
-export function parseTimezoneInput(input: string): string | null {
-  const text = input.toLowerCase().trim()
-  if (text.includes('калининград') || text.includes('+2') || text.includes('utc+2') || text.includes('gmt+2')) return 'Europe/Kaliningrad'
-  if (text.includes('москв') || text.includes('мск') || text.includes('+3') || text.includes('utc+3') || text.includes('gmt+3') || text.includes('питер') || text.includes('спб')) return 'Europe/Moscow'
-  if (text.includes('самара') || text.includes('+4') || text.includes('utc+4') || text.includes('gmt+4')) return 'Europe/Samara'
-  if (text.includes('екатеринбург') || text.includes('екб') || text.includes('+5') || text.includes('utc+5') || text.includes('gmt+5')) return 'Asia/Yekaterinburg'
-  if (text.includes('омск') || text.includes('+6') || text.includes('utc+6') || text.includes('gmt+6')) return 'Asia/Omsk'
-  if (text.includes('красноярск') || text.includes('новосибирск') || text.includes('+7') || text.includes('utc+7') || text.includes('gmt+7')) return 'Asia/Krasnoyarsk'
-  if (text.includes('иркутск') || text.includes('+8') || text.includes('utc+8') || text.includes('gmt+8')) return 'Asia/Irkutsk'
-  if (text.includes('якутск') || text.includes('+9') || text.includes('utc+9') || text.includes('gmt+9')) return 'Asia/Yakutsk'
-  if (text.includes('владивосток') || text.includes('+10') || text.includes('utc+10') || text.includes('gmt+10')) return 'Asia/Vladivostok'
-  if (text.includes('магадан') || text.includes('+11') || text.includes('utc+11') || text.includes('gmt+11')) return 'Asia/Magadan'
-  if (text.includes('камчатк') || text.includes('+12') || text.includes('utc+12') || text.includes('gmt+12')) return 'Asia/Kamchatka'
-  if (text.includes('europe/') || text.includes('asia/') || text.includes('america/') || text.includes('utc')) {
-    return input.trim()
-  }
-  return null
-}
+import { parseTimezoneInput } from '@/lib/backend/timezone'
+export { parseTimezoneInput }
 
 function escMd(s: string) {
   if (!s) return ''
@@ -1259,6 +1243,9 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           const hasUsKeywords = /(?:^|[^а-яёa-z0-9])(?:нам|для нас|вместе|обоим|общая|совместная|совместно|для меня и)(?:[^а-яёa-z0-9]|$)/i.test(item.rawText || '')
           const isBothShared = Boolean(item.isBothShared === true || (hasUsKeywords && item.isBothShared !== false))
 
+          const taskOwnerChatId = isBothShared ? BigInt(chatId) : friend.chatId
+          const taskAssignees = isBothShared ? [String(chatId), String(friend.chatId)] : [String(friend.chatId)]
+
           const newTask = await prisma.task.create({
             data: {
               title: item.title,
@@ -1269,42 +1256,22 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
               dueTime: item.dueTime || null,
               repeat: item.repeat || null,
               tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
-              ownerChatId: friend.chatId,
+              ownerChatId: taskOwnerChatId,
               authorChatId: BigInt(chatId),
-              assignees: [String(chatId)],
+              assignees: taskAssignees,
               isShared: true,
             } as any
           })
 
-          if (isBothShared) {
-            // Also create a linked copy for the author so it appears in author's calendar, dashboard, and triggers reminders for both
-            await prisma.task.create({
-              data: {
-                title: item.title,
-                description: item.summary || '',
-                priority: item.priority || 'medium',
-                status: 'todo',
-                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
-                dueTime: item.dueTime || null,
-                repeat: item.repeat || null,
-                tags: ['общая', ...(item.tags || [])],
-                ownerChatId: BigInt(chatId),
-                authorChatId: BigInt(chatId),
-                assignees: [String(friend.chatId)],
-                isShared: true,
-              } as any
-            })
-          }
-
           let notifyMsg = isBothShared
-            ? `🤝 *${escMd(senderName)}* создал(а) общую задачу для вас двоих!\n\n`
-            : `🤝 *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
-          notifyMsg += `📌 *Задача:* ${escMd(item.title)}\n`
+            ? `▪ *${escMd(senderName)}* создал(а) общую задачу для вас двоих!\n\n`
+            : `▪ *${escMd(senderName)}* поручил(а) тебе задачу!\n\n`
+          notifyMsg += `▫ *Задача:* ${escMd(item.title)}\n`
           if (item.summary) {
-            notifyMsg += `📝 *Описание:* ${escMd(item.summary)}\n`
+            notifyMsg += `▫ *Описание:* ${escMd(item.summary)}\n`
           }
           if (item.dueTime) {
-            notifyMsg += `⏰ *Время:* ${item.dueTime}${notifyConflictNotice}\n`
+            notifyMsg += `⏱ *Время:* ${item.dueTime}${notifyConflictNotice}\n`
           }
           notifyMsg += isBothShared
             ? `\n_Общая задача добавлена вам обоим в «Входящие» и календарь на сайте Zerf AI_`
@@ -1332,8 +1299,8 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             }
           })
           msg += isBothShared
-            ? `🤝 Общая задача *«${escMd(item.title)}»* создана для вас двоих и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
-            : `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
+            ? `▪ Общая задача *«${escMd(item.title)}»* создана для вас двоих и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
+            : `▪ Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
         } else {
           // Note or Goal
           await saveParsedItemToDb(item, friend.chatId, chatId)
@@ -3413,7 +3380,7 @@ export async function POST(req: NextRequest) {
         const lowerText = trimmed.toLowerCase()
 
         // 00. Natural language timezone setting ("мой часовой пояс +3", "часовой пояс мск", "поставь часовой пояс Екатеринбург")
-        const tzNaturalMatch = trimmed.match(/(?:мой\s+|установи\s+|поставь\s+|смени\s+)?часовой\s+пояс\s*(?:на|:)?\s*([+\w\s/–-]+)/i)
+        const tzNaturalMatch = trimmed.match(/(?:мой\s+|установи\s+|поставь\s+|смени\s+|измени\s+)?часовой\s+пояс\s*(?:на|:)?\s*([+\w\s/–\-а-яёА-ЯЁ]+)/iu)
         if (tzNaturalMatch && tzNaturalMatch[1]) {
           const matchedTz = parseTimezoneInput(tzNaturalMatch[1])
           if (matchedTz) {

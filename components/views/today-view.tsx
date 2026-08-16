@@ -5,7 +5,7 @@ import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { HabitsWidget } from '@/components/habits-widget'
 import { cn } from '@/lib/utils'
-import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X } from 'lucide-react'
 import { parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
 
@@ -41,12 +41,67 @@ const getInitialDailyContext = (): DailyContext => {
   }
 }
 
+export function taskMatchesHabit(task: any, habit: { id: string; title: string }): boolean {
+  if (!task || !habit) return false
+  if (task.habitId === habit.id) return true
+
+  const hTitle = habit.title.toLowerCase().trim()
+  const tTitle = (task.title || '').toLowerCase()
+  const tDesc = (task.description || '').toLowerCase()
+  const tags: string[] = (task.tags || []).map((t: any) => String(t).toLowerCase())
+
+  // Exact tag match
+  if (tags.includes(hTitle)) return true
+
+  // Specific semantic matching for gaming habits:
+  // "Играть в игры" / "Игры" / "Гейминг" -> matches "поиграть", "игры", "игра", "cs", "counterstrike", "dota", "steam"
+  if (/(?:игр|гейм|играть)/i.test(hTitle)) {
+    if (/(?:поиграть|играть|сыграть|игры|игру|игрули|гейм|cs|counter.?strike|dota|steam|playstation|xbox)/i.test(tTitle + ' ' + tDesc) || tags.some((t: string) => /(?:игры|игра|гейминг|cs)/i.test(t))) {
+      return true
+    }
+  }
+
+  // "Прослушивание музыки" / "Музыка" -> "музык", "трек", "песн", "альбом", "плейлист", "spotify"
+  if (/(?:музык|слушать|песн)/i.test(hTitle)) {
+    if (/(?:музык|трек|песн|альбом|плейлист|spotify|яндекс\s*музык|слушать)/i.test(tTitle + ' ' + tDesc) || tags.some((t: string) => /(?:музыка|треки)/i.test(t))) {
+      return true
+    }
+  }
+
+  // "Утренняя тренировка" / "Тренировка" / "Спорт" / "Зал" -> "тренировк", "спорт", "зал", "бег", "пробежка", "отжимания", "приседания", "воркаут"
+  if (/(?:тренировк|спорт|зал|воркаут|зарядк|фитнес|бег)/i.test(hTitle)) {
+    if (/(?:тренировк|спорт|зал|воркаут|зарядк|фитнес|бег|пробежк|отжимания|приседания|жим|турник|растяжк|пресс)/i.test(tTitle + ' ' + tDesc) || tags.some((t: string) => /(?:спорт|тренировка|фитнес)/i.test(t))) {
+      return true
+    }
+  }
+
+  // "Чтение" / "Читать книги" -> "книг", "читать", "глав", "страниц"
+  if (/(?:чтени|книг|читать)/i.test(hTitle)) {
+    if (/(?:книг|читать|прочитать|глав|страниц|литератур)/i.test(tTitle + ' ' + tDesc) || tags.some((t: string) => /(?:книги|чтение)/i.test(t))) {
+      return true
+    }
+  }
+
+  // Generic keyword stem matching (words >= 4 chars)
+  const keywords = hTitle.split(/[\s,.-]+/).filter(w => w.length >= 4)
+  for (const kw of keywords) {
+    const stem = kw.slice(0, 4)
+    if (tTitle.includes(stem) || tDesc.includes(stem) || tags.some((t: string) => t.includes(stem))) {
+      return true
+    }
+  }
+
+  return false
+}
+
 export function TodayView() {
   const { state, dispatch } = useApp()
-  const today = new Date().toISOString().slice(0, 10)
-  const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
-  const [eisenhowerSort, setEisenhowerSort] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null)
+  const [eisenhowerSort, setEisenhowerSort] = useState(false)
+  const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
+
+  const today = new Date().toISOString().slice(0, 10)
 
   const FIXED_TAGS = [
     { id: 'all', label: 'Все' },
@@ -81,14 +136,21 @@ export function TodayView() {
       .catch(() => {})
   }, [])
 
+  const activeHabit = state.habits.find(h => h.id === selectedHabitId) || null
+
   const rawTodayTasks = state.tasks.filter(t => {
+    if (activeHabit) {
+      // When a habit is selected: show ALL tasks from ALL dates for this habit
+      return taskMatchesHabit(t, activeHabit)
+    }
+    // Otherwise show today's tasks
     if (t.dueDate) return t.dueDate === today
     return isToday(parseISO(t.createdAt))
   })
   const todayTasks = rawTodayTasks.filter(matchesTag)
   const doneTasks = todayTasks.filter(t => t.status === 'done')
   const activeTasks = todayTasks.filter(t => t.status !== 'done')
-  const overdueTasks = state.tasks.filter(t => t.status === 'overdue')
+  const overdueTasks = activeHabit ? [] : state.tasks.filter(t => t.status === 'overdue')
   const completionRate = todayTasks.length ? Math.round((doneTasks.length / todayTasks.length) * 100) : 0
 
   const stats = [
@@ -212,7 +274,34 @@ export function TodayView() {
         )}
 
         {/* Habits Widget */}
-        <HabitsWidget />
+        <HabitsWidget
+          selectedHabitId={selectedHabitId}
+          onSelectHabit={setSelectedHabitId}
+        />
+
+        {/* Active Habit Banner */}
+        {activeHabit && (
+          <div className="flex items-center justify-between p-3 rounded-2xl bg-primary/10 border border-primary/25">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-xl shrink-0">{activeHabit.icon || '📌'}</span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">Привычка: {activeHabit.title}</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {todayTasks.length > 0
+                    ? `Показаны все задачи по этой привычке со всех дней (${todayTasks.length})`
+                    : 'По этой привычке пока нет созданных задач'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedHabitId(null)}
+              className="px-2.5 py-1 rounded-xl bg-card border border-border hover:bg-muted text-foreground text-[11px] font-semibold flex items-center gap-1 transition-all shrink-0 shadow-xs"
+            >
+              <X className="w-3 h-3" />
+              <span>Все задачи</span>
+            </button>
+          </div>
+        )}
 
         {/* Overdue tasks */}
         {overdueTasks.length > 0 && (
@@ -250,13 +339,15 @@ export function TodayView() {
           })}
         </div>
 
-        {/* Today tasks list */}
+        {/* Tasks list */}
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5 text-muted-foreground" />
               <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Сегодня — {activeTasks.length} задач осталось
+                {activeHabit
+                  ? `Задачи привычки «${activeHabit.title}» — ${activeTasks.length} осталось`
+                  : `Сегодня — ${activeTasks.length} задач осталось`}
               </h2>
             </div>
             <button
@@ -279,8 +370,16 @@ export function TodayView() {
               className="flex flex-col items-center gap-2 py-10 text-center bg-card/30 rounded-2xl border border-dashed border-border"
             >
               <CheckCircle2 className="w-10 h-10 text-[var(--status-done)]/60" />
-              <p className="text-sm font-medium text-foreground">Все задачи на сегодня выполнены!</p>
-              <p className="text-[13px] text-muted-foreground">Отличная работа. Отдохни или запланируй дела на завтра.</p>
+              <p className="text-sm font-medium text-foreground">
+                {activeHabit
+                  ? `По привычке «${activeHabit.title}» нет активных задач`
+                  : 'Все задачи на сегодня выполнены!'}
+              </p>
+              <p className="text-[13px] text-muted-foreground">
+                {activeHabit
+                  ? 'Все задачи этой привычки выполнены или еще не созданы.'
+                  : 'Отличная работа. Отдохни или запланируй дела на завтра.'}
+              </p>
             </motion.div>
           ) : (
             <div className="space-y-0.5">

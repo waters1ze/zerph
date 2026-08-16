@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Check, MoreVertical, Flame, Edit3, Trash2, CheckCircle2, Circle } from 'lucide-react'
+import { Plus, Check, MoreVertical, Flame, Edit3, Trash2, CheckCircle2, Circle, Sparkles } from 'lucide-react'
 import { useApp, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -10,7 +10,12 @@ import { HabitDetailsModal } from '@/components/habit-details-modal'
 import { HabitEditModal } from '@/components/habit-edit-modal'
 import type { Habit } from '@/lib/types'
 
-export function HabitsWidget() {
+interface HabitsWidgetProps {
+  selectedHabitId?: string | null
+  onSelectHabit?: (habitId: string | null) => void
+}
+
+export function HabitsWidget({ selectedHabitId, onSelectHabit }: HabitsWidgetProps = {}) {
   const { state, dispatch } = useApp()
   const confirm = useConfirmDialog()
   const [isAdding, setIsAdding] = useState(false)
@@ -195,6 +200,7 @@ export function HabitsWidget() {
         {state.habits.map(habit => {
           const isDone = habit.lastCompletedAt === todayStr
           const isMenuOpen = activeMenuHabitId === habit.id
+          const isSelected = selectedHabitId === habit.id
 
           return (
             <motion.div
@@ -204,11 +210,19 @@ export function HabitsWidget() {
               whileTap={{ scale: 0.98 }}
               className={cn(
                 'relative p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 group',
-                isDone
-                  ? 'bg-primary/15 border-primary/30 shadow-xs'
+                isSelected
+                  ? 'bg-primary/20 border-primary ring-2 ring-primary/40 shadow-sm'
+                  : isDone
+                  ? 'bg-primary/10 border-primary/25 shadow-xs'
                   : 'bg-card border-border/60 hover:border-primary/40'
               )}
-              onClick={() => setSelectedHabitForDetails(habit)}
+              onClick={() => {
+                if (onSelectHabit) {
+                  onSelectHabit(isSelected ? null : habit.id)
+                } else {
+                  setSelectedHabitForDetails(habit)
+                }
+              }}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xl">{habit.icon || '📌'}</span>
@@ -245,6 +259,16 @@ export function HabitsWidget() {
                           className="absolute right-0 top-7 z-50 w-36 bg-popover border border-border rounded-xl shadow-2xl p-1 font-sans flex flex-col gap-0.5"
                           onClick={e => e.stopPropagation()}
                         >
+                          <button
+                            onClick={() => {
+                              setActiveMenuHabitId(null)
+                              setSelectedHabitForDetails(habit)
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs font-semibold text-foreground hover:bg-accent transition-colors text-left"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-primary" />
+                            <span>Подробнее</span>
+                          </button>
                           <button
                             onClick={() => {
                               setActiveMenuHabitId(null)
