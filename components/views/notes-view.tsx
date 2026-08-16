@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -13,12 +13,70 @@ import {
   Trash2, Search, Calendar as CalendarIcon,
   ChevronLeft, ChevronRight, BookOpen, Users, Sparkles, Loader2, Check, X, FolderPlus,
   Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Flame,
-  PanelLeft, PanelLeftClose, ChevronDown, FolderTree
+  PanelLeft, PanelLeftClose, ChevronDown, FolderTree, Network, Link as LinkIcon, CornerDownRight, ArrowUpRight
 } from 'lucide-react'
 import type { Note, NoteType } from '@/lib/types'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
+import { KnowledgeGraphModal } from '@/components/knowledge-graph-modal'
+import { extractWikilinks, findBacklinks, findOutgoingLinks, getFolderColor } from '@/lib/wikilinks'
 
 const DEFAULT_FOLDERS = ['Общее', 'Работа', 'Личное', 'Идеи', 'Учеба', 'Проекты']
+
+export interface FolderTreeNode {
+  fullPath: string
+  name: string
+  children: FolderTreeNode[]
+  notesCount: number
+}
+
+function buildFolderTree(notes: Note[], defaultFolders: string[]): FolderTreeNode[] {
+  const allFolderPaths = new Set(defaultFolders)
+  notes.forEach(n => {
+    if (n.folder && n.folder.trim()) allFolderPaths.add(n.folder.trim())
+  })
+
+  // Ensure intermediate paths
+  const expandedPaths = new Set<string>()
+  allFolderPaths.forEach(path => {
+    const parts = path.split('/')
+    let current = ''
+    parts.forEach(part => {
+      current = current ? `${current}/${part}` : part
+      expandedPaths.add(current)
+    })
+  })
+
+  const rootNodes: FolderTreeNode[] = []
+  const nodeMap = new Map<string, FolderTreeNode>()
+
+  Array.from(expandedPaths).sort().forEach(fullPath => {
+    const parts = fullPath.split('/')
+    const name = parts[parts.length - 1]
+    const notesCount = notes.filter(n => (n.folder || 'Общее').startsWith(fullPath)).length
+
+    const node: FolderTreeNode = {
+      fullPath,
+      name,
+      children: [],
+      notesCount,
+    }
+    nodeMap.set(fullPath, node)
+
+    if (parts.length === 1) {
+      rootNodes.push(node)
+    } else {
+      const parentPath = parts.slice(0, -1).join('/')
+      const parent = nodeMap.get(parentPath)
+      if (parent) {
+        parent.children.push(node)
+      } else {
+        rootNodes.push(node)
+      }
+    }
+  })
+
+  return rootNodes
+}
 
 export function NotesView() {
   const { state, dispatch } = useApp()
@@ -33,8 +91,16 @@ export function NotesView() {
   const [showMobileList, setShowMobileList] = useState(true)
   const [isFoldersOpen, setIsFoldersOpen] = useState(true)
   const [isAiProcessing, setIsAiProcessing] = useState(false)
+  
+  // Folder Creation / Subfolder state
   const [newFolderName, setNewFolderName] = useState('')
+  const [parentFolderForNew, setParentFolderForNew] = useState<string | null>(null)
   const [showNewFolderModal, setShowNewFolderModal] = useState(false)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['Школа', 'Учеба', 'Работа', 'Проекты']))
+
+  // Graph Modal state
+  const [isGraphModalOpen, setIsGraphModalOpen] = useState(false)
+  const [graphFolderFilter, setGraphFolderFilter] = useState<string | null>(null)
 
   // Draft state for note editing
   const [editTitle, setEditTitle] = useState('')
@@ -48,7 +114,13 @@ export function NotesView() {
   const [editVisibility, setEditVisibility] = useState<'private' | 'public'>('private')
   const [newTagInput, setNewTagInput] = useState('')
 
-  // Derive unique folders list
+  // Wikilink autocomplete state
+  const [showWikilinkSuggest, setShowWikilinkSuggest] = useState(false)
+  const [wikilinkQuery, setWikilinkQuery] = useState('')
+  const [wikilinkCursorPos, setWikilinkCursorPos] = useState<number | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // Derive unique flat folders list
   const allFolders = useMemo(() => {
     const set = new Set(DEFAULT_FOLDERS)
     notes.forEach(n => {
@@ -57,13 +129,20 @@ export function NotesView() {
     return Array.from(set)
   }, [notes])
 
-  // Folder label helper
-  const currentFolderLabel = useMemo(() => {
-    if (selectedFolder === 'all') return 'Все заметки'
-    if (selectedFolder === 'pinned') return 'Закрепленные'
-    if (selectedFolder === 'dated') return 'С датой'
-    return selectedFolder
-  }, [selectedFolder])
+  // Derive hierarchical folder tree
+  const folderTree = useMemo(() => {
+    return buildFolderTree(notes, DEFAULT_FOLDERS)
+  }, [notes])
+
+  const toggleFolderExpanded = (path: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
 
   const activeNote = notes.find(n => n.id === selectedId) || notes[0] || null
 
@@ -81,7 +160,7 @@ export function NotesView() {
     }
   }, [selectedId, activeNote])
 
-  // Filter notes strictly by search & folder
+  // Filter notes strictly by search & folder (supports hierarchical prefix matching)
   const filteredNotes = notes.filter(n => {
     const matchesSearch =
       n.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -98,9 +177,9 @@ export function NotesView() {
       return n.type === selectedFolder
     }
 
-    // Specific named folder
+    // Specific named folder or subfolder
     const noteFolder = n.folder || 'Общее'
-    return noteFolder.toLowerCase() === selectedFolder.toLowerCase()
+    return noteFolder.startsWith(selectedFolder)
   })
 
   // Create new note
@@ -125,7 +204,7 @@ export function NotesView() {
     setShowMobileList(false)
   }
 
-  // Save current note edits to cloud DB
+  // Save current note edits
   const handleSave = () => {
     if (!activeNote) return
     dispatch({
@@ -147,7 +226,65 @@ export function NotesView() {
     setIsEditing(false)
   }
 
-  // AI Auto-classification of notes into folders
+  // Handle Wikilink input changes in textarea
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    const pos = e.target.selectionStart
+    setEditContent(value)
+
+    // Check if cursor is directly after [[
+    const textBeforeCursor = value.slice(0, pos)
+    const match = textBeforeCursor.match(/\[\[([^\]]*)$/)
+    if (match) {
+      setShowWikilinkSuggest(true)
+      setWikilinkQuery(match[1])
+      setWikilinkCursorPos(pos)
+    } else {
+      setShowWikilinkSuggest(false)
+    }
+  }
+
+  const insertWikilink = (targetTitle: string) => {
+    if (wikilinkCursorPos === null || !textareaRef.current) return
+    const textBefore = editContent.slice(0, wikilinkCursorPos)
+    const textAfter = editContent.slice(wikilinkCursorPos)
+    const lastBracketIdx = textBefore.lastIndexOf('[[')
+
+    if (lastBracketIdx !== -1) {
+      const newText = textBefore.slice(0, lastBracketIdx) + `[[${targetTitle}]]` + textAfter
+      setEditContent(newText)
+      setShowWikilinkSuggest(false)
+    }
+  }
+
+  // Navigate to a note by title (or create if not found)
+  const handleNavigateWikilink = (targetTitle: string) => {
+    const norm = targetTitle.toLowerCase().trim()
+    const found = notes.find(n => n.title.toLowerCase().trim() === norm)
+    if (found) {
+      setSelectedId(found.id)
+      setShowMobileList(false)
+      setIsEditing(false)
+    } else {
+      // Create new note with this title
+      const newNote: Note = {
+        id: `n-${Date.now()}`,
+        title: targetTitle,
+        content: `# ${targetTitle}\n\nСвязанная заметка`,
+        type: 'note',
+        folder: activeNote?.folder || 'Общее',
+        tags: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      dispatch({ type: 'ADD_NOTE', note: newNote })
+      setSelectedId(newNote.id)
+      setShowMobileList(false)
+      setIsEditing(true)
+    }
+  }
+
+  // AI Auto-classification
   const handleAiClassify = async () => {
     if (!activeNote || isAiProcessing) return
     setIsAiProcessing(true)
@@ -157,40 +294,26 @@ export function NotesView() {
       const prompt = `Проанализируй этот текст заметки и верни JSON со свойствами:
 1. "folder": определи наиболее подходящую папку из [${allFolders.map(f => `"${f}"`).join(', ')}] или предложи короткое название папки (1 слово)
 2. "type": из ["note", "journal", "meeting"]
-   - "journal" если это личные мысли, дневник, рефлексия
-   - "meeting" если это созвон, встреча, договорённость, протокол
-   - "note" для всего остального
-3. "dueDate": если в тексте есть дата (например «до 25 мая», «на четверг»), верни в формате YYYY-MM-DD, иначе null
+3. "dueDate": если в тексте есть дата (например «до 25 мая»), верни в формате YYYY-MM-DD, иначе null
 
 Текст заметки:
 "${activeNote.title}
 ${activeNote.content}"
 
-Верни ТОЛЬКО JSON без markdown разметки: {"folder": string, "type": string, "dueDate": string | null}`
+Верни ТОЛЬКО JSON: {"folder": string, "type": string, "dueDate": string | null}`
 
       const res = await fetch('/api/groq', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: prompt }],
-          apiKey,
-        }),
+        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], apiKey }),
       })
-
       const data = await res.json()
       if (data.content) {
         const cleaned = data.content.replace(/```json/g, '').replace(/```/g, '').trim()
         const parsed = JSON.parse(cleaned)
-
-        if (parsed.folder) {
-          setEditFolder(parsed.folder)
-        }
-        if (parsed.type) {
-          setEditType(parsed.type)
-        }
-        if (parsed.dueDate) {
-          setEditDueDate(parsed.dueDate)
-        }
+        if (parsed.folder) setEditFolder(parsed.folder)
+        if (parsed.type) setEditType(parsed.type)
+        if (parsed.dueDate) setEditDueDate(parsed.dueDate)
 
         dispatch({
           type: 'UPDATE_NOTE',
@@ -203,40 +326,12 @@ ${activeNote.content}"
         })
       }
     } catch {
-      // Simple fallback keyword classification
-      const lower = (activeNote.title + ' ' + activeNote.content).toLowerCase()
-      let detectedFolder = 'Общее'
-      let detectedType: NoteType = 'note'
-
-      if (lower.includes('работа') || lower.includes('проект') || lower.includes('клиент') || lower.includes('договор')) {
-        detectedFolder = 'Работа'
-      } else if (lower.includes('учеба') || lower.includes('лекция') || lower.includes('экзамен') || lower.includes('книга')) {
-        detectedFolder = 'Учеба'
-      } else if (lower.includes('идея') || lower.includes('стартап') || lower.includes('придумал') || lower.includes('мысль')) {
-        detectedFolder = 'Идеи'
-      } else if (lower.includes('купить') || lower.includes('дом') || lower.includes('семья') || lower.includes('личное')) {
-        detectedFolder = 'Личное'
-      }
-
-      if (lower.includes('созвон') || lower.includes('митинг') || lower.includes('встреча') || lower.includes('обсудили')) {
-        detectedType = 'meeting'
-      } else if (lower.includes('дневник') || lower.includes('чувствую') || lower.includes('сегодня я')) {
-        detectedType = 'journal'
-      }
-
-      setEditFolder(detectedFolder)
-      setEditType(detectedType)
-      dispatch({
-        type: 'UPDATE_NOTE',
-        id: activeNote.id,
-        updates: { folder: detectedFolder, type: detectedType },
-      })
+      // Fallback
     } finally {
       setIsAiProcessing(false)
     }
   }
 
-  // Toggle pin
   const handleTogglePin = () => {
     if (!activeNote) return
     dispatch({
@@ -246,485 +341,313 @@ ${activeNote.content}"
     })
   }
 
-  // Delete note
   const handleDelete = async () => {
     if (!activeNote) return
     const ok = await confirm({
-      title: `Удалить заметку «${activeNote.title}»?`,
-      description: 'Это действие нельзя будет отменить.',
+      title: 'Удалить заметку?',
+      description: `Вы уверены, что хотите удалить «${activeNote.title}»?`,
       confirmText: 'Удалить',
       variant: 'danger',
     })
     if (ok) {
       dispatch({ type: 'DELETE_NOTE', id: activeNote.id })
-      setSelectedId(notes.find(n => n.id !== activeNote.id)?.id || null)
-      setIsEditing(false)
+      setSelectedId(null)
       setShowMobileList(true)
     }
   }
 
-  // Add tag
   const handleAddTag = () => {
     const t = newTagInput.trim().replace(/^#/, '')
     if (t && !editTags.includes(t)) {
-      const updated = [...editTags, t]
-      setEditTags(updated)
+      setEditTags([...editTags, t])
       setNewTagInput('')
-      if (activeNote) {
-        dispatch({ type: 'UPDATE_NOTE', id: activeNote.id, updates: { tags: updated } })
-      }
     }
   }
 
-  // Remove tag
-  const handleRemoveTag = (tagToRemove: string) => {
-    const updated = editTags.filter(t => t !== tagToRemove)
-    setEditTags(updated)
-    if (activeNote) {
-      dispatch({ type: 'UPDATE_NOTE', id: activeNote.id, updates: { tags: updated } })
-    }
+  const handleRemoveTag = (t: string) => {
+    setEditTags(editTags.filter(x => x !== t))
   }
 
-  if (activeFolderView === null) {
+  // Backlinks & Outgoing links calculation
+  const backlinks = useMemo(() => {
+    if (!activeNote?.title) return []
+    return findBacklinks(activeNote.title, notes)
+  }, [activeNote?.title, notes])
+
+  const outgoingLinks = useMemo(() => {
+    if (!activeNote) return []
+    return findOutgoingLinks(activeNote, notes)
+  }, [activeNote, notes])
+
+  // Custom Markdown renderer for [[Wikilinks]]
+  const renderMarkdownWithWikilinks = (content: string) => {
+    if (!content) return null
+    // Replace [[Link]] with special placeholder or custom renderer
+    const parts = content.split(/(\[\[[^\]]+\]\])/g)
+
     return (
-      <div className="flex flex-col h-full w-full bg-background overflow-y-auto rounded-2xl border border-border shadow-2xl font-sans p-5 sm:p-7 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
-          <div>
-            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-              <FolderTree className="w-5 h-5 text-primary" />
-              <span>Папки заметок</span>
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Выберите папку, чтобы открыть и редактировать относящиеся к ней заметки
-            </p>
-          </div>
+      <div className="space-y-2 leading-relaxed">
+        {parts.map((part, idx) => {
+          const match = part.match(/^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]$/)
+          if (match) {
+            const targetTitle = match[1].trim()
+            const alias = match[2]?.trim() || targetTitle
+            const targetExists = notes.some(n => n.title.toLowerCase().trim() === targetTitle.toLowerCase().trim())
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowNewFolderModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-semibold border border-border transition-all"
-            >
-              <FolderPlus className="w-4 h-4 text-primary" />
-              <span>Новая папка</span>
-            </button>
-            <button
-              onClick={() => {
-                handleCreateNote()
-                setActiveFolderView('Общее')
-                setSelectedFolder('Общее')
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-md hover:opacity-90 transition-opacity"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Быстрая заметка</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative max-w-md">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Поиск по всем заметкам и папкам…"
-            className="w-full h-10 pl-10 pr-4 rounded-xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
-          />
-        </div>
-
-        {/* Quick Collections Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* 1. All Notes */}
-          <div
-            onClick={() => {
-              setSelectedFolder('all')
-              setActiveFolderView('all')
-            }}
-            className="p-4 rounded-2xl bg-card hover:bg-muted/40 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex items-center justify-between group shadow-xs"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                  Все заметки
-                </h3>
-                <p className="text-[11px] text-muted-foreground">{notes.length} заметок</p>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-          </div>
-
-          {/* 2. Pinned */}
-          <div
-            onClick={() => {
-              setSelectedFolder('pinned')
-              setActiveFolderView('pinned')
-            }}
-            className="p-4 rounded-2xl bg-card hover:bg-muted/40 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex items-center justify-between group shadow-xs"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
-                <Pin className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-foreground group-hover:text-amber-500 transition-colors">
-                  Закрепленные
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  {notes.filter(n => n.pinned).length} заметок
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
-          </div>
-
-          {/* 3. Group / Team Shared Notes */}
-          <div
-            onClick={() => {
-              setSelectedFolder('Группа')
-              setActiveFolderView('Группа')
-            }}
-            className="p-4 rounded-2xl bg-card hover:bg-muted/40 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex items-center justify-between group shadow-xs"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center font-bold">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-foreground group-hover:text-sky-400 transition-colors">
-                  Общие (Группа)
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  {notes.filter(n => n.folder === 'Группа' || n.visibility === 'public' || n.tags?.includes('группа') || n.tags?.includes('команда')).length} заметок
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-sky-400 group-hover:translate-x-0.5 transition-all" />
-          </div>
-        </div>
-
-        {/* Categories Grid */}
-        <div className="space-y-3 pt-2">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Категории и папки ({allFolders.length})
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {allFolders.map(folder => {
-              const folderNotes = notes.filter(n => (n.folder || 'Общее').toLowerCase() === folder.toLowerCase())
-              const recentNote = folderNotes[0]
-
-              return (
-                <div
-                  key={folder}
-                  onClick={() => {
-                    setSelectedFolder(folder)
-                    setActiveFolderView(folder)
-                    if (folderNotes.length > 0) {
-                      setSelectedId(folderNotes[0].id)
-                    }
-                  }}
-                  className="p-5 rounded-2xl bg-card hover:bg-muted/30 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex flex-col justify-between gap-4 group shadow-sm hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                        <Folder className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
-                          {folder}
-                        </h3>
-                        <span className="text-[11px] text-muted-foreground font-medium">
-                          {folderNotes.length} {folderNotes.length === 1 ? 'заметка' : folderNotes.length >= 2 && folderNotes.length <= 4 ? 'заметки' : 'заметок'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/50">
-                      Открыть →
-                    </span>
-                  </div>
-
-                  {/* Recent Preview Snippet */}
-                  <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
-                    {recentNote ? (
-                      <div className="space-y-1">
-                        <p className="font-semibold text-foreground truncate">{recentNote.title}</p>
-                        <p className="line-clamp-1 opacity-70">
-                          {recentNote.content ? recentNote.content.slice(0, 60) : 'Без содержимого'}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="italic text-muted-foreground/60">Папка пуста</p>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* New Folder Modal */}
-        <AnimatePresence>
-          {showNewFolderModal && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-card border border-border p-5 rounded-2xl shadow-2xl max-w-sm w-full space-y-4"
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleNavigateWikilink(targetTitle)}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-lg text-xs font-bold font-mono transition-all border shadow-xs',
+                  targetExists
+                    ? 'bg-primary/15 text-primary border-primary/30 hover:bg-primary/25 hover:scale-105'
+                    : 'bg-muted/70 text-muted-foreground border-dashed border-border hover:text-foreground'
+                )}
+                title={targetExists ? `Открыть: ${targetTitle}` : `Создать заметку: ${targetTitle}`}
               >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-foreground">Новая папка</h3>
-                  <button onClick={() => setShowNewFolderModal(false)} className="text-muted-foreground hover:text-foreground">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  autoFocus
-                  value={newFolderName}
-                  onChange={e => setNewFolderName(e.target.value)}
-                  placeholder="Название папки (напр. 'Документы', 'Финансы')..."
-                  className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs text-foreground outline-none focus:border-primary"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      if (newFolderName.trim()) {
-                        setSelectedFolder(newFolderName.trim())
-                        setActiveFolderView(newFolderName.trim())
-                        setNewFolderName('')
-                        setShowNewFolderModal(false)
-                      }
-                    }
-                  }}
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => setShowNewFolderModal(false)}
-                    className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-xs font-semibold text-muted-foreground"
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (newFolderName.trim()) {
-                        setSelectedFolder(newFolderName.trim())
-                        setActiveFolderView(newFolderName.trim())
-                        setNewFolderName('')
-                        setShowNewFolderModal(false)
-                      }
-                    }}
-                    className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold"
-                  >
-                    Создать
-                  </button>
-                </div>
-              </motion.div>
-            </div>
+                <LinkIcon className="w-3 h-3" />
+                <span>{alias}</span>
+                {!targetExists && <span className="text-[10px] opacity-60">+</span>}
+              </button>
+            )
+          }
+
+          return (
+            <ReactMarkdown key={idx} remarkPlugins={[remarkGfm]}>
+              {part}
+            </ReactMarkdown>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Recursive tree renderer
+  const renderFolderTreeNode = (node: FolderTreeNode, depth = 0) => {
+    const isSelected = selectedFolder === node.fullPath
+    const isExpanded = expandedFolders.has(node.fullPath)
+    const hasChildren = node.children.length > 0
+    const folderColor = getFolderColor(node.fullPath)
+
+    return (
+      <div key={node.fullPath} className="space-y-0.5">
+        <div
+          onClick={() => {
+            setSelectedFolder(node.fullPath)
+            setActiveFolderView(node.fullPath)
+          }}
+          style={{ paddingLeft: `${8 + depth * 14}px` }}
+          className={cn(
+            'flex items-center justify-between py-1.5 pr-2 rounded-xl text-xs font-medium cursor-pointer transition-all group select-none',
+            isSelected
+              ? 'bg-primary/15 text-primary font-bold shadow-xs'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           )}
-        </AnimatePresence>
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={(e) => toggleFolderExpanded(node.fullPath, e)}
+                className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-foreground"
+              >
+                {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              </button>
+            ) : (
+              <span className="w-4 h-4 shrink-0" />
+            )}
+
+            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: folderColor }} />
+            <span className="truncate">{node.name}</span>
+          </div>
+
+          <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setParentFolderForNew(node.fullPath)
+                setShowNewFolderModal(true)
+              }}
+              className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted"
+              title="Создать подпапку"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+            
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setGraphFolderFilter(node.fullPath)
+                setIsGraphModalOpen(true)
+              }}
+              className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-amber-400 hover:bg-muted"
+              title="Граф этой папки"
+            >
+              <Network className="w-3 h-3" />
+            </button>
+
+            <span className="text-[10px] font-bold text-muted-foreground ml-0.5">
+              {node.notesCount}
+            </span>
+          </div>
+        </div>
+
+        {hasChildren && isExpanded && (
+          <div className="space-y-0.5">
+            {node.children.map(child => renderFolderTreeNode(child, depth + 1))}
+          </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden rounded-2xl border border-border shadow-2xl font-sans">
-      {/* ── 1. iOS Style Collapsible Folders Sidebar ── */}
+    <div className="flex h-[calc(100vh-100px)] rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xl font-sans relative">
+      
+      {/* ── 1. Left Folder Tree Sidebar (Obsidian Style) ── */}
       <AnimatePresence initial={false}>
         {isFoldersOpen && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 224, opacity: 1 }}
+            animate={{ width: 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="hidden lg:flex flex-col bg-card/90 border-r border-border p-3 select-none shrink-0 overflow-hidden"
+            transition={{ duration: 0.2 }}
+            className="border-r border-border bg-muted/20 flex flex-col shrink-0 overflow-hidden"
           >
-            <div className="flex items-center justify-between px-2 py-2">
-              <button
-                onClick={() => setActiveFolderView(null)}
-                className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
-                title="Вернуться к списку папок"
-              >
-                <span>← Папки</span>
-              </button>
+            {/* Folder Header */}
+            <div className="p-3.5 border-b border-border/60 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderTree className="w-4 h-4 text-primary" />
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground">Папки & База</span>
+              </div>
+
               <div className="flex items-center gap-1">
+                {/* Global Graph View Button */}
                 <button
-                  onClick={() => setShowNewFolderModal(true)}
-                  className="text-muted-foreground hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-muted/60"
+                  onClick={() => {
+                    setGraphFolderFilter(null)
+                    setIsGraphModalOpen(true)
+                  }}
+                  className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 text-xs font-semibold flex items-center gap-1 transition-all"
+                  title="Открыть интерактивный граф знаний всей базы"
+                >
+                  <Network className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Граф</span>
+                </button>
+
+                {/* New Root Folder */}
+                <button
+                  onClick={() => {
+                    setParentFolderForNew(null)
+                    setShowNewFolderModal(true)
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                   title="Создать папку"
                 >
                   <FolderPlus className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => setIsFoldersOpen(false)}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted/60"
-                  title="Скрыть панель папок"
-                >
-                  <PanelLeftClose className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
-            <div className="space-y-0.5 mt-1 overflow-y-auto flex-1 pr-1">
-              {/* Quick Filters */}
+            {/* Quick Views: All, Pinned, Dated */}
+            <div className="p-2 space-y-0.5 border-b border-border/40">
               <button
-                onClick={() => setSelectedFolder('all')}
+                onClick={() => { setSelectedFolder('all'); setActiveFolderView(null) }}
                 className={cn(
-                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-medium transition-all',
-                  selectedFolder === 'all'
-                    ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
-                    : 'text-foreground/80 hover:bg-muted/60'
+                  'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                  selectedFolder === 'all' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >
-                <div className="flex items-center gap-2.5">
-                  <Folder className={cn('w-4 h-4 shrink-0', selectedFolder === 'all' ? 'text-primary' : 'text-muted-foreground')} />
+                <div className="flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5" />
                   <span>Все заметки</span>
                 </div>
-                <span className="text-[11px] font-bold text-muted-foreground/60">{notes.length}</span>
+                <span className="text-[10px] opacity-70">{notes.length}</span>
               </button>
 
               <button
-                onClick={() => setSelectedFolder('pinned')}
+                onClick={() => { setSelectedFolder('pinned'); setActiveFolderView(null) }}
                 className={cn(
-                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-medium transition-all',
-                  selectedFolder === 'pinned'
-                    ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
-                    : 'text-foreground/80 hover:bg-muted/60'
+                  'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                  selectedFolder === 'pinned' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >
-                <div className="flex items-center gap-2.5">
-                  <Pin className={cn('w-4 h-4 shrink-0', selectedFolder === 'pinned' ? 'text-primary' : 'text-muted-foreground')} />
+                <div className="flex items-center gap-2">
+                  <Pin className="w-3.5 h-3.5 text-amber-400" />
                   <span>Закрепленные</span>
                 </div>
-                <span className="text-[11px] font-bold text-muted-foreground/60">
-                  {notes.filter(n => n.pinned).length}
-                </span>
+                <span className="text-[10px] opacity-70">{notes.filter(n => n.pinned).length}</span>
               </button>
+            </div>
 
-              <button
-                onClick={() => setSelectedFolder('dated')}
-                className={cn(
-                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-medium transition-all',
-                  selectedFolder === 'dated'
-                    ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
-                    : 'text-foreground/80 hover:bg-muted/60'
-                )}
-              >
-                <div className="flex items-center gap-2.5">
-                  <CalendarIcon className={cn('w-4 h-4 shrink-0', selectedFolder === 'dated' ? 'text-primary' : 'text-muted-foreground')} />
-                  <span>С датой</span>
-                </div>
-                <span className="text-[11px] font-bold text-muted-foreground/60">
-                  {notes.filter(n => !!n.dueDate).length}
-                </span>
-              </button>
-
-              <div className="my-2 border-t border-border/50" />
-              <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                Категории
-              </p>
-
-              {allFolders.map(folder => {
-                const count = notes.filter(n => (n.folder || 'Общее').toLowerCase() === folder.toLowerCase()).length
-                const isActive = selectedFolder.toLowerCase() === folder.toLowerCase()
-
-                return (
-                  <button
-                    key={folder}
-                    onClick={() => setSelectedFolder(folder)}
-                    className={cn(
-                      'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-medium transition-all',
-                      isActive
-                        ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
-                        : 'text-foreground/80 hover:bg-muted/60'
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <Folder className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
-                      <span className="truncate">{folder}</span>
-                    </div>
-                    <span className="text-[11px] font-bold text-muted-foreground/60 shrink-0 ml-1.5">{count}</span>
-                  </button>
-                )
-              })}
+            {/* Nested Folder Tree */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                Дерево папок
+              </div>
+              {folderTree.map(node => renderFolderTreeNode(node))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── 2. iOS Notes List Panel ── */}
+      {/* ── 2. Note List Panel ── */}
       <div
         className={cn(
-          'w-full md:w-84 lg:w-80 border-r border-border bg-card/60 flex flex-col shrink-0',
+          'w-full md:w-80 border-r border-border bg-card/60 flex flex-col shrink-0',
           !showMobileList && 'hidden md:flex'
         )}
       >
-        {/* Top Header with iOS Folder Switcher & Controls */}
-        <div className="p-3.5 border-b border-border/60 flex flex-col gap-2.5">
+        {/* Top Search & Actions */}
+        <div className="p-3.5 border-b border-border/60 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <button
-                onClick={() => setActiveFolderView(null)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted hover:bg-muted/80 text-[11px] font-semibold text-foreground border border-border shrink-0 transition-colors"
-                title="Все папки"
+                onClick={() => setIsFoldersOpen(!isFoldersOpen)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                title={isFoldersOpen ? 'Скрыть папки' : 'Показать папки'}
               >
-                <span>← Папки</span>
+                {isFoldersOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
               </button>
 
-              {/* Folder Selector / Title */}
-              <div className="flex items-center gap-1.5 truncate">
-                <select
-                  value={selectedFolder}
-                  onChange={e => setSelectedFolder(e.target.value)}
-                  className="bg-transparent text-sm font-bold tracking-tight text-foreground font-sans outline-none cursor-pointer truncate max-w-[120px]"
-                >
-                  <option value="all" className="bg-card text-foreground">Все заметки</option>
-                  <option value="pinned" className="bg-card text-foreground">Закрепленные</option>
-                  <option value="dated" className="bg-card text-foreground">С датой</option>
-                  <optgroup label="Папки" className="bg-card text-foreground">
-                    {allFolders.map(f => (
-                      <option key={f} value={f} className="bg-card text-foreground">{f}</option>
-                    ))}
-                  </optgroup>
-                </select>
-                <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
-                  {filteredNotes.length}
-                </span>
-              </div>
+              <span className="text-xs font-bold text-foreground truncate">
+                {selectedFolder === 'all' ? 'Все заметки' : selectedFolder}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
+                {filteredNotes.length}
+              </span>
             </div>
 
             <button
               onClick={handleCreateNote}
-              className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-md shrink-0"
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-sm shrink-0"
               title="Создать заметку"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
 
           {/* Search bar */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Поиск по заметкам…"
-              className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/50 border border-border/60 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
+              className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/50 border border-border/60 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </div>
 
-        {/* Note List */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+        {/* Note List Items */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 no-scrollbar">
           {filteredNotes.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground text-[13px]">
+            <div className="py-16 text-center text-muted-foreground text-xs">
               Заметок не найдено
             </div>
           ) : (
@@ -741,20 +664,20 @@ ${activeNote.content}"
                     setIsEditing(false)
                   }}
                   className={cn(
-                    'p-3 rounded-xl cursor-pointer border transition-all duration-150 relative',
+                    'p-3 rounded-xl cursor-pointer border transition-all duration-150',
                     isSelected
                       ? 'bg-primary/10 border-primary/40 shadow-xs'
                       : 'bg-card border-border/40 hover:bg-muted/40'
                   )}
                 >
                   <div className="flex items-center justify-between gap-1 mb-1">
-                    <h3 className="text-[13px] font-bold text-foreground line-clamp-1 flex-1 font-sans">
+                    <h3 className="text-xs font-bold text-foreground line-clamp-1 flex-1">
                       {n.title || 'Без названия'}
                     </h3>
                     {n.pinned && <Pin className="w-3 h-3 text-primary shrink-0" />}
                   </div>
 
-                  <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed mb-2 font-sans">
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed mb-2">
                     {preview}
                   </p>
 
@@ -762,15 +685,7 @@ ${activeNote.content}"
                     <span className="px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground font-medium">
                       {n.folder || 'Общее'}
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      <span>{format(parseISO(n.updatedAt), 'd MMM HH:mm', { locale: ru })}</span>
-                      {n.dueDate && (
-                        <span className="flex items-center gap-0.5 text-primary font-semibold bg-primary/10 px-1 py-0.5 rounded">
-                          <CalendarIcon className="w-2.5 h-2.5" />
-                          {n.dueDate}
-                        </span>
-                      )}
-                    </div>
+                    <span>{format(parseISO(n.updatedAt), 'd MMM HH:mm', { locale: ru })}</span>
                   </div>
                 </div>
               )
@@ -779,7 +694,7 @@ ${activeNote.content}"
         </div>
       </div>
 
-      {/* ── 3. Editor / Viewing Panel ── */}
+      {/* ── 3. Note Viewing & Editing Panel ── */}
       <div
         className={cn(
           'flex-1 flex flex-col h-full bg-background overflow-hidden',
@@ -789,7 +704,7 @@ ${activeNote.content}"
         {activeNote ? (
           <>
             {/* Editor Toolbar */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-card/60 backdrop-blur-md shrink-0">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/60 bg-card/60 backdrop-blur-md shrink-0">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowMobileList(true)}
@@ -801,12 +716,9 @@ ${activeNote.content}"
                 <button
                   onClick={handleTogglePin}
                   className={cn(
-                    'p-2 rounded-xl border transition-all text-[12px] font-medium flex items-center gap-1.5',
-                    activeNote.pinned
-                      ? 'bg-primary/15 text-primary border-primary/30'
-                      : 'hover:bg-muted/60 border-border text-muted-foreground'
+                    'p-2 rounded-xl border transition-all text-xs font-medium flex items-center gap-1.5',
+                    activeNote.pinned ? 'bg-primary/15 text-primary border-primary/30 font-bold' : 'hover:bg-muted/60 border-border text-muted-foreground'
                   )}
-                  title="Закрепить вверху"
                 >
                   <Pin className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">{activeNote.pinned ? 'Закреплено' : 'Закрепить'}</span>
@@ -815,31 +727,30 @@ ${activeNote.content}"
                 <button
                   onClick={handleAiClassify}
                   disabled={isAiProcessing}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-[12px] font-medium hover:bg-primary/20 transition-all disabled:opacity-50"
-                  title="Определить папку и привязать дату с помощью AI"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-semibold hover:bg-primary/20 transition-all disabled:opacity-50"
                 >
                   {isAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   <span className="hidden sm:inline">AI Сортировка</span>
                 </button>
               </div>
 
-              {/* Toolbar right actions */}
+              {/* Right Toolbar Actions */}
               <div className="flex items-center gap-2">
                 {isEditing ? (
                   <button
                     onClick={handleSave}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold shadow-md hover:opacity-90 transition-opacity"
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-sm hover:opacity-90 transition-opacity"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    Сохранить
+                    <span>Сохранить</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted border border-border text-[12px] font-medium text-foreground transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-muted/60 hover:bg-muted border border-border text-xs font-semibold text-foreground transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    Править
+                    <span>Править</span>
                   </button>
                 )}
 
@@ -853,227 +764,228 @@ ${activeNote.content}"
               </div>
             </div>
 
-            {/* Editor Workspace */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 max-w-3xl mx-auto w-full">
-              {/* Title & Metadata */}
+            {/* Note Body Workspace */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-5 max-w-4xl mx-auto w-full no-scrollbar relative">
+              
+              {/* Title Input or View */}
               {isEditing ? (
                 <input
                   type="text"
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   placeholder="Заголовок заметки…"
-                  className="w-full text-2xl font-bold text-foreground bg-transparent outline-none border-b border-border/40 pb-2 font-sans tracking-tight"
+                  className="w-full text-2xl font-bold text-foreground bg-transparent outline-none border-b border-border/40 pb-2 tracking-tight"
                 />
               ) : (
-                <h1 className="text-2xl font-bold text-foreground font-sans tracking-tight leading-snug">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight leading-snug">
                   {activeNote.title}
                 </h1>
               )}
 
-              {/* Folder Selector & Linked Date Picker Bar */}
-              <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl bg-card border border-border/60 text-[12px] flex-wrap">
+              {/* Folder & Metadata Row */}
+              <div className="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-card border border-border/60 text-xs">
                 <div className="flex items-center gap-2">
+                  <Folder className="w-3.5 h-3.5 text-primary" />
                   <span className="text-muted-foreground font-medium">Папка:</span>
                   {isEditing ? (
                     <select
                       value={editFolder}
                       onChange={e => setEditFolder(e.target.value)}
-                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none"
+                      className="px-2.5 py-1 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none"
                     >
                       {allFolders.map(f => (
                         <option key={f} value={f}>{f}</option>
                       ))}
                     </select>
                   ) : (
-                    <span className="font-semibold text-primary">
+                    <span className="font-bold text-foreground px-2 py-0.5 rounded-md bg-muted/50 border border-border/40">
                       {activeNote.folder || 'Общее'}
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 border-l border-border/60 pl-3 ml-1">
-                  <div className="flex items-center gap-1.5 text-amber-500 font-medium shrink-0">
-                    <Check className="w-4 h-4" />
-                    <span>Задачи:</span>
-                  </div>
+                {/* Graph Link to this folder */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGraphFolderFilter(activeNote.folder || 'Общее')
+                    setIsGraphModalOpen(true)
+                  }}
+                  className="ml-auto text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
+                >
+                  <Network className="w-3 h-3" />
+                  <span>Граф этой папки</span>
+                </button>
+              </div>
 
-                  {isEditing ? (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {editTaskIds.map(tId => (
-                        <span key={tId} className="px-1.5 py-0.5 rounded bg-muted text-[10px] flex items-center gap-1">
-                          {tasks.find(t => t.id === tId)?.title?.slice(0, 15) || 'Задача'}
-                          <span className="cursor-pointer text-destructive font-bold ml-1 hover:text-red-500" onClick={() => setEditTaskIds(p => p.filter(id => id !== tId))}>×</span>
-                        </span>
-                      ))}
-                      <select
-                        className="h-7 px-2 w-28 rounded-lg bg-muted/60 border border-border text-[11px] text-foreground outline-none focus:border-primary/50"
-                        onChange={e => {
-                          if (e.target.value && !editTaskIds.includes(e.target.value)) {
-                            setEditTaskIds(p => [...p, e.target.value])
-                          }
-                          e.target.value = ''
-                        }}
-                        defaultValue=""
-                      >
-                        <option value="" disabled>+ Добавить</option>
-                        {tasks.filter(t => !editTaskIds.includes(t.id)).map(t => (
-                          <option key={t.id} value={t.id}>{t.title.slice(0,30)}</option>
+              {/* Note Content (with Wikilinks editor / preview) */}
+              <div className="relative">
+                {isEditing ? (
+                  <>
+                    <textarea
+                      ref={textareaRef}
+                      value={editContent}
+                      onChange={handleContentChange}
+                      placeholder="Пишите текст... Для логической связи введите [[Название заметки]]"
+                      rows={14}
+                      className="w-full text-sm leading-relaxed text-foreground bg-transparent outline-none resize-y placeholder:text-muted-foreground/40 font-mono"
+                    />
+
+                    {/* Floating Wikilink Suggestion Dropdown */}
+                    {showWikilinkSuggest && (
+                      <div className="absolute top-12 left-4 z-30 w-72 max-h-48 overflow-y-auto rounded-2xl bg-card border border-border shadow-2xl p-2 space-y-1">
+                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                          <LinkIcon className="w-3 h-3 text-primary" />
+                          <span>Связать с заметкой [[...]]</span>
+                        </div>
+                        {notes
+                          .filter(n => n.id !== activeNote.id && n.title.toLowerCase().includes(wikilinkQuery.toLowerCase()))
+                          .slice(0, 5)
+                          .map(n => (
+                            <button
+                              key={n.id}
+                              type="button"
+                              onClick={() => insertWikilink(n.title)}
+                              className="w-full flex items-center justify-between p-2 rounded-xl text-xs text-left hover:bg-primary/10 hover:text-primary transition-colors"
+                            >
+                              <span className="font-bold truncate">{n.title}</span>
+                              <span className="text-[10px] text-muted-foreground">{n.folder || 'Общее'}</span>
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="prose-task text-sm leading-relaxed text-foreground/90 py-2">
+                    {renderMarkdownWithWikilinks(activeNote.content)}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Obsidian-Style Backlinks & Connections Panel ── */}
+              <div className="pt-6 border-t border-border/60 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <LinkIcon className="w-3.5 h-3.5 text-primary" />
+                    <span>Связи заметки (Obsidian Graph & Wikilinks)</span>
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setGraphFolderFilter(null)
+                      setIsGraphModalOpen(true)
+                    }}
+                    className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Network className="w-3.5 h-3.5" />
+                    <span>Открыть граф</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Backlinks (Ссылки на эту заметку) */}
+                  <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-2">
+                    <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1.5">
+                      <CornerDownRight className="w-3.5 h-3.5 text-emerald-400" />
+                      Обратные ссылки (Backlinks): {backlinks.length}
+                    </span>
+                    {backlinks.length > 0 ? (
+                      <div className="space-y-1.5 pt-1">
+                        {backlinks.map(({ note, contextSnippet }) => (
+                          <div
+                            key={note.id}
+                            onClick={() => setSelectedId(note.id)}
+                            className="p-2 rounded-xl bg-muted/30 hover:bg-muted/60 border border-border/40 cursor-pointer transition-colors"
+                          >
+                            <span className="text-xs font-bold text-foreground block truncate">
+                              [[{note.title}]]
+                            </span>
+                            {contextSnippet && (
+                              <p className="text-[11px] text-muted-foreground/80 line-clamp-1 italic mt-0.5">
+                                «{contextSnippet}»
+                              </p>
+                            )}
+                          </div>
                         ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {activeNote.taskIds?.length ? (
-                        activeNote.taskIds.map(tId => (
-                          <span key={tId} className="px-1.5 py-0.5 rounded bg-muted/50 text-[11px] border border-border/50">
-                            {tasks.find(t => t.id === tId)?.title || 'Задача'}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="font-semibold text-muted-foreground/60">Нет задач</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 border-l border-border/60 pl-3 ml-1">
-                  <div className="flex items-center gap-1.5 text-orange-500 font-medium shrink-0">
-                    <Flame className="w-3.5 h-3.5" />
-                    <span>Привычка:</span>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground/60 italic pt-1">
+                        Другие заметки пока не ссылаются на эту через [[{activeNote.title}]]
+                      </p>
+                    )}
                   </div>
-                  {isEditing ? (
-                    <select
-                      value={editHabitId}
-                      onChange={e => setEditHabitId(e.target.value)}
-                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none text-[11px]"
-                    >
-                      <option value="">Без привычки</option>
-                      {habits.map(h => (
-                        <option key={h.id} value={h.id}>{h.icon || '🔥'} {h.title}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="font-semibold text-foreground">
-                      {habits.find(h => h.id === activeNote.habitId)?.title
-                        ? `${habits.find(h => h.id === activeNote.habitId)?.icon || '🔥'} ${habits.find(h => h.id === activeNote.habitId)?.title}`
-                        : 'Нет'}
-                    </span>
-                  )}
-                </div>
 
-                <div className="flex items-center gap-2 border-l border-border/60 pl-3 ml-1">
-                  <span className="text-muted-foreground font-medium">Видимость:</span>
-                  {isEditing ? (
-                    <select
-                      value={editVisibility}
-                      onChange={e => setEditVisibility(e.target.value as 'private' | 'public')}
-                      className="h-7 px-2 rounded-lg bg-muted/60 border border-border text-foreground font-semibold outline-none"
-                    >
-                      <option value="private">Приватная</option>
-                      <option value="public">Видна всем</option>
-                    </select>
-                  ) : (
-                    <span className="font-semibold text-foreground">
-                      {activeNote.visibility === 'public' ? 'Видна всем' : 'Приватная'}
+                  {/* Outgoing Links (Ссылки из этой заметки) */}
+                  <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-2">
+                    <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1.5">
+                      <ArrowUpRight className="w-3.5 h-3.5 text-amber-400" />
+                      Исходящие ссылки: {outgoingLinks.length}
                     </span>
-                  )}
+                    {outgoingLinks.length > 0 ? (
+                      <div className="space-y-1.5 pt-1">
+                        {outgoingLinks.map(({ targetTitle, targetNote }) => (
+                          <div
+                            key={targetTitle}
+                            onClick={() => handleNavigateWikilink(targetTitle)}
+                            className="p-2 rounded-xl bg-muted/30 hover:bg-muted/60 border border-border/40 cursor-pointer transition-colors flex items-center justify-between"
+                          >
+                            <span className="text-xs font-bold text-foreground truncate">
+                              [[{targetTitle}]]
+                            </span>
+                            <span className="text-[10px] text-primary font-semibold">
+                              {targetNote ? 'Открыть →' : 'Создать +'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground/60 italic pt-1">
+                        В тексте нет ссылок [[...]]. Нажмите «Править», чтобы связать с другими заметками.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Note Content */}
-              {isEditing ? (
-                <textarea
-                  value={editContent}
-                  onChange={e => setEditContent(e.target.value)}
-                  placeholder="Начните писать здесь…"
-                  rows={14}
-                  className="w-full text-[14px] leading-relaxed text-foreground bg-transparent outline-none resize-y placeholder:text-muted-foreground/40 font-sans"
-                />
-              ) : (
-                <div className="prose-task text-[14px] leading-relaxed text-foreground/90 py-2 font-sans">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {activeNote.content || '_Пустая заметка. Нажмите «Править», чтобы добавить текст._'}
-                  </ReactMarkdown>
-                </div>
-              )}
-
-              {/* Tags Section */}
-              <div className="pt-4 border-t border-border/40 space-y-2">
-                <div className="flex items-center gap-2 text-[12px] font-semibold text-muted-foreground">
-                  <Tag className="w-3.5 h-3.5" />
-                  <span>Теги</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {(isEditing ? editTags : activeNote.tags).map(tag => (
-                    <span
-                      key={tag}
-                      className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-medium border border-primary/20 flex items-center gap-1"
-                    >
-                      #{tag}
-                      {isEditing && (
-                        <button
-                          onClick={() => handleRemoveTag(tag)}
-                          className="hover:text-destructive transition-colors ml-0.5"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </span>
-                  ))}
-
-                  {isEditing && (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={newTagInput}
-                        onChange={e => setNewTagInput(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                        placeholder="+ тег"
-                        className="h-6 w-20 px-2 text-[11px] rounded-full bg-muted/60 border border-border text-foreground outline-none"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
             <FileText className="w-12 h-12 stroke-[1.2] text-muted-foreground/40 mb-3" />
-            <p className="text-base font-semibold text-foreground font-sans">Заметок пока нет</p>
-            <p className="text-[13px] text-muted-foreground mt-1 font-sans">Нажмите «+», чтобы создать первую заметку</p>
+            <p className="text-base font-semibold text-foreground">Заметок пока нет</p>
+            <p className="text-xs text-muted-foreground mt-1">Нажмите «+», чтобы создать первую заметку</p>
           </div>
         )}
       </div>
 
-      {/* Modal for creating a new folder */}
+      {/* Modal for creating a new folder / subfolder */}
       {showNewFolderModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <FolderPlus className="w-4 h-4 text-primary" />
-                Новая папка
+                <span>{parentFolderForNew ? `Подпапка в «${parentFolderForNew}»` : 'Новая папка'}</span>
               </h3>
               <button
-                onClick={() => { setShowNewFolderModal(false); setNewFolderName('') }}
+                onClick={() => { setShowNewFolderModal(false); setNewFolderName(''); setParentFolderForNew(null) }}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+            
             <input
               type="text"
               value={newFolderName}
               onChange={e => setNewFolderName(e.target.value)}
-              placeholder="Название папки (например: Учеба, Работа)..."
-              className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs focus:outline-none focus:border-primary text-foreground"
+              placeholder="Название (например: Физика или 10 класс)..."
+              className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
               autoFocus
             />
+
             <div className="flex gap-2">
               <button
-                onClick={() => { setShowNewFolderModal(false); setNewFolderName('') }}
+                onClick={() => { setShowNewFolderModal(false); setNewFolderName(''); setParentFolderForNew(null) }}
                 className="flex-1 h-9 rounded-xl bg-muted hover:bg-muted/80 text-xs font-semibold text-foreground transition-colors"
               >
                 Отмена
@@ -1082,14 +994,17 @@ ${activeNote.content}"
                 onClick={() => {
                   const f = newFolderName.trim()
                   if (f) {
-                    setSelectedFolder(f)
-                    setEditFolder(f)
+                    const full = parentFolderForNew ? `${parentFolderForNew}/${f}` : f
+                    setSelectedFolder(full)
+                    setEditFolder(full)
+                    setExpandedFolders(prev => new Set(prev).add(full))
                     setShowNewFolderModal(false)
                     setNewFolderName('')
+                    setParentFolderForNew(null)
                   }
                 }}
                 disabled={!newFolderName.trim()}
-                className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 transition-all disabled:opacity-50"
+                className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all disabled:opacity-50 shadow-sm"
               >
                 Создать
               </button>
@@ -1097,6 +1012,18 @@ ${activeNote.content}"
           </div>
         </div>
       )}
+
+      {/* Obsidian-Style Knowledge Graph Modal */}
+      <KnowledgeGraphModal
+        isOpen={isGraphModalOpen}
+        onClose={() => setIsGraphModalOpen(false)}
+        notes={notes}
+        initialFolder={graphFolderFilter}
+        onSelectNote={(noteId) => {
+          setSelectedId(noteId)
+          setShowMobileList(false)
+        }}
+      />
     </div>
   )
 }

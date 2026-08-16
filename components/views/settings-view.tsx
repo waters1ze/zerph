@@ -10,7 +10,7 @@ import {
   User, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Layers, CheckCircle2, ArrowRight,
-  Send, Plus, CheckCircle
+  Send, Plus, CheckCircle, Search, X
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -345,108 +345,146 @@ export function SettingsView() {
     }
   }
 
+  const [searchFilter, setSearchFilter] = useState('')
+
+  const SECTIONS = [
+    {
+      group: 'АККАУНТ',
+      items: [
+        { id: 'account' as SettingsTab, label: 'Профиль & Вход', icon: User, desc: 'Почта, пароль, Telegram ID' },
+        { id: 'subscription' as SettingsTab, label: 'Тарифные планы', icon: Sparkles, desc: 'Подписка Plus, Pro, Corp' },
+      ],
+    },
+    {
+      group: 'СВЯЗЬ & ГОЛОС',
+      items: [
+        { id: 'notifications' as SettingsTab, label: 'Уведомления & Каналы', icon: Bell, desc: 'Telegram, VK, рассылка' },
+        { id: 'automation' as SettingsTab, label: 'Голос & Siri', icon: Zap, desc: 'iOS Shortcuts, быстрые команды' },
+      ],
+    },
+    {
+      group: 'ИНТЕРФЕЙС',
+      items: [
+        { id: 'appearance' as SettingsTab, label: 'Оформление & Тема', icon: Palette, desc: 'Цвета, темная/светлая тема' },
+        { id: 'pwa' as SettingsTab, label: 'PWA Приложение', icon: Smartphone, desc: 'Установка на экран телефона/ПК' },
+      ],
+    },
+    {
+      group: 'СИСТЕМА',
+      items: [
+        { id: 'data' as SettingsTab, label: 'Сессии & Экспорт', icon: Shield, desc: 'Устройства, экспорт в JSON' },
+      ],
+    },
+  ]
+
+  const filteredSections = SECTIONS.map(s => ({
+    ...s,
+    items: s.items.filter(i => 
+      !searchFilter || 
+      i.label.toLowerCase().includes(searchFilter.toLowerCase()) ||
+      i.desc.toLowerCase().includes(searchFilter.toLowerCase())
+    )
+  })).filter(s => s.items.length > 0)
+
+  const activeItem = SECTIONS.flatMap(s => s.items).find(i => i.id === activeTab)
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20 font-sans">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-card border border-border">
-        <div>
-          <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
-            <span><span className="mono-emoji mr-1.5">⚙️</span>Настройки Zerf Note</span>
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Управление единым аккаунтом, связками входа, голосовыми командами и внешним видом
-          </p>
+    <div className="w-full max-w-5xl mx-auto rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[640px] md:h-[82vh] font-sans">
+      
+      {/* ── Left Sidebar Navigation (Obsidian Style) ── */}
+      <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border/70 bg-muted/20 p-4 flex flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
+        <div className="space-y-4">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between px-1">
+            <h1 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <span className="mono-emoji">⚙️</span>
+              <span>Настройки Zerf</span>
+            </h1>
+            {currentChatId && !currentChatId.startsWith('guest_') && (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold font-mono">
+                {currentChatId}
+              </span>
+            )}
+          </div>
+
+          {/* Search bar inside settings */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchFilter}
+              onChange={e => setSearchFilter(e.target.value)}
+              placeholder="Поиск по настройкам…"
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-card border border-border/80 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* Navigation Groups */}
+          <div className="space-y-4">
+            {filteredSections.map(sec => (
+              <div key={sec.group} className="space-y-1">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-2">
+                  {sec.group}
+                </h3>
+                <div className="space-y-0.5">
+                  {sec.items.map(item => {
+                    const isSel = activeTab === item.id
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left',
+                          isSel
+                            ? 'bg-primary text-primary-foreground shadow-sm font-bold'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        )}
+                      >
+                        <Icon className={cn('w-4 h-4 shrink-0', isSel ? 'text-primary-foreground' : 'text-primary')} />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {currentChatId && !currentChatId.startsWith('guest_') && (
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              ID: {currentChatId}
-            </span>
+        {/* Bottom Profile Info */}
+        <div className="pt-4 mt-4 border-t border-border/50 hidden md:flex items-center justify-between text-[11px] text-muted-foreground px-1">
+          <span>Zerf AI Assistant</span>
+          <span className="font-semibold text-primary">v2.4 Pro</span>
+        </div>
+      </div>
+
+      {/* ── Right Content Pane ── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-background/40">
+        
+        {/* Header of the Active Section */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 bg-muted/10 shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-foreground">
+              {activeItem?.label || 'Настройки'}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {activeItem?.desc || 'Параметры и конфигурация системы'}
+            </p>
           </div>
-        )}
-      </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-muted/50 border border-border/80 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTab('account')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'account' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <User className="w-3.5 h-3.5" />
-          <span>Профиль & Вход</span>
-        </button>
+          <button
+            onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
+            className="w-8 h-8 rounded-xl flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Закрыть настройки"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-        <button
-          onClick={() => setActiveTab('notifications')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'notifications' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Bell className="w-3.5 h-3.5 text-primary" />
-          <span>Уведомления & Каналы</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('automation')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'automation' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span>Голос & Siri (iOS / Android)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('appearance')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'appearance' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Palette className="w-3.5 h-3.5" />
-          <span>Оформление</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('pwa')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'pwa' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          <span>PWA Приложение</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('subscription')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'subscription' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-          <span>Тариф & Лимиты</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('data')}
-          className={cn(
-            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
-            activeTab === 'data' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Shield className="w-3.5 h-3.5" />
-          <span>Данные & Экспорт</span>
-        </button>
-      </div>
+        {/* Main Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-6">
 
       {/* ── TAB 1: Account & Multi-Provider Authentication ──────────────────── */}
       {activeTab === 'account' && (
@@ -1465,9 +1503,11 @@ export function SettingsView() {
                 <span>Скачать JSON</span>
               </button>
             </Row>
-          </Section>
+              </Section>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
