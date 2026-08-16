@@ -22,12 +22,20 @@ export async function GET(req: NextRequest) {
       orderBy: { lastActiveAt: 'desc' },
     })
 
-    // System stats in parallel
-    const [totalTasks, totalGoals, totalNotes] = await Promise.all([
-      prisma.task.count({ where: { status: { not: 'draft' } } }).catch(() => 0),
-      prisma.goal.count().catch(() => 0),
-      prisma.note.count().catch(() => 0),
-    ])
+    // System stats — one round trip instead of three sequential counts
+    // (with connection_limit=1 each extra query adds its full latency)
+    let totalTasks = 0, totalGoals = 0, totalNotes = 0
+    try {
+      const counts = await prisma.$queryRaw<Array<{ tasks: number; goals: number; notes: number }>>`
+        SELECT
+          (SELECT COUNT(*) FROM "Task" WHERE status <> 'draft')::int AS tasks,
+          (SELECT COUNT(*) FROM "Goal")::int AS goals,
+          (SELECT COUNT(*) FROM "Note")::int AS notes
+      `
+      totalTasks = Number(counts[0]?.tasks) || 0
+      totalGoals = Number(counts[0]?.goals) || 0
+      totalNotes = Number(counts[0]?.notes) || 0
+    } catch {}
 
     const activePremiumCount = users.filter(u => {
       if (!planAtLeast(u.plan, 'plus')) return false
@@ -95,30 +103,13 @@ export async function GET(req: NextRequest) {
     })
   } catch (err: unknown) {
     console.error('Admin users API error:', err)
-    return NextResponse.json({
-      stats: {
-        totalUsers: 1,
-        activePremium: 1,
-        activeToday: 1,
-        totalTasks: 0,
-        totalGoals: 0,
-        totalNotes: 0,
-      },
-      users: [
-        {
-          id: '6136950061',
-          chatId: 6136950061,
-          name: 'Кирилл (Владелец)',
-          username: '@watersize',
-          plan: 'premium',
-          isPremium: true,
-          isAdmin: true,
-          isRoot: true,
-          daysRemaining: 9999,
-          authProvider: 'telegram',
-        }
-      ],
-    })
+    // Honest 500 — the previous fake fallback returned a ghost "Кирилл" user
+    // and masked real outages, which is why the panel showed nothing with no
+    // way to understand why.
+    return NextResponse.json(
+      { success: false, error: 'Не удалось загрузить данные. Попробуйте ещё раз.' },
+      { status: 500 }
+    )
   }
 }
 

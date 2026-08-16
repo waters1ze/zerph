@@ -1689,6 +1689,18 @@ export async function saveParsedItemToDb(
     const rawLower = (item.rawText || item.title || '').toLowerCase().trim()
     const isExplicitNote = rawLower.startsWith('заметк') || rawLower.includes('запиши заметку') || rawLower.includes('сохрани заметку') || rawLower.includes('в заметки')
 
+    // If it's a question, math problem or calculation, never create a note — treat as answer!
+    const isQuestionOrMath = !isExplicitNote && (
+      /\b(сколько|как решить|реши|вычисли|сосчитай|объясни|что такое|почему|кто такой|кто такая|в каком году|переведи|найди корень|теорема)\b/i.test(rawLower) ||
+      /\?$/.test(rawLower) ||
+      /\b\d+\s*[\*\+\-\/×÷^=]\s*\d+\b/.test(rawLower)
+    )
+    if (isQuestionOrMath) {
+      item.type = 'answer'
+      item.action = 'reply'
+      return { item, updatedItem: false }
+    }
+
     // If it's not explicitly a note request and has dummy placeholder content, treat as task instead!
     if (!isExplicitNote && (item.summary?.includes('Нет информации') || item.title === 'Новая заметка' || !item.summary || item.summary === item.title)) {
       item.type = 'task'

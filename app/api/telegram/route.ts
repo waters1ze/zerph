@@ -1346,6 +1346,16 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 
     const { completedTask, updatedItem } = await saveParsedItemToDb(item, chatId)
 
+    if (item.type === 'answer' || item.action === 'reply') {
+      const answerContent = item.summary || item.title
+      if (items.length === 1) {
+        msg = `💡 *Ответ:*\n${escMd(answerContent)}\n\n`
+      } else {
+        msg += `💡 *Ответ:* ${escMd(answerContent)}\n\n`
+      }
+      continue
+    }
+
     if (item.action === 'delete' || item.type === 'completion') {
       if (completedTask) {
         msg += `Выполнено: ${escMd(completedTask.title)}\n\n`

@@ -194,17 +194,24 @@ export async function callGroqChatCompletion(options: {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
 
   const primaryModel = options.model || GROQ_CHAT_MODEL
+  // NOTE: mixtral-8x7b-32768 / llama3-8b-8192 were decommissioned by Groq —
+  // each retry against them burned a slow round trip before failing.
   const models = [
     primaryModel,
-    ...(options.fallbackModels || ['llama-3.1-8b-instant', 'llama3-8b-8192', 'mixtral-8x7b-32768'])
+    ...(options.fallbackModels || ['llama-3.1-8b-instant', 'openai/gpt-oss-20b'])
   ].filter((v, i, a) => a.indexOf(v) === i)
 
   let lastError: Error | null = null
+  // Hard cap on external attempts so one slow provider can never hang a
+  // request indefinitely (the admin panel used to spin forever on this)
+  let attemptsLeft = 4
 
   // ── Tier 1: Groq Multi-Account Round-Robin Pool ──
   if (keys.length > 0) {
     for (const m of models) {
       for (const key of keys) {
+        if (attemptsLeft <= 0) break
+        attemptsLeft -= 1
         try {
           const body: Record<string, any> = {
             model: m,
@@ -221,6 +228,7 @@ export async function callGroqChatCompletion(options: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
+            signal: AbortSignal.timeout(25000),
           })
 
           if (res.status === 429) {
@@ -252,7 +260,7 @@ export async function callGroqChatCompletion(options: {
 
   // ── Tier 2: Hugging Face Serverless Chat LLM Pool ──
   const hfTokens = getHuggingFaceTokens()
-  if (hfTokens.length > 0) {
+  if (hfTokens.length > 0 && attemptsLeft > 0) {
     const hfChatModels = [
       'meta-llama/Llama-3.3-70B-Instruct',
       'meta-llama/Llama-3.1-8B-Instruct',
@@ -262,6 +270,8 @@ export async function callGroqChatCompletion(options: {
 
     for (const hfModel of hfChatModels) {
       for (const token of hfTokens) {
+        if (attemptsLeft <= 0) break
+        attemptsLeft -= 1
         try {
           console.log(`[GroqChat Fallback] Switching to Hugging Face LLM: ${hfModel}...`)
           const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}/v1/chat/completions`, {
@@ -277,6 +287,7 @@ export async function callGroqChatCompletion(options: {
               max_tokens: options.max_tokens ?? 1024,
               ...(options.response_format ? { response_format: options.response_format } : {})
             }),
+            signal: AbortSignal.timeout(25000),
           })
 
           if (hfRes.ok) {
@@ -295,7 +306,7 @@ export async function callGroqChatCompletion(options: {
 
   // ── Tier 3: OpenAI Fallback (if configured) ──
   const openAiKey = process.env.OPENAI_API_KEY
-  if (openAiKey) {
+  if (openAiKey && attemptsLeft > 0) {
     try {
       const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -309,6 +320,7 @@ export async function callGroqChatCompletion(options: {
           temperature: options.temperature ?? 0.3,
           max_tokens: options.max_tokens ?? 1024,
         }),
+        signal: AbortSignal.timeout(25000),
       })
 
       if (openAiRes.ok) {
@@ -362,6 +374,7 @@ export async function callGroqWhisper(options: {
           method: 'POST',
           headers: { Authorization: `Bearer ${key}` },
           body: formData,
+          signal: AbortSignal.timeout(60000),
         })
 
         if (res.status === 429) {
@@ -413,6 +426,7 @@ export async function callGroqWhisper(options: {
               'Content-Type': mimeType,
             },
             body: options.audioBuffer,
+            signal: AbortSignal.timeout(60000),
           })
 
           if (hfRes.ok) {
@@ -442,6 +456,7 @@ export async function callGroqWhisper(options: {
         method: 'POST',
         headers: { Authorization: `Bearer ${openAiKey}` },
         body: openAiFormData,
+        signal: AbortSignal.timeout(60000),
       })
 
       if (openAiRes.ok) {

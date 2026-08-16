@@ -105,6 +105,24 @@ export async function generateCommentAnalysisReport(
         rawComments: []
       }
     }
+
+    // Cache miss on a plain read (admin panel open): NEVER kick off an LLM run
+    // here — it used to block the panel for 45+ seconds. The user presses
+    // "Свежий ИИ-анализ" (forceRefresh) to build a report on demand.
+    return {
+      totalAnalyzed: totalInDb,
+      newCommentsCount: unanalyzedCount,
+      sentimentSummary: { positivePercent: 0, neutralPercent: 0, negativePercent: 0 },
+      topRequests: [`${unanalyzedCount} новых комментариев ещё не проанализированы ИИ`],
+      mainIssuesOrQuestions: [],
+      executiveSummary: 'Кэшированный отчет ещё не сформирован. Нажмите «Свежий ИИ-анализ», чтобы запустить анализ.',
+      rawComments: recentComments.map(c => ({
+        id: c.id,
+        userName: c.userName,
+        text: c.text,
+        createdAt: c.createdAt.toISOString()
+      }))
+    }
   }
 
   // If forceRefresh or no cache: fetch fresh comments that have NOT been analyzed

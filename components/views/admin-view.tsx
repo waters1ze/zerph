@@ -98,7 +98,8 @@ export function AdminView() {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
-        }
+        },
+        signal: AbortSignal.timeout(15000),
       })
       const data = await res.json()
       if (data.isRoot) setIsViewerRoot(true)
@@ -112,7 +113,8 @@ export function AdminView() {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
-        }
+        },
+        signal: AbortSignal.timeout(25000),
       })
       const data = await res.json()
       if (data.success) {
@@ -173,6 +175,7 @@ export function AdminView() {
     try {
       const res = await fetch('/api/admin/promocode', {
         headers: getAuthHeaders(),
+        signal: AbortSignal.timeout(15000),
       })
       const data = await res.json()
       if (data.promoCodes) {
@@ -773,8 +776,17 @@ export function AdminView() {
                 <span>Загрузка списка пользователей...</span>
               </div>
             ) : filteredUsers.length === 0 ? (
-              <div className="p-12 text-center text-xs text-muted-foreground">
-                Пользователи не найдены
+              <div className="p-12 text-center text-xs text-muted-foreground flex flex-col items-center gap-3">
+                <span>{users.length === 0 ? 'Не удалось загрузить пользователей' : 'Пользователи не найдены'}</span>
+                {users.length === 0 && (
+                  <button
+                    onClick={() => fetchAdminData()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Повторить
+                  </button>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-border/60">

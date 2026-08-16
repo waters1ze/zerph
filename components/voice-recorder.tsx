@@ -9,7 +9,7 @@ import type { Task, Goal, Note } from '@/lib/types'
 import { GROQ_API_KEY } from '@/lib/config'
 
 interface ParsedResult {
-  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion'
+  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion' | 'answer'
   title: string
   summary: string
   priority: 'urgent' | 'high' | 'medium' | 'low'
@@ -36,7 +36,7 @@ const PRIORITY_DOT: Record<string, string> = {
 }
 
 const TYPE_EMOJI: Record<string, string> = {
-  task: '▪', goal: '★', note: '▫', project: '◈', reminder: '✦', completion: '✓',
+  task: '▪', goal: '★', note: '▫', project: '◈', reminder: '✦', completion: '✓', answer: '💡',
 }
 
 export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
@@ -165,6 +165,11 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
       if (found) {
         dispatch({ type: 'UPDATE_TASK', id: found.id, updates: { status: 'done', completedAt: new Date().toISOString() } })
       }
+      onClose()
+      return
+    }
+
+    if (result.type === 'answer') {
       onClose()
       return
     }
@@ -344,8 +349,41 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                   </div>
                 )}
 
+                {/* RESULT — ANSWER */}
+                {stage === 'result' && result && result.type === 'answer' && (
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">💡</span>
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-amber-500 px-2 py-0.5 rounded-full bg-amber-500/15">
+                          Ответ ИИ
+                        </span>
+                      </div>
+                      <p className="text-[13px] font-semibold text-foreground leading-snug">{result.title}</p>
+                      <div className="text-[12px] text-foreground/90 leading-relaxed whitespace-pre-wrap bg-background/60 p-3 rounded-lg border border-border/50 max-h-48 overflow-y-auto">
+                        {result.summary}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50 italic">
+                      <Volume2 className="w-3 h-3 shrink-0" />
+                      <span className="line-clamp-1">"{result.rawText}"</span>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={reset}
+                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors">
+                        Спросить еще
+                      </button>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={confirmResult}
+                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-semibold flex items-center justify-center gap-1.5 hover:opacity-90">
+                        <Check className="w-3.5 h-3.5" />
+                        Понятно
+                      </motion.button>
+                    </div>
+                  </div>
+                )}
+
                 {/* RESULT — NORMAL */}
-                {stage === 'result' && result && result.type !== 'completion' && (
+                {stage === 'result' && result && result.type !== 'completion' && result.type !== 'answer' && (
                   <div className="space-y-3">
                     <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2.5">
                       <div className="flex items-center gap-2">

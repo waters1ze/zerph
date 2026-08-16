@@ -705,6 +705,11 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        if (item.type === 'answer' || item.action === 'reply') {
+          responseMsg += `💡 Ответ:\n${item.summary || item.title}\n\n`
+          continue
+        }
+
         await saveParsedItemToDb(item, vkChatId)
         const typeLabel = item.type === 'note' ? '📝 Заметка' : item.type === 'goal' ? '🎯 Цель' : '✅ Задача'
         responseMsg += `${typeLabel}: «${item.title}»\n`
