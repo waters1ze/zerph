@@ -178,6 +178,31 @@ export function extractNaturalTime(text: string): string | null {
   if (!text) return null
   const t = text.toLowerCase()
 
+  // 0. Time Range: "с 8 до 15", "с 8:30 до 15:00", "от 8 до 15", "08:00 - 15:00", "с 8 утра до 3 дня"
+  const rangeMatch = t.match(/(?:с|от)?\s*(\d{1,2})(?::(\d{2}))?\s*(утра|вечера|дня|ночи)?\s*(?:до|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(утра|вечера|дня|ночи)?\b/i)
+  if (rangeMatch) {
+    let h1 = parseInt(rangeMatch[1], 10)
+    const m1 = rangeMatch[2] ? rangeMatch[2] : '00'
+    const p1 = rangeMatch[3] ? rangeMatch[3].toLowerCase() : ''
+
+    let h2 = parseInt(rangeMatch[4], 10)
+    const m2 = rangeMatch[5] ? rangeMatch[5] : '00'
+    const p2 = rangeMatch[6] ? rangeMatch[6].toLowerCase() : ''
+
+    if (p1 === 'вечера' || p1 === 'дня') {
+      if (h1 < 12) h1 += 12
+    }
+    if (p2 === 'вечера' || p2 === 'дня') {
+      if (h2 < 12) h2 += 12
+    } else if (!p2 && h2 < h1 && h2 <= 12) {
+      h2 += 12
+    }
+
+    if (h1 >= 0 && h1 <= 23 && h2 >= 0 && h2 <= 23) {
+      return `${String(h1).padStart(2, '0')}:${m1} - ${String(h2).padStart(2, '0')}:${m2}`
+    }
+  }
+
   // 1. Direct HH:MM (e.g. 09:00, 19:30, в 9:00)
   const directMatch = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/)
   if (directMatch) {
@@ -1205,6 +1230,46 @@ export async function getExistingItemsContext(ownerChatId?: number | bigint | st
   }
 }
 
+export async function cancelScheduleForDate(
+  ownerChatId: number | bigint | string,
+  dateStr: string
+): Promise<{ count: number; deletedTitles: string[] }> {
+  try {
+    const cid = BigInt(ownerChatId)
+    const tasks = await prisma.task.findMany({
+      where: {
+        ownerChatId: cid,
+        dueDate: dateStr,
+      },
+    })
+
+    const schoolRegex = /(?:урок|алгебр|геометр|физик|хим|биолог|русск|литератур|истори|обществознан|информатик|английск|немецк|французск|физкультур|физ-р|географ|астрономи|обж|труд|пар[аы]|школ|расписани|заняти)/i
+
+    const tasksToDelete = tasks.filter(t => {
+      // NEVER delete holidays or birthdays
+      if (isHolidayTitle(t.title) || isBirthdayTitle(t.title) || t.repeat === 'yearly') return false
+      const tags = (t.tags || []).map(x => String(x).toLowerCase())
+      const isTagged = tags.includes('учеба') || tags.includes('школа') || tags.includes('расписание')
+      const isTitleMatch = schoolRegex.test(t.title) || schoolRegex.test(t.description || '')
+      return isTagged || isTitleMatch
+    })
+
+    if (tasksToDelete.length > 0) {
+      const ids = tasksToDelete.map(t => t.id)
+      await prisma.task.deleteMany({
+        where: {
+          id: { in: ids },
+        },
+      })
+    }
+
+    return { count: tasksToDelete.length, deletedTitles: tasksToDelete.map(t => t.title) }
+  } catch (err) {
+    console.error('cancelScheduleForDate error:', err)
+    return { count: 0, deletedTitles: [] }
+  }
+}
+
 // ── High-level: save ParsedItem from Groq AI ──────────────────────────────────
 
 export async function saveParsedItemToDb(
@@ -1217,6 +1282,16 @@ export async function saveParsedItemToDb(
   updatedItem?: boolean
 }> {
   if (item.type === 'answer' || item.action === 'reply') {
+    return { item, updatedItem: false }
+  }
+
+  // Cancel schedule / Day off action
+  if (item.action === 'cancel_schedule') {
+    if (ownerChatId) {
+      const targetDate = item.dueDate || new Date().toISOString().slice(0, 10)
+      const res = await cancelScheduleForDate(ownerChatId, targetDate)
+      return { item, updatedItem: res.count > 0 }
+    }
     return { item, updatedItem: false }
   }
 

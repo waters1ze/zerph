@@ -7,7 +7,7 @@ import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from
 
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate' | 'schedule' | 'answer'
-  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'completion' | 'set_my_birthday' | 'get_schedule' | 'reply'
+  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'cancel_schedule' | 'completion' | 'set_my_birthday' | 'get_schedule' | 'reply'
   targetId?: string | null
   title: string
   summary: string
@@ -187,18 +187,18 @@ Always respond with ONLY valid JSON:
 {
   "items": [
     {
-      "action": "create" | "update" | "delete" | "delete_all" | "completion" | "set_my_birthday" | "get_schedule" | "reply",
+      "action": "create" | "update" | "delete" | "delete_all" | "cancel_schedule" | "completion" | "set_my_birthday" | "get_schedule" | "reply",
       "targetId": "ID элемента если action update/delete" | null,
       "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate" | "schedule" | "answer",
       "title": "Понятное, информативное название с сутью действия",
       "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями)",
       "priority": "urgent" | "high" | "medium" | "low",
       "dueDate": "YYYY-MM-DD" | null,
-      "dueTime": "HH:MM" | null,
+      "dueTime": "HH:MM" | "HH:MM - HH:MM" | null,
       "daysCount": 1 | 3 | 7 | null,
       "repeat": "yearly" | "monthly" | "weekly" | "weekdays" | "daily" | null,
       "reminderOffsetMinutes": 0 | 5 | 10 | 15 | 30 | 60 | 1440 | null,
-      "targetTitle": "для типа completion или delete: название задачи" | null,
+      "targetTitle": "для типа completion или delete/update: название задачи" | null,
       "recipientName": "строка с именем друга, кому отправляется элемент (задача, заметка, цель) или чей график запрашивается. Иначе null. ТОЛЬКО ОДНО ИМЯ.",
       "isBothShared": true, // true ТОЛЬКО если сказано «нам», «для нас», «вместе», «обоим». false если поручение одному другу («дай Вове», «поручи Лере»)
       "projectId": null,
@@ -215,6 +215,28 @@ Always respond with ONLY valid JSON:
     }
   ]
 }
+
+══════════════════════════════════════════
+🏫 ПРАВИЛА ДЛЯ ШКОЛЬНОГО РАСПИСАНИЯ, УРОКОВ И ДИАПАЗОНОВ ВРЕМЕНИ
+══════════════════════════════════════════
+1. ДИАПАЗОНЫ ВРЕМЕНИ ("с 8 до 15", "с 8:30 до 14:00", "с 18 до 20"):
+   - Если указано время от и до (например "уроки в школе с 8 до 15", "тренировка с 18:00 до 20:00", "курсы с 10 до 12:30"):
+     • Установи "dueTime": "08:00 - 15:00" (или "18:00 - 20:00")!
+     • "dueDate": YYYY-MM-DD (ближайшая дата события).
+
+2. РАСПИСАНИЕ УРОКОВ ИЛИ ПАР:
+   - Если пользователь диктует или пишет расписание уроков (например "в понедельник уроки: 1. Алгебра, 2. Русский, 3. Физика с 8 до 13", "замени 2-й урок на химию в среду"):
+     • Создай список уроков с номерами и временем.
+     • "tags": ["учеба", "школа", "расписание"].
+
+3. ВЫХОДНОЙ ДЕНЬ / ОТМЕНА УРОКОВ НА ДЕНЬ:
+   - Если пользователь говорит "в этот день выходной", "завтра выходной", "в понедельник выходной", "отмени уроки на среду", "15 сентября выходной в школе, убери уроки":
+     • "action": "cancel_schedule"
+     • "type": "task"
+     • "dueDate": "YYYY-MM-DD" (дата выходного дня)
+     • "title": "Школьные уроки (выходной)"
+     • Система автоматически снимет школьные уроки на эту дату, не затрагивая праздники и личные дела!
+══════════════════════════════════════════
 
 HABITS & PROJECTS RULES:
 - If input mentions "привычка", "добавь привычку", "создай привычку", "трекать привычку" (e.g., "привычка пить 2л воды каждое утро", "привычка читать 15 минут"), set "type": "habit", "title": "...", "frequency": "daily" (or "weekdays" / "weekly"), "icon": "💧"!

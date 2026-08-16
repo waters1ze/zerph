@@ -37,13 +37,16 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
   let isPassed = false
   if (task.dueTime && !isDone) {
     const now = new Date()
-    const [h, m] = task.dueTime.split(':').map(Number)
+    const startTimeStr = task.dueTime.split(/[\s–-]+/)[0].trim()
+    const [h, m] = startTimeStr.split(':').map(Number)
     let due: Date
-    if (task.dueDate && task.dueDate.includes('-')) {
+    if (task.dueDate && task.dueDate.includes('-') && !isNaN(h) && !isNaN(m)) {
       const [year, month, day] = task.dueDate.split('-').map(Number)
       due = new Date(year, month - 1, day, h, m)
-    } else {
+    } else if (!isNaN(h) && !isNaN(m)) {
       due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m)
+    } else {
+      due = now
     }
     const diffMs = due.getTime() - now.getTime()
     minutesLeft = Math.round(diffMs / 60000)

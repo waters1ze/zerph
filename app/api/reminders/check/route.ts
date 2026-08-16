@@ -86,7 +86,8 @@ export async function GET() {
 
       const { todayStr, currentTimeStr } = getUserCurrentTimeAndDate(tz)
 
-      if (task.dueTime !== currentTimeStr) continue
+      const startTime = task.dueTime.split(/[\s–-]+/)[0].trim()
+      if (startTime !== currentTimeStr) continue
       if (task.dueDate && task.dueDate !== todayStr) continue
 
       const isRecipientMsg =

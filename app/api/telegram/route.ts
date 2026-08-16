@@ -1343,6 +1343,16 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       continue
     }
 
+    if (item.action === 'cancel_schedule') {
+      const dateText = item.dueDate ? ` на ${item.dueDate}` : ''
+      if (updatedItem) {
+        msg += `🌴 *Школьное расписание и уроки${dateText} успешно убраны (выходной день).* Праздники и личные задачи сохранены.\n\n`
+      } else {
+        msg += `🌴 *На этот день (${item.dueDate || 'сегодня'}) уроков не найдено — у вас выходной!*\n\n`
+      }
+      continue
+    }
+
     if (item.action === 'set_my_birthday') {
       msg += `🎂 ${escMd(item.title)}\n\n`
       continue
@@ -1555,15 +1565,21 @@ async function processPhoto(chatId: number, photoArray: any[]) {
 
     const { createTask } = await import('@/lib/backend/db')
     const createdList: string[] = []
+    let isSchoolSchedule = false
 
     for (const t of extractedTasks) {
+      const taskTags = t.tags && t.tags.length > 0 ? t.tags : ['фото', 'vision-ai']
+      if (taskTags.includes('школа') || taskTags.includes('расписание') || taskTags.includes('учеба')) {
+        isSchoolSchedule = true
+      }
+
       const created = await createTask({
         title: t.title,
         description: t.description || 'Распознано из фото через Vision AI',
         priority: t.priority || 'medium',
         dueDate: t.dueDate || new Date().toISOString().slice(0, 10),
         dueTime: t.dueTime || undefined,
-        tags: ['фото', 'vision-ai'],
+        tags: taskTags,
         aiGenerated: true,
         ownerChatId: BigInt(chatId),
         subtasks: (t.subtasks || []).map((st, i) => ({
@@ -1573,16 +1589,20 @@ async function processPhoto(chatId: number, photoArray: any[]) {
         }))
       })
       if (created) {
-        const timePart = t.dueTime ? ` в ${t.dueTime}` : ''
-        const datePart = t.dueDate ? ` (${t.dueDate})` : ''
+        const timePart = t.dueTime ? ` (${t.dueTime})` : ''
+        const datePart = t.dueDate ? ` [${t.dueDate}]` : ''
         createdList.push(`• *${escMd(t.title)}*${timePart}${datePart}`)
       }
     }
 
+    const header = isSchoolSchedule
+      ? `📚 *Расписание уроков успешно распознано и добавлено:* ${createdList.length} предметов\n_Праздники и личные дела сохранены._\n\n`
+      : `🎉 *Успешно распознано и создано задач:* ${createdList.length}\n\n`
+
     const msg =
-      `🎉 *Успешно распознано и создано задач:* ${createdList.length}\n\n` +
+      header +
       createdList.join('\n') +
-      `\n\n_Все задачи добавлены в ваш список дел и синхронизированы с сайтом!_`
+      `\n\n_Все уроки и задачи добавлены в ваш список дел и синхронизированы с сайтом!_`
 
     await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
   } catch (err) {
