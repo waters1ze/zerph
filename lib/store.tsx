@@ -565,6 +565,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json()
 
       if (data && data.tasks !== undefined) {
+        if (data._dbOffline && (!data.tasks || data.tasks.length === 0)) {
+          // DB is temporarily offline or quota exceeded — keep local cache intact
+          return
+        }
+
         const filteredTasks = (data.tasks || []).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
         const filteredGoals = (data.goals || []).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
         const filteredNotes = (data.notes || []).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))

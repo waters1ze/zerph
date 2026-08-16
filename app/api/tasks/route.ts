@@ -42,24 +42,33 @@ export async function GET(req: NextRequest) {
     const ownerChatId = await getOwnerChatId(req)
     if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     
-    await touchUserLastActive(ownerChatId)
-    await syncFriendBirthdays(ownerChatId)
-    const [tasks, goals, notes, friends, habits] = await Promise.all([
-      getAllTasks(ownerChatId),
-      getAllGoals(ownerChatId),
-      getAllNotes(ownerChatId),
-      getFriends(ownerChatId),
-      getAllHabits(ownerChatId),
-    ])
-    return NextResponse.json(serialize({ tasks, goals, notes, friends, habits }), {
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-      },
-    })
+    try {
+      await touchUserLastActive(ownerChatId)
+      await syncFriendBirthdays(ownerChatId)
+      const [tasks, goals, notes, friends, habits] = await Promise.all([
+        getAllTasks(ownerChatId),
+        getAllGoals(ownerChatId),
+        getAllNotes(ownerChatId),
+        getFriends(ownerChatId),
+        getAllHabits(ownerChatId),
+      ])
+      return NextResponse.json(serialize({ tasks, goals, notes, friends, habits }), {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      })
+    } catch (dbErr) {
+      console.error('DB query error in /api/tasks GET:', dbErr)
+      return NextResponse.json({ tasks: [], goals: [], notes: [], friends: [], habits: [], _dbOffline: true }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        },
+      })
+    }
   } catch (err: unknown) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ tasks: [], goals: [], notes: [], friends: [], habits: [], _dbOffline: true }, { status: 200 })
   }
 }
 

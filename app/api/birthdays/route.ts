@@ -3,11 +3,13 @@ import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function GET(req: NextRequest) {
-  const authUser = await getAuthenticatedUser(req)
-  if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   try {
-    const cid = BigInt(authUser.chatId)
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) return NextResponse.json([], { status: 200 })
+
+    const cidStr = authUser.chatId
+    const cid = /^\d+$/.test(cidStr) ? BigInt(cidStr) : null
+    if (!cid) return NextResponse.json([], { status: 200 })
 
     // Get all friendships for this user
     const friendships = await prisma.friendship.findMany({
@@ -59,15 +61,17 @@ export async function GET(req: NextRequest) {
       if (birthday) {
         const name = [friend.firstName, friend.lastName].filter(Boolean).join(' ') || (friend.username ? `@${friend.username}` : `Участник #${friend.chatId.toString().slice(-4)}`)
         results.push({
-          chatId: String(friend.chatId),
+          chatId: Number(friend.chatId),
           name,
-          birthday
+          birthday,
+          username: friend.username,
         })
       }
     }
 
     return NextResponse.json(results)
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  } catch (err) {
+    console.error('Error in /api/birthdays:', err)
+    return NextResponse.json([])
   }
 }
