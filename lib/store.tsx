@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react'
 import type {
   Task, Goal, Project, Note, Friend, ChatMessage,
-  UserSettings, View, Priority, TaskStatus, GoalStatus, Habit
+  UserSettings, View, Priority, TaskStatus, GoalStatus, Habit, ScheduleGroup
 } from './types'
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ interface AppState {
   notes: Note[]
   friends: Friend[]
   habits: Habit[]
+  scheduleGroups: ScheduleGroup[]
   chat: ChatMessage[]
   settings: UserSettings
   currentView: View
@@ -87,6 +88,10 @@ type Action =
   | { type: 'REPLACE_GOAL'; tempId: string; goal: Goal }
   | { type: 'REPLACE_HABIT'; tempId: string; habit: Habit }
   | { type: 'DELETE_HABIT'; id: string }
+  | { type: 'ADD_SCHEDULE_GROUP'; group: ScheduleGroup }
+  | { type: 'UPDATE_SCHEDULE_GROUP'; id: string; updates: Partial<ScheduleGroup> }
+  | { type: 'DELETE_SCHEDULE_GROUP'; id: string }
+  | { type: 'SET_SCHEDULE_GROUPS'; groups: ScheduleGroup[] }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
   | { type: 'UPDATE_SETTINGS'; updates: Partial<UserSettings> }
   | { type: 'ADD_FRIEND'; friend: Friend }
@@ -171,6 +176,27 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, habits: state.habits.map(h => h.id === action.tempId ? action.habit : h) }
     case 'DELETE_HABIT':
       return { ...state, habits: state.habits.filter(h => h.id !== action.id) }
+    case 'ADD_SCHEDULE_GROUP': {
+      const nextGroups = [action.group, ...state.scheduleGroups]
+      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(nextGroups)) } catch {}
+      return { ...state, scheduleGroups: nextGroups }
+    }
+    case 'UPDATE_SCHEDULE_GROUP': {
+      const nextGroups = state.scheduleGroups.map(g =>
+        g.id === action.id ? { ...g, ...action.updates, updatedAt: new Date().toISOString() } : g
+      )
+      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(nextGroups)) } catch {}
+      return { ...state, scheduleGroups: nextGroups }
+    }
+    case 'DELETE_SCHEDULE_GROUP': {
+      const nextGroups = state.scheduleGroups.filter(g => g.id !== action.id)
+      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(nextGroups)) } catch {}
+      return { ...state, scheduleGroups: nextGroups }
+    }
+    case 'SET_SCHEDULE_GROUPS': {
+      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(action.groups)) } catch {}
+      return { ...state, scheduleGroups: action.groups }
+    }
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chat: [...state.chat, action.message] }
     case 'UPDATE_SETTINGS': {
@@ -195,6 +221,7 @@ const INITIAL_STATE: AppState = {
   notes: SEED_NOTES,
   friends: SEED_FRIENDS,
   habits: SEED_HABITS,
+  scheduleGroups: [],
   chat: SEED_CHAT,
   settings: DEFAULT_SETTINGS,
   currentView: 'today',
@@ -408,6 +435,14 @@ function initAppState(initialState: AppState): AppState {
     if (viewStr) savedView = viewStr
   } catch {}
 
+  let savedScheduleGroups: ScheduleGroup[] = []
+  try {
+    const rawGroups = localStorage.getItem('zerf_schedule_groups')
+    if (rawGroups) {
+      savedScheduleGroups = JSON.parse(rawGroups)
+    }
+  } catch {}
+
   return {
     ...initialState,
     tasks: Array.isArray(cachedData.tasks) ? cachedData.tasks : [],
@@ -416,6 +451,7 @@ function initAppState(initialState: AppState): AppState {
     projects: Array.isArray(cachedData.projects) ? cachedData.projects : [],
     friends: Array.isArray(cachedData.friends) ? cachedData.friends : [],
     habits: Array.isArray(cachedData.habits) ? cachedData.habits : [],
+    scheduleGroups: savedScheduleGroups.length > 0 ? savedScheduleGroups : [],
     settings: { ...initialState.settings, ...savedSettings },
     ...(savedView ? { currentView: savedView } : {})
   }

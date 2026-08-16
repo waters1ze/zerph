@@ -4,10 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { HabitsWidget } from '@/components/habits-widget'
+import { ScheduleWidget } from '@/components/schedule-widget'
+import { ScheduleGroupModal } from '@/components/schedule-group-modal'
 import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate } from '@/lib/utils'
-import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X, Settings2 } from 'lucide-react'
 import { parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
+import type { ScheduleGroup } from '@/lib/types'
 
 interface DailyContext {
   formattedDate: string
@@ -101,6 +104,20 @@ export function TodayView() {
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
   const [showAllLessons, setShowAllLessons] = useState(false)
   const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
+
+  const handleSaveGroup = (group: ScheduleGroup) => {
+    const exists = state.scheduleGroups?.some(g => g.id === group.id)
+    if (exists) {
+      dispatch({ type: 'UPDATE_SCHEDULE_GROUP', id: group.id, updates: group })
+    } else {
+      dispatch({ type: 'ADD_SCHEDULE_GROUP', group })
+    }
+  }
+
+  const handleDeleteGroup = (groupId: string) => {
+    dispatch({ type: 'DELETE_SCHEDULE_GROUP', id: groupId })
+  }
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -278,6 +295,13 @@ export function TodayView() {
           </motion.div>
         )}
 
+        {/* Smart Schedule Group Widget (Full Timeline for Today) */}
+        <ScheduleWidget
+          groups={state.scheduleGroups || []}
+          onOpenManager={() => setIsScheduleModalOpen(true)}
+          mode="full"
+        />
+
         {/* Habits Widget */}
         <HabitsWidget
           selectedHabitId={selectedHabitId}
@@ -321,8 +345,8 @@ export function TodayView() {
           </div>
         )}
 
-        {/* Tag Filters Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+        {/* Tag Filters Bar (Responsive flex-wrap, no scrollbars) */}
+        <div className="flex flex-wrap items-center gap-1.5 no-scrollbar select-none">
           {FIXED_TAGS.map(tag => {
             const isActive = selectedTag === tag.id
             const Icon = (tag as any).icon
@@ -331,7 +355,7 @@ export function TodayView() {
                 key={tag.id}
                 onClick={() => setSelectedTag(tag.id)}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border shrink-0',
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
                     : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -603,6 +627,15 @@ export function TodayView() {
           </div>
         </div>
       </div>
+
+      {/* Schedule Group Manager Modal */}
+      <ScheduleGroupModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        groups={state.scheduleGroups || []}
+        onSaveGroup={handleSaveGroup}
+        onDeleteGroup={handleDeleteGroup}
+      />
     </div>
   )
 }

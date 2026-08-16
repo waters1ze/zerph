@@ -18,6 +18,35 @@ export type View =
   | 'settings'
   | 'admin'
 
+export interface ScheduleLesson {
+  id: string
+  name: string
+  startTime: string
+  endTime: string
+  room?: string
+  teacher?: string
+  note?: string
+  color?: string
+}
+
+export interface DaySchedule {
+  dayOfWeek: number // 1 = Пн, 2 = Вт, 3 = Ср, 4 = Чт, 5 = Пт, 6 = Сб, 7 = Вс
+  enabled: boolean
+  lessons: ScheduleLesson[]
+}
+
+export interface ScheduleGroup {
+  id: string
+  title: string
+  icon: string
+  color: string
+  description?: string
+  days: DaySchedule[]
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Task {
   id: string
   title: string

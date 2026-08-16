@@ -369,7 +369,7 @@ export function SettingsView() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-muted/50 border border-border/80 overflow-x-auto">
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-muted/50 border border-border/80 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('account')}
           className={cn(

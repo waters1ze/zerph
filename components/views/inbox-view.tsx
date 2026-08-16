@@ -139,8 +139,8 @@ export function InboxView() {
     <div className="w-full max-w-none grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* ── Main Left/Center Column ── */}
       <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-5">
-        {/* Tag Filters Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+        {/* Tag Filters Bar (Responsive flex-wrap, no scrollbars) */}
+        <div className="flex flex-wrap items-center gap-1.5 no-scrollbar select-none">
           {sections.map(tag => {
             const isActive = selectedTag === tag.id
             const Icon = (tag as any).icon

@@ -5,9 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { cn, isTaskVisibleInMainList, groupTasksByDate } from '@/lib/utils'
-import type { Priority, TaskStatus } from '@/lib/types'
-import { CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar, Users, UserCheck } from 'lucide-react'
+import type { Priority, TaskStatus, ScheduleGroup } from '@/lib/types'
+import { 
+  CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, 
+  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock
+} from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
+import { ScheduleWidget } from '@/components/schedule-widget'
+import { ScheduleGroupModal } from '@/components/schedule-group-modal'
 
 type FilterStatus = 'all' | TaskStatus
 type SortKey = 'dueDate' | 'priority' | 'createdAt'
@@ -15,11 +20,12 @@ type SortKey = 'dueDate' | 'priority' | 'createdAt'
 const PRIORITY_ORDER: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
 
 export function TasksView() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [sortKey, setSortKey] = useState<SortKey>('dueDate')
   const [filterProject, setFilterProject] = useState<string>('all')
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
 
   const FIXED_TAGS = [
     { id: 'all', label: 'Все' },
@@ -29,7 +35,7 @@ export function TasksView() {
     { id: 'личное', label: 'Личное', icon: User },
     { id: 'срочно', label: 'Срочно', icon: Zap },
     { id: 'идеи', label: 'Идеи', icon: Lightbulb },
-    { id: 'учеба', label: 'Учеба', icon: GraduationCap },
+    { id: 'учеба', label: 'Учеба / Школа', icon: GraduationCap },
     { id: 'спорт', label: 'Спорт', icon: Activity },
   ]
 
@@ -46,6 +52,9 @@ export function TasksView() {
       const isCommon = tags.includes('общая') || tags.includes('совместная') || tags.includes('совместно') || tags.includes('общие')
       const hasDel = tags.includes('поручение') || tags.includes('делегировано') || tags.includes('поручено')
       return (t.isShared || hasDel) && !isCommon
+    }
+    if (selectedTag === 'учеба') {
+      return tags.some(tag => tag.includes('учеб') || tag.includes('школ') || tag.includes('урок') || tag.includes('дз'))
     }
     return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
   }
@@ -91,12 +100,26 @@ export function TasksView() {
   const mediumCount = visibleTasks.filter(t => t.priority === 'medium' && t.status !== 'done').length
   const lowCount = visibleTasks.filter(t => t.priority === 'low' && t.status !== 'done').length
 
+  const handleSaveGroup = (group: ScheduleGroup) => {
+    const exists = state.scheduleGroups?.some(g => g.id === group.id)
+    if (exists) {
+      dispatch({ type: 'UPDATE_SCHEDULE_GROUP', id: group.id, updates: group })
+    } else {
+      dispatch({ type: 'ADD_SCHEDULE_GROUP', group })
+    }
+  }
+
+  const handleDeleteGroup = (groupId: string) => {
+    dispatch({ type: 'DELETE_SCHEDULE_GROUP', id: groupId })
+  }
+
   return (
     <div className="w-full max-w-none grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* ── Main Left/Center Column ── */}
       <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
-        {/* Tag Filters Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar select-none">
+        
+        {/* Tag Filters Bar (Responsive flex-wrap, no scrollbars) */}
+        <div className="flex flex-wrap items-center gap-1.5 no-scrollbar select-none">
           {FIXED_TAGS.map(tag => {
             const isActive = selectedTag === tag.id
             const Icon = (tag as any).icon
@@ -105,7 +128,7 @@ export function TasksView() {
                 key={tag.id}
                 onClick={() => setSelectedTag(tag.id)}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border shrink-0',
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
                     : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -118,7 +141,14 @@ export function TasksView() {
           })}
         </div>
 
-        {/* Tabs — single line on all screen sizes */}
+        {/* Smart Schedule Group Widget (Compact Single Card for School / Classes) */}
+        <ScheduleWidget
+          groups={state.scheduleGroups || []}
+          onOpenManager={() => setIsScheduleModalOpen(true)}
+          mode="compact"
+        />
+
+        {/* Tabs — single line with smooth pill styling */}
         <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border w-full sm:w-fit overflow-x-auto no-scrollbar flex-nowrap shrink-0">
           {statusTabs.map(tab => (
             <button
@@ -198,7 +228,7 @@ export function TasksView() {
                     </span>
                     <div className="flex-1 h-[1px] bg-border/40 ml-2" />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     {group.tasks.map((t, i) => (
                       <TaskItem key={t.id} task={t} index={i} />
                     ))}
@@ -207,7 +237,7 @@ export function TasksView() {
               ))}
             </motion.div>
           ) : (
-            <motion.div key="flat-list" className="space-y-0.5">
+            <motion.div key="flat-list" className="space-y-1">
               {filtered.map((t, i) => (
                 <TaskItem key={t.id} task={t} index={i} />
               ))}
@@ -216,10 +246,61 @@ export function TasksView() {
         </AnimatePresence>
       </div>
 
-      {/* ── Right Sidebar Desktop Dashboard Panel ── */}
-      <div className="hidden lg:flex lg:col-span-5 xl:col-span-4 flex-col gap-5 sticky top-2">
-        {/* Project Navigator Card */}
-        <div className="p-5 rounded-2xl bg-card border border-border flex flex-col gap-3.5 shadow-xs">
+      {/* ── Right Sidebar Column ── */}
+      <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-4">
+        
+        {/* Schedule Groups Card */}
+        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-primary" />
+              <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">
+                Расписание уроков / групп
+              </h2>
+            </div>
+            <button
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              <span>Настроить</span>
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            {(state.scheduleGroups && state.scheduleGroups.length > 0) ? (
+              state.scheduleGroups.map(grp => (
+                <div
+                  key={grp.id}
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-muted/30 border border-border/50 hover:bg-muted/60 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: grp.color }}
+                    />
+                    <span className="text-xs font-bold text-foreground truncate">{grp.title}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    {grp.days.filter(d => d.enabled).length} дн./нед.
+                  </span>
+                </div>
+              ))
+            ) : (
+              <button
+                onClick={() => setIsScheduleModalOpen(true)}
+                className="w-full py-3 border border-dashed border-border rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4 text-primary" />
+                <span>Создать группу (Школа / Секция)</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Project Matrix / Summary */}
+        <div className="p-5 rounded-2xl bg-card border border-border flex flex-col gap-3 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Briefcase className="w-4 h-4 text-primary" />
@@ -228,11 +309,11 @@ export function TasksView() {
             <span className="text-[11px] text-muted-foreground font-medium">{state.projects.length} активных</span>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5 pt-1">
             <button
               onClick={() => setFilterProject('all')}
               className={cn(
-                'w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left',
+                'w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left font-medium',
                 filterProject === 'all'
                   ? 'bg-primary/10 border-primary/30 text-primary font-bold'
                   : 'bg-muted/30 border-border/40 text-foreground hover:bg-muted/60'
@@ -318,6 +399,15 @@ export function TasksView() {
           </div>
         </div>
       </div>
+
+      {/* Schedule Group Manager Modal */}
+      <ScheduleGroupModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        groups={state.scheduleGroups || []}
+        onSaveGroup={handleSaveGroup}
+        onDeleteGroup={handleDeleteGroup}
+      />
     </div>
   )
 }
