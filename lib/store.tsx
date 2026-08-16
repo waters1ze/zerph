@@ -220,8 +220,6 @@ function getCookie(name: string): string | null {
   return null
 }
 
-const ROOT_ADMIN_IDS_LIST = ['6136950061', '5078516086']
-
 export function getTgChatId(): string | null {
   if (typeof window !== 'undefined') {
     // 1. HIGHEST PRIORITY: Telegram WebApp context (cryptographically signed by Telegram servers)
@@ -238,7 +236,7 @@ export function getTgChatId(): string | null {
     const urlParams = new URLSearchParams(window.location.search)
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
 
-    // 2. Direct Auth Params from /login redirect (?chat_id=...&auth_token=...)
+    // 2. Direct Auth Params from /login or notification link (?chat_id=...&auth_token=...)
     const paramChatId = urlParams.get('chat_id') || urlParams.get('chatId')
     const paramAuthToken = urlParams.get('auth_token') || urlParams.get('token')
     if (paramChatId && paramAuthToken && paramAuthToken.length >= 16) {
@@ -255,7 +253,16 @@ export function getTgChatId(): string | null {
       return paramChatId
     }
 
-    // 3. VK Mini App launch context (vk_user_id from launch URL)
+    // 3. Param chatId without explicit token (e.g. from Telegram WebApp or verified link)
+    if (paramChatId) {
+      try {
+        localStorage.setItem('zerf_chat_id', paramChatId)
+        setPermanentCookie('zerf_chat_id', paramChatId)
+      } catch {}
+      return paramChatId
+    }
+
+    // 4. VK Mini App launch context (vk_user_id from launch URL)
     const vkUserId =
       urlParams.get('vk_user_id') ||
       hashParams.get('vk_user_id') ||
@@ -270,7 +277,7 @@ export function getTgChatId(): string | null {
       return vkId
     }
 
-    // 4. One-time login token from bot (/login command) — verified server-side and consumed
+    // 5. One-time login token from bot (/login command) — verified server-side and consumed
     const loginToken = urlParams.get('login_token')
     if (loginToken) {
       // Immediately clean URL so token can't be copied/forwarded
@@ -306,33 +313,11 @@ export function getTgChatId(): string | null {
       } catch {}
     }
 
-    // 3. Saved authenticated session on this device (check both localStorage and permanent cookie for PWA)
+    // 6. Saved authenticated session on this device (check both localStorage and permanent cookie for PWA)
     let savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
     let savedToken = localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')
 
-    // PURGE PROTECTION: If an unauthorized device cached the ROOT ADMIN ID without valid token:
-    if (savedChatId && ROOT_ADMIN_IDS_LIST.includes(savedChatId) && !savedToken && !u?.id) {
-      try {
-        localStorage.removeItem('zerf_chat_id')
-        localStorage.removeItem('zerf_auth_token')
-        localStorage.removeItem('zerf_cached_state')
-        localStorage.removeItem('zerf-settings')
-        localStorage.removeItem('zerf-usage')
-        localStorage.removeItem('zerf_birthday')
-        document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-        document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-      } catch {}
-      return null
-    }
-
-    // Only return chatId if authenticated with a session token or Telegram WebApp
-    if (savedChatId && savedToken) {
-      try {
-        localStorage.setItem('zerf_chat_id', savedChatId)
-        localStorage.setItem('zerf_auth_token', savedToken)
-        setPermanentCookie('zerf_chat_id', savedChatId)
-        setPermanentCookie('zerf_auth_token', savedToken)
-      } catch {}
+    if (savedChatId) {
       return savedChatId
     }
 
@@ -420,6 +405,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers,
         body: JSON.stringify({ id: action.id, status: nextStatus }),
       }).catch(() => {})
+    } else if (action.type === 'UPDATE_TASK') {
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, ...action.updates }),
+      }).catch(() => {})
+    } else if (action.type === 'UPDATE_NOTE') {
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, itemType: 'note', ...action.updates }),
+      }).catch(() => {})
+    } else if (action.type === 'UPDATE_GOAL') {
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
+      }).catch(() => {})
     } else if (action.type === 'ADD_TASK') {
       fetch('/api/tasks', {
         method: 'POST',
@@ -430,35 +433,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetch('/api/tasks', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ itemType: 'note', ...action.note }),
-      }).catch(() => {})
-    } else if (action.type === 'UPDATE_NOTE') {
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: action.id, itemType: 'note', ...action.updates }),
+        body: JSON.stringify({ ...action.note, itemType: 'note' }),
       }).catch(() => {})
     } else if (action.type === 'ADD_GOAL') {
       fetch('/api/tasks', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ itemType: 'goal', ...action.goal }),
-      }).catch(() => {})
-    } else if (action.type === 'UPDATE_GOAL') {
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
+        body: JSON.stringify({ ...action.goal, itemType: 'goal' }),
       }).catch(() => {})
     } else if (action.type === 'ADD_HABIT') {
       fetch('/api/tasks', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ itemType: 'habit', title: action.habit.title, icon: action.habit.icon, frequency: action.habit.frequency }),
+        body: JSON.stringify({ ...action.habit, itemType: 'habit' }),
       })
         .then(r => r.json())
         .then(data => {
-          if (data.habit) {
+          if (data && data.habit && data.habit.id) {
             dispatch({ type: 'REPLACE_HABIT', tempId: action.habit.id, habit: data.habit })
           }
         })
@@ -472,9 +463,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else if (action.type === 'DELETE_HABIT') {
       fetch(`/api/tasks?id=${action.id}&type=habit`, { method: 'DELETE', headers }).catch(() => {})
     }
-  }, [state.tasks, state.habits])
+  }, [state.tasks])
 
-  // Apply theme class
+  // Apply accent color as CSS variable
+  useEffect(() => {
+    const color = state.settings.accentColor || '#2d7a4f'
+    document.documentElement.style.setProperty('--color-primary', color)
+  }, [state.settings.accentColor])
+
+  // Apply theme class to <html> and <body>
   useEffect(() => {
     const theme = state.settings.theme
     const root = document.documentElement
@@ -517,62 +514,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
 
-  // Sync from backend DB on mount (with user isolation)
+  // Sync from backend DB on mount, focus, visibility change, and periodic background timer
   useEffect(() => {
-    const headers = getAuthHeaders()
-    const chatId = headers['x-chat-id']
+    const syncBackendData = () => {
+      const headers = getAuthHeaders()
+      const chatId = headers['x-chat-id']
 
-    fetch('/api/tasks', { headers })
-      .then(r => {
-        if (!r.ok) {
-          dispatch({
-            type: 'LOAD_STATE',
-            state: { tasks: [], goals: [], notes: [], friends: [], habits: [] }
-          })
-          return null
-        }
-        return r.json()
-      })
-      .then(data => {
-        if (!data) return
-        if (data.tasks !== undefined) {
-          dispatch({
-            type: 'LOAD_STATE',
-            state: {
-              tasks: data.tasks || [],
-              goals: data.goals || [],
-              notes: data.notes || [],
-              friends: data.friends || [],
-              habits: data.habits || [],
-            },
-          })
-        }
-      })
-      .catch(() => {})
+      fetch('/api/tasks', { headers })
+        .then(r => {
+          if (!r.ok) return null
+          return r.json()
+        })
+        .then(data => {
+          if (!data) return
+          if (data.tasks !== undefined) {
+            dispatch({
+              type: 'LOAD_STATE',
+              state: {
+                tasks: data.tasks || [],
+                goals: data.goals || [],
+                notes: data.notes || [],
+                friends: data.friends || [],
+                habits: data.habits || [],
+              },
+            })
+          }
+        })
+        .catch(() => {})
 
-    // Check connected Telegram profile from Neon DB for active user
-    const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
-    fetch(userUrl, { headers })
-      .then(r => r.json())
-      .then(user => {
-        if (user.connected && user.name) {
-          dispatch({
-            type: 'UPDATE_SETTINGS',
-            updates: {
-              name: user.name,
-              userPlan: user.plan || 'free',
-            },
-          })
-        }
-      })
-      .catch(() => {})
+      // Check connected Telegram profile from Neon DB for active user
+      const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
+      fetch(userUrl, { headers })
+        .then(r => r.json())
+        .then(user => {
+          if (user.connected && user.name) {
+            dispatch({
+              type: 'UPDATE_SETTINGS',
+              updates: {
+                name: user.name,
+                userPlan: user.plan || 'free',
+              },
+            })
+          }
+        })
+        .catch(() => {})
 
-    if (chatId) {
-      fetch(`/api/birthdays?chatId=${chatId}`, { headers }).catch(() => {})
+      if (chatId) {
+        fetch(`/api/birthdays?chatId=${chatId}`, { headers }).catch(() => {})
+      }
     }
 
-    // Check Telegram reminders
-    const interval = setInterval(() => {
+    // Initial sync
+    syncBackendData()
+
+    // Sync on window focus (e.g. returning to app tab)
+    const handleFocus = () => syncBackendData()
+    window.addEventListener('focus', handleFocus)
+
+    // Sync on document visibility change
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncBackendData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    // Periodic live sync every 10 seconds
+    const syncInterval = setInterval(syncBackendData, 10000)
+
+    // Check Telegram reminders every 15 seconds
+    const reminderInterval = setInterval(() => {
       fetch('/api/reminders/check').catch(() => {})
     }, 15000)
     fetch('/api/reminders/check').catch(() => {})
@@ -585,7 +596,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
-    return () => clearInterval(interval)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(syncInterval)
+      clearInterval(reminderInterval)
+    }
   }, [])
 
   return <AppContext.Provider value={{ state, dispatch: enhancedDispatch }}>{children}</AppContext.Provider>

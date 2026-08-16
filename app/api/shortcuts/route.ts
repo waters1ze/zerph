@@ -9,6 +9,7 @@ import { parseIntentWithGroq, transcribeAudioWithGroq } from '@/lib/backend/groq
 import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { prisma } from '@/lib/backend/prisma'
+import { createServerSession } from '@/lib/backend/auth'
 import { tokenMatchesCandidateName } from '@/lib/backend/name-aliases'
 import { GROQ_API_KEY } from '@/lib/config'
 
@@ -216,9 +217,19 @@ async function processShortcutsItems(
       }
       notifyFriendMsg += `\n_Задача добавлена в ваши «Входящие» и календарь в Zerf AI_`
 
+      let webAppUrl = `${appUrl}/tg?chatId=${friendChatId}`
+      try {
+        const sessionToken = await createServerSession(friendChatId, 'Telegram Siri Notification')
+        if (sessionToken) {
+          webAppUrl = `${appUrl}/tg?chat_id=${friendChatId}&auth_token=${sessionToken}`
+        }
+      } catch (e) {
+        console.error('Error creating session for notification:', e)
+      }
+
       await sendTgNotification(Number(friendChatId), notifyFriendMsg, {
         inline_keyboard: [
-          [{ text: '📱 Открыть в Zerf App', web_app: { url: `${appUrl}/tg?chatId=${friendChatId}` } }],
+          [{ text: '📱 Открыть в Zerf App', web_app: { url: webAppUrl } }],
           [
             { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
             { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }

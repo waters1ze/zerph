@@ -40,7 +40,11 @@ export function TasksView() {
   }
 
   const filtered = state.tasks
-    .filter(t => filterStatus === 'all' || t.status === filterStatus)
+    .filter(t => {
+      if (filterStatus === 'all') return true
+      if (filterStatus === 'todo') return t.status === 'todo' || t.status === 'inprogress'
+      return t.status === filterStatus
+    })
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
     .filter(matchesTag)
     .filter(isBirthdayVisible)
@@ -61,7 +65,7 @@ export function TasksView() {
 
   const statusTabs: { id: FilterStatus; label: string; count: number }[] = [
     { id: 'all', label: 'Все', count: state.tasks.filter(matchesTag).length },
-    { id: 'todo', label: 'К выполнению', count: state.tasks.filter(t => t.status === 'todo').filter(matchesTag).length },
+    { id: 'todo', label: 'К выполнению', count: state.tasks.filter(t => t.status !== 'done').filter(matchesTag).length },
     { id: 'inprogress', label: 'В процессе', count: state.tasks.filter(t => t.status === 'inprogress').filter(matchesTag).length },
     { id: 'done', label: 'Готово', count: state.tasks.filter(t => t.status === 'done').filter(matchesTag).length },
     { id: 'overdue', label: 'Просрочено', count: state.tasks.filter(t => t.status === 'overdue').filter(matchesTag).length },
