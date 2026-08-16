@@ -94,10 +94,38 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       return true
     })
 
-    return uniqueTasks.map(t => {
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10)
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+    const autoCompletedIds: string[] = []
+
+    const mappedTasks = uniqueTasks.map(t => {
+      let currentStatus = t.status
+      let completedAt = t.completedAt
+
+      // Auto-complete tasks whose time range has passed
+      if (t.dueTime && currentStatus !== 'done') {
+        const parts = t.dueTime.split(/[\s–-]+/)
+        if (parts.length >= 2) {
+          const endTime = parts[1].trim()
+          if (t.dueDate && t.dueDate < todayStr) {
+            currentStatus = 'done'
+            completedAt = completedAt || now
+            autoCompletedIds.push(t.id)
+          } else if (t.dueDate === todayStr && currentTimeStr >= endTime) {
+            currentStatus = 'done'
+            completedAt = completedAt || now
+            autoCompletedIds.push(t.id)
+          }
+        }
+      }
+
       if (isBirthdayTitle(t.title)) {
         return {
           ...t,
+          status: currentStatus,
+          completedAt,
           title: t.title.startsWith('🎂') ? t.title : `🎂 ${t.title}`,
           dueTime: '00:00',
           repeat: t.repeat || 'yearly',
@@ -105,18 +133,30 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       } else if (isHolidayTitle(t.title)) {
         return {
           ...t,
+          status: currentStatus,
+          completedAt,
           title: t.title.startsWith('🎉') ? t.title : `🎉 ${t.title}`,
           dueTime: '00:00',
           repeat: t.repeat || 'yearly',
         }
       } else {
-        // Strip erroneous 🎂 or 🎉 from normal tasks
         return {
           ...t,
+          status: currentStatus,
+          completedAt,
           title: t.title.replace(/^🎂\s*/, ''),
         }
       }
     })
+
+    if (autoCompletedIds.length > 0) {
+      prisma.task.updateMany({
+        where: { id: { in: autoCompletedIds } },
+        data: { status: 'done', completedAt: now },
+      }).catch(() => {})
+    }
+
+    return mappedTasks
   } catch (err) {
     console.error('getAllTasks error:', err)
     return []

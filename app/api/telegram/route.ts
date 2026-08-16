@@ -18,7 +18,7 @@ import {
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
   getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
-  isHolidayTitle, isBirthdayTitle,
+  isHolidayTitle, isBirthdayTitle, cancelScheduleForDate,
 } from '@/lib/backend/db'
 import { getUserAuthToken, createServerSession } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
@@ -1097,6 +1097,17 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
     return
   }
 
+  const isSchoolBatch = items.some(it => {
+    const tags = (it.tags || []).map(x => String(x).toLowerCase())
+    return tags.includes('школа') || tags.includes('расписание') || tags.includes('учеба')
+  })
+  if (isSchoolBatch && items.length >= 2) {
+    const datesToClean = Array.from(new Set(items.map(it => it.dueDate || new Date().toISOString().slice(0, 10))))
+    for (const d of datesToClean) {
+      await cancelScheduleForDate(chatId, d)
+    }
+  }
+
   let msg = items.length > 1 ? `Обработано элементов: ${items.length}\n\n` : ''
 
   for (let idx = 0; idx < items.length; idx++) {
@@ -1563,15 +1574,22 @@ async function processPhoto(chatId: number, photoArray: any[]) {
       return
     }
 
-    const { createTask } = await import('@/lib/backend/db')
+    const { createTask, cancelScheduleForDate } = await import('@/lib/backend/db')
     const createdList: string[] = []
-    let isSchoolSchedule = false
+    const isSchoolSchedule = extractedTasks.some(t => {
+      const tags = (t.tags || []).map(x => String(x).toLowerCase())
+      return tags.includes('школа') || tags.includes('расписание') || tags.includes('учеба')
+    })
+
+    if (isSchoolSchedule) {
+      const datesToClean = Array.from(new Set(extractedTasks.map(t => t.dueDate || new Date().toISOString().slice(0, 10))))
+      for (const d of datesToClean) {
+        await cancelScheduleForDate(chatId, d)
+      }
+    }
 
     for (const t of extractedTasks) {
       const taskTags = t.tags && t.tags.length > 0 ? t.tags : ['фото', 'vision-ai']
-      if (taskTags.includes('школа') || taskTags.includes('расписание') || taskTags.includes('учеба')) {
-        isSchoolSchedule = true
-      }
 
       const created = await createTask({
         title: t.title,

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { HabitsWidget } from '@/components/habits-widget'
-import { cn, isYearlyEventTask } from '@/lib/utils'
+import { cn, isYearlyEventTask, isSchoolTask } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X } from 'lucide-react'
 import { parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
@@ -158,6 +158,8 @@ export function TodayView() {
   const todayTasks = rawTodayTasks.filter(matchesTag)
   const doneTasks = todayTasks.filter(t => t.status === 'done')
   const activeTasks = todayTasks.filter(t => t.status !== 'done')
+  const schoolActiveTasks = activeTasks.filter(isSchoolTask)
+  const personalActiveTasks = activeTasks.filter(t => !isSchoolTask(t))
   const overdueTasks = activeHabit ? [] : state.tasks.filter(t => t.status === 'overdue')
   const completionRate = todayTasks.length ? Math.round((doneTasks.length / todayTasks.length) * 100) : 0
 
@@ -371,6 +373,33 @@ export function TodayView() {
               Авто-план дня
             </button>
           </div>
+          {/* School Schedule Card for Today */}
+          {!activeHabit && schoolActiveTasks.length > 0 && (
+            <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-card border border-border/80 shadow-2xs mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                    🏫
+                  </div>
+                  <h3 className="text-[13px] font-bold text-foreground">Школьное расписание на сегодня</h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {schoolActiveTasks.length} {schoolActiveTasks.length === 1 ? 'урок' : schoolActiveTasks.length < 5 ? 'урока' : 'уроков'}
+                  </span>
+                </div>
+                <span className="text-[11px] text-muted-foreground hidden sm:inline-block">
+                  {schoolActiveTasks[0].dueTime ? `с ${schoolActiveTasks[0].dueTime.split(/[\s–-]+/)[0]}` : ''}
+                </span>
+              </div>
+              <div className="space-y-1 mt-1">
+                {schoolActiveTasks
+                  .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
+                  .map((t, i) => (
+                    <TaskItem key={t.id} task={t} index={i} compact />
+                  ))}
+              </div>
+            </div>
+          )}
+
           {activeTasks.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
@@ -391,7 +420,7 @@ export function TodayView() {
             </motion.div>
           ) : (
             <div className="space-y-0.5">
-              {[...activeTasks]
+              {(activeHabit ? activeTasks : personalActiveTasks)
                 .sort((a, b) => {
                   if (eisenhowerSort) {
                     const getScore = (p: string) => p === 'urgent' ? 4 : p === 'high' ? 3 : p === 'medium' ? 2 : 1

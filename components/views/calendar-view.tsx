@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
-import { cn, isYearlyEventTask } from '@/lib/utils'
+import { cn, isYearlyEventTask, isSchoolTask } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ArrowLeft,
   Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon
@@ -36,7 +36,7 @@ function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
-// ── Day cell in grid ──────────────────────────────────────────────────────────
+// ── Day Cell Component ────────────────────────────────────────────────────────
 function DayCell({
   date,
   tasks,
@@ -51,8 +51,25 @@ function DayCell({
   onClick: () => void
 }) {
   const dayNum = date.getDate()
-  const topTasks = tasks.slice(0, 2)
-  const more = tasks.length - 2
+  const schoolTasks = tasks.filter(isSchoolTask)
+  const otherTasks = tasks.filter(t => !isSchoolTask(t))
+
+  const displayTasks: Array<{ id: string; title: string; priority: string; dueTime?: string | null }> = []
+  if (schoolTasks.length >= 2) {
+    const firstTime = schoolTasks[0].dueTime ? schoolTasks[0].dueTime.split(/[\s–-]+/)[0] : ''
+    displayTasks.push({
+      id: `school_group_${schoolTasks[0].id}`,
+      title: `🏫 Школа (${schoolTasks.length} ур.)`,
+      priority: 'medium',
+      dueTime: firstTime || null,
+    })
+    displayTasks.push(...otherTasks)
+  } else {
+    displayTasks.push(...tasks)
+  }
+
+  const topTasks = displayTasks.slice(0, 2)
+  const more = displayTasks.length - 2
 
   return (
     <motion.div
@@ -144,6 +161,8 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   })
   const dayNotes = state.notes.filter(n => n.dueDate === dateStr)
   const activeTasks = dayTasks.filter(t => t.status !== 'done')
+  const schoolActive = activeTasks.filter(isSchoolTask)
+  const personalActive = activeTasks.filter(t => !isSchoolTask(t))
   const doneTasks = dayTasks.filter(t => t.status === 'done')
   const todayStr = toYMD(new Date())
   const isToday = dateStr === todayStr
@@ -212,19 +231,46 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
         </div>
       )}
 
-      {/* Active tasks */}
-      {activeTasks.length > 0 ? (
+      {/* School Schedule Group */}
+      {schoolActive.length > 0 && (
+        <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-card border border-border/80 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                🏫
+              </div>
+              <h3 className="text-[13px] font-bold text-foreground">Школьное расписание</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                {schoolActive.length} {schoolActive.length === 1 ? 'урок' : schoolActive.length < 5 ? 'урока' : 'уроков'}
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline-block">
+              {schoolActive[0].dueTime ? `с ${schoolActive[0].dueTime.split(/[\s–-]+/)[0]}` : ''}
+            </span>
+          </div>
+          <div className="space-y-1 mt-1">
+            {schoolActive
+              .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
+              .map((t, i) => (
+                <TaskItem key={t.id} task={t} index={i} compact />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Personal & Other Tasks */}
+      {personalActive.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] uppercase tracking-widest font-bold text-muted-foreground">Задачи</p>
+          <p className="text-[11px] uppercase tracking-widest font-bold text-muted-foreground">Задачи и дела</p>
           <div className="space-y-1">
-            {activeTasks
+            {personalActive
               .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
               .map((t, i) => <TaskItem key={t.id} task={t} index={i} />)
             }
           </div>
         </div>
       ) : (
-        dayNotes.length === 0 && (
+        schoolActive.length === 0 && dayNotes.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

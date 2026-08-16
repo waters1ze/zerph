@@ -54,6 +54,14 @@ export function isYearlyEventTask(task: { title?: string; tags?: string[]; repea
   )
 }
 
+export function isSchoolTask(task: { title?: string; tags?: string[]; description?: string }): boolean {
+  if (!task) return false
+  const tags = (task.tags || []).map(x => String(x).toLowerCase())
+  if (tags.includes('школа') || tags.includes('расписание') || tags.includes('учеба')) return true
+  const schoolRegex = /(?:^|\s|\d\.)(?:урок|алгебр|геометр|физик|хим|биолог|русск|литератур|истори|обществознан|информатик|английск|немецк|французск|физкультур|физ-р|географ|астрономи|обж|труд|пар[аы]|школ|заняти)/i
+  return schoolRegex.test(task.title || '') || schoolRegex.test(task.description || '')
+}
+
 export function isBirthdayVisible(task: { title?: string; dueDate?: string | null; tags?: string[] }, maxDays = 7): boolean {
   if (!task || !isBirthdayTask(task)) return true
   if (!task.dueDate || !task.dueDate.includes('-')) return false
