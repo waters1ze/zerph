@@ -9,8 +9,8 @@ import {
   Sun, Moon, Monitor, Bell, BellOff, Link, Key,
   User, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
-  Lock, ExternalLink, Download, Layers, CheckCircle2, ArrowRight,
-  Send, Plus, CheckCircle, Search, X
+  Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
+  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -46,7 +46,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative w-9 h-5 rounded-full transition-colors duration-200',
+        'relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer shrink-0',
         checked ? 'bg-primary' : 'bg-border'
       )}
     >
@@ -66,7 +66,16 @@ const THEMES = [
   { id: 'system',label: 'Системная',icon: Monitor },
 ] as const
 
-type SettingsTab = 'account' | 'notifications' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data'
+const ACCENT_COLORS = [
+  { id: '#2d7a4f', label: 'Изумрудный', color: '#2d7a4f' },
+  { id: '#2563eb', label: 'Сапфировый', color: '#2563eb' },
+  { id: '#7c3aed', label: 'Фиолетовый', color: '#7c3aed' },
+  { id: '#ea580c', label: 'Янтарный', color: '#ea580c' },
+  { id: '#e11d48', label: 'Рубиновый', color: '#e11d48' },
+  { id: '#0d9488', label: 'Морской', color: '#0d9488' },
+] as const
+
+type SettingsTab = 'account' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data'
 
 export function SettingsView() {
   const { state, dispatch } = useApp()
@@ -74,7 +83,6 @@ export function SettingsView() {
   const { language, setLanguage } = useLanguage()
   const confirm = useConfirmDialog()
   const [activeTab, setActiveTab] = useState<SettingsTab>('account')
-  const [saved, setSaved] = useState(false)
 
   // Auth form states
   const [email, setEmail] = useState('')
@@ -96,6 +104,10 @@ export function SettingsView() {
     plan?: string
     isPremium?: boolean
     newsDisabled?: boolean
+    ttsEnabled?: boolean
+    timezone?: string
+    reminderIntervalMinutes?: number
+    reminderRepeatCount?: number
   }>({})
   const [newsToggleLoading, setNewsToggleLoading] = useState(false)
   const [showEmailLinkModal, setShowEmailLinkModal] = useState(false)
@@ -121,11 +133,30 @@ export function SettingsView() {
   const [promoLoading, setPromoLoading] = useState(false)
   const [promoMsg, setPromoMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  // Import JSON states
+  const importFileRef = useRef<HTMLInputElement>(null)
+  const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}&text=`
   const [nameSavedStatus, setNameSavedStatus] = useState<boolean>(false)
+  const [settingsSavedBadge, setSettingsSavedBadge] = useState<boolean>(false)
   const nameSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Generic DB preference updater
+  const syncPreferenceToServer = async (payload: Record<string, any>) => {
+    if (!currentChatId) return
+    try {
+      await fetch(`/api/telegram/user?chatId=${currentChatId}`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      setSettingsSavedBadge(true)
+      setTimeout(() => setSettingsSavedBadge(false), 2000)
+    } catch {}
+  }
 
   const saveUserNameToServer = async (newName: string) => {
     const trimmed = newName.trim()
@@ -175,10 +206,18 @@ export function SettingsView() {
               plan: d.plan,
               isPremium: d.isPremium,
               newsDisabled: d.newsDisabled,
+              ttsEnabled: d.ttsEnabled,
+              timezone: d.timezone,
+              reminderIntervalMinutes: d.reminderIntervalMinutes,
+              reminderRepeatCount: d.reminderRepeatCount,
             })
             if (d.email) setLinkEmail(d.email)
-            if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf') {
+            if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf' && !settings.name) {
               setName(d.name)
+            }
+            if (d.timezone) {
+              setUserTimezone(d.timezone)
+              try { localStorage.setItem('zerf_timezone', d.timezone) } catch {}
             }
           }
           if (d.birthday) {
@@ -197,30 +236,13 @@ export function SettingsView() {
   const handleUserBirthdayChange = async (val: string) => {
     setUserBirthday(val)
     try { localStorage.setItem('zerf_birthday', val) } catch {}
-    if (!currentChatId) return
-    try {
-      await fetch(`/api/telegram/user?chatId=${currentChatId}`, {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ birthday: val }),
-      })
-    } catch {}
+    syncPreferenceToServer({ birthday: val })
   }
 
   const handleTimezoneChange = async (tz: string) => {
     setUserTimezone(tz)
     try { localStorage.setItem('zerf_timezone', tz) } catch {}
-    if (!currentChatId) return
-    try {
-      await fetch('/api/user/timezone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: currentChatId, timezone: tz }),
-      })
-    } catch {}
+    syncPreferenceToServer({ timezone: tz })
   }
 
   const handleActivatePromo = async (e: React.FormEvent) => {
@@ -321,46 +343,6 @@ export function SettingsView() {
     }
   }
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setAuthError(null)
-    setAuthSuccess(null)
-    setAuthLoading(true)
-
-    try {
-      const res = await fetch('/api/auth/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: isRegister ? 'register' : 'login',
-          email,
-          password,
-          firstName: name
-        })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Ошибка входа')
-      }
-
-      localStorage.setItem('zerf_chat_id', data.chatId)
-      if (data.token) localStorage.setItem('zerf_auth_token', data.token)
-      if (data.firstName) {
-        localStorage.setItem('zerf_user_name', data.firstName)
-        update({ name: data.firstName })
-      }
-
-      setAuthSuccess(data.message || 'Успешно!')
-      setTimeout(() => {
-        window.location.reload()
-      }, 700)
-    } catch (err: any) {
-      setAuthError(err.message || 'Ошибка сети')
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
   const handleLogout = async () => {
     const ok = await confirm({
       title: 'Выйти из аккаунта?',
@@ -380,34 +362,93 @@ export function SettingsView() {
     }
   }
 
+  // Handle JSON Import
+  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string
+        const parsed = JSON.parse(text)
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Файл не содержит корректных данных JSON')
+        }
+
+        const tasksCount = Array.isArray(parsed.tasks) ? parsed.tasks.length : 0
+        const notesCount = Array.isArray(parsed.notes) ? parsed.notes.length : 0
+        const goalsCount = Array.isArray(parsed.goals) ? parsed.goals.length : 0
+
+        const ok = await confirm({
+          title: 'Импортировать данные?',
+          description: `Найдено: ${tasksCount} задач, ${notesCount} заметок, ${goalsCount} целей. Они будут добавлены в ваше текущее пространство.`,
+          confirmText: 'Импортировать',
+        })
+
+        if (ok) {
+          const mergedTasks = [...(parsed.tasks || []), ...state.tasks.filter(t => !(parsed.tasks || []).some((pt: any) => pt.id === t.id))]
+          const mergedNotes = [...(parsed.notes || []), ...state.notes.filter(n => !(parsed.notes || []).some((pn: any) => pn.id === n.id))]
+          const mergedGoals = [...(parsed.goals || []), ...state.goals.filter(g => !(parsed.goals || []).some((pg: any) => pg.id === g.id))]
+          const mergedProjects = [...(parsed.projects || []), ...state.projects.filter(p => !(parsed.projects || []).some((pp: any) => pp.id === p.id))]
+          
+          dispatch({
+            type: 'LOAD_STATE',
+            state: {
+              tasks: mergedTasks,
+              notes: mergedNotes,
+              goals: mergedGoals,
+              projects: mergedProjects,
+            }
+          })
+
+          setImportStatus({
+            type: 'success',
+            text: `Успешно импортировано: ${tasksCount} задач, ${notesCount} заметок!`
+          })
+          setTimeout(() => setImportStatus(null), 4000)
+        }
+      } catch (err: any) {
+        setImportStatus({
+          type: 'error',
+          text: err.message || 'Ошибка при чтении файла резервной копии'
+        })
+        setTimeout(() => setImportStatus(null), 4000)
+      } finally {
+        if (importFileRef.current) importFileRef.current.value = ''
+      }
+    }
+    reader.readAsText(file)
+  }
+
   const [searchFilter, setSearchFilter] = useState('')
 
   const SECTIONS = [
     {
       group: 'АККАУНТ',
       items: [
-        { id: 'account' as SettingsTab, label: 'Профиль & Вход', icon: User, desc: 'Почта, пароль, Telegram ID' },
-        { id: 'subscription' as SettingsTab, label: 'Тарифные планы', icon: Sparkles, desc: 'Подписка Plus, Pro, Corp' },
+        { id: 'account' as SettingsTab, label: 'Профиль & Вход', icon: User, desc: 'Имя, часовой пояс, Email, Telegram, VK' },
+        { id: 'subscription' as SettingsTab, label: 'Тарифные планы', icon: Sparkles, desc: 'Подписка Free, Plus, Pro, Corp' },
       ],
     },
     {
       group: 'СВЯЗЬ & ГОЛОС',
       items: [
-        { id: 'notifications' as SettingsTab, label: 'Уведомления & Каналы', icon: Bell, desc: 'Telegram, VK, рассылка' },
-        { id: 'automation' as SettingsTab, label: 'Голос & Siri', icon: Zap, desc: 'iOS Shortcuts, быстрые команды' },
+        { id: 'notifications' as SettingsTab, label: 'Уведомления & Каналы', icon: Bell, desc: 'Telegram, VK, Web Push, звуки, повторы' },
+        { id: 'focus' as SettingsTab, label: 'Фокус & Таймеры', icon: Timer, desc: 'Pomodoro, перерывы, автоперенос задач' },
+        { id: 'automation' as SettingsTab, label: 'Голос & Siri', icon: Zap, desc: 'iOS Shortcuts, быстрые команды, виджеты' },
       ],
     },
     {
       group: 'ИНТЕРФЕЙС',
       items: [
-        { id: 'appearance' as SettingsTab, label: 'Оформление & Тема', icon: Palette, desc: 'Цвета, темная/светлая тема' },
-        { id: 'pwa' as SettingsTab, label: 'PWA Приложение', icon: Smartphone, desc: 'Установка на экран телефона/ПК' },
+        { id: 'appearance' as SettingsTab, label: 'Оформление & Цвета', icon: Palette, desc: 'Светлая/тёмная тема, палитра акцентов' },
+        { id: 'pwa' as SettingsTab, label: 'PWA Приложение', icon: Smartphone, desc: 'Установка на экран телефона и рабочий стол ПК' },
       ],
     },
     {
       group: 'СИСТЕМА',
       items: [
-        { id: 'data' as SettingsTab, label: 'Сессии & Экспорт', icon: Shield, desc: 'Устройства, экспорт в JSON' },
+        { id: 'data' as SettingsTab, label: 'Резервные копии & Данные', icon: Shield, desc: 'Экспорт в JSON, импорт, сессии устройств' },
       ],
     },
   ]
@@ -424,7 +465,7 @@ export function SettingsView() {
   const activeItem = SECTIONS.flatMap(s => s.items).find(i => i.id === activeTab)
 
   return (
-    <div className="w-full max-w-5xl mx-auto rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[640px] md:h-[82vh] font-sans">
+    <div className="w-full max-w-5xl mx-auto rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[640px] md:h-[84vh] font-sans">
       
       {/* ── Left Sidebar Navigation (Obsidian Style) ── */}
       <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border/70 bg-muted/20 p-4 flex flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
@@ -471,7 +512,7 @@ export function SettingsView() {
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
                         className={cn(
-                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left',
+                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer',
                           isSel
                             ? 'bg-primary text-primary-foreground shadow-sm font-bold'
                             : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -488,10 +529,13 @@ export function SettingsView() {
           </div>
         </div>
 
-        {/* Bottom Profile Info */}
+        {/* Bottom Status Info */}
         <div className="pt-4 mt-4 border-t border-border/50 hidden md:flex items-center justify-between text-[11px] text-muted-foreground px-1">
-          <span>Zerf AI Assistant</span>
-          <span className="font-semibold text-primary">v2.4 Pro</span>
+          <span>Синхронизация с БД</span>
+          <span className="font-semibold text-emerald-500 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            <span>Активна</span>
+          </span>
         </div>
       </div>
 
@@ -500,18 +544,26 @@ export function SettingsView() {
         
         {/* Header of the Active Section */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 bg-muted/10 shrink-0">
-          <div>
-            <h2 className="text-base font-bold text-foreground">
-              {activeItem?.label || 'Настройки'}
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {activeItem?.desc || 'Параметры и конфигурация системы'}
-            </p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                {activeItem?.label || 'Настройки'}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {activeItem?.desc || 'Параметры и конфигурация системы'}
+              </p>
+            </div>
+            {settingsSavedBadge && (
+              <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in">
+                <Check className="w-3 h-3" />
+                <span>Сохранено в базе</span>
+              </span>
+            )}
           </div>
 
           <button
             onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
-            className="w-8 h-8 rounded-xl flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="w-8 h-8 rounded-xl flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             title="Закрыть настройки"
           >
             <X className="w-4 h-4" />
@@ -521,13 +573,11 @@ export function SettingsView() {
         {/* Main Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-6">
 
-      {/* ── TAB 1: Account & Multi-Provider Authentication ──────────────────── */}
+      {/* ── TAB 1: Account & Profile ────────────────────────────────────────── */}
       {activeTab === 'account' && (
-        
-
         <div className="space-y-6">
           <Section title="Ваш Профиль">
-            <Row label="Имя пользователя" description="Отображается в команде, совместных проектах и чате">
+            <Row label="Имя пользователя" description="Отображается в команде, совместных проектах, задачах и чате">
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -584,7 +634,7 @@ export function SettingsView() {
           <Section title="Связанные способы входа в этот аккаунт">
             <div className="p-5 space-y-4">
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Вы можете привязать <b>Email</b>, <b>Telegram</b>, <b>ВКонтакте</b> и <b>Google</b> к этому единому профилю. Вы сможете входить с любого устройства любым удобным способом — все задачи и заметки сохраняются в одном месте.
+                Вы можете привязать <b>Email</b>, <b>Telegram</b>, <b>ВКонтакте</b> и <b>Google</b> к этому единому профилю. Вы сможете входить с любого устройства любым удобным способом — все задачи и заметки сохраняются в базе данных в реальном времени.
               </p>
 
               {authSuccess && (
@@ -652,7 +702,7 @@ export function SettingsView() {
 
                   <button
                     onClick={() => setShowEmailLinkModal(!showEmailLinkModal)}
-                    className="w-full py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold border border-primary/20 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold border border-primary/20 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Key className="w-3 h-3" />
                     <span>{profileData.email ? 'Сменить Email / Пароль' : 'Привязать Email и Пароль'}</span>
@@ -686,7 +736,7 @@ export function SettingsView() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleLinkVk}
-                      className="flex-1 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <span>{profileData.vkId ? 'Изменить VK ID' : 'Указать VK ID'}</span>
                     </button>
@@ -728,7 +778,7 @@ export function SettingsView() {
                   </div>
                   <button
                     onClick={handleLinkGoogle}
-                    className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <span>{profileData.googleEmail ? 'Изменить Google Email' : 'Привязать Google'}</span>
                   </button>
@@ -784,14 +834,14 @@ export function SettingsView() {
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm"
+                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer"
                       >
                         {authLoading ? 'Сохранение...' : 'Сохранить и привязать'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowEmailLinkModal(false)}
-                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors"
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
                       >
                         Отмена
                       </button>
@@ -804,7 +854,7 @@ export function SettingsView() {
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={handleLogout}
-                  className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-semibold transition-all"
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
                 >
                   Выйти из этого аккаунта
                 </button>
@@ -969,7 +1019,7 @@ export function SettingsView() {
                       }
                     }
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors"
+                  className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors cursor-pointer"
                 >
                   Тест пуша
                 </button>
@@ -1007,17 +1057,41 @@ export function SettingsView() {
             </Row>
 
             <Row
+              label="Голосовые ответы бота в Telegram (TTS)"
+              description="Бот будет озвучивать свои ответы и сводки голосовыми сообщениями"
+            >
+              <Toggle
+                checked={settings.voiceSettings?.ttsResponseEnabled ?? profileData.ttsEnabled ?? false}
+                onChange={v => {
+                  update({
+                    voiceSettings: {
+                      ...settings.voiceSettings,
+                      ttsResponseEnabled: v
+                    }
+                  })
+                  setProfileData(p => ({ ...p, ttsEnabled: v }))
+                  syncPreferenceToServer({ ttsEnabled: v })
+                }}
+              />
+            </Row>
+
+            <Row
               label="Интервал повторов напоминаний"
-              description="За сколько минут присылать повторные напоминания"
+              description="С каким интервалом бот присылает повторные напоминания, если задача не закрыта"
             >
               <select
-                value={settings.notifications.reminderIntervalMinutes || 5}
-                onChange={e => update({
-                  notifications: {
-                    ...settings.notifications,
-                    reminderIntervalMinutes: Number(e.target.value)
-                  }
-                })}
+                value={settings.notifications.reminderIntervalMinutes || profileData.reminderIntervalMinutes || 5}
+                onChange={e => {
+                  const val = Number(e.target.value)
+                  update({
+                    notifications: {
+                      ...settings.notifications,
+                      reminderIntervalMinutes: val
+                    }
+                  })
+                  setProfileData(p => ({ ...p, reminderIntervalMinutes: val }))
+                  syncPreferenceToServer({ reminderIntervalMinutes: val })
+                }}
                 className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
               >
                 <option value={5}>5 минут (Рекомендуется)</option>
@@ -1032,13 +1106,18 @@ export function SettingsView() {
               description="Сколько раз повторять напоминание до завершения задачи"
             >
               <select
-                value={settings.notifications.reminderRepeatCount || 3}
-                onChange={e => update({
-                  notifications: {
-                    ...settings.notifications,
-                    reminderRepeatCount: Number(e.target.value)
-                  }
-                })}
+                value={settings.notifications.reminderRepeatCount || profileData.reminderRepeatCount || 3}
+                onChange={e => {
+                  const val = Number(e.target.value)
+                  update({
+                    notifications: {
+                      ...settings.notifications,
+                      reminderRepeatCount: val
+                    }
+                  })
+                  setProfileData(p => ({ ...p, reminderRepeatCount: val }))
+                  syncPreferenceToServer({ reminderRepeatCount: val })
+                }}
                 className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
               >
                 <option value={1}>1 раз (Только в срок)</option>
@@ -1047,11 +1126,101 @@ export function SettingsView() {
                 <option value={5}>5 раз (Настойчиво)</option>
               </select>
             </Row>
+
+            <Row
+              label="Вечерний отчет и итоги дня"
+              description="Присылать список выполненных и оставшихся задач в конце рабочего дня"
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="time"
+                  value={settings.eveningReview?.time || '21:00'}
+                  onChange={e => update({
+                    eveningReview: {
+                      enabled: settings.eveningReview?.enabled ?? true,
+                      time: e.target.value
+                    }
+                  })}
+                  className="h-8 px-2.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground outline-none cursor-pointer"
+                />
+                <Toggle
+                  checked={settings.eveningReview?.enabled ?? true}
+                  onChange={v => update({
+                    eveningReview: {
+                      time: settings.eveningReview?.time || '21:00',
+                      enabled: v
+                    }
+                  })}
+                />
+              </div>
+            </Row>
           </Section>
         </div>
       )}
 
-      {/* ── TAB 3: Voice Automation (iOS & Android) ──────────────────────────── */}
+      {/* ── TAB 3: Focus & Pomodoro ─────────────────────────────────────────── */}
+      {activeTab === 'focus' && (
+        <div className="space-y-6">
+          <Section title="Тайм-менеджмент и Pomodoro">
+            <Row
+              label="Режим глубокого фокуса"
+              description="Включает специальный таймер концентрации внимания в карточках задач и на часах"
+            >
+              <Toggle
+                checked={settings.focusModeEnabled ?? true}
+                onChange={v => update({ focusModeEnabled: v })}
+              />
+            </Row>
+
+            <Row
+              label="Длительность рабочего фокуса"
+              description="Рекомендуемое время непрерывной работы над одной задачей без отвлечений"
+            >
+              <select
+                value={settings.focusSettings?.defaultDurationMinutes || 25}
+                onChange={e => update({
+                  focusSettings: {
+                    defaultDurationMinutes: Number(e.target.value),
+                    breakDurationMinutes: settings.focusSettings?.breakDurationMinutes || 5
+                  }
+                })}
+                className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+              >
+                <option value={15}>15 минут (Быстрый спринт)</option>
+                <option value={20}>20 минут</option>
+                <option value={25}>25 минут (Классический Pomodoro)</option>
+                <option value={30}>30 минут</option>
+                <option value={45}>45 минут (Учебная пара / Урок)</option>
+                <option value={50}>50 минут (Глубокое погружение)</option>
+                <option value={60}>60 минут (1 час)</option>
+              </select>
+            </Row>
+
+            <Row
+              label="Длительность короткого перерыва"
+              description="Время отдыха между интервалами концентрации"
+            >
+              <select
+                value={settings.focusSettings?.breakDurationMinutes || 5}
+                onChange={e => update({
+                  focusSettings: {
+                    defaultDurationMinutes: settings.focusSettings?.defaultDurationMinutes || 25,
+                    breakDurationMinutes: Number(e.target.value)
+                  }
+                })}
+                className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+              >
+                <option value={3}>3 минуты</option>
+                <option value={5}>5 минут (Рекомендуется)</option>
+                <option value={10}>10 минут</option>
+                <option value={15}>15 минут</option>
+              </select>
+            </Row>
+          </Section>
+        </div>
+      )}
+
+      {/* ── TAB 4: Voice Automation (iOS & Android) ──────────────────────────── */}
       {activeTab === 'automation' && (
         <div className="space-y-6">
           <div className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3">
@@ -1069,7 +1238,7 @@ export function SettingsView() {
                 setCopiedShortcut(true)
                 setTimeout(() => setCopiedShortcut(false), 2000)
               }}
-              className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border shrink-0 transition-colors"
+              className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border shrink-0 transition-colors cursor-pointer"
             >
               {copiedShortcut ? 'Скопировано!' : 'Копировать'}
             </button>
@@ -1177,7 +1346,7 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ── TAB 3: Appearance & Language ─────────────────────────────────────── */}
+      {/* ── TAB 5: Appearance & Language ─────────────────────────────────────── */}
       {activeTab === 'appearance' && (
         <div className="space-y-6">
           <Section title="Тема оформления">
@@ -1190,7 +1359,7 @@ export function SettingsView() {
                       key={t.id}
                       onClick={() => update({ theme: t.id })}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all',
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer',
                         settings.theme === t.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                       )}
                     >
@@ -1199,6 +1368,25 @@ export function SettingsView() {
                     </button>
                   )
                 })}
+              </div>
+            </Row>
+
+            <Row label="Цветовой акцент" description="Основной оттенок кнопок, бейджей и выделений">
+              <div className="flex items-center gap-2">
+                {ACCENT_COLORS.map(acc => (
+                  <button
+                    key={acc.id}
+                    onClick={() => update({ accentColor: acc.color })}
+                    className={cn(
+                      'w-7 h-7 rounded-full transition-transform cursor-pointer border-2 flex items-center justify-center',
+                      settings.accentColor === acc.color ? 'scale-110 border-foreground' : 'border-transparent opacity-80 hover:opacity-100'
+                    )}
+                    style={{ backgroundColor: acc.color }}
+                    title={acc.label}
+                  >
+                    {settings.accentColor === acc.color && <Check className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                ))}
               </div>
             </Row>
 
@@ -1216,7 +1404,7 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ── TAB 4: PWA App Installation ─────────────────────────────────────── */}
+      {/* ── TAB 6: PWA App Installation ─────────────────────────────────────── */}
       {activeTab === 'pwa' && (
         <div className="space-y-6">
           <Section title="Установка на устройства">
@@ -1264,7 +1452,7 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ── TAB 5: Subscription, Plans & Promo Codes ────────────────────────── */}
+      {/* ── TAB 7: Subscription, Plans & Promo Codes ────────────────────────── */}
       {activeTab === 'subscription' && (
         <div className="space-y-6">
           <Section title="Тарифные планы">
@@ -1280,7 +1468,7 @@ export function SettingsView() {
                     type="button"
                     onClick={() => setBillingCycle('monthly')}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                      'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
                       billingCycle === 'monthly'
                         ? 'bg-primary text-primary-foreground shadow-xs'
                         : 'text-muted-foreground hover:text-foreground'
@@ -1292,7 +1480,7 @@ export function SettingsView() {
                     type="button"
                     onClick={() => setBillingCycle('yearly')}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1',
+                      'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer',
                       billingCycle === 'yearly'
                         ? 'bg-primary text-primary-foreground shadow-xs'
                         : 'text-muted-foreground hover:text-foreground'
@@ -1377,7 +1565,7 @@ export function SettingsView() {
                           }}
                           disabled={loadingPay}
                           className={cn(
-                            'w-full py-2.5 rounded-xl text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-md disabled:opacity-60',
+                            'w-full py-2.5 rounded-xl text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-md disabled:opacity-60 cursor-pointer',
                             highlight
                               ? 'bg-primary text-primary-foreground shadow-primary/20'
                               : 'bg-foreground text-background'
@@ -1437,7 +1625,7 @@ export function SettingsView() {
                       }
                     }}
                     className={cn(
-                      'relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-60',
+                      'relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-60 cursor-pointer',
                       profileData.newsDisabled ? 'bg-primary' : 'bg-muted border border-border'
                     )}
                   >
@@ -1469,7 +1657,7 @@ export function SettingsView() {
                   <button
                     type="submit"
                     disabled={promoLoading || !promoInput.trim()}
-                    className="h-9 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center shrink-0"
+                    className="h-9 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center shrink-0 cursor-pointer"
                   >
                     {promoLoading ? 'Проверка...' : 'Применить'}
                   </button>
@@ -1506,7 +1694,7 @@ export function SettingsView() {
                     setCopiedRef(true)
                     setTimeout(() => setCopiedRef(false), 2000)
                   }}
-                  className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-colors flex items-center justify-center gap-1.5 shrink-0"
+                  className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                 >
                   <span className="mono-emoji">🎁</span>
                   <span>{copiedRef ? 'Ссылка скопирована!' : 'Пригласить друга'}</span>
@@ -1517,32 +1705,89 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ── TAB 6: Data & Privacy ────────────────────────────────────────────── */}
+      {/* ── TAB 8: Data & Backup ─────────────────────────────────────────────── */}
       {activeTab === 'data' && (
         <div className="space-y-6">
           <Section title="Резервное копирование и экспорт">
             <Row label="Экспорт всех данных (JSON)" description="Скачать полный архив задач, заметок, целей и проектов">
               <button
                 onClick={() => {
-                  const { tasks, goals, notes, projects } = state
-                  const data = JSON.stringify({ exportedAt: new Date().toISOString(), tasks, goals, notes, projects }, null, 2)
+                  const { tasks, goals, notes, projects, habits, scheduleGroups } = state
+                  const data = JSON.stringify({ exportedAt: new Date().toISOString(), tasks, goals, notes, projects, habits, scheduleGroups }, null, 2)
                   const blob = new Blob([data], { type: 'application/json' })
                   const url = URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = url
-                  a.download = `zerf-note-export-${new Date().toISOString().slice(0, 10)}.json`
+                  a.download = `zerf-backup-${new Date().toISOString().slice(0, 10)}.json`
                   a.click()
                   URL.revokeObjectURL(url)
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
+                className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Скачать JSON</span>
               </button>
             </Row>
-              </Section>
-            </div>
-          )}
+
+            <Row label="Импорт данных из архива (JSON)" description="Восстановить или объединить задачи и заметки из ранее скачанного файла">
+              <div className="flex items-center gap-2">
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportJson}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => importFileRef.current?.click()}
+                  className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Загрузить JSON</span>
+                </button>
+              </div>
+            </Row>
+
+            {importStatus && (
+              <div className={cn(
+                'p-4 rounded-xl text-xs font-medium border flex items-center gap-2',
+                importStatus.type === 'success'
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+              )}>
+                {importStatus.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                <span>{importStatus.text}</span>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Сброс локального кэша">
+            <Row label="Очистить локальный кэш браузера" description="Перезагружает актуальные данные из облачной базы данных">
+              <button
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Очистить кэш?',
+                    description: 'Приложение очистит временные файлы браузера и заново загрузит все данные из базы.',
+                    confirmText: 'Очистить и перезагрузить',
+                  })
+                  if (ok) {
+                    try {
+                      localStorage.removeItem('zerf-settings')
+                      localStorage.removeItem('zerf_current_view')
+                    } catch {}
+                    window.location.reload()
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Сбросить кэш</span>
+              </button>
+            </Row>
+          </Section>
+        </div>
+      )}
+
         </div>
       </div>
     </div>

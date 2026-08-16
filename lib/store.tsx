@@ -465,6 +465,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Track freshly created optimistic IDs so a racing background sync doesn't wipe them
   // before the server POST completes (same 60s window as deletions)
   const recentlyAddedIdsRef = useRef<Map<string, number>>(new Map())
+  // Consecutive 401 strikes from the sync endpoint — logout only fires on the
+  // second strike so a single transient/racing 401 can't log the user out
+  const deadSessionStrikesRef = useRef(0)
+  // Prevents overlapping sync requests from piling up on a slow backend
+  const syncInFlightRef = useRef(false)
 
   // Latest-state ref for background sync (avoids stale closures / callback churn)
   const stateRef = useRef(state)
@@ -658,6 +663,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Core Sync Function
   const syncBackendData = useCallback(async (showIndicator = false) => {
+    if (syncInFlightRef.current) return
+    syncInFlightRef.current = true
     if (showIndicator) setIsSyncing(true)
     try {
       const headers = getAuthHeaders()
@@ -676,14 +683,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const res = await fetch('/api/tasks', { headers, cache: 'no-store' })
-      if (res.status === 401 && (headers['x-auth-token'] || headers['x-tg-init-data'] || headers['x-vk-launch'] || headers['x-chat-id'])) {
-        // Stale credentials (e.g. after a DB switch) — log out to the login screen
-        forceLogoutOnDeadSession()
-        return
-      }
-      if (!res.ok) return
-      const data = await res.json()
+      const res = await fetch('/api/tasks', {
+        headers,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(20000),
+      }).catch(() => null)
+
+      if (res) {
+        if (res.status === 401 && (headers['x-auth-token'] || headers['x-tg-init-data'] || headers['x-vk-launch'])) {
+          // Real credentials were rejected. Require TWO consecutive 401s before
+          // logging out — one can slip through on a race or stale secondary tab.
+          deadSessionStrikesRef.current += 1
+          if (deadSessionStrikesRef.current >= 2) {
+            forceLogoutOnDeadSession()
+          }
+          return
+        }
+        if (res.ok) {
+          deadSessionStrikesRef.current = 0
+        }
+        if (!res.ok) return
+        const data = await res.json()
 
       if (data && data.tasks !== undefined) {
         if (data._dbOffline && (!data.tasks || data.tasks.length === 0)) {
@@ -720,25 +740,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Check connected Telegram profile from Neon DB for active user
       const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
-      fetch(userUrl, { headers, cache: 'no-store' })
+      fetch(userUrl, { headers, cache: 'no-store', signal: AbortSignal.timeout(20000) })
         .then(r => r.json())
         .then(user => {
-          if (user.connected && user.name) {
-            dispatch({
-              type: 'UPDATE_SETTINGS',
-              updates: {
-                name: user.name,
-                userPlan: user.plan || 'free',
-              },
-            })
+          if (user.connected) {
+            const curSettings = stateRef.current.settings
+            const updates: Partial<UserSettings> = {}
+            if (user.plan && user.plan !== curSettings.userPlan) {
+              updates.userPlan = user.plan
+            }
+            if (user.name && user.name !== 'Kirill Perekatnov' && user.name !== 'Пользователь Zerf' && (!curSettings.name || curSettings.name === 'Kirill Perekatnov')) {
+              updates.name = user.name
+            }
+            if (user.reminderIntervalMinutes !== undefined || user.reminderRepeatCount !== undefined) {
+              updates.notifications = {
+                ...curSettings.notifications,
+                reminderIntervalMinutes: user.reminderIntervalMinutes ?? curSettings.notifications.reminderIntervalMinutes ?? 5,
+                reminderRepeatCount: user.reminderRepeatCount ?? curSettings.notifications.reminderRepeatCount ?? 3,
+              }
+            }
+            if (user.ttsEnabled !== undefined) {
+              updates.voiceSettings = {
+                ...curSettings.voiceSettings,
+                ttsResponseEnabled: Boolean(user.ttsEnabled)
+              }
+            }
+            if (Object.keys(updates).length > 0) {
+              dispatch({ type: 'UPDATE_SETTINGS', updates })
+            }
           }
         })
         .catch(() => {})
 
       if (chatId) {
-        fetch(`/api/birthdays?chatId=${chatId}`, { headers }).catch(() => {})
+        fetch(`/api/birthdays?chatId=${chatId}`, { headers, signal: AbortSignal.timeout(20000) }).catch(() => {})
       }
+      } // end if (res)
     } catch {} finally {
+      syncInFlightRef.current = false
       if (showIndicator) {
         setTimeout(() => setIsSyncing(false), 400)
       }
@@ -775,12 +814,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
-    // Fast live sync: every 3.5 seconds while app is visible, so voice/Telegram tasks appear immediately!
+    // Fast live sync while app is visible, so voice/Telegram tasks appear quickly.
+    // 6s (not 3.5s): each sync fires 2-3 DB-backed requests and Supabase's
+    // transaction pooler chokes when several tabs hammer it in parallel.
     const syncInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         syncBackendData(false)
       }
-    }, 3500)
+    }, 6000)
 
     // Check Telegram reminders every 15 seconds
     const reminderInterval = setInterval(() => {

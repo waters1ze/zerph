@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { getAuthenticatedUser, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { hashPassword, verifyPassword } from '@/lib/backend/passwords'
 import { normalizePlan, isNewsDisabled, planAtLeast } from '@/lib/backend/plans'
 
@@ -47,6 +47,10 @@ export async function GET(req: NextRequest) {
             googleEmail: chat.googleEmail || null,
             authProvider: chat.authProvider || 'telegram',
             birthday: chat.birthday || null,
+            timezone: chat.timezone || 'Europe/Moscow',
+            reminderIntervalMinutes: chat.reminderIntervalMinutes ?? 5,
+            reminderRepeatCount: chat.reminderRepeatCount ?? 3,
+            ttsEnabled: Boolean(chat.ttsEnabled),
             plan: activePlan,
             isPremium,
             subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
@@ -57,20 +61,25 @@ export async function GET(req: NextRequest) {
       }
     } catch (dbErr) {
       console.error('DB query error in /api/telegram/user:', dbErr)
-      // Return safe fallback for active user to avoid frontend 500
-      return NextResponse.json({
-        connected: true,
-        chatId: Number(cid) || 0,
-        name: 'Пользователь Zerf',
-        plan: 'free',
-        isPremium: false,
-        isAdmin: ROOT_ADMIN_IDS.includes(cid),
-      })
+      // 503 (NOT a fake 200 with plan:'free'): a transient DB blip must not
+      // make the client rewrite the user's name/plan, which caused the UI to
+      // flicker between user and guest states. Clients ignore non-connected
+      // responses and keep their last known state.
+      return NextResponse.json(
+        { connected: false, transient: true, error: 'DB temporarily unavailable' },
+        { status: 503 }
+      )
     }
 
+    // Authenticated but no TelegramChat row (e.g. VK-only user) — not an error
     return NextResponse.json({ connected: false })
   } catch (err: unknown) {
-    return NextResponse.json({ connected: false, error: String(err) }, { status: 200 })
+    // getAuthenticatedUser rethrows DB failures — surface them as 5xx so the
+    // client keeps its cached state instead of treating the user as logged out
+    if (err instanceof Error && (err.message.includes('db') || err.message.includes('Prisma') || (err as any)?.code)) {
+      return NextResponse.json({ connected: false, transient: true }, { status: 503 })
+    }
+    return NextResponse.json({ connected: false, error: String(err) }, { status: 401 })
   }
 }
 
@@ -83,7 +92,7 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
 
@@ -92,6 +101,22 @@ export async function POST(req: NextRequest) {
     if (birthday !== undefined) {
       const parsed = parseBirthday(birthday)
       updateData.birthday = parsed ? parsed.iso : (birthday || null)
+    }
+
+    if (timezone !== undefined) {
+      updateData.timezone = String(timezone).trim()
+    }
+
+    if (reminderIntervalMinutes !== undefined) {
+      updateData.reminderIntervalMinutes = Math.max(1, Math.min(120, Number(reminderIntervalMinutes) || 5))
+    }
+
+    if (reminderRepeatCount !== undefined) {
+      updateData.reminderRepeatCount = Math.max(1, Math.min(10, Number(reminderRepeatCount) || 3))
+    }
+
+    if (ttsEnabled !== undefined) {
+      updateData.ttsEnabled = Boolean(ttsEnabled)
     }
 
     if (name !== undefined) {

@@ -91,7 +91,7 @@ export function ScheduleWidget({
           </div>
           <div>
             <h4 className="text-sm font-bold text-foreground">Группы расписания и уроков</h4>
-            <p className="text-xs text-muted-foreground">Создайте группу «Школа» или «Тренировки» для умного отображения расписания</p>
+            <p className="text-xs text-muted-foreground">Создавайте группы для уроков, занятий и расписания по дням</p>
           </div>
         </div>
         <button

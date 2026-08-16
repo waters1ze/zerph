@@ -42,7 +42,12 @@ export async function GET(req: NextRequest) {
   try {
     const ownerChatId = await getOwnerChatId(req)
     if (!ownerChatId) {
-      return NextResponse.json({ tasks: [], goals: [], notes: [], friends: [], habits: [] })
+      // 401 (not a silent 200 with empty lists): an empty-200 would make the
+      // client's periodic sync wipe all local data on any transient auth gap.
+      return NextResponse.json(
+        { error: 'Unauthorized', tasks: [], goals: [], notes: [], friends: [], habits: [] },
+        { status: 401 }
+      )
     }
     
     try {
