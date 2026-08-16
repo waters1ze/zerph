@@ -118,7 +118,10 @@ export async function GET(req: NextRequest) {
     }).catch(() => {}) // non-blocking
 
     if (shouldRedirect) {
-      const res = NextResponse.redirect(new URL('/', req.url))
+      const redirectUrl = new URL('/', req.url)
+      redirectUrl.searchParams.set('chat_id', chatIdStr)
+      redirectUrl.searchParams.set('auth_token', sessionToken)
+      const res = NextResponse.redirect(redirectUrl)
       res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax' })
       res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax' })
       return res

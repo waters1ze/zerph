@@ -209,8 +209,15 @@ function setPermanentCookie(name: string, value: string) {
 
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null
-  const matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[]\/+^])/g, '\\$1') + '=([^;]*)'))
-  return matches ? decodeURIComponent(matches[1]) : null
+  const prefix = `${name}=`
+  const cookies = document.cookie.split(';')
+  for (let i = 0; i < cookies.length; i++) {
+    const c = cookies[i].trim()
+    if (c.indexOf(prefix) === 0) {
+      return decodeURIComponent(c.substring(prefix.length))
+    }
+  }
+  return null
 }
 
 const ROOT_ADMIN_IDS_LIST = ['6136950061', '5078516086']
@@ -231,7 +238,24 @@ export function getTgChatId(): string | null {
     const urlParams = new URLSearchParams(window.location.search)
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
 
-    // 2. VK Mini App launch context (vk_user_id from launch URL)
+    // 2. Direct Auth Params from /login redirect (?chat_id=...&auth_token=...)
+    const paramChatId = urlParams.get('chat_id') || urlParams.get('chatId')
+    const paramAuthToken = urlParams.get('auth_token') || urlParams.get('token')
+    if (paramChatId && paramAuthToken && paramAuthToken.length >= 16) {
+      try {
+        localStorage.setItem('zerf_chat_id', paramChatId)
+        localStorage.setItem('zerf_auth_token', paramAuthToken)
+        localStorage.removeItem('zerf_cached_state')
+        setPermanentCookie('zerf_chat_id', paramChatId)
+        setPermanentCookie('zerf_auth_token', paramAuthToken)
+      } catch {}
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+      return paramChatId
+    }
+
+    // 3. VK Mini App launch context (vk_user_id from launch URL)
     const vkUserId =
       urlParams.get('vk_user_id') ||
       hashParams.get('vk_user_id') ||
@@ -246,7 +270,7 @@ export function getTgChatId(): string | null {
       return vkId
     }
 
-    // 3. One-time login token from bot (/login command) — verified server-side and consumed
+    // 4. One-time login token from bot (/login command) — verified server-side and consumed
     const loginToken = urlParams.get('login_token')
     if (loginToken) {
       // Immediately clean URL so token can't be copied/forwarded

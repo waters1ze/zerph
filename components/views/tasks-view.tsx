@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { cn, isBirthdayVisible } from '@/lib/utils'
+import { cn, isBirthdayVisible, groupTasksByDate } from '@/lib/utils'
 import type { Priority, TaskStatus } from '@/lib/types'
-import { CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity } from 'lucide-react'
+import { CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
 
 type FilterStatus = 'all' | TaskStatus
@@ -66,6 +66,8 @@ export function TasksView() {
     { id: 'done', label: 'Готово', count: state.tasks.filter(t => t.status === 'done').filter(matchesTag).length },
     { id: 'overdue', label: 'Просрочено', count: state.tasks.filter(t => t.status === 'overdue').filter(matchesTag).length },
   ]
+
+  const dateGroups = groupTasksByDate(filtered)
 
   return (
     <div className="flex flex-col gap-4 max-w-2xl">
@@ -142,7 +144,7 @@ export function TasksView() {
         />
       </div>
 
-      {/* Task list */}
+      {/* Task list grouped by dates */}
       <AnimatePresence mode="popLayout">
         {filtered.length === 0 ? (
           <motion.div
@@ -152,11 +154,36 @@ export function TasksView() {
             className="flex flex-col items-center gap-2 py-16 text-center"
           >
             <CheckSquare className="w-10 h-10 text-muted-foreground/30" />
-            <p className="text-sm font-medium text-muted-foreground">No tasks found</p>
-            <p className="text-xs text-muted-foreground/60">Try adjusting your filters</p>
+            <p className="text-sm font-medium text-muted-foreground">Задачи не найдены</p>
+            <p className="text-xs text-muted-foreground/60">Попробуйте изменить параметры фильтра</p>
+          </motion.div>
+        ) : sortKey === 'dueDate' ? (
+          <motion.div key="grouped-list" className="space-y-4">
+            {dateGroups.map(group => (
+              <div key={group.dateKey} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 px-1 py-1 select-none">
+                  <div className={cn(
+                    'flex items-center gap-1.5 text-[12px] font-bold tracking-tight uppercase',
+                    group.isToday ? 'text-primary' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+                  )}>
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{group.label}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">
+                    {group.tasks.length}
+                  </span>
+                  <div className="flex-1 h-[1px] bg-border/40 ml-2" />
+                </div>
+                <div className="space-y-0.5">
+                  {group.tasks.map((t, i) => (
+                    <TaskItem key={t.id} task={t} index={i} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </motion.div>
         ) : (
-          <motion.div key="list" className="space-y-0.5">
+          <motion.div key="flat-list" className="space-y-0.5">
             {filtered.map((t, i) => (
               <TaskItem key={t.id} task={t} index={i} />
             ))}

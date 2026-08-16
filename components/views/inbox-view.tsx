@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { Inbox, Users, Tag, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity } from 'lucide-react'
-import { cn, isBirthdayTask } from '@/lib/utils'
+import { Inbox, Users, Tag, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar } from 'lucide-react'
+import { cn, isBirthdayTask, groupTasksByDate } from '@/lib/utils'
 
 const FIXED_TAGS = [
   { id: 'all', label: 'Все' },
@@ -34,6 +34,7 @@ export function InboxView() {
 
   const uncategorized = rawUncategorized.filter(matchesTag)
   const sharedWithMe = rawSharedWithMe.filter(matchesTag)
+  const dateGroups = groupTasksByDate(uncategorized)
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
@@ -96,8 +97,29 @@ export function InboxView() {
             </p>
           </motion.div>
         ) : (
-          <div className="space-y-0.5">
-            {uncategorized.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}
+          <div className="space-y-4">
+            {dateGroups.map(group => (
+              <div key={group.dateKey} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 px-1 py-1 select-none">
+                  <div className={cn(
+                    'flex items-center gap-1.5 text-[12px] font-bold tracking-tight uppercase',
+                    group.isToday ? 'text-primary' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+                  )}>
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{group.label}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">
+                    {group.tasks.length}
+                  </span>
+                  <div className="flex-1 h-[1px] bg-border/40 ml-2" />
+                </div>
+                <div className="space-y-0.5">
+                  {group.tasks.map((t, i) => (
+                    <TaskItem key={t.id} task={t} index={i} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

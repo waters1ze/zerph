@@ -47,3 +47,85 @@ export function isBirthdayVisible(task: { title?: string; dueDate?: string | nul
 
   return diffDays >= 0 && diffDays <= maxDays
 }
+
+export interface TaskDateGroupItem<T> {
+  dateKey: string
+  label: string
+  isToday: boolean
+  isTomorrow: boolean
+  isOverdue: boolean
+  tasks: T[]
+}
+
+export function groupTasksByDate<T extends { dueDate?: string | null; createdAt?: string; status?: string }>(tasks: T[]): TaskDateGroupItem<T>[] {
+  const today = new Date().toISOString().slice(0, 10)
+  const tomorrowDate = new Date(Date.now() + 24 * 60 * 60 * 1000)
+  const tomorrow = tomorrowDate.toISOString().slice(0, 10)
+  const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const yesterday = yesterdayDate.toISOString().slice(0, 10)
+
+  const groupsMap = new Map<string, T[]>()
+
+  for (const task of tasks) {
+    const key = task.dueDate || 'no-date'
+    if (!groupsMap.has(key)) {
+      groupsMap.set(key, [])
+    }
+    groupsMap.get(key)!.push(task)
+  }
+
+  // Sort keys: Overdue / past dates first, then Today, then Tomorrow, then upcoming dates in ascending order, and 'no-date' last
+  const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) => {
+    if (a === 'no-date') return 1
+    if (b === 'no-date') return -1
+    return a.localeCompare(b)
+  })
+
+  return sortedKeys.map(key => {
+    let label = ''
+    let isTodayFlag = false
+    let isTomorrowFlag = false
+    let isOverdueFlag = false
+
+    if (key === 'no-date') {
+      label = 'Без даты'
+    } else if (key === today) {
+      isTodayFlag = true
+      const formatted = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(key + 'T00:00:00'))
+      label = `Сегодня · ${formatted}`
+    } else if (key === tomorrow) {
+      isTomorrowFlag = true
+      const formatted = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(key + 'T00:00:00'))
+      label = `Завтра · ${formatted}`
+    } else if (key === yesterday) {
+      const formatted = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(key + 'T00:00:00'))
+      label = `Вчера · ${formatted}`
+    } else {
+      try {
+        const d = new Date(key + 'T00:00:00')
+        const weekday = new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(d)
+        const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1)
+        const dateStr = new Intl.DateTimeFormat('ru-RU', {
+          day: 'numeric',
+          month: 'long',
+          year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        }).format(d)
+        label = `${capitalizedWeekday} · ${dateStr}`
+        if (key < today) {
+          isOverdueFlag = true
+        }
+      } catch {
+        label = key
+      }
+    }
+
+    return {
+      dateKey: key,
+      label,
+      isToday: isTodayFlag,
+      isTomorrow: isTomorrowFlag,
+      isOverdue: isOverdueFlag,
+      tasks: groupsMap.get(key)!,
+    }
+  })
+}
