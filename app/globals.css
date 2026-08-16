@@ -186,6 +186,324 @@
   --status-overdue:   oklch(0.65 0.22 25);
 }
 
+/* ─── VISUAL PRESETS (Zerf curated themes) ──────────────────────────
+   Каждый пресет — полный набор токенов. hue-связанные токены (ring,
+   sidebar-primary, brand, chart-1) наследуются от --primary через
+   relative color syntax, поэтому смена акцента из палитры меняет всё
+   согласованно. Классы идут ПОСЛЕ .dark и перекрывают его. */
+
+/* Strict — инженерный монохром, белый акцент. Дефолт. */
+.theme-strict {
+  color-scheme: dark;
+
+  --background:  oklch(0.10 0.002 260);
+  --foreground:  oklch(0.96 0.002 260);
+
+  --card:        oklch(0.14 0.002 260);
+  --card-foreground: oklch(0.96 0.002 260);
+
+  --popover:     oklch(0.155 0.002 260);
+  --popover-foreground: oklch(0.96 0.002 260);
+
+  --primary:         oklch(0.985 0 0);
+  --primary-foreground: oklch(0.13 0.002 260);
+
+  --secondary:       oklch(0.19 0.002 260);
+  --secondary-foreground: oklch(0.88 0.002 260);
+
+  --muted:           oklch(0.175 0.002 260);
+  --muted-foreground: oklch(0.60 0.004 260);
+
+  --accent:          oklch(0.21 0.002 260);
+  --accent-foreground: oklch(0.95 0.002 260);
+
+  --destructive: oklch(0.52 0.22 25);
+  --border:      oklch(0.24 0.002 260);
+  --input:       oklch(0.21 0.002 260);
+  --ring:        oklch(from var(--primary) l c h / 40%);
+
+  --brand:       var(--primary);
+  --brand-subtle: oklch(0.22 0.002 260);
+  --brand-foreground: oklch(0.13 0.002 260);
+
+  --chart-1:  var(--primary);
+  --chart-2:  oklch(0.72 0.008 260);
+  --chart-3:  oklch(0.55 0.010 260);
+  --chart-4:  oklch(0.42 0.015 260);
+  --chart-5:  oklch(0.30 0.020 260);
+
+  --sidebar:          oklch(0.115 0.002 260);
+  --sidebar-foreground: oklch(0.88 0.002 260);
+  --sidebar-primary:  var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent:   oklch(0.20 0.002 260);
+  --sidebar-accent-foreground: oklch(0.95 0.002 260);
+  --sidebar-border:   oklch(0.22 0.002 260);
+  --sidebar-ring:     oklch(from var(--primary) l c h / 40%);
+
+  --priority-urgent:  oklch(0.68 0.22 25);
+  --priority-high:    oklch(0.74 0.16 50);
+  --priority-medium:  oklch(0.70 0.13 152);
+  --priority-low:     oklch(0.62 0.09 200);
+
+  --status-done:      oklch(0.60 0.14 152);
+  --status-inprogress: oklch(0.74 0.12 78);
+  --status-overdue:   oklch(0.65 0.22 25);
+}
+
+/* Warm — тёплый чёрный с шампанским золотом (эволюция прежней тёмной) */
+.theme-warm {
+  color-scheme: dark;
+
+  --background:  oklch(0.085 0.006 70);
+  --foreground:  oklch(0.95 0.008 75);
+
+  --card:        oklch(0.125 0.007 70);
+  --card-foreground: oklch(0.95 0.008 75);
+
+  --popover:     oklch(0.13 0.007 70);
+  --popover-foreground: oklch(0.95 0.008 75);
+
+  --primary:         oklch(0.78 0.15 78);
+  --primary-foreground: oklch(0.14 0.02 70);
+
+  --secondary:       oklch(0.18 0.008 70);
+  --secondary-foreground: oklch(0.85 0.01 75);
+
+  --muted:           oklch(0.16 0.008 70);
+  --muted-foreground: oklch(0.58 0.01 70);
+
+  --accent:          oklch(0.18 0.015 78);
+  --accent-foreground: oklch(0.85 0.12 78);
+
+  --destructive: oklch(0.52 0.22 25);
+  --border:      oklch(0.20 0.008 70);
+  --input:       oklch(0.18 0.008 70);
+  --ring:        oklch(from var(--primary) l c h / 40%);
+
+  --brand:       var(--primary);
+  --brand-subtle: oklch(0.18 0.03 78);
+  --brand-foreground: oklch(0.98 0 0);
+
+  --chart-1:  var(--primary);
+  --chart-2:  oklch(0.55 0.16 152);
+  --chart-3:  oklch(0.62 0.12 200);
+  --chart-4:  oklch(0.60 0.12 260);
+  --chart-5:  oklch(0.68 0.18 30);
+
+  --sidebar:          oklch(0.10 0.006 70);
+  --sidebar-foreground: oklch(0.90 0.008 75);
+  --sidebar-primary:  var(--primary);
+  --sidebar-primary-foreground: oklch(0.10 0.01 70);
+  --sidebar-accent:   oklch(0.16 0.01 78);
+  --sidebar-accent-foreground: oklch(0.95 0.008 75);
+  --sidebar-border:   oklch(0.18 0.006 70);
+  --sidebar-ring:     oklch(from var(--primary) l c h / 40%);
+
+  --priority-urgent:  oklch(0.68 0.22 25);
+  --priority-high:    oklch(0.74 0.16 50);
+  --priority-medium:  oklch(0.70 0.13 152);
+  --priority-low:     oklch(0.62 0.09 200);
+
+  --status-done:      oklch(0.60 0.14 152);
+  --status-inprogress: oklch(0.78 0.14 78);
+  --status-overdue:   oklch(0.65 0.22 25);
+}
+
+/* Blue — светлый корпоративный, холодная нейтраль + один синий */
+.theme-blue {
+  color-scheme: light;
+
+  --background:  oklch(0.977 0.004 250);
+  --foreground:  oklch(0.15 0.010 250);
+
+  --card:        oklch(0.995 0.002 250);
+  --card-foreground: oklch(0.15 0.010 250);
+
+  --popover:     oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.010 250);
+
+  --primary:         oklch(0.48 0.16 258);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary:       oklch(0.93 0.006 250);
+  --secondary-foreground: oklch(0.25 0.012 250);
+
+  --muted:           oklch(0.92 0.006 250);
+  --muted-foreground: oklch(0.46 0.012 250);
+
+  --accent:          oklch(0.93 0.015 252);
+  --accent-foreground: oklch(0.42 0.15 255);
+
+  --destructive: oklch(0.55 0.22 27);
+  --border:      oklch(0.86 0.006 250);
+  --input:       oklch(0.86 0.006 250);
+  --ring:        oklch(from var(--primary) l c h / 40%);
+
+  --brand:       var(--primary);
+  --brand-subtle: oklch(0.93 0.03 255);
+  --brand-foreground: oklch(0.99 0 0);
+
+  --chart-1:  var(--primary);
+  --chart-2:  oklch(0.62 0.12 200);
+  --chart-3:  oklch(0.55 0.10 260);
+  --chart-4:  oklch(0.72 0.14 78);
+  --chart-5:  oklch(0.62 0.18 30);
+
+  --sidebar:          oklch(0.965 0.005 250);
+  --sidebar-foreground: oklch(0.22 0.010 250);
+  --sidebar-primary:  var(--primary);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent:   oklch(0.92 0.02 255);
+  --sidebar-accent-foreground: oklch(0.42 0.15 255);
+  --sidebar-border:   oklch(0.88 0.006 250);
+  --sidebar-ring:     oklch(from var(--primary) l c h / 40%);
+
+  --priority-urgent:  oklch(0.60 0.22 25);
+  --priority-high:    oklch(0.68 0.18 50);
+  --priority-medium:  oklch(0.70 0.12 152);
+  --priority-low:     oklch(0.55 0.08 200);
+
+  --status-done:      oklch(0.50 0.13 152);
+  --status-inprogress: oklch(0.72 0.14 78);
+  --status-overdue:   oklch(0.58 0.22 25);
+}
+
+/* Vivid — тёмный с одним выразительным цветом */
+.theme-vivid {
+  color-scheme: dark;
+
+  --background:  oklch(0.115 0.012 300);
+  --foreground:  oklch(0.95 0.006 300);
+
+  --card:        oklch(0.155 0.014 300);
+  --card-foreground: oklch(0.95 0.006 300);
+
+  --popover:     oklch(0.17 0.014 300);
+  --popover-foreground: oklch(0.95 0.006 300);
+
+  --primary:         oklch(0.72 0.19 300);
+  --primary-foreground: oklch(0.13 0.02 300);
+
+  --secondary:       oklch(0.20 0.015 300);
+  --secondary-foreground: oklch(0.88 0.008 300);
+
+  --muted:           oklch(0.19 0.014 300);
+  --muted-foreground: oklch(0.62 0.012 300);
+
+  --accent:          oklch(0.23 0.03 300);
+  --accent-foreground: oklch(0.85 0.10 300);
+
+  --destructive: oklch(0.52 0.22 25);
+  --border:      oklch(0.26 0.015 300);
+  --input:       oklch(0.23 0.015 300);
+  --ring:        oklch(from var(--primary) l c h / 40%);
+
+  --brand:       var(--primary);
+  --brand-subtle: oklch(0.24 0.05 300);
+  --brand-foreground: oklch(0.13 0.02 300);
+
+  --chart-1:  var(--primary);
+  --chart-2:  oklch(0.70 0.13 195);
+  --chart-3:  oklch(0.68 0.14 152);
+  --chart-4:  oklch(0.75 0.13 78);
+  --chart-5:  oklch(0.70 0.16 15);
+
+  --sidebar:          oklch(0.13 0.012 300);
+  --sidebar-foreground: oklch(0.90 0.008 300);
+  --sidebar-primary:  var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent:   oklch(0.22 0.025 300);
+  --sidebar-accent-foreground: oklch(0.95 0.006 300);
+  --sidebar-border:   oklch(0.24 0.015 300);
+  --sidebar-ring:     oklch(from var(--primary) l c h / 40%);
+
+  --priority-urgent:  oklch(0.68 0.22 25);
+  --priority-high:    oklch(0.74 0.16 50);
+  --priority-medium:  oklch(0.70 0.13 152);
+  --priority-low:     oklch(0.62 0.09 200);
+
+  --status-done:      oklch(0.60 0.14 152);
+  --status-inprogress: oklch(0.74 0.12 78);
+  --status-overdue:   oklch(0.65 0.22 25);
+}
+
+/* Paper — кремовая светлая, чернильный акцент (инверсия Strict) */
+.theme-paper {
+  color-scheme: light;
+
+  --background:  oklch(0.972 0.007 85);
+  --foreground:  oklch(0.14 0.006 80);
+
+  --card:        oklch(0.995 0.004 85);
+  --card-foreground: oklch(0.14 0.006 80);
+
+  --popover:     oklch(1 0.002 85);
+  --popover-foreground: oklch(0.14 0.006 80);
+
+  --primary:         oklch(0.17 0.006 80);
+  --primary-foreground: oklch(0.975 0.007 85);
+
+  --secondary:       oklch(0.93 0.008 80);
+  --secondary-foreground: oklch(0.22 0.008 80);
+
+  --muted:           oklch(0.92 0.008 80);
+  --muted-foreground: oklch(0.45 0.010 80);
+
+  --accent:          oklch(0.93 0.010 82);
+  --accent-foreground: oklch(0.25 0.010 80);
+
+  --destructive: oklch(0.55 0.22 27);
+  --border:      oklch(0.85 0.008 80);
+  --input:       oklch(0.85 0.008 80);
+  --ring:        oklch(from var(--primary) l c h / 35%);
+
+  --brand:       var(--primary);
+  --brand-subtle: oklch(0.93 0.015 82);
+  --brand-foreground: oklch(0.975 0.007 85);
+
+  --chart-1:  var(--primary);
+  --chart-2:  oklch(0.55 0.010 80);
+  --chart-3:  oklch(0.40 0.015 80);
+  --chart-4:  oklch(0.65 0.08 60);
+  --chart-5:  oklch(0.50 0.10 25);
+
+  --sidebar:          oklch(0.962 0.008 85);
+  --sidebar-foreground: oklch(0.22 0.008 80);
+  --sidebar-primary:  var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent:   oklch(0.92 0.012 82);
+  --sidebar-accent-foreground: oklch(0.25 0.010 80);
+  --sidebar-border:   oklch(0.87 0.008 80);
+  --sidebar-ring:     oklch(from var(--primary) l c h / 35%);
+
+  --priority-urgent:  oklch(0.60 0.22 25);
+  --priority-high:    oklch(0.68 0.18 50);
+  --priority-medium:  oklch(0.70 0.12 152);
+  --priority-low:     oklch(0.55 0.08 200);
+
+  --status-done:      oklch(0.50 0.13 152);
+  --status-inprogress: oklch(0.72 0.14 78);
+  --status-overdue:   oklch(0.58 0.22 25);
+}
+
+/* ─── CONTROLLED TOGGLES ───────────────────────────────────────────── */
+
+/* Плотность: масштабирует все spacing-утилиты (Tailwind v4 — var(--spacing)) */
+.density-compact    { --spacing: 0.225rem; }
+.density-default    { --spacing: 0.25rem; }
+.density-comfortable { --spacing: 0.29rem; }
+
+/* Радиусы: глобальный множитель для rounded-* */
+.radius-sharp   { --radius: 4px; }
+.radius-default { --radius: 0.625rem; }
+.radius-rounded { --radius: 1rem; }
+
+/* Форма элементов: сглаженно-квадратные вместо круглых */
+.shapes-square .rounded-full {
+  border-radius: calc(var(--radius) * 0.8);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -197,7 +515,7 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
   ::selection {
-    background: oklch(0.55 0.16 152 / 28%);
+    background: oklch(from var(--primary) l c h / 28%);
   }
 }
 
@@ -234,9 +552,9 @@
   to   { transform: translateY(0);   opacity: 1; }
 }
 @keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 oklch(0.55 0.16 152 / 40%); }
-  70%  { box-shadow: 0 0 0 8px oklch(0.55 0.16 152 / 0%); }
-  100% { box-shadow: 0 0 0 0 oklch(0.55 0.16 152 / 0%); }
+  0%   { box-shadow: 0 0 0 0 oklch(from var(--primary) l c h / 40%); }
+  70%  { box-shadow: 0 0 0 8px oklch(from var(--primary) l c h / 0%); }
+  100% { box-shadow: 0 0 0 0 oklch(from var(--primary) l c h / 0%); }
 }
 @keyframes shimmer {
   from { background-position: -200% center; }
@@ -304,12 +622,12 @@
   @apply text-muted-foreground/60 line-through cursor-default;
 }
 
-/* gold shimmer on brand accent elements */
+/* gold shimmer on brand accent elements (hue follows --brand of the preset) */
 .gold-shimmer {
   background: linear-gradient(105deg,
-    oklch(0.78 0.14 78) 0%,
-    oklch(0.88 0.12 88) 45%,
-    oklch(0.78 0.14 78) 100%
+    var(--brand) 0%,
+    oklch(from var(--brand) calc(l + 0.10) calc(c * 0.8) h) 45%,
+    var(--brand) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 3s ease-in-out infinite;
@@ -458,7 +776,7 @@ span.text-2xl:not(.color-exempt) {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.45);
+  background: oklch(from var(--primary) l c h / 45%);
 }
 
 ::-webkit-scrollbar-button {
@@ -491,11 +809,11 @@ span.text-2xl:not(.color-exempt) {
   width: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(16, 185, 129, 0.3);
+  background: oklch(from var(--primary) l c h / 30%);
   border-radius: 9999px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.6);
+  background: oklch(from var(--primary) l c h / 60%);
 }
 
 /* Monochrome / Black and White emoji and icon styling */

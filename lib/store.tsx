@@ -5,6 +5,10 @@ import type {
   Task, Goal, Project, Note, Friend, ChatMessage,
   UserSettings, View, Priority, TaskStatus, GoalStatus, Habit, ScheduleGroup
 } from './types'
+import {
+  applyVisualsToDocument, normalizeTheme, accentPaletteFor,
+  type TextScaleStep, type DensityMode, type RadiusMode,
+} from './theme-presets'
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10)
@@ -25,11 +29,15 @@ const SEED_CHAT: ChatMessage[] = [
 ]
 
 const DEFAULT_SETTINGS: UserSettings = {
-  theme: 'dark',
+  theme: 'strict',
   name: '',
   email: '',
   avatar: '',
-  accentColor: '#2d7a4f',
+  accentColor: 'default',
+  textScale: 0,
+  density: 'default',
+  borderRadius: 'default',
+  roundShapes: true,
   notifications: { desktop: true, web: true, telegram: true, vk: true, email: false, dueReminders: true, teamUpdates: true, reminderIntervalMinutes: 5, reminderRepeatCount: 3 },
   integrations: { telegram: false, aiApiKey: '', aiModel: 'llama-3.3-70b-versatile', groqApiKey: '', telegramBotToken: '' },
   weekStartsOn: 1,
@@ -443,6 +451,25 @@ function initAppState(initialState: AppState): AppState {
     }
   } catch {}
 
+  // Normalize legacy visual settings (light/dark/system themes, old hex accents)
+  const mergedSettings: UserSettings = { ...initialState.settings, ...savedSettings }
+  const theme = normalizeTheme(mergedSettings.theme)
+  const accentKnown =
+    mergedSettings.accentColor === 'default' ||
+    accentPaletteFor(theme).some(a => a.id === mergedSettings.accentColor)
+  mergedSettings.theme = theme
+  if (!accentKnown) mergedSettings.accentColor = 'default'
+  mergedSettings.textScale = ([-1, 0, 1, 2, 3] as const).includes(mergedSettings.textScale as any)
+    ? (mergedSettings.textScale as TextScaleStep)
+    : 0
+  if (!['compact', 'default', 'comfortable'].includes(String(mergedSettings.density))) {
+    mergedSettings.density = 'default'
+  }
+  if (!['sharp', 'default', 'rounded'].includes(String(mergedSettings.borderRadius))) {
+    mergedSettings.borderRadius = 'default'
+  }
+  if (typeof mergedSettings.roundShapes !== 'boolean') mergedSettings.roundShapes = true
+
   return {
     ...initialState,
     tasks: Array.isArray(cachedData.tasks) ? cachedData.tasks : [],
@@ -452,7 +479,7 @@ function initAppState(initialState: AppState): AppState {
     friends: Array.isArray(cachedData.friends) ? cachedData.friends : [],
     habits: Array.isArray(cachedData.habits) ? cachedData.habits : [],
     scheduleGroups: savedScheduleGroups.length > 0 ? savedScheduleGroups : [],
-    settings: { ...initialState.settings, ...savedSettings },
+    settings: mergedSettings,
     ...(savedView ? { currentView: savedView } : {})
   }
 }
@@ -605,31 +632,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.tasks, broadcastSync])
 
-  // Apply accent color as CSS variable
+  // Apply visual preset: theme class, accent override, density, radius, text scale
   useEffect(() => {
-    const color = state.settings.accentColor || '#2d7a4f'
-    document.documentElement.style.setProperty('--color-primary', color)
-  }, [state.settings.accentColor])
-
-  // Apply theme class to <html> and <body>
-  useEffect(() => {
-    const theme = state.settings.theme
-    const root = document.documentElement
-    if (theme === 'dark') {
-      root.classList.add('dark')
-      root.classList.remove('light')
-      document.body.classList.add('dark')
-      document.body.classList.remove('light')
-    } else if (theme === 'light') {
-      root.classList.remove('dark')
-      root.classList.add('light')
-      document.body.classList.remove('dark')
-      document.body.classList.add('light')
-    } else {
-      root.classList.remove('dark', 'light')
-      document.body.classList.remove('dark', 'light')
-    }
-  }, [state.settings.theme])
+    applyVisualsToDocument({
+      theme: normalizeTheme(state.settings.theme),
+      accentId: state.settings.accentColor || 'default',
+      textScale: (state.settings.textScale ?? 0) as TextScaleStep,
+      density: (state.settings.density ?? 'default') as DensityMode,
+      radius: (state.settings.borderRadius ?? 'default') as RadiusMode,
+      roundShapes: state.settings.roundShapes !== false,
+    })
+  }, [state.settings.theme, state.settings.accentColor, state.settings.textScale, state.settings.density, state.settings.borderRadius, state.settings.roundShapes])
 
   // Persist settings to localStorage
   useEffect(() => {

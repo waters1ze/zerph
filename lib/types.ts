@@ -176,11 +176,24 @@ export interface ChatMessage {
 }
 
 export interface UserSettings {
-  theme: 'light' | 'dark' | 'system'
+  /**
+   * Визуальный пресет. Legacy-значения (light/dark/system) приходят из
+   * старого localStorage и нормализуются в lib/theme-presets.ts.
+   */
+  theme: 'strict' | 'warm' | 'blue' | 'vivid' | 'paper' | 'light' | 'dark' | 'system'
   name: string
   email: string
   avatar?: string
+  /** 'default' (собственный акцент темы) | id из палитры lib/theme-presets.ts */
   accentColor: string
+  /** Размер текста: -1..3 шагов (14–19px), 0 — стандарт */
+  textScale?: -1 | 0 | 1 | 2 | 3
+  /** Плотность интерфейса */
+  density?: 'compact' | 'default' | 'comfortable'
+  /** Радиусы скруглений */
+  borderRadius?: 'sharp' | 'default' | 'rounded'
+  /** true — круглые элементы (по умолчанию), false — сглаженно-квадратные */
+  roundShapes?: boolean
   notifications: {
     desktop: boolean
     web?: boolean

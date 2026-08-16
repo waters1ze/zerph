@@ -6,7 +6,7 @@ import { useSettings, useApp, getTgChatId, getAuthHeaders } from '@/lib/store'
 import { useLanguage } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
-  Sun, Moon, Monitor, Bell, BellOff, Link, Key,
+  Bell, BellOff, Link, Key,
   User, Users, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
@@ -18,6 +18,10 @@ import { PLAN_CATALOG } from '@/lib/plans'
 import { GiftSection } from '@/components/settings/gift-section'
 import { ImportExportSection } from '@/components/settings/import-export-section'
 import { TeamsSection } from '@/components/settings/teams-section'
+import {
+  THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
+  normalizeTheme, type ThemePresetId, type TextScaleStep,
+} from '@/lib/theme-presets'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -63,20 +67,13 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   )
 }
 
-const THEMES = [
-  { id: 'light', label: 'Светлая', icon: Sun },
-  { id: 'dark',  label: 'Тёмная',  icon: Moon },
-  { id: 'system',label: 'Системная',icon: Monitor },
-] as const
-
-const ACCENT_COLORS = [
-  { id: '#2d7a4f', label: 'Изумрудный', color: '#2d7a4f' },
-  { id: '#2563eb', label: 'Сапфировый', color: '#2563eb' },
-  { id: '#7c3aed', label: 'Фиолетовый', color: '#7c3aed' },
-  { id: '#ea580c', label: 'Янтарный', color: '#ea580c' },
-  { id: '#e11d48', label: 'Рубиновый', color: '#e11d48' },
-  { id: '#0d9488', label: 'Морской', color: '#0d9488' },
-] as const
+const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
+  { value: -1, label: 'A' },
+  { value: 0,  label: 'A' },
+  { value: 1,  label: 'A' },
+  { value: 2,  label: 'A' },
+  { value: 3,  label: 'A' },
+]
 
 type SettingsTab = 'account' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data' | 'teams'
 
@@ -1354,44 +1351,147 @@ export function SettingsView() {
       {activeTab === 'appearance' && (
         <div className="space-y-6">
           <Section title="Тема оформления">
-            <Row label="Цветовая тема" description="Выберите светлую, тёмную или системную тему">
-              <div className="flex gap-1.5 p-1 rounded-xl bg-muted/60 border border-border">
-                {THEMES.map(t => {
-                  const Icon = t.icon
+            <div className="p-4">
+              <div className="text-[13px] font-medium text-foreground mb-1">Цветовая тема</div>
+              <p className="text-[12px] text-muted-foreground mb-3">Пять продуманных пресетов — меняется весь интерфейс целиком</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {THEME_PRESETS.map(preset => {
+                  const active = normalizeTheme(settings.theme) === preset.id
                   return (
                     <button
-                      key={t.id}
-                      onClick={() => update({ theme: t.id })}
+                      key={preset.id}
+                      onClick={() => {
+                        const accentStillValid =
+                          settings.accentColor !== 'default' &&
+                          accentPaletteFor(preset.id).some(a => a.id === settings.accentColor)
+                        update({ theme: preset.id, ...(accentStillValid ? {} : { accentColor: 'default' }) })
+                      }}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer',
-                        settings.theme === t.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                        'group text-left rounded-xl border p-2.5 transition-all cursor-pointer',
+                        active
+                          ? 'border-primary/60 ring-1 ring-primary/30 bg-card'
+                          : 'border-border hover:border-foreground/25 bg-card/50'
                       )}
                     >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{t.label}</span>
+                      {/* mini preview */}
+                      <div
+                        className="h-14 rounded-lg border border-black/10 mb-2 relative overflow-hidden flex flex-col justify-center gap-1.5 px-2"
+                        style={{ background: preset.preview.bg }}
+                      >
+                        <div className="h-2 w-4/5 rounded-sm" style={{ background: preset.preview.surface }} />
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-2 w-2 rounded-full" style={{ background: preset.preview.accent }} />
+                          <div className="h-2 w-1/2 rounded-sm" style={{ background: preset.preview.surface }} />
+                        </div>
+                        {active && (
+                          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: preset.preview.accent }}>
+                            <Check className="w-2.5 h-2.5" style={{ color: preset.preview.bg }} />
+                          </div>
+                        )}
+                      </div>
+                      <div className={cn('text-[12.5px] font-bold', active ? 'text-primary' : 'text-foreground')}>{preset.label}</div>
+                      <div className="text-[10.5px] leading-snug text-muted-foreground line-clamp-2">{preset.tagline}</div>
                     </button>
                   )
                 })}
               </div>
-            </Row>
+            </div>
 
-            <Row label="Цветовой акцент" description="Основной оттенок кнопок, бейджей и выделений">
-              <div className="flex items-center gap-2">
-                {ACCENT_COLORS.map(acc => (
+            <div className="px-4 py-4">
+              <div className="text-[13px] font-medium text-foreground mb-1">Цветовой акцент</div>
+              <p className="text-[12px] text-muted-foreground mb-3">Оттенок кнопок, бейджей и выделений — только проверенные цвета, читаемость гарантирована</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => update({ accentColor: 'default' })}
+                  className={cn(
+                    'h-8 px-3 rounded-full border-2 flex items-center gap-1.5 text-[11px] font-semibold transition-all cursor-pointer',
+                    settings.accentColor === 'default' ? 'border-foreground scale-105' : 'border-border opacity-75 hover:opacity-100'
+                  )}
+                  title="Собственный акцент темы"
+                >
+                  <span
+                    className="w-4 h-4 rounded-full border border-black/20"
+                    style={{ background: THEME_PRESETS.find(t => t.id === normalizeTheme(settings.theme))?.preview.accent }}
+                  />
+                  Стандартный
+                </button>
+                {accentPaletteFor(normalizeTheme(settings.theme)).map(acc => (
                   <button
                     key={acc.id}
-                    onClick={() => update({ accentColor: acc.color })}
+                    onClick={() => update({ accentColor: acc.id })}
                     className={cn(
                       'w-7 h-7 rounded-full transition-transform cursor-pointer border-2 flex items-center justify-center',
-                      settings.accentColor === acc.color ? 'scale-110 border-foreground' : 'border-transparent opacity-80 hover:opacity-100'
+                      settings.accentColor === acc.id ? 'scale-110 border-foreground' : 'border-transparent opacity-80 hover:opacity-100'
                     )}
                     style={{ backgroundColor: acc.color }}
                     title={acc.label}
                   >
-                    {settings.accentColor === acc.color && <Check className="w-3.5 h-3.5 text-white" />}
+                    {settings.accentColor === acc.id && <Check className="w-3.5 h-3.5" style={{ color: acc.fg }} />}
                   </button>
                 ))}
               </div>
+            </div>
+
+            <Row label="Размер текста" description="От чуть мельче до крупного — шаги ограничены, вёрстка не поедет">
+              <div className="flex gap-1 p-1 rounded-xl bg-muted/60 border border-border items-end">
+                {TEXT_STEPS.map((s, i) => (
+                  <button
+                    key={s.value}
+                    onClick={() => update({ textScale: s.value })}
+                    className={cn(
+                      'rounded-lg transition-all cursor-pointer font-bold',
+                      (settings.textScale ?? 0) === s.value ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                    style={{ fontSize: 11 + i * 1.5, padding: '4px 10px' }}
+                    title={['Мелкий', 'Обычный', 'Крупнее', 'Большой', 'Очень большой'][i]}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </Row>
+
+            <Row label="Плотность интерфейса" description="Насколько просторные отступы между элементами">
+              <div className="flex gap-1.5 p-1 rounded-xl bg-muted/60 border border-border">
+                {DENSITY_MODES.map(d => (
+                  <button
+                    key={d.id}
+                    onClick={() => update({ density: d.id })}
+                    title={d.hint}
+                    className={cn(
+                      'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                      (settings.density ?? 'default') === d.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </Row>
+
+            <Row label="Скругления" description="Форма карточек, кнопок и полей">
+              <div className="flex gap-1.5 p-1 rounded-xl bg-muted/60 border border-border">
+                {RADIUS_MODES.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => update({ borderRadius: r.id })}
+                    title={r.hint}
+                    className={cn(
+                      'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                      (settings.borderRadius ?? 'default') === r.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </Row>
+
+            <Row label="Круглые элементы" description="Аватары, чипы и переключатели: круг или сглаженный квадрат">
+              <Toggle
+                checked={settings.roundShapes !== false}
+                onChange={v => update({ roundShapes: v })}
+              />
             </Row>
 
             <Row label="Первый день недели" description="С какого дня начинается календарная сетка">
