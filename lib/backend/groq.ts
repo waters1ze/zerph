@@ -7,7 +7,7 @@ import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from
 
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate' | 'schedule' | 'answer'
-  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'cancel_schedule' | 'completion' | 'set_my_birthday' | 'get_schedule' | 'reply'
+  action?: 'create' | 'update' | 'delete' | 'delete_all' | 'cancel_schedule' | 'cancel_recurring_schedule' | 'completion' | 'set_my_birthday' | 'get_schedule' | 'reply'
   targetId?: string | null
   title: string
   summary: string
@@ -236,6 +236,24 @@ Always respond with ONLY valid JSON:
      • "dueDate": "YYYY-MM-DD" (дата выходного дня)
      • "title": "Школьные уроки (выходной)"
      • Система автоматически снимет школьные уроки на эту дату, не затрагивая праздники и личные дела!
+
+4. ОТДЕЛЬНЫЕ РЕГУЛЯРНЫЕ ЗАНЯТИЯ (ПЛАВАНИЕ, СПОРТ, СЕКЦИИ):
+   - Если пользователь говорит "каждую пятницу я хожу плавать в 18:00", "по субботам английский в 11:00", "по вторникам тренировка по боксу в 19:00":
+     • "type": "task"
+     • "action": "create"
+     • "title": "Плавание" (или "Английский", "Тренировка по боксу")
+     • "repeat": "weekly" (или "daily" / "weekdays")
+     • "dueDate": "YYYY-MM-DD" (ближайшая дата этого дня)
+     • "dueTime": "18:00"
+     • "tags": ["спорт", "хобби", "личное"] (НЕ добавляй "школа", чтобы оно отображалось как отдельная задача, а не внутри группы школа!)
+
+5. ОТМЕНА / ПРЕКРАЩЕНИЕ РЕГУЛЯРНОГО РАСПИСАНИЯ ("убери это расписание", "я больше не хожу на плавание", "отмени бассейн по пятницам"):
+   - Если пользователь просит прекратить или убрать повторяющееся расписание:
+     • "action": "cancel_recurring_schedule"
+     • "type": "task"
+     • "targetTitle": "Плавание" (название отменяемого занятия)
+     • "title": "Плавание"
+     • Прошлые дни останутся в истории, а на будущее повторение снимется!
 ══════════════════════════════════════════
 
 HABITS & PROJECTS RULES:

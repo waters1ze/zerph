@@ -1310,6 +1310,66 @@ export async function cancelScheduleForDate(
   }
 }
 
+export async function cancelRecurringSchedule(
+  ownerChatId: number | bigint | string,
+  queryTitle: string,
+  fromDateStr: string = new Date().toISOString().slice(0, 10)
+): Promise<{ count: number; cancelledTitles: string[] }> {
+  try {
+    const cid = BigInt(ownerChatId)
+    const tasks = await prisma.task.findMany({
+      where: {
+        ownerChatId: cid,
+      },
+    })
+
+    const cleanQuery = queryTitle.toLowerCase().replace(/^(?:убери|удали|отмени|расписание|задачу|планы|серию)\s*/i, '').trim()
+    const queryWords = cleanQuery.split(/\s+/).filter(w => w.length > 2)
+
+    const matchingTasks = tasks.filter(t => {
+      if (isHolidayTitle(t.title) || isBirthdayTitle(t.title) || t.repeat === 'yearly') return false
+      const titleLower = (t.title || '').toLowerCase()
+      const descLower = (t.description || '').toLowerCase()
+      const match = queryWords.length > 0
+        ? queryWords.some(w => titleLower.includes(w) || descLower.includes(w))
+        : (cleanQuery ? titleLower.includes(cleanQuery) : false)
+      return match
+    })
+
+    let cancelledCount = 0
+    const cancelledTitles: string[] = []
+
+    for (const t of matchingTasks) {
+      if (t.repeat) {
+        if (t.dueDate && t.dueDate < fromDateStr) {
+          // Past day: keep the historical record intact, but remove repeat so future occurrences stop
+          await prisma.task.update({
+            where: { id: t.id },
+            data: { repeat: null },
+          })
+          cancelledCount++
+          cancelledTitles.push(t.title)
+        } else {
+          // Future or today recurring template: delete or remove repeat
+          await prisma.task.delete({ where: { id: t.id } })
+          cancelledCount++
+          cancelledTitles.push(t.title)
+        }
+      } else if (t.dueDate && t.dueDate >= fromDateStr && t.status !== 'done') {
+        // Future non-recurring instance matching the query
+        await prisma.task.delete({ where: { id: t.id } })
+        cancelledCount++
+        cancelledTitles.push(t.title)
+      }
+    }
+
+    return { count: cancelledCount, cancelledTitles: Array.from(new Set(cancelledTitles)) }
+  } catch (err) {
+    console.error('cancelRecurringSchedule error:', err)
+    return { count: 0, cancelledTitles: [] }
+  }
+}
+
 // ── High-level: save ParsedItem from Groq AI ──────────────────────────────────
 
 export async function saveParsedItemToDb(
@@ -1330,6 +1390,16 @@ export async function saveParsedItemToDb(
     if (ownerChatId) {
       const targetDate = item.dueDate || new Date().toISOString().slice(0, 10)
       const res = await cancelScheduleForDate(ownerChatId, targetDate)
+      return { item, updatedItem: res.count > 0 }
+    }
+    return { item, updatedItem: false }
+  }
+
+  // Cancel recurring schedule routine
+  if (item.action === 'cancel_recurring_schedule') {
+    if (ownerChatId) {
+      const query = item.targetTitle || item.title || item.rawText
+      const res = await cancelRecurringSchedule(ownerChatId, query)
       return { item, updatedItem: res.count > 0 }
     }
     return { item, updatedItem: false }

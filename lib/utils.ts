@@ -62,6 +62,46 @@ export function isSchoolTask(task: { title?: string; tags?: string[]; descriptio
   return schoolRegex.test(task.title || '') || schoolRegex.test(task.description || '')
 }
 
+export function isTaskOnDate(t: { dueDate?: string | null; repeat?: string | null; title?: string; tags?: string[] }, targetDateStr: string, realTodayYMD: string): boolean {
+  if (!t.dueDate || !t.dueDate.includes('-')) return false
+  if (t.dueDate === targetDateStr) return true
+
+  // Yearly events (birthdays, holidays)
+  if (isYearlyEventTask(t)) {
+    const [, tm, td] = t.dueDate.split('-').map(Number)
+    const [, sm, sd] = targetDateStr.split('-').map(Number)
+    return sm === tm && sd === td && targetDateStr >= realTodayYMD
+  }
+
+  // Weekly repeating events (e.g. "каждую пятницу плавание")
+  if (t.repeat === 'weekly') {
+    const origDate = new Date(t.dueDate + 'T12:00:00')
+    const targetDate = new Date(targetDateStr + 'T12:00:00')
+    return origDate.getDay() === targetDate.getDay() && targetDateStr >= t.dueDate
+  }
+
+  // Daily repeating events
+  if (t.repeat === 'daily') {
+    return targetDateStr >= t.dueDate
+  }
+
+  // Weekday repeating events (Mon-Fri)
+  if (t.repeat === 'weekdays') {
+    const targetDate = new Date(targetDateStr + 'T12:00:00')
+    const day = targetDate.getDay()
+    return day >= 1 && day <= 5 && targetDateStr >= t.dueDate
+  }
+
+  // Monthly repeating events
+  if (t.repeat === 'monthly') {
+    const [, , td] = t.dueDate.split('-').map(Number)
+    const [, , sd] = targetDateStr.split('-').map(Number)
+    return sd === td && targetDateStr >= t.dueDate
+  }
+
+  return false
+}
+
 export function isBirthdayVisible(task: { title?: string; dueDate?: string | null; tags?: string[] }, maxDays = 7): boolean {
   if (!task || !isBirthdayTask(task)) return true
   if (!task.dueDate || !task.dueDate.includes('-')) return false

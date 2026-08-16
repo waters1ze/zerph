@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
-import { cn, isYearlyEventTask, isSchoolTask } from '@/lib/utils'
+import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ArrowLeft,
   Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon
@@ -146,19 +146,7 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   const year = date.getFullYear()
 
   const realTodayYMD = toYMD(new Date())
-
-  const dayTasks = state.tasks.filter(t => {
-    if (t.dueDate === dateStr) return true
-    if (t.dueDate && t.dueDate.includes('-')) {
-      const isYearly = isYearlyEventTask(t)
-      if (isYearly) {
-        const [, tm, td] = t.dueDate.split('-').map(Number)
-        const [, sm, sd] = dateStr.split('-').map(Number)
-        if (sm === tm && sd === td && dateStr >= realTodayYMD) return true
-      }
-    }
-    return false
-  })
+  const dayTasks = state.tasks.filter(t => isTaskOnDate(t, dateStr, realTodayYMD))
   const dayNotes = state.notes.filter(n => n.dueDate === dateStr)
   const activeTasks = dayTasks.filter(t => t.status !== 'done')
   const schoolActive = activeTasks.filter(isSchoolTask)
@@ -322,24 +310,12 @@ export function CalendarView() {
 
   const realTodayYMD = toYMD(new Date())
 
-  // Group tasks by date
-  const tasksByDate = state.tasks.reduce((acc, t) => {
-    if (t.dueDate && t.dueDate.includes('-')) {
-      const isYearly = isYearlyEventTask(t)
-
-      if (isYearly) {
-        const [, tm, td] = t.dueDate.split('-').map(Number)
-        if (!isNaN(tm) && !isNaN(td)) {
-          const projectedDate = `${year}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`
-          if (projectedDate >= realTodayYMD) {
-            if (!acc[projectedDate]) acc[projectedDate] = []
-            acc[projectedDate].push(t)
-          }
-        }
-      } else {
-        if (!acc[t.dueDate]) acc[t.dueDate] = []
-        acc[t.dueDate].push(t)
-      }
+  // Group tasks by date for all cells in the calendar grid
+  const tasksByDate = cells.reduce((acc, cellDate) => {
+    const ymd = toYMD(cellDate)
+    const matching = state.tasks.filter(t => isTaskOnDate(t, ymd, realTodayYMD))
+    if (matching.length > 0) {
+      acc[ymd] = matching
     }
     return acc
   }, {} as Record<string, Task[]>)

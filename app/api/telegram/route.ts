@@ -1364,6 +1364,16 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       continue
     }
 
+    if (item.action === 'cancel_recurring_schedule') {
+      const routineName = item.targetTitle || item.title || 'расписание'
+      if (updatedItem) {
+        msg += `🔁 *Регулярное расписание «${escMd(routineName)}» остановлено.* Прошедшие дни сохранены в истории, а на будущее повторения сняты.\n\n`
+      } else {
+        msg += `🔁 Повторяющееся расписание «${escMd(routineName)}» не найдено.\n\n`
+      }
+      continue
+    }
+
     if (item.action === 'set_my_birthday') {
       msg += `🎂 ${escMd(item.title)}\n\n`
       continue
