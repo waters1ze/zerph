@@ -82,6 +82,9 @@ type Action =
   | { type: 'UPDATE_PROJECT'; id: string; updates: Partial<Project> }
   | { type: 'ADD_HABIT'; habit: Habit }
   | { type: 'UPDATE_HABIT'; id: string; updates: Partial<Habit> }
+  | { type: 'REPLACE_TASK'; tempId: string; task: Task }
+  | { type: 'REPLACE_NOTE'; tempId: string; note: Note }
+  | { type: 'REPLACE_GOAL'; tempId: string; goal: Goal }
   | { type: 'REPLACE_HABIT'; tempId: string; habit: Habit }
   | { type: 'DELETE_HABIT'; id: string }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
@@ -127,6 +130,9 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'ADD_TASK':
       return { ...state, tasks: [action.task, ...state.tasks] }
+    case 'REPLACE_TASK':
+      // Replace temp optimistic task with real DB record (different id)
+      return { ...state, tasks: state.tasks.map(t => t.id === action.tempId ? action.task : t) }
     case 'UPDATE_TASK':
       return {
         ...state,
@@ -138,12 +144,16 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, tasks: state.tasks.filter(t => t.id !== action.id), selectedTaskId: null, isDetailOpen: false }
     case 'ADD_NOTE':
       return { ...state, notes: [action.note, ...state.notes] }
+    case 'REPLACE_NOTE':
+      return { ...state, notes: state.notes.map(n => n.id === action.tempId ? action.note : n) }
     case 'UPDATE_NOTE':
       return { ...state, notes: state.notes.map(n => n.id === action.id ? { ...n, ...action.updates, updatedAt: new Date().toISOString() } : n) }
     case 'DELETE_NOTE':
       return { ...state, notes: state.notes.filter(n => n.id !== action.id), selectedNoteId: null }
     case 'ADD_GOAL':
       return { ...state, goals: [action.goal, ...state.goals] }
+    case 'REPLACE_GOAL':
+      return { ...state, goals: state.goals.map(g => g.id === action.tempId ? action.goal : g) }
     case 'UPDATE_GOAL':
       return { ...state, goals: state.goals.map(g => g.id === action.id ? { ...g, ...action.updates, updatedAt: new Date().toISOString() } : g) }
     case 'DELETE_GOAL':
@@ -416,6 +426,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false)
   // Track recently deleted item IDs to prevent race-condition resurrection during background sync
   const recentlyDeletedIdsRef = useRef<Map<string, number>>(new Map())
+  // Track freshly created optimistic IDs so a racing background sync doesn't wipe them
+  // before the server POST completes (same 60s window as deletions)
+  const recentlyAddedIdsRef = useRef<Map<string, number>>(new Map())
+
+  // Latest-state ref for background sync (avoids stale closures / callback churn)
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const broadcastSync = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -475,33 +492,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
       }).catch(() => {})
     } else if (action.type === 'ADD_TASK') {
+      recentlyAddedIdsRef.current.set(action.task.id, Date.now())
       fetch('/api/tasks', {
         method: 'POST',
         headers,
         body: JSON.stringify(action.task),
-      }).catch(() => {})
+      })
+        .then(async r => {
+          const data = await r.json().catch(() => null)
+          if (r.ok && data?.task?.id) {
+            dispatch({ type: 'REPLACE_TASK', tempId: action.task.id, task: data.task })
+          } else if (!r.ok) {
+            dispatch({ type: 'DELETE_TASK', id: action.task.id })
+          }
+        })
+        .catch(() => {})
     } else if (action.type === 'ADD_NOTE') {
+      recentlyAddedIdsRef.current.set(action.note.id, Date.now())
       fetch('/api/tasks', {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...action.note, itemType: 'note' }),
-      }).catch(() => {})
+      })
+        .then(async r => {
+          const data = await r.json().catch(() => null)
+          if (r.ok && data?.note?.id) {
+            dispatch({ type: 'REPLACE_NOTE', tempId: action.note.id, note: data.note })
+          } else if (!r.ok) {
+            dispatch({ type: 'DELETE_NOTE', id: action.note.id })
+          }
+        })
+        .catch(() => {})
     } else if (action.type === 'ADD_GOAL') {
+      recentlyAddedIdsRef.current.set(action.goal.id, Date.now())
       fetch('/api/tasks', {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...action.goal, itemType: 'goal' }),
-      }).catch(() => {})
+      })
+        .then(async r => {
+          const data = await r.json().catch(() => null)
+          if (r.ok && data?.goal?.id) {
+            dispatch({ type: 'REPLACE_GOAL', tempId: action.goal.id, goal: data.goal })
+          } else if (!r.ok) {
+            dispatch({ type: 'DELETE_GOAL', id: action.goal.id })
+          }
+        })
+        .catch(() => {})
     } else if (action.type === 'ADD_HABIT') {
+      recentlyAddedIdsRef.current.set(action.habit.id, Date.now())
       fetch('/api/tasks', {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...action.habit, itemType: 'habit' }),
       })
-        .then(r => r.json())
-        .then(data => {
-          if (data && data.habit && data.habit.id) {
+        .then(async r => {
+          const data = await r.json().catch(() => null)
+          if (r.ok && data?.habit?.id) {
             dispatch({ type: 'REPLACE_HABIT', tempId: action.habit.id, habit: data.habit })
+          } else if (!r.ok) {
+            dispatch({ type: 'DELETE_HABIT', id: action.habit.id })
           }
         })
         .catch(() => {})
@@ -577,11 +627,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const headers = getAuthHeaders()
       const chatId = headers['x-chat-id']
 
-      // Purge deleted IDs older than 60 seconds
+      // Purge deleted/added IDs older than 60 seconds
       const now = Date.now()
       for (const [id, timestamp] of recentlyDeletedIdsRef.current.entries()) {
         if (now - timestamp > 60000) {
           recentlyDeletedIdsRef.current.delete(id)
+        }
+      }
+      for (const [id, timestamp] of recentlyAddedIdsRef.current.entries()) {
+        if (now - timestamp > 60000) {
+          recentlyAddedIdsRef.current.delete(id)
         }
       }
 
@@ -600,11 +655,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        const filteredTasks = (data.tasks || []).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
-        const filteredGoals = (data.goals || []).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
-        const filteredNotes = (data.notes || []).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))
+        // Keep freshly created optimistic items that the server list doesn't
+        // know about yet (their POST is still in flight) — prevents the
+        // "added -> vanished -> reappeared" flicker on background sync.
+        const keepFresh = <T extends { id: string }>(serverList: T[], localList: T[]): T[] => {
+          const fresh = localList.filter(
+            l => recentlyAddedIdsRef.current.has(l.id) && !serverList.some(srv => srv.id === l.id)
+          )
+          return [...serverList, ...fresh]
+        }
+        const filteredTasks = keepFresh(data.tasks || [], stateRef.current.tasks).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
+        const filteredGoals = keepFresh(data.goals || [], stateRef.current.goals).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
+        const filteredNotes = keepFresh(data.notes || [], stateRef.current.notes).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))
         const filteredFriends = (data.friends || []).filter((f: Friend) => !recentlyDeletedIdsRef.current.has(f.id))
-        const filteredHabits = (data.habits || []).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
+        const filteredHabits = keepFresh(data.habits || [], stateRef.current.habits).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
 
         dispatch({
           type: 'LOAD_STATE',
