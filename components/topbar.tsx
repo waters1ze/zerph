@@ -19,11 +19,13 @@ const VIEW_LABELS: Record<string, string> = {
   goals:    'Цели',
   projects: 'Проекты',
   notes:    'Заметки',
+  graph:    'Граф знаний',
   calendar: 'Календарь',
   chat:     'AI Чат',
   stats:    'Аналитика',
   friends:  'Команда',
   settings: 'Настройки',
+  admin:    'Админ-панель',
 }
 
 interface Props {

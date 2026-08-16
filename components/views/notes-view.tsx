@@ -867,7 +867,7 @@ ${activeNote.content}"
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                     <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                    <span>Связи заметки (Obsidian Graph & Wikilinks)</span>
+                    <span>Связи заметки (Граф и ссылки)</span>
                   </h3>
                   <button
                     onClick={() => {

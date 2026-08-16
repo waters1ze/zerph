@@ -551,7 +551,7 @@ export function KnowledgeGraphModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-foreground">Граф знаний (Obsidian Graph)</h2>
+                <h2 className="text-sm font-bold text-foreground">Граф знаний</h2>
                 {localNoteId && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
                     Локальный граф
