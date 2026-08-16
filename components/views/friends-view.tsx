@@ -365,14 +365,14 @@ export function FriendsView() {
 
   if (!mounted) {
     return (
-      <div className="flex flex-col gap-5 max-w-2xl opacity-0">
+      <div className="flex flex-col gap-5 w-full max-w-5xl opacity-0">
         <h2 className="text-base font-bold text-foreground">Команда и совместная работа</h2>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5 max-w-2xl font-sans">
+    <div className="flex flex-col gap-5 w-full max-w-5xl font-sans">
       {/* Toast Notification */}
       <AnimatePresence>
         {notice && (

@@ -132,12 +132,12 @@ export function StatsView() {
   const q4 = activeTasks.filter(t => t.priority === 'low' && (!t.dueDate || t.dueDate > tomorrow))
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6 w-full max-w-none">
       {/* Header & Period selector */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-foreground">Живая аналитика</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Реальная статистика выполнения ваших задач</p>
+          <h2 className="text-xl font-extrabold text-foreground tracking-tight">Живая аналитика</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Реальная статистика выполнения ваших задач и продуктивности</p>
         </div>
         <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border w-fit">
           {PERIODS.map(p => (
@@ -157,150 +157,197 @@ export function StatsView() {
         </div>
       </div>
 
-      {/* Eisenhower Matrix */}
-      <div className="p-4 rounded-2xl bg-card border border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <LayoutGrid className="w-4 h-4 text-primary" />
-          <p className="text-[13px] font-bold text-foreground">Матрица Эйзенхауэра</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Q1 */}
-          <div className="p-3 rounded-xl bg-[var(--priority-urgent)]/10 border border-[var(--priority-urgent)]/20">
-            <h3 className="text-[12px] font-bold text-[var(--priority-urgent)] mb-2">Срочно + Важно</h3>
-            <div className="space-y-1">
-              {q1.slice(0, 4).map(t => (
-                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
-              ))}
-              {q1.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
-            </div>
-          </div>
-          {/* Q2 */}
-          <div className="p-3 rounded-xl bg-[var(--status-done)]/10 border border-[var(--status-done)]/20">
-            <h3 className="text-[12px] font-bold text-[var(--status-done)] mb-2">Важно + Несрочно</h3>
-            <div className="space-y-1">
-              {q2.slice(0, 4).map(t => (
-                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
-              ))}
-              {q2.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
-            </div>
-          </div>
-          {/* Q3 */}
-          <div className="p-3 rounded-xl bg-[var(--priority-medium)]/10 border border-[var(--priority-medium)]/20">
-            <h3 className="text-[12px] font-bold text-[var(--priority-medium)] mb-2">Срочно + Неважно</h3>
-            <div className="space-y-1">
-              {q3.slice(0, 4).map(t => (
-                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
-              ))}
-              {q3.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
-            </div>
-          </div>
-          {/* Q4 */}
-          <div className="p-3 rounded-xl bg-muted/40 border border-border">
-            <h3 className="text-[12px] font-bold text-muted-foreground mb-2">Несрочно + Неважно</h3>
-            <div className="space-y-1">
-              {q4.slice(0, 4).map(t => (
-                <p key={t.id} className="text-[11px] text-foreground truncate">• {t.title}</p>
-              ))}
-              {q4.length === 0 && <p className="text-[11px] text-muted-foreground italic">Пусто</p>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Top stats grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Top stats grid - Full width 4 columns */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <StatCard label="Выполнено задач" value={done} sub={`из ${total} всего`} icon={CheckCircle2} color="text-[var(--status-done)]" delay={0} />
         <StatCard label="Процент выполнения" value={`${completionRate}%`} sub="за всё время" icon={TrendingUp} color="text-primary" delay={0.06} />
         <StatCard label="Просрочено" value={overdue} sub={overdue > 0 ? 'требует внимания' : 'всё чисто!'} icon={AlertCircle} color="text-[var(--status-overdue)]" delay={0.12} />
         <StatCard label="В процессе" value={inProgress} sub="активных задач" icon={Clock} color="text-[var(--status-inprogress)]" delay={0.18} />
       </div>
 
-      {/* 365-Day Activity Heatmap */}
-      <ActivityHeatmap
-        completedDates={state.tasks.filter(t => t.status === 'done' && t.completedAt).map(t => t.completedAt!)}
-        totalCompleted={done}
-        currentStreak={done > 0 ? Math.max(1, done) : 0}
-      />
-
-      {/* Weekly completion graph - REAL DATA */}
-      <div className="p-4 rounded-2xl bg-card border border-border">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-primary" />
-            <p className="text-[13px] font-bold text-foreground">Выполнено за 7 дней</p>
-          </div>
-          <span className="text-[11px] font-medium text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full">Реальные данные</span>
-        </div>
-        <div className="flex items-end gap-2 h-24">
-          {weeklyBars.map((b, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-              <span className="text-[10px] font-bold text-foreground">{b.count > 0 ? b.count : ''}</span>
-              <motion.div
-                className={cn(
-                  'w-full rounded-t-md transition-colors',
-                  b.count > 0 ? 'bg-primary' : 'bg-muted/40'
-                )}
-                initial={{ height: 0 }}
-                animate={{ height: `${b.count > 0 ? Math.max((b.count / maxWeekly) * 60, 8) : 4}px` }}
-                transition={{ duration: 0.5, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
-              />
-              <span className="text-[10px] font-medium text-muted-foreground">{b.label}</span>
+      {/* Main 2-Column Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full">
+        {/* Left Column: Eisenhower Matrix */}
+        <div className="lg:col-span-6 flex flex-col p-5 rounded-2xl bg-card border border-border">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4 text-primary" />
+              <p className="text-[14px] font-bold text-foreground">Матрица Эйзенхауэра</p>
             </div>
-          ))}
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              {activeTasks.length} активных
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 flex-1">
+            {/* Q1 */}
+            <div className="p-3.5 rounded-xl bg-[var(--priority-urgent)]/10 border border-[var(--priority-urgent)]/20 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[12px] font-bold text-[var(--priority-urgent)]">Срочно + Важно</h3>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--priority-urgent)]/20 text-[var(--priority-urgent)]">
+                  {q1.length}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 no-scrollbar flex-1">
+                {q1.map(t => (
+                  <p key={t.id} className="text-[11px] text-foreground truncate bg-card/40 px-2 py-1 rounded-md border border-border/30">
+                    • {t.title}
+                  </p>
+                ))}
+                {q1.length === 0 && <p className="text-[11px] text-muted-foreground italic py-3 text-center">Нет срочных задач</p>}
+              </div>
+            </div>
+
+            {/* Q2 */}
+            <div className="p-3.5 rounded-xl bg-[var(--status-done)]/10 border border-[var(--status-done)]/20 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[12px] font-bold text-[var(--status-done)]">Важно + Несрочно</h3>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--status-done)]/20 text-[var(--status-done)]">
+                  {q2.length}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 no-scrollbar flex-1">
+                {q2.map(t => (
+                  <p key={t.id} className="text-[11px] text-foreground truncate bg-card/40 px-2 py-1 rounded-md border border-border/30">
+                    • {t.title}
+                  </p>
+                ))}
+                {q2.length === 0 && <p className="text-[11px] text-muted-foreground italic py-3 text-center">Нет задач</p>}
+              </div>
+            </div>
+
+            {/* Q3 */}
+            <div className="p-3.5 rounded-xl bg-[var(--priority-medium)]/10 border border-[var(--priority-medium)]/20 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[12px] font-bold text-[var(--priority-medium)]">Срочно + Неважно</h3>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--priority-medium)]/20 text-[var(--priority-medium)]">
+                  {q3.length}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 no-scrollbar flex-1">
+                {q3.map(t => (
+                  <p key={t.id} className="text-[11px] text-foreground truncate bg-card/40 px-2 py-1 rounded-md border border-border/30">
+                    • {t.title}
+                  </p>
+                ))}
+                {q3.length === 0 && <p className="text-[11px] text-muted-foreground italic py-3 text-center">Нет задач</p>}
+              </div>
+            </div>
+
+            {/* Q4 */}
+            <div className="p-3.5 rounded-xl bg-muted/40 border border-border flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[12px] font-bold text-muted-foreground">Несрочно + Неважно</h3>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                  {q4.length}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 no-scrollbar flex-1">
+                {q4.map(t => (
+                  <p key={t.id} className="text-[11px] text-foreground truncate bg-card/40 px-2 py-1 rounded-md border border-border/30">
+                    • {t.title}
+                  </p>
+                ))}
+                {q4.length === 0 && <p className="text-[11px] text-muted-foreground italic py-3 text-center">Нет задач</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Weekly Bar Chart + Priority Breakdown + Goals */}
+        <div className="lg:col-span-6 flex flex-col gap-4">
+          {/* Weekly completion graph */}
+          <div className="p-4 rounded-2xl bg-card border border-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                <p className="text-[13px] font-bold text-foreground">Выполнено за 7 дней</p>
+              </div>
+              <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                Реальные данные
+              </span>
+            </div>
+            <div className="flex items-end gap-2.5 h-28 pt-2">
+              {weeklyBars.map((b, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-foreground">{b.count > 0 ? b.count : ''}</span>
+                  <motion.div
+                    className={cn(
+                      'w-full rounded-t-md transition-colors',
+                      b.count > 0 ? 'bg-primary shadow-sm shadow-primary/30' : 'bg-muted/40'
+                    )}
+                    initial={{ height: 0 }}
+                    animate={{ height: `${b.count > 0 ? Math.max((b.count / maxWeekly) * 70, 10) : 4}px` }}
+                    transition={{ duration: 0.5, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                  <span className="text-[10px] font-medium text-muted-foreground">{b.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Priority breakdown */}
+          <div className="p-4 rounded-2xl bg-card border border-border">
+            <div className="flex items-center gap-2 mb-3">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <p className="text-[13px] font-bold text-foreground">Распределение по приоритетам</p>
+            </div>
+            <div className="space-y-2.5">
+              {priorityBreakdown.map(p => (
+                <BarMini key={p.label} label={p.label} count={p.count} pct={p.pct} color={p.color} />
+              ))}
+            </div>
+          </div>
+
+          {/* Goals & Collaboration Mini Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="p-4 rounded-2xl bg-card border border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="w-4 h-4 text-primary" />
+                <p className="text-[13px] font-bold text-foreground">Цели</p>
+              </div>
+              <p className="text-2xl font-bold text-foreground">{avgGoalProgress}%</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">средний прогресс</p>
+              <div className="h-1.5 rounded-full bg-border overflow-hidden mt-2.5">
+                <motion.div
+                  className="h-full rounded-full bg-primary"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${avgGoalProgress}%` }}
+                  transition={{ duration: 0.8, delay: 0.3 }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">{goalsOnTrack} из {goalsTotal} целей в норме</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-card border border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-4 h-4 text-primary" />
+                <p className="text-[13px] font-bold text-foreground">Команда & AI</p>
+              </div>
+              <p className="text-2xl font-bold text-foreground">{sharedTasks}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">общих задач</p>
+              <div className="mt-2.5 space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Создано AI:</span>
+                  <span className="font-bold text-foreground">{aiTasks}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Контактов:</span>
+                  <span className="font-bold text-foreground">{state.friends.length}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Priority breakdown */}
-      <div className="p-4 rounded-2xl bg-card border border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <Flame className="w-4 h-4 text-orange-400" />
-          <p className="text-[13px] font-bold text-foreground">Распределение по приоритетам</p>
-        </div>
-        <div className="space-y-3">
-          {priorityBreakdown.map(p => (
-            <BarMini key={p.label} label={p.label} count={p.count} pct={p.pct} color={p.color} />
-          ))}
-        </div>
-      </div>
-
-      {/* Goals & Collaboration overview */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="p-4 rounded-2xl bg-card border border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Target className="w-4 h-4 text-primary" />
-            <p className="text-[13px] font-bold text-foreground">Цели</p>
-          </div>
-          <p className="text-3xl font-bold text-foreground">{avgGoalProgress}%</p>
-          <p className="text-[12px] text-muted-foreground mt-1">средний прогресс</p>
-          <div className="h-1.5 rounded-full bg-border overflow-hidden mt-3">
-            <motion.div
-              className="h-full rounded-full bg-primary"
-              initial={{ width: 0 }}
-              animate={{ width: `${avgGoalProgress}%` }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-            />
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-2">{goalsOnTrack} из {goalsTotal} целей в норме</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-card border border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="w-4 h-4 text-primary" />
-            <p className="text-[13px] font-bold text-foreground">Совместная работа</p>
-          </div>
-          <p className="text-3xl font-bold text-foreground">{sharedTasks}</p>
-          <p className="text-[12px] text-muted-foreground mt-1">общих задач</p>
-          <div className="mt-3 space-y-1.5">
-            <div className="flex justify-between text-[12px]">
-              <span className="text-muted-foreground">Создано AI:</span>
-              <span className="font-bold text-foreground">{aiTasks}</span>
-            </div>
-            <div className="flex justify-between text-[12px]">
-              <span className="text-muted-foreground">Участников команды:</span>
-              <span className="font-bold text-foreground">{state.friends.length}</span>
-            </div>
-          </div>
-        </div>
+      {/* 365-Day Activity Heatmap - Spanning 100% */}
+      <div className="w-full">
+        <ActivityHeatmap
+          completedDates={state.tasks.filter(t => t.status === 'done' && t.completedAt).map(t => t.completedAt!)}
+          totalCompleted={done}
+          currentStreak={done > 0 ? Math.max(1, done) : 0}
+        />
       </div>
     </div>
   )
