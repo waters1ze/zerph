@@ -86,6 +86,8 @@ model TelegramChat {
   email                  String?   @unique
   passwordHash           String?
   authProvider           String?   // "telegram" | "vk" | "email" | "google"
+  vkId                   String?
+  googleEmail            String?
   birthday               String?   // YYYY-MM-DD or MM-DD
   reminderIntervalMinutes Int       @default(5)
   reminderRepeatCount    Int       @default(3)

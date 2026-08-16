@@ -9,7 +9,8 @@ import {
   Sun, Moon, Monitor, Bell, BellOff, Link, Key,
   User, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
-  Lock, ExternalLink, Download, Layers, CheckCircle2, ArrowRight
+  Lock, ExternalLink, Download, Layers, CheckCircle2, ArrowRight,
+  Send, Plus, CheckCircle
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 
@@ -81,6 +82,19 @@ export function SettingsView() {
   const [authError, setAuthError] = useState<string | null>(null)
   const [authSuccess, setAuthSuccess] = useState<string | null>(null)
 
+  // Multi-Provider Linking States
+  const [profileData, setProfileData] = useState<{
+    email?: string | null
+    hasPassword?: boolean
+    vkId?: string | null
+    googleEmail?: string | null
+    username?: string | null
+    name?: string
+  }>({})
+  const [showEmailLinkModal, setShowEmailLinkModal] = useState(false)
+  const [linkEmail, setLinkEmail] = useState('')
+  const [linkPassword, setLinkPassword] = useState('')
+
   const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
   const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
   const [loadingPay, setLoadingPay] = useState(false)
@@ -96,13 +110,24 @@ export function SettingsView() {
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}&text=`
 
-  useEffect(() => {
+  const fetchProfile = () => {
     if (currentChatId) {
       fetch(`/api/telegram/user?chatId=${currentChatId}`, {
         headers: getAuthHeaders(),
       })
         .then(r => r.json())
         .then(d => {
+          if (d.connected) {
+            setProfileData({
+              email: d.email,
+              hasPassword: d.hasPassword,
+              vkId: d.vkId,
+              googleEmail: d.googleEmail,
+              username: d.username,
+              name: d.name
+            })
+            if (d.email) setLinkEmail(d.email)
+          }
           if (d.birthday) {
             setUserBirthday(d.birthday)
             try { localStorage.setItem('zerf_birthday', d.birthday) } catch {}
@@ -110,6 +135,10 @@ export function SettingsView() {
         })
         .catch(() => {})
     }
+  }
+
+  useEffect(() => {
+    fetchProfile()
   }, [currentChatId])
 
   const handleUserBirthdayChange = async (val: string) => {
@@ -126,6 +155,75 @@ export function SettingsView() {
         body: JSON.stringify({ birthday: val }),
       })
     } catch {}
+  }
+
+  const handleLinkEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError(null)
+    setAuthSuccess(null)
+    setAuthLoading(true)
+
+    try {
+      const res = await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: linkEmail, password: linkPassword })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки Email')
+      setAuthSuccess('Email и пароль успешно привязаны к вашему аккаунту!')
+      setProfileData(prev => ({ ...prev, email: linkEmail, hasPassword: true }))
+      setShowEmailLinkModal(false)
+      fetchProfile()
+    } catch (err: any) {
+      setAuthError(err.message || 'Ошибка сети')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLinkGoogle = async () => {
+    const emailPrompt = prompt('Введите ваш Google Email для привязки к этому аккаунту:', profileData.googleEmail || '')
+    if (!emailPrompt || !emailPrompt.includes('@')) return
+    setAuthLoading(true)
+    try {
+      const res = await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleEmail: emailPrompt })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки Google')
+      setProfileData(prev => ({ ...prev, googleEmail: emailPrompt }))
+      setAuthSuccess('Google аккаунт успешно привязан!')
+      setTimeout(() => setAuthSuccess(null), 3000)
+    } catch (err: any) {
+      alert(err.message || 'Ошибка привязки')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLinkVk = async () => {
+    const vkPrompt = prompt('Введите ваш ID ВКонтакте (например, 240878278):', profileData.vkId || '')
+    if (!vkPrompt) return
+    setAuthLoading(true)
+    try {
+      const res = await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vkId: vkPrompt })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки VK')
+      setProfileData(prev => ({ ...prev, vkId: vkPrompt }))
+      setAuthSuccess('ВКонтакте успешно привязан к профилю!')
+      setTimeout(() => setAuthSuccess(null), 3000)
+    } catch (err: any) {
+      alert(err.message || 'Ошибка привязки')
+    } finally {
+      setAuthLoading(false)
+    }
   }
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -212,7 +310,7 @@ export function SettingsView() {
             <span>⚙️ Настройки Zerf Note</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Управление аккаунтом, синхронизацией, голосовыми командами и внешним видом
+            Управление единым аккаунтом, связками входа, голосовыми командами и внешним видом
           </p>
         </div>
 
@@ -295,7 +393,7 @@ export function SettingsView() {
         </button>
       </div>
 
-      {/* ── TAB 1: Account & Authentication ──────────────────────────────────── */}
+      {/* ── TAB 1: Account & Multi-Provider Authentication ──────────────────── */}
       {activeTab === 'account' && (
         <div className="space-y-6">
           <Section title="Ваш Профиль">
@@ -329,41 +427,174 @@ export function SettingsView() {
             </Row>
           </Section>
 
-          {/* Email / Social Authentication Form */}
-          <Section title="Авторизация & Подключение аккаунтов">
+          {/* Multi-Provider Linked Accounts Hub */}
+          <Section title="Связанные способы входа в этот аккаунт">
             <div className="p-5 space-y-4">
-              {currentChatId && !currentChatId.startsWith('guest_') ? (
-                <div className="flex items-center justify-between p-4 rounded-xl bg-muted/40 border border-border">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-foreground">Аккаунт подключен</p>
-                    <p className="text-[11px] text-muted-foreground">Идентификатор профиля: {currentChatId}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Вы можете привязать <b>Email</b>, <b>Telegram</b>, <b>ВКонтакте</b> и <b>Google</b> к этому единому профилю. Вы сможете входить с любого устройства любым удобным способом — все задачи и заметки сохраняются в одном месте.
+              </p>
+
+              {authSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
+
+              {/* Providers Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {/* 1. Telegram Card */}
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#229ED9]/15 text-[#229ED9] flex items-center justify-center font-bold">
+                        <Send className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-foreground">Telegram</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {profileData.username ? profileData.username : `@Zerph_bot (ID: ${currentChatId || 'не привязан'})`}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                      Подключен
+                    </span>
                   </div>
-                  <button
-                    onClick={handleLogout}
-                    className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-semibold transition-all"
+                  <a
+                    href="https://t.me/Zerph_bot?start=login"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5"
                   >
-                    Выйти из аккаунта
+                    <span>Открыть диалог с ботом</span>
+                    <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                  </a>
+                </div>
+
+                {/* 2. Email & Password Card */}
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-bold">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground">Email & Пароль</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {profileData.email ? profileData.email : 'Не привязан к аккаунту'}
+                        </p>
+                      </div>
+                    </div>
+                    {profileData.email ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
+                        Привязан
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20 shrink-0">
+                        Свободен
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setShowEmailLinkModal(!showEmailLinkModal)}
+                    className="w-full py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold border border-primary/20 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Key className="w-3 h-3" />
+                    <span>{profileData.email ? 'Сменить Email / Пароль' : 'Привязать Email и Пароль'}</span>
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Войдите или зарегистрируйтесь по <b>Email</b>, через <b>Telegram (@Zerph_bot)</b> или <b>ВКонтакте</b>, чтобы сохранять задачи и получать напоминания.
-                  </p>
 
-                  <form onSubmit={handleEmailAuth} className="space-y-3 p-4 rounded-2xl bg-card border border-border/80">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-foreground">
-                        {isRegister ? 'Регистрация по Email' : 'Вход по Email'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => { setIsRegister(!isRegister); setAuthError(null) }}
-                        className="text-xs text-primary hover:underline font-semibold"
-                      >
-                        {isRegister ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт'}
-                      </button>
+                {/* 3. VK Card */}
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#0077FF]/15 text-[#0077FF] flex items-center justify-center font-bold text-xs">
+                        VK
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-foreground">ВКонтакте</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {profileData.vkId ? `VK ID: ${profileData.vkId}` : 'Сообщество / Mini App'}
+                        </p>
+                      </div>
                     </div>
+                    {profileData.vkId ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                        Привязан
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border">
+                        Доступен
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleLinkVk}
+                      className="flex-1 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>{profileData.vkId ? 'Изменить VK ID' : 'Указать VK ID'}</span>
+                    </button>
+                    <a
+                      href="https://vk.com/im?sel=-240878278"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2.5 py-1.5 rounded-xl bg-[#0077FF]/10 text-[#0077FF] text-xs font-semibold hover:bg-[#0077FF]/20 transition-colors flex items-center justify-center"
+                      title="Открыть чат VK"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* 4. Google Card */}
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center font-bold text-xs">
+                        G
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground">Google Вход</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {profileData.googleEmail ? profileData.googleEmail : 'Быстрый вход в 1 клик'}
+                        </p>
+                      </div>
+                    </div>
+                    {profileData.googleEmail ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
+                        Привязан
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
+                        Доступен
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleLinkGoogle}
+                    className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span>{profileData.googleEmail ? 'Изменить Google Email' : 'Привязать Google'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Inline Modal/Form for Email Linking */}
+              <AnimatePresence>
+                {showEmailLinkModal && (
+                  <motion.form
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    onSubmit={handleLinkEmailSubmit}
+                    className="p-4 rounded-2xl bg-muted/50 border border-primary/30 space-y-3 mt-3 overflow-hidden"
+                  >
+                    <p className="text-xs font-bold text-foreground">
+                      {profileData.email ? 'Изменить Email и пароль для входа' : 'Привязать Email и установить пароль:'}
+                    </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
@@ -371,22 +602,21 @@ export function SettingsView() {
                         <input
                           type="email"
                           required
-                          value={email}
-                          onChange={e => setEmail(e.target.value)}
+                          value={linkEmail}
+                          onChange={e => setLinkEmail(e.target.value)}
                           placeholder="alex@gmail.com"
-                          className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs text-foreground outline-none focus:border-primary"
+                          className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
                         />
                       </div>
-
                       <div>
-                        <label className="text-[11px] text-muted-foreground font-semibold block mb-1">Пароль</label>
+                        <label className="text-[11px] text-muted-foreground font-semibold block mb-1">Новый пароль</label>
                         <input
                           type="password"
                           required
-                          value={password}
-                          onChange={e => setPassword(e.target.value)}
+                          value={linkPassword}
+                          onChange={e => setLinkPassword(e.target.value)}
                           placeholder="••••••••"
-                          className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs text-foreground outline-none focus:border-primary"
+                          className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
                         />
                       </div>
                     </div>
@@ -397,68 +627,35 @@ export function SettingsView() {
                       </p>
                     )}
 
-                    {authSuccess && (
-                      <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {authSuccess}
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-3 pt-1">
+                    <div className="flex items-center gap-2 pt-1">
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm"
+                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm"
                       >
-                        {authLoading ? 'Загрузка...' : (isRegister ? 'Зарегистрироваться' : 'Войти')}
+                        {authLoading ? 'Сохранение...' : 'Сохранить и привязать'}
                       </button>
-
                       <button
                         type="button"
-                        onClick={handleGoogleAuth}
-                        className="px-3.5 h-9 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center gap-1.5"
+                        onClick={() => setShowEmailLinkModal(false)}
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors"
                       >
-                        <span>Google Вход</span>
+                        Отмена
                       </button>
                     </div>
-                  </form>
+                  </motion.form>
+                )}
+              </AnimatePresence>
 
-                  {/* Telegram and VK Direct Links */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <a
-                      href="https://t.me/Zerph_bot?start=login"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-3.5 rounded-xl bg-[#229ED9]/10 border border-[#229ED9]/30 hover:bg-[#229ED9]/20 transition-all flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#229ED9] text-white flex items-center justify-center font-bold">TG</div>
-                        <div>
-                          <p className="text-xs font-bold text-foreground">Войти через Telegram</p>
-                          <p className="text-[10px] text-muted-foreground">@Zerph_bot (/login)</p>
-                        </div>
-                      </div>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                    </a>
-
-                    <a
-                      href="https://vk.com/im?sel=-240878278"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-3.5 rounded-xl bg-[#0077FF]/10 border border-[#0077FF]/30 hover:bg-[#0066DD]/20 transition-all flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#0077FF] text-white flex items-center justify-center font-bold">VK</div>
-                        <div>
-                          <p className="text-xs font-bold text-foreground">Войти через ВКонтакте</p>
-                          <p className="text-[10px] text-muted-foreground">Бот сообщества</p>
-                        </div>
-                      </div>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                    </a>
-                  </div>
-                </div>
-              )}
+              {/* Logout Button */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleLogout}
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-semibold transition-all"
+                >
+                  Выйти из этого аккаунта
+                </button>
+              </div>
             </div>
           </Section>
 
@@ -581,7 +778,7 @@ export function SettingsView() {
               </div>
 
               <div className="p-3 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground">
-                ✨ Теперь по нажатию виджета сразу открывается микрофон: надиктовали задачу — бот озвучит ответ и сохранит всё в ваш аккаунт!
+                ✨ Теперь по нажатию виджета сразу открывается микрофон: надиктовали задачу или вопрос — бот озвучит ответ и сохранит всё в ваш аккаунт!
               </div>
             </div>
           </div>

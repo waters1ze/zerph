@@ -1680,6 +1680,8 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               email: null,
               passwordHash: null,
               authProvider: null,
+              vkId: null,
+              googleEmail: null,
               birthday: chat?.birthday || null,
               reminderIntervalMinutes: 5,
               reminderRepeatCount: 3,
