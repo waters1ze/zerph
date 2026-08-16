@@ -229,6 +229,17 @@ RECURRENCE & ADVANCE REMINDERS RULES:
 - If input asks to be reminded in advance ("за 5 минут", "за 15 минут", "за 1 час", "за 1 день до..."), calculate and set "reminderOffsetMinutes" (e.g. 5, 15, 60, 1440)!
 - If the user explicitly states THEIR OWN birthday (e.g., "мой др 03.04.2010", "у меня день рождения..."), set "action": "set_my_birthday" and extract the date into "dueDate" (format: YYYY-MM-DD or DD.MM.YYYY translated to YYYY-MM-DD). If year is unknown, use 0020-MM-DD.
 
+HOLIDAYS & YEARLY EVENTS RULES (HIGHEST PRIORITY):
+- If the user asks to add or remember a holiday, birthday, or yearly event (e.g., "Добавь праздник 1 сентября день Знаний", "Праздник Новый Год 31 декабря", "Праздник 8 марта", "День победы 9 мая", "день рождения друга 15 мая", "годовщина 10 октября"):
+  • "type": "task"
+  • "action": "create"
+  • "repeat": "yearly"
+  • "dueTime": "00:00"
+  • "dueDate": "YYYY-MM-DD" (calculate the date accurately for the upcoming year, e.g. "1 сентября" -> "2026-09-01")
+  • "title": Clean concise holiday title without "добавь праздник" (e.g. "День Знаний", "Новый Год", "8 Марта — Международный женский день")
+  • "summary": "Ежегодный праздник / памятное событие"
+  • "tags": ["праздник", "календарь"] (or ["день рождения", "календарь"])
+
 TASK VS NOTE RULES (HIGHEST PRIORITY):
 - BY DEFAULT, all voice inputs, Siri dictation, widget inputs, and user messages MUST be classified as "type": "task" (to create a concrete actionable task in the user's todo list)!
 - NEVER create a note with placeholder titles or content like "Новая заметка", "Нет информации", "Заметка". If there is short input, it is ALWAYS a TASK.

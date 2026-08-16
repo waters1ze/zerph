@@ -100,9 +100,17 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
           ...t,
           title: t.title.startsWith('🎂') ? t.title : `🎂 ${t.title}`,
           dueTime: '00:00',
+          repeat: t.repeat || 'yearly',
+        }
+      } else if (isHolidayTitle(t.title)) {
+        return {
+          ...t,
+          title: t.title.startsWith('🎉') ? t.title : `🎉 ${t.title}`,
+          dueTime: '00:00',
+          repeat: t.repeat || 'yearly',
         }
       } else {
-        // Strip erroneous 🎂 from non-birthday tasks
+        // Strip erroneous 🎂 or 🎉 from normal tasks
         return {
           ...t,
           title: t.title.replace(/^🎂\s*/, ''),
@@ -120,6 +128,12 @@ export function isBirthdayTitle(title: string | null | undefined): boolean {
   const clean = title.replace(/^🎂\s*/, '').trim()
   // Match "день рождения", "д.р.", "др", but NOT "друзья", "друг", "друзьями", "подарок", etc.
   return /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(clean)
+}
+
+export function isHolidayTitle(title: string | null | undefined): boolean {
+  if (!title) return false
+  const clean = title.replace(/^🎉\s*/, '').trim()
+  return /(?:^|[^а-яёa-z0-9])(?:праздник|новый\s*год|день\s*знаний|день\s*победы|день\s*защитника|8\s*марта|рождество|пасха|масленица|день\s*матери|день\s*отца|годовщин\w*)(?:[^а-яёa-z0-9]|$)/i.test(clean)
 }
 
 export async function getAllGoals(ownerChatId?: number | bigint | string | null) {
@@ -1533,8 +1547,21 @@ export async function saveParsedItemToDb(
       }
     }
 
-    const isYearlyEvent = /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?|праздник|годовщин\w*)(?:[^а-яёa-z0-9]|$)/i.test(item.title || item.rawText || '')
+    const isHoliday = isHolidayTitle(item.title) || isHolidayTitle(item.rawText)
+    const isBirthday = isBirthdayTitle(item.title) || isBirthdayTitle(item.rawText)
+    const isYearlyEvent = isHoliday || isBirthday || /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?|праздник|годовщин\w*)(?:[^а-яёa-z0-9]|$)/i.test(item.title || item.rawText || '')
     const finalRepeat = item.repeat || (isYearlyEvent ? 'yearly' : null)
+
+    let finalTitle = item.title
+    if (isHoliday) {
+      if (!finalTitle.startsWith('🎉')) finalTitle = `🎉 ${finalTitle.replace(/^(?:праздник|добавь\s*праздник)\s*/i, '')}`
+      item.tags = Array.from(new Set([...(item.tags || []), 'праздник', 'календарь']))
+      if (!item.dueTime) item.dueTime = '00:00'
+    } else if (isBirthday) {
+      if (!finalTitle.startsWith('🎂')) finalTitle = `🎂 ${finalTitle}`
+      item.tags = Array.from(new Set([...(item.tags || []), 'день рождения', 'календарь']))
+      if (!item.dueTime) item.dueTime = '00:00'
+    }
 
     if (finalRepeat === 'yearly' && finalDueDate) {
       const parts = finalDueDate.split('-')
@@ -1555,14 +1582,14 @@ export async function saveParsedItemToDb(
     }
 
     const baseTags = item.recipientName ? [...(item.tags || []), item.recipientName] : (item.tags || [])
-    const categorizedTags = autoCategorizeTags(item.title, desc, baseTags)
+    const categorizedTags = autoCategorizeTags(finalTitle, desc, baseTags)
 
     await createTask({
-      title: item.title,
+      title: finalTitle,
       description: desc,
       priority: item.priority || 'medium',
       dueDate: finalDueDate,
-      dueTime: extractedTime,
+      dueTime: item.dueTime || extractedTime,
       repeat: finalRepeat,
       reminderOffsetMinutes: item.reminderOffsetMinutes || 0,
       tags: categorizedTags,

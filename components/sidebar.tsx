@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { cn, isBirthdayVisible, isBirthdayTask } from '@/lib/utils'
+import { cn, isBirthdayVisible, isBirthdayTask, isYearlyEventTask } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import type { View } from '@/lib/types'
 import { ChevronRight, Circle, User } from 'lucide-react'
@@ -144,7 +144,7 @@ export function Sidebar() {
     return d === today && t.status !== 'done'
   }).length
 
-  const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done' && !isBirthdayTask(t)).length
+  const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done' && !isYearlyEventTask(t)).length
   const notesCount = notes.length
 
   const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null) || 'Мой профиль'

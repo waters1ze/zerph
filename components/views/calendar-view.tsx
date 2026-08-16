@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
-import { cn } from '@/lib/utils'
+import { cn, isYearlyEventTask } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ArrowLeft,
   Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon
@@ -133,9 +133,7 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   const dayTasks = state.tasks.filter(t => {
     if (t.dueDate === dateStr) return true
     if (t.dueDate && t.dueDate.includes('-')) {
-      const isYearly = t.repeat === 'yearly' ||
-                       /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(t.title || '') ||
-                       t.tags?.includes('день рождения')
+      const isYearly = isYearlyEventTask(t)
       if (isYearly) {
         const [, tm, td] = t.dueDate.split('-').map(Number)
         const [, sm, sd] = dateStr.split('-').map(Number)
@@ -281,9 +279,7 @@ export function CalendarView() {
   // Group tasks by date
   const tasksByDate = state.tasks.reduce((acc, t) => {
     if (t.dueDate && t.dueDate.includes('-')) {
-      const isYearly = t.repeat === 'yearly' ||
-                       /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(t.title || '') ||
-                       t.tags?.includes('день рождения')
+      const isYearly = isYearlyEventTask(t)
 
       if (isYearly) {
         const [, tm, td] = t.dueDate.split('-').map(Number)
@@ -312,9 +308,7 @@ export function CalendarView() {
     const hasTasks = state.tasks.some(t => {
       if (!t.dueDate || !t.dueDate.includes('-')) return false
       const [ty, tm] = t.dueDate.split('-').map(Number)
-      const isYearly = t.repeat === 'yearly' ||
-                       /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?)(?:[^а-яёa-z0-9]|$)/i.test(t.title || '') ||
-                       t.tags?.includes('день рождения')
+      const isYearly = isYearlyEventTask(t)
       if (isYearly) {
         const [, ytm, ytd] = t.dueDate.split('-').map(Number)
         const projectedDate = `${year}-${String(ytm).padStart(2, '0')}-${String(ytd).padStart(2, '0')}`

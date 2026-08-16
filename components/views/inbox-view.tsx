@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { Inbox, Users, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar, UserCheck, Sparkles } from 'lucide-react'
-import { cn, isBirthdayTask, groupTasksByDate } from '@/lib/utils'
+import { cn, isBirthdayTask, isYearlyEventTask, groupTasksByDate } from '@/lib/utils'
 
 const FIXED_TAGS = [
   { id: 'all', label: 'Все' },
@@ -48,8 +48,8 @@ export function InboxView() {
     return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
   }
 
-  // All inbox items (not in a specific project or goal, and not birthday cards)
-  const allInboxTasks = state.tasks.filter(t => !t.projectId && !t.goalId && !isBirthdayTask(t))
+  // All inbox items (not in a specific project or goal, and not birthday/holiday yearly cards)
+  const allInboxTasks = state.tasks.filter(t => !t.projectId && !t.goalId && !isYearlyEventTask(t))
   
   // 1. Common / shared tasks for both participants
   const rawCommonShared = allInboxTasks.filter(t => isCommonSharedTask(t))

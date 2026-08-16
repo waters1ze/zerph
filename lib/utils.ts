@@ -20,6 +20,40 @@ export function isBirthdayTask(task: { title?: string; tags?: string[] }): boole
   )
 }
 
+export function isHolidayTask(task: { title?: string; tags?: string[]; repeat?: string | null }): boolean {
+  if (!task) return false
+  const title = (task.title || '').toLowerCase()
+  const tags = (task.tags || []).map(t => String(t).toLowerCase())
+  return (
+    title.startsWith('🎉') ||
+    title.includes('праздник') ||
+    title.includes('новый год') ||
+    title.includes('день знаний') ||
+    title.includes('день победы') ||
+    title.includes('день защитника') ||
+    title.includes('8 марта') ||
+    title.includes('рождество') ||
+    title.includes('пасха') ||
+    title.includes('масленица') ||
+    title.includes('день матери') ||
+    title.includes('день отца') ||
+    title.includes('годовщин') ||
+    tags.includes('праздник') ||
+    tags.includes('праздники') ||
+    tags.includes('holiday')
+  )
+}
+
+export function isYearlyEventTask(task: { title?: string; tags?: string[]; repeat?: string | null }): boolean {
+  if (!task) return false
+  return (
+    task.repeat === 'yearly' ||
+    isBirthdayTask(task) ||
+    isHolidayTask(task) ||
+    /(?:^|[^а-яёa-z0-9])(?:день\s*рождения|д\.?\s*р\.?|праздник|годовщин\w*)(?:[^а-яёa-z0-9]|$)/i.test(task.title || '')
+  )
+}
+
 export function isBirthdayVisible(task: { title?: string; dueDate?: string | null; tags?: string[] }, maxDays = 7): boolean {
   if (!task || !isBirthdayTask(task)) return true
   if (!task.dueDate || !task.dueDate.includes('-')) return false
@@ -39,6 +73,34 @@ export function isBirthdayVisible(task: { title?: string; dueDate?: string | nul
   let diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
 
   // If birthday already passed this year, check next year
+  if (diffDays < 0) {
+    due = new Date(currentYear + 1, month - 1, day)
+    due.setHours(0, 0, 0, 0)
+    diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
+  }
+
+  return diffDays >= 0 && diffDays <= maxDays
+}
+
+export function isHolidayVisible(task: { title?: string; dueDate?: string | null; tags?: string[] }, maxDays = 14): boolean {
+  if (!task || !isHolidayTask(task)) return true
+  if (!task.dueDate || !task.dueDate.includes('-')) return false
+
+  const parts = task.dueDate.split('-').map(Number)
+  const month = parts.length === 3 ? parts[1] : parts[0]
+  const day = parts.length === 3 ? parts[2] : parts[1]
+  if (!month || !day) return false
+
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const currentYear = now.getFullYear()
+
+  // Target holiday this year
+  let due = new Date(currentYear, month - 1, day)
+  due.setHours(0, 0, 0, 0)
+  let diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24)
+
+  // If holiday already passed this year, check next year
   if (diffDays < 0) {
     due = new Date(currentYear + 1, month - 1, day)
     due.setHours(0, 0, 0, 0)

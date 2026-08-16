@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { HabitsWidget } from '@/components/habits-widget'
-import { cn } from '@/lib/utils'
+import { cn, isYearlyEventTask } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X } from 'lucide-react'
 import { parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
@@ -143,8 +143,16 @@ export function TodayView() {
       // When a habit is selected: show ALL tasks from ALL dates for this habit
       return taskMatchesHabit(t, activeHabit)
     }
-    // Otherwise show today's tasks
-    if (t.dueDate) return t.dueDate === today
+    // Otherwise show today's tasks + today's repeating yearly events (holidays & birthdays)
+    if (t.dueDate) {
+      if (t.dueDate === today) return true
+      if (isYearlyEventTask(t)) {
+        const [, tm, td] = t.dueDate.split('-').map(Number)
+        const [, sm, sd] = today.split('-').map(Number)
+        if (sm === tm && sd === td) return true
+      }
+      return false
+    }
     return isToday(parseISO(t.createdAt))
   })
   const todayTasks = rawTodayTasks.filter(matchesTag)

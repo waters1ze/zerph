@@ -18,6 +18,7 @@ import {
   autoAddFriends, checkGroupOrUserHasPremium, getFriends,
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
   getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
+  isHolidayTitle, isBirthdayTitle,
 } from '@/lib/backend/db'
 import { getUserAuthToken, createServerSession } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
@@ -1347,26 +1348,50 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       continue
     }
 
-    const typeLabel = TYPE_RU[item.type] || item.type
-    const actionWord = updatedItem || item.action === 'update' ? 'изменена' : 'создана'
+    const isHoliday = isHolidayTitle(item.title) || isHolidayTitle(item.rawText) || item.tags?.includes('праздник')
+    const isBirthday = isBirthdayTitle(item.title) || isBirthdayTitle(item.rawText) || item.tags?.includes('день рождения')
+
+    const cleanTitle = item.title.replace(/^[🎉🎂]\s*/, '').trim()
+    let typeLabel = TYPE_RU[item.type] || item.type
+    let displayTitle = cleanTitle
+    let emojiPrefix = ''
+
+    if (isHoliday) {
+      typeLabel = 'Праздник'
+      displayTitle = cleanTitle
+      emojiPrefix = '🎉 '
+    } else if (isBirthday) {
+      typeLabel = 'День рождения'
+      displayTitle = cleanTitle
+      emojiPrefix = '🎂 '
+    }
+
+    let actionWord = updatedItem || item.action === 'update' ? 'изменен' : 'создан'
+    if (!isHoliday && !isBirthday) {
+      actionWord = updatedItem || item.action === 'update' ? 'изменена' : 'создана'
+    }
+
     const prefix = items.length > 1 ? `${idx + 1}. ` : ''
     const pText = PRIORITY_RU[item.priority] || item.priority
 
     const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
     const senderName = sender?.firstName || 'Пользователь'
 
-    msg += `${prefix}${typeLabel} ${actionWord}: *${escMd(item.title)}*\n`
+    msg += `${prefix}${emojiPrefix}${typeLabel} ${actionWord}: *${escMd(displayTitle)}*\n`
     msg += `👤 Автор: ${escMd(senderName)}\n`
     
-    if (item.summary && item.summary !== item.title) {
+    if (item.summary && item.summary !== item.title && !item.summary.toLowerCase().startsWith('ежегодный')) {
       msg += `Описание: ${escMd(item.summary)}\n`
     }
     if (item.subtasks && item.subtasks.length > 0) {
       msg += `Чек-лист:\n` + item.subtasks.map((s: string) => `  • ${escMd(s)}`).join('\n') + `\n`
     }
-    if (item.priority) msg += `Приоритет: ${pText}\n`
+    if (item.priority && !isHoliday && !isBirthday) msg += `Приоритет: ${pText}\n`
     if (item.dueDate) msg += `Дата: ${item.dueDate}\n`
-    if (item.dueTime) msg += `Время: ${item.dueTime}\n`
+    if (item.repeat === 'yearly' || isHoliday || isBirthday) {
+      msg += `Повтор: Каждый год\n`
+    }
+    if (item.dueTime && item.dueTime !== '00:00') msg += `Время: ${item.dueTime}\n`
     msg += `\n`
   }
 
