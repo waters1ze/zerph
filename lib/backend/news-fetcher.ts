@@ -114,7 +114,7 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
 
         if (titleMatch) {
           const title = cleanHtmlText(titleMatch[1])
-          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 600) : ''
           const url = linkMatch ? linkMatch[1].trim() : undefined
           if (title && title.length > 15) {
             geoNews.push({ title, summary, url, source: 'Мировая повестка' })
@@ -144,7 +144,7 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
 
         if (titleMatch) {
           const title = cleanHtmlText(titleMatch[1])
-          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 600) : ''
           const url = linkMatch ? linkMatch[1].trim() : undefined
           if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
             techNews.push({ title, summary, url, source: 'Хабр AI' })
@@ -173,7 +173,7 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
 
         if (titleMatch) {
           const title = cleanHtmlText(titleMatch[1])
-          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 600) : ''
           const url = linkMatch ? linkMatch[1].trim() : undefined
           if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
             eduNews.push({ title, summary, url, source: 'Образование & Наука' })
