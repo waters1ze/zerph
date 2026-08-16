@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Zerf AI — Долгосрочный план развития экосистемы</title>
+<style>
+  @page { size: A4; margin: 20mm 17mm 20mm 17mm; }
+  html, body {
+    margin: 0; padding: 0; background: #FFFFFF;
+    font-family: 'Segoe UI', 'Inter', Arial, sans-serif;
+    color: #1E293B; font-size: 14px; line-height: 1.6;
+  }
+  h1, h2, h3, p, ul, ol, table { margin: 0; }
+  .doc { max-width: 100%; }
+
+  h1 {
+    font-size: 25px; font-weight: 800; color: #0F172A;
+    letter-spacing: -0.4px; line-height: 1.25;
+    margin: 26px 0 6px 0;
+    page-break-after: avoid;
+  }
+  h1 .num { color: #4F46E5; margin-right: 10px; }
+  h2 {
+    font-size: 17px; font-weight: 700; color: #0F172A;
+    margin: 20px 0 8px 0;
+    page-break-after: avoid;
+  }
+  p { margin: 0 0 10px 0; }
+  .lead { font-size: 15px; color: #334155; }
+  strong { color: #0F172A; }
+  .accent { color: #4F46E5; font-weight: 600; }
+
+  .section { page-break-inside: auto; }
+  .section-start { page-break-before: always; }
+
+  ul, ol { margin: 0 0 12px 0; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+
+  code, .mono {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px; background: #F1F5F9; border: 1px solid #E2E8F0;
+    border-radius: 4px; padding: 1px 6px; color: #3730A3;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0 16px 0;
+    font-size: 12.5px; page-break-inside: auto;
+  }
+  thead { display: table-header-group; }
+  th {
+    background: #EEF2FF; color: #3730A3; text-align: left;
+    font-weight: 700; font-size: 12px; letter-spacing: 0.3px;
+    padding: 9px 12px; border: 1px solid #C7D2FE;
+  }
+  td {
+    padding: 8px 12px; border: 1px solid #E2E8F0;
+    vertical-align: top; color: #334155;
+  }
+  tr { page-break-inside: avoid; }
+  td.center { text-align: center; }
+
+  .card {
+    border: 1px solid #E2E8F0; border-radius: 10px;
+    padding: 18px 22px; margin: 14px 0 18px 0;
+    background: #FFFFFF;
+    page-break-inside: avoid;
+  }
+  .card.tinted { background: #F8FAFC; }
+  .card-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 10px; page-break-after: avoid;
+  }
+  .card-title { font-size: 16px; font-weight: 800; color: #0F172A; }
+  .card-when {
+    font-size: 12px; font-weight: 700; color: #4F46E5;
+    background: #EEF2FF; border-radius: 999px; padding: 3px 12px;
+    white-space: nowrap;
+  }
+  .card p, .card li { font-size: 13.5px; }
+  .meta-row { display: flex; gap: 24px; margin-top: 10px; flex-wrap: wrap; }
+  .meta-item { font-size: 12px; color: #64748B; }
+  .meta-item b { color: #0F172A; font-weight: 700; }
+
+  .goal {
+    border-left: 4px solid #4F46E5; background: #F8FAFC;
+    padding: 12px 18px; border-radius: 0 8px 8px 0;
+    margin: 10px 0 12px 0; font-size: 13.5px; color: #334155;
+    page-break-inside: avoid;
+  }
+  .goal b { color: #4F46E5; }
+
+  .diagram {
+    border: 1px solid #E2E8F0; border-radius: 10px; background: #F8FAFC;
+    padding: 20px; margin: 14px 0 16px 0; page-break-inside: avoid;
+  }
+  .dg-core {
+    background: #EEF2FF; border: 1.5px solid #4F46E5; border-radius: 8px;
+    padding: 10px 18px; text-align: center; font-weight: 700; color: #3730A3;
+    font-size: 13px; margin: 0 90px;
+  }
+  .dg-line { height: 20px; border-left: 1.5px dashed #94A3B8; margin-left: 50%; }
+  .dg-row { display: flex; gap: 8px; margin-top: 2px; }
+  .dg-node {
+    flex: 1; background: #FFFFFF; border: 1px solid #C7D2FE; border-radius: 6px;
+    text-align: center; font-size: 11.5px; font-weight: 600; color: #334155;
+    padding: 8px 4px;
+  }
+  .dg-caption { font-size: 11.5px; color: #94A3B8; text-align: center; margin-top: 10px; }
+
+  .note {
+    background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px;
+    padding: 12px 18px; margin: 12px 0; font-size: 13px; color: #713F12;
+    page-break-inside: avoid;
+  }
+
+  .toc { margin: 10px 0 6px 0; }
+  .toc-row { display: flex; justify-content: space-between; font-size: 13.5px; color: #475569; padding: 5px 0; border-bottom: 1px dashed #E2E8F0; }
+  .toc-row b { color: #0F172A; font-weight: 600; }
+
+  .footer-note { font-size: 11px; color: #94A3B8; margin-top: 26px; border-top: 1px solid #E2E8F0; padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <!-- ================= TOC ================= -->
+  <h1><span class="num">01</span>Содержание</h1>
+  <div class="toc">
+    <div class="toc-row"><b>2. Видение: одно ядро — много клиентов</b><span>стр. 2</span></div>
+    <div class="toc-row"><b>3. Отправная точка: что уже готово</b><span>стр. 2</span></div>
+    <div class="toc-row"><b>4. Решение по поиску: внутри программы, а не отдельный сервис</b><span>стр. 3</span></div>
+    <div class="toc-row"><b>5. Дорожная карта: обзор фаз</b><span>стр. 4</span></div>
+    <div class="toc-row"><b>6. Фаза 0 — Фундамент экосистемы</b><span>стр. 5</span></div>
+    <div class="toc-row"><b>7. Фаза 1 — CLI в стилистике Claude Code</b><span>стр. 5–6</span></div>
+    <div class="toc-row"><b>8. Фаза 2 — Семантический поиск и zerf ask</b><span>стр. 7–8</span></div>
+    <div class="toc-row"><b>9. Фаза 3 — Входы и ритуалы</b><span>стр. 9</span></div>
+    <div class="toc-row"><b>10. Фаза 4 — Система живёт сама</b><span>стр. 10</span></div>
+    <div class="toc-row"><b>11. Фаза 5 — Открытая экосистема: API, плагины, воркспейсы</b><span>стр. 11–12</span></div>
+    <div class="toc-row"><b>12. Система расширений в деталях (как в Obsidian)</b><span>стр. 12–13</span></div>
+    <div class="toc-row"><b>13. Тарифная сетка экосистемы</b><span>стр. 14</span></div>
+    <div class="toc-row"><b>14. Метрики успеха</b><span>стр. 14</span></div>
+    <div class="toc-row"><b>15. Чего сознательно не делаем</b><span>стр. 15</span></div>
+    <div class="toc-row"><b>16. Первые шаги — с чего начинаем</b><span>стр. 15</span></div>
+  </div>
+
+  <!-- ================= 2. VISION ================= -->
+  <div class="section section-start">
+  <h1><span class="num">02</span>Видение: одно ядро — много клиентов</h1>
+  <p class="lead">Zerf перестаёт быть «сайтом с фичами» и становится <strong>системой второго мозга</strong>: человек ловит мысли и контент откуда угодно, система сама организует их, и он находит всё мгновенно — в любом клиенте.</p>
+  <p>Ключевой принцип: <span class="accent">весь функционал пишется один раз в ядре и автоматически становится доступен во всех клиентах</span> — сайт, Telegram-бот, VK, CLI, браузерное расширение, desktop-компаньон. Переключение между клиентами бесшовно, потому что это одна база, одна лента активности, одни настройки.</p>
+
+  <div class="diagram">
+    <div class="dg-row">
+      <div class="dg-node">Сайт</div>
+      <div class="dg-node">Telegram-бот</div>
+      <div class="dg-node">VK</div>
+      <div class="dg-node">CLI</div>
+      <div class="dg-node">Расширение</div>
+      <div class="dg-node">Desktop</div>
+    </div>
+    <div class="dg-line"></div>
+    <div class="dg-core">CORE API — задачи · заметки · граф знаний · календарь · цели · привычки · друзья · поиск · автоматизации</div>
+    <div class="dg-caption">Все клиенты ходят в одно ядро по одному протоколу с персональными токенами</div>
+  </div>
+
+  <div class="goal"><b>Критерий успеха видения:</b> заметка, созданная в терминале, через секунду видна на сайте, в боте и в расширении — и в ленте активности видно, откуда она появилась.</div>
+
+  <h1><span class="num">03</span>Отправная точка: что уже готово</h1>
+  <p>Фундамент экосистемы уже существует — большой рефакторинг не нужен:</p>
+  <ul>
+    <li><strong>Ядро API:</strong> ~40 эндпоинтов (задачи, заметки с папками, цели, привычки, календарь, друзья, подписки, поиск), бизнес-логика сосредоточена в <code>lib/backend/db.ts</code>.</li>
+    <li><strong>Три клиента уже работают поверх ядра:</strong> сайт, Telegram-бот, VK-колбэк.</li>
+    <li><strong>Авторизация:</strong> session-токены (100 дней), Telegram initData HMAC, VK-подписи, одноразовые login-токены — PAT добавляется поверх готовой инфраструктуры.</li>
+    <li><strong>AI-слой:</strong> Groq с пулом ключей и фолбэками, Whisper-транскрипция, Vision OCR, недельные отчёты, утренние/вечерние дайджесты.</li>
+    <li><strong>Монетизация:</strong> тарифы Free / Plus 99 ₽ / Pro 299 ₽ / Corp, YooMoney-оплаты, промокоды, реферальные счётчики.</li>
+    <li><strong>Инфраструктура:</strong> Supabase (Postgres), Vercel, cron-расписания, ICS-фид, админ-панель.</li>
+  </ul>
+  <div class="note">Важно: отдельный этап «выделение ядра» из плана исключён сознательно — API уже является ядром. Нужны только персональные токены, пара недостающих эндпоинтов и версионирование контрактов для внешних клиентов.</div>
+  </div>
+
+  <!-- ================= 4. SEARCH DECISION ================= -->
+  <div class="section section-start">
+  <h1><span class="num">04</span>Решение по поиску: внутри программы, а не отдельный сервис</h1>
+  <p class="lead">Поисковик — это <strong>не отдельное приложение и не отдельный сервер</strong>. Это модуль внутри существующего Next.js-бэкенда, который доступен из всех клиентов через один эндпоинт.</p>
+
+  <h2>Почему не отдельно</h2>
+  <ul>
+    <li>Отдельный сервис = отдельное развёртывание, мониторинг, синхронизация данных и точка отказа — на текущем масштабе это чистые издержки без выгоды.</li>
+    <li>Данные для поиска уже лежат в нашей Supabase-базе — векторный индекс живёт в той же БД (расширение pgvector), без репликации куда-либо.</li>
+    <li>Индексировать весь интернет не нужно и невозможно: веб-часть ответов берётся готовой через поисковый API (Tavily) — как это делает Perplexity.</li>
+  </ul>
+
+  <h2>Как устроено: три компонента внутри программы</h2>
+  <table>
+    <thead><tr><th style="width:24%">Компонент</th><th style="width:44%">Что это</th><th>Где живёт</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Векторный индекс</strong></td>
+        <td>Embeddings заметок, задач, сохранённых статей и истории бота. Поиск по смыслу: «как я решал проблему масштабирования» находит заметку «растёт нагрузка на бота».</td>
+        <td>Таблица <code>Embedding</code> + pgvector в той же Supabase</td>
+      </tr>
+      <tr>
+        <td><strong>Поисковый модуль</strong></td>
+        <td>Единая функция: параллельный запрос к своему индексу и к Tavily API (веб-результаты), затем LLM (Groq) собирает ответ с источниками — «из твоих заметок» / «из интернета».</td>
+        <td><code>lib/backend/search.ts</code> — обычный модуль бэкенда</td>
+      </tr>
+      <tr>
+        <td><strong>Один эндпоинт</strong></td>
+        <td>Все клиенты дергают один и тот же контракт. Пишем один раз — Perplexity-опыт доступен везде.</td>
+        <td><code>/api/search/ask</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="diagram">
+    <div class="dg-row">
+      <div class="dg-node">Сайт: страница поиска</div>
+      <div class="dg-node">CLI: zerf ask</div>
+      <div class="dg-node">Расширение: панель</div>
+    </div>
+    <div class="dg-line"></div>
+    <div class="dg-core">/api/search/ask — один эндпоинт</div>
+    <div class="dg-line"></div>
+    <div class="dg-row">
+      <div class="dg-node">pgvector: своя база (по смыслу)</div>
+      <div class="dg-node">Tavily API: интернет</div>
+    </div>
+    <div class="dg-line"></div>
+    <div class="dg-core">Groq LLM: ответ с источниками [1][2][3]</div>
+    <div class="dg-caption">Схема поискового слоя: модуль внутри программы, без отдельных сервисов</div>
+  </div>
+
+  <div class="note">Вынос поиска в отдельный микросервис оправдан только при нагрузке в сотни запросов в секунду — на горизонте плана этого не будет. Архитектура модуля позволяет сделать это позже без переписывания клиентов: они общаются с эндпоинтом, а не с внутренностями.</div>
+  </div>
+
+  <!-- ================= 5. ROADMAP OVERVIEW ================= -->
+  <div class="section section-start">
+  <h1><span class="num">05</span>Дорожная карта: обзор фаз</h1>
+  <p class="lead">Шесть фаз на 12 месяцев. Каждая фаза заканчивается работающим продуктом, который можно выпускать и монетизировать, — без «больших взрывов».</p>
+  <table>
+    <thead><tr><th style="width:20%">Фаза</th><th style="width:16%">Срок</th><th style="width:40%">Главный результат</th><th>Тариф</th></tr></thead>
+    <tbody>
+      <tr><td><strong>0. Фундамент</strong></td><td>недели 1–2</td><td>PAT-токены, лента активности, deep links, метрики в админке</td><td>основа для всего</td></tr>
+      <tr><td><strong>1. CLI MVP</strong></td><td>недели 2–5</td><td>Терминальный клиент с полным функционалом сайта: команды + REPL-агент</td><td>Plus</td></tr>
+      <tr><td><strong>2. Поиск</strong></td><td>месяцы 2–3</td><td>Семантический поиск по базе + zerf ask (Perplexity-слой)</td><td>Pro (лимиты ниже)</td></tr>
+      <tr><td><strong>3. Входы и ритуалы</strong></td><td>месяцы 3–5</td><td>Браузерное расширение, daily notes с шаблонами, публикация, версионность</td><td>Plus / Pro</td></tr>
+      <tr><td><strong>4. Живая система</strong></td><td>месяцы 5–9</td><td>Автоматизации, email-вход, RSS-кюратор, desktop-компаньон</td><td>Pro</td></tr>
+      <tr><td><strong>5. Открытая экосистема</strong></td><td>месяцы 9–12</td><td>Публичный API, webhooks, плагины как в Obsidian, маркетплейс, воркспейсы</td><td>Pro / Corp</td></tr>
+    </tbody>
+  </table>
+
+  <!-- PHASE 0 -->
+  <h1><span class="num">06</span>Фаза 0 — Фундамент экосистемы</h1>
+  <div class="card">
+    <div class="card-head"><div class="card-title">Токены, лента, мосты, метрики</div><div class="card-when">1–2 недели</div></div>
+    <div class="goal"><b>Цель:</b> бэкенд готов принимать внешних клиентов безопасно, а переключение между клиентами ощущается как одна система.</div>
+    <p><strong>Задачи:</strong></p>
+    <ul>
+      <li><strong>PAT-токены:</strong> сессии с типом <code>cli</code> / <code>pat</code> и сроком 1 год. Выдача через бота: команда <code>/api</code> генерирует одноразовый код, <code>zerf login</code> активирует его. Механика login-токенов уже существует — переиспользуем.</li>
+      <li><strong>Лента активности:</strong> таблица <code>ActivityLog</code> (пользователь, действие, объект, клиент-источник, время). Даёт «магию»: «3 заметки изменены в Telegram со вчера».</li>
+      <li><strong>Deep links:</strong> <code>zerf open &lt;id&gt;</code> открывает объект на сайте; из бота — кнопка с готовой командой CLI. Мостики между клиентами.</li>
+      <li><strong>Метрики в админке:</strong> DAU/WAU, retention D1/D7, конверсия Free → Plus → Pro, выручка по месяцам. Без цифр дальнейшие фазы летят вслепую.</li>
+      <li><strong>Недостающие эндпоинты:</strong> поиск по заметкам (текстовый — временно), batch-операции, версия контрактов <code>/api/v1</code> для внешних клиентов.</li>
+    </ul>
+    <div class="meta-row">
+      <div class="meta-item"><b>Результат:</b> внешние клиенты подключаются за минуты</div>
+      <div class="meta-item"><b>Риски:</b> минимальные — всё поверх готового</div>
+    </div>
+  </div>
+
+  <!-- PHASE 1 -->
+  <h1><span class="num">07</span>Фаза 1 — CLI в стилистике Claude Code</h1>
+  <div class="card">
+    <div class="card-head"><div class="card-title">Терминальный клиент над всем функционалом</div><div class="card-when">2–4 недели, параллельно с фазой 0</div></div>
+    <div class="goal"><b>Цель:</b> пользователь ни в чём не ограничен в терминале: задачи, заметки, цели, привычки, календарь, друзья — весь функционал сайта.</div>
+    <p><strong>Стек:</strong> Node + TypeScript (наш стек), <strong>ink</strong> (React для терминала — так сделан UX Claude Code) или <code>@clack/prompts</code>, commander для аргументов. Публикация в npm как <code>zerf</code>.</p>
+    <p><strong>Два режима:</strong></p>
+    <ul>
+      <li><strong>Команды для скорости:</strong> <code>zerf new</code>, <code>zerf find</code>, <code>zerf today</code>, <code>zerf done &lt;query&gt;</code>, <code>zerf habit</code>, <code>zerf cal</code>, <code>zerf inbox</code>, <code>zerf open</code>, <code>zerf sync</code>.</li>
+      <li><strong>REPL-агент:</strong> баннер, естественный язык → Groq function calling → инструменты (те же API-эндпоинты) → план → подтверждение Y/n → диф перед записью. Стилистика Claude Code / Gemini CLI.</li>
+    </ul>
+    <p><strong>Защита и права:</strong> операции-destructive требуют подтверждения; опасные (<code>zerf rm</code>) — двойного. Токен в <code>~/.zerf/credentials</code>, права по тарифу проверяет сервер — CLI не хранит тарифную логику.</p>
+    <div class="meta-row">
+      <div class="meta-item"><b>Монетизация:</b> CLI — фича Plus; первая «фича для своих»</div>
+      <div class="meta-item"><b>Аудитория:</b> разработчики — самая платящая</div>
+    </div>
+  </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="section section-start">
+  <h1><span class="num">08</span>Фаза 2 — Семантический поиск и zerf ask</h1>
+  <div class="card">
+    <div class="card-head"><div class="card-title">Поисковик, который знает тебя</div><div class="card-when">месяцы 2–3</div></div>
+    <div class="goal"><b>Цель:</b> один вопрос — ответ из своих заметок и из интернета, с источниками. Главная «продающая» фича экосистемы.</div>
+    <p><strong>Шаг 1 — векторный индекс (2–3 недели):</strong></p>
+    <ul>
+      <li>Включить расширение <strong>pgvector</strong> в Supabase, таблица <code>Embedding</code> (objectId, kind, vector), индекс HNSW.</li>
+      <li>Embeddings: у Groq нет embedding-модели — берём OpenAI <code>text-embedding-3-small</code> (копейки: ~0,02 $ за миллион токенов) или бесплатный HF Inference (пул уже умеет HF). Бэкфил всех заметок + пересчёт при изменениях (очередь через cron).</li>
+    </ul>
+    <p><strong>Шаг 2 — zerf ask и поиск на сайте (1–2 недели):</strong></p>
+    <ul>
+      <li><code>lib/backend/search.ts</code>: параллельно pgvector (своя база) + <strong>Tavily API</strong> (интернет; бесплатный тариф 1000 запросов/мес) → Groq собирает ответ с источниками.</li>
+      <li>Эндпоинт <code>/api/search/ask</code>; клиенты: страница поиска на сайте, <code>zerf ask "..."</code> в CLI, позже панель расширения.</li>
+      <li>Режимы: <code>--web</code>, <code>--local</code>, по умолчанию — всё вместе.</li>
+    </ul>
+    <p><strong>Пример:</strong> <code>zerf ask "какие подходы к версионированию заметок и что я сам об этом писал?"</code> → «Из твоих заметок: … (12.03)» + «Из интернета: CRDT, OT…» → ответ со ссылками [1][2][3].</p>
+    <div class="meta-row">
+      <div class="meta-item"><b>Монетизация:</b> Pro — безлимит; Plus — 10/день; Free — 3/день попробовать</div>
+      <div class="meta-item"><b>Риск:</b> качество склейки — тюнинг промптов 1–2 недели</div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <h1><span class="num">09</span>Фаза 3 — Входы и ритуалы</h1>
+  <div class="card">
+    <div class="card-head"><div class="card-title">Ловить откуда угодно, возвращаться каждый день</div><div class="card-when">месяцы 3–5</div></div>
+    <div class="goal"><b>Цель:</b> база наполняется сама из браузера, а ежедневные ритуалы формируют привычку (retention).</div>
+    <p><strong>Браузерное расширение (1,5–2 недели), три в одном:</strong></p>
+    <ul>
+      <li><strong>Клиппер:</strong> страница → в базу с автовыжимкой (Groq), автотеги, связи с похожими заметками.</li>
+      <li><strong>Панель «Из твоей базы»:</strong> при гуглении сбоку — что ты уже писал и сохранял по теме (после фазы 2 это дёшево — поиск уже есть как API).</li>
+      <li><strong>Quick capture:</strong> выделил текст → правый клик → «Сохранить в Zerf» с контекстом страницы. Manifest V3, авторизация по PAT.</li>
+    </ul>
+    <p><strong>Daily notes и шаблоны (1 неделя):</strong> ежедневная заметка (незавершённое вчера, расписание, рефлексия), таблица <code>Template</code> с переменными («книга», «встреча», «проект»), автосвязь со вчерашней заметкой.</p>
+    <p><strong>Публикация (несколько дней):</strong> заметка/папка → публичная страница с работающими wikilinks. Рендер Markdown и граф уже есть. Аналог Obsidian Publish ($8/мес только за это) — наша Pro-фича почти бесплатно.</p>
+    <p><strong>Версионность заметок (1 неделя):</strong> таблица ревизий, дифы, восстановление. Ожидаемая платная фича для всех, кто пришёл из Notion.</p>
+    <div class="meta-row">
+      <div class="meta-item"><b>Монетизация:</b> клиппер — Plus; публикация и версии — Pro</div>
+      <div class="meta-item"><b>Эффект:</b> переключение поведения — «всё само падает в базу»</div>
+    </div>
+  </div>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="section section-start">
+  <h1><span class="num">10</span>Фаза 4 — Система живёт сама</h1>
+  <div class="card">
+    <div class="card-head"><div class="card-title">Автоматизации, email, RSS, desktop</div><div class="card-when">месяцы 5–9</div></div>
+    <div class="goal"><b>Цель:</b> система не ждёт команд — она замечает, предлагает и делает сама.</div>
+    <p><strong>Движок автоматизаций (2–3 недели):</strong> таблица правил «триггер → условие → действие». Триггеры: заметка создана, задача просрочена, тег поставлен, AI заметил дубликат. Действия: создать задачу, написать в бот, связать заметки, предложить MOC. Обобщение захардкоженных cron-правил; cron-инфраструктура уже есть.</p>
+    <p><strong>Email-вход (1–2 недели):</strong> письмо на <code>inbox@домен</code> (Cloudflare Email Routing → webhook, почти бесплатно) → LLM-классификация: задача / статья / расписание → правильное место. Пересылка без думания — сильная привычка.</p>
+    <p><strong>RSS + AI-кюратор (1–2 недели):</strong> news-fetcher уже тянет внешние источники — раскрываем для пользователей: свои ленты → выжимки → папка «На почитать», автосвязь с заметками по темам.</p>
+    <p><strong>Desktop-компаньон (3–4 недели, Tauri):</strong> хоткей → всплывающая панель: быстрый capture, поиск (включая ask), today, уведомления. Переиспользует API-клиент и UI-код CLI. Raycast-стиль — главное окно в экосистему на десктопе.</p>
+    <div class="meta-row">
+      <div class="meta-item"><b>Монетизация:</b> автоматизации и кюратор — Pro; desktop — Plus</div>
+      <div class="meta-item"><b>Эффект:</b> «система помогает, а не ждёт» — главное отличие от конкурентов</div>
+    </div>
+  </div>
+
+  <!-- PHASE 5 -->
+  <h1><span class="num">11</span>Фаза 5 — Открытая экосистема</h1>
+  <div class="card">
+    <div class="card-head"><div class="card-title">API, плагины, маркетплейс, воркспейсы</div><div class="card-when">месяцы 9–12</div></div>
+    <div class="goal"><b>Цель:</b> пользователи сами достраивают продукт друг для друга — как сообщество Obsidian. Это самый дешёвый двигатель развития.</div>
+    <p><strong>Workspaces (2–3 недели):</strong> личное / работа / проект, переключение контекста, поиск по всем воркспейсам, шаринг целого воркспейса. Corp становится настоящим командным тарифом с высоким чеком, а не «безлимитом для одного». Аккуратная миграция схемы.</p>
+    <p><strong>Публичный API + webhooks (1–2 недели):</strong> PAT уже есть — добавляем документацию, лимиты по тарифу, вебхуки на события («заметка создана», «задача завершена») в n8n / Zapier / свой сервер. Привлекает техническую аудиторию и создаёт комьюнити.</p>
+    <p><strong>Плагины и маркетплейс</strong> — подробно в следующем разделе: три уровня открытости, манифест с правами, каталог с модерацией.</p>
+    <div class="meta-row">
+      <div class="meta-item"><b>Монетизация:</b> плагины бесплатны (рост ценности), воркспейсы и API-лимиты — Pro / Corp</div>
+    </div>
+  </div>
+
+  <!-- PLUGINS DETAIL -->
+  <h1><span class="num">12</span>Система расширений в деталях (как в Obsidian)</h1>
+  <p class="lead">Принцип: <strong>продукт — платформа, комьюнити — двигатель фич.</strong> Obsidian вырос не на своих фичах, а на тысячах плагинов сообщества. Повторяем этот путь тремя уровнями открытости — от простого к сложному.</p>
+
+  <h2>Уровень 1 — Публичный API (основа, фаза 5)</h2>
+  <p>Без API плагины невозможны. Всё, что построено на PAT-токенах и версионированных эндпоинтах. Разработчик может написать скрипт/бота/интеграцию уже на этом уровне.</p>
+
+  <h2>Уровень 2 — CLI-плагины (npm-пакеты, сразу после CLI)</h2>
+  <ul>
+    <li>Формат: npm-пакеты <code>zerf-plugin-*</code>; установка <code>zerf plugin install &lt;name&gt;</code>; команды плагина появляются в CLI как родные.</li>
+    <li>Плагин получает объект API-клиента с токеном и правами текущего пользователя — как Obsidian-плагин получает <code>app</code>.</li>
+    <li>Исполняется локально на машине пользователя — сандбокс не нужен (та же модель доверия, что у npm/Obsidian).</li>
+    <li>Примеры, которые напишем сами для затравки: экспорт дневника в Markdown-архив, интеграция с git, статистика в терминале, импорт из Todoist.</li>
+  </ul>
+
+  <h2>Уровень 3 — Веб-плагины (сандбокс, фаза 5)</h2>
+  <ul>
+    <li>Манифест: имя, версия, права (<code>notes:read</code>, <code>tasks:write</code>, <code>network</code>) — пользователь видит и одобряет права при установке.</li>
+    <li>Исполнение в изолированном iframe / Web Worker; связь с приложением через postMessage-мост к ограниченному набору операций — произвольный доступ к DOM и данным невозможен.</li>
+    <li>UI-слоты: команда, панель, вид (карточка на дашборде), пункт в меню заметки. Рендер через безопасный поднабор HTML/CSS.</li>
+    <li><strong>Серверного исполнения чужого кода нет</strong> — только клиентские плагины плюс доверенные официальные автоматизации. Это снимает 90% проблем безопасности.</li>
+  </ul>
+
+  <h2>Маркетплейс</h2>
+  <ul>
+    <li>Каталог: в админке (модерация) и на сайте (установка в один клик); для CLI — реестр npm-пакетов.</li>
+    <li>Версионирование semver, счётчики установок, отзывы позже; плагины бесплатны на первом этапе.</li>
+    <li>В дальнейшем — rev-share для авторов (процент Pro-подписок, приведённых плагином) — сильный стимул для комьюнити.</li>
+  </ul>
+  <div class="note">Порядок внедрения: API → CLI-плагины (дёшево, локальное доверие) → веб-плагины (сандбокс) → маркетплейс. Не пытаться сделать всё сразу: сначала 5–7 собственных плагинов-примеров, потом открытие для сообщества.</div>
+  </div>
+
+  <!-- TARIFFS + METRICS -->
+  <div class="section section-start">
+  <h1><span class="num">13</span>Тарифная сетка экосистемы</h1>
+  <table>
+    <thead><tr><th style="width:16%">Тариф</th><th style="width:46%">Что входит</th><th>Лимиты ИИ</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Free</strong></td><td>Сайт + боты, базовые лимиты задач/напоминаний, текстовый поиск</td><td>3 запроса ask/день — попробовать</td></tr>
+      <tr><td><strong>Plus · 99 ₽/мес</strong></td><td>Всё из Free + <strong>CLI</strong>, клиппер, безлимит заметок/Siri/целей, daily notes,desktop-компаньон</td><td>10 ask/день, автовыжимки статей</td></tr>
+      <tr><td><strong>Pro · 299 ₽/мес</strong></td><td>Всё из Plus + <strong>ask безлимит</strong>, автоматизации, публикация, версионность, RSS-кюратор, повышенные API-лимиты</td><td>безлимит, приоритетная очередь</td></tr>
+      <tr><td><strong>Corp</strong></td><td>Всё из Pro + воркспейсы и командный доступ, общие проекты, позже SSO</td><td>командные пулы лимитов</td></tr>
+    </tbody>
+  </table>
+
+  <h1><span class="num">14</span>Метрики успеха</h1>
+  <p>Оцениваем не количество фич, а три цифры (все три — в админке с фазы 0):</p>
+  <table>
+    <thead><tr><th style="width:26%">Метрика</th><th style="width:34%">Что означает</th><th>Какая фаза на неё влияет</th></tr></thead>
+    <tbody>
+      <tr><td><strong>DAU / WAU</strong></td><td>Ежедневная привычка пользоваться системой</td><td>CLI, daily notes, дайджесты</td></tr>
+      <tr><td><strong>Retention D7 / D30</strong></td><td>Люди возвращаются после первой недели</td><td>ask, автоматизации, расширение</td></tr>
+      <tr><td><strong>Конверсия Free → Plus → Pro</strong></td><td>Готовность платить за экосистему</td><td>ask-проба (5+ запросов → покупка), CLI, плагины</td></tr>
+    </tbody>
+  </table>
+  <div class="goal"><b>Правило:</b> каждая фаза после релиза наблюдает за своей метрикой 2–4 недели; следующая фаза стартует только если метрика предыдущей не падает.</div>
+
+  <h1><span class="num">15</span>Чего сознательно не делаем</h1>
+  <ul>
+    <li><strong>Конкурент Google / свой индекс интернета</strong> — это корпорация с миллиардными затратами, а не фича. Наша ниша: поиск, который знает пользователя, поверх чужого индекса (Tavily).</li>
+    <li><strong>Большой рефакторинг «выделение ядра» до старта CLI</strong> — API уже ядро; двигаемся инкрементально.</li>
+    <li><strong>Серверное исполнение плагинов пользователей</strong> — только клиентские плагины и доверенные автоматизации.</li>
+    <li><strong>Canvas/whiteboards, свой браузер, нативные мобильные приложения</strong> — дорого, слабый эффект на текущем этапе; PWA закрывает мобильный кейс.</li>
+    <li><strong>Фазы 3–5 раньше 1–2</strong> — клиппер без семантического поиска просто копилка статей; автоматизации без стабильного ядра — источник багов.</li>
+  </ul>
+
+  <h1><span class="num">16</span>Первые шаги — с чего начинаем</h1>
+  <div class="card tinted">
+    <p><strong>Неделя 1:</strong> PAT-токены + <code>zerf login</code> через код из бота; таблица <code>ActivityLog</code>; метрики DAU/WAU в админку.</p>
+    <p><strong>Неделя 2:</strong> каркас CLI на ink: авторизация, <code>today</code>, <code>new</code>, <code>find</code>, <code>done</code>, <code>sync</code>, <code>open</code>.</p>
+    <p><strong>Недели 3–4:</strong> REPL-агент (Groq function calling поверх API), привычки/календарь/друзья в CLI, публикация пакета в npm.</p>
+    <p><strong>Параллельно:</strong> pgvector + embeddings-бэкфилг — фундамент поиска готов к фазе 2.</p>
+  </div>
+
+  <div class="footer-note">Zerf AI · Долгосрочный план развития экосистемы · версия 1.0 · август 2026 · zeprh.vercel.app</div>
+  </div>
+
+</div>
+</body>
+</html>

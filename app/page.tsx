@@ -19,6 +19,7 @@ import { NotesView }    from '@/components/views/notes-view'
 import { CalendarView } from '@/components/views/calendar-view'
 import { StatsView }    from '@/components/views/stats-view'
 import { FriendsView }  from '@/components/views/friends-view'
+import { TeamsView }    from '@/components/views/teams-view'
 import { SettingsView } from '@/components/views/settings-view'
 
 import { ProjectsView } from '@/components/views/projects-view'
@@ -72,7 +73,7 @@ export function AppShell() {
         setTimeout(() => handleOpenVoice(), 300)
       }
 
-      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'projects', 'settings'].includes(view)) {
+      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'teams', 'projects', 'settings'].includes(view)) {
         dispatch({ type: 'SET_VIEW', view: view as any })
       }
     }
@@ -94,6 +95,7 @@ export function AppShell() {
     calendar:   <CalendarView />,
     stats:      <StatsView />,
     friends:    <FriendsView />,
+    teams:      <TeamsView />,
     settings:   <SettingsView />,
     projects:   <ProjectsView />,
     admin:      <AdminView />,

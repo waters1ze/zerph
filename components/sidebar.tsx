@@ -9,7 +9,8 @@ import { ChevronRight, Circle, User } from 'lucide-react'
 
 import {
   Sun, Inbox, CheckSquare, FileText, Calendar, Clock,
-  Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Crown, Network
+  Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Crown, Network,
+  UserCheck, Building2
 } from 'lucide-react'
 
 interface NavItem {
@@ -31,7 +32,8 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { id: 'goals',      label: 'Цели',           icon: Target,      section: 'planning' },
   { id: 'projects',   label: 'Проекты',        icon: FolderOpen,  section: 'planning' },
   { id: 'stats',      label: 'Аналитика',      icon: BarChart2,   section: 'аналитика' },
-  { id: 'friends',    label: 'Команда',        icon: Users,       section: 'совместная работа' },
+  { id: 'friends',    label: 'Друзья',         icon: UserCheck,   section: 'совместная работа' },
+  { id: 'teams',      label: 'Команды',        icon: Building2,   section: 'совместная работа' },
   { id: 'settings',   label: 'Настройки',      icon: Settings,    section: 'аккаунт' },
 ]
 

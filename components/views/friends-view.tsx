@@ -479,19 +479,19 @@ export function FriendsView() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            Команда и совместная работа
+            <UserCheck className="w-5 h-5 text-primary" />
+            Друзья и контакты
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Приглашайте друзей и коллег по @username для делегирования и совместного ведения задач
+            Обменивайтесь заметками и задачами, просматривайте расписание и дни рождения друзей
           </p>
         </div>
         <button
           onClick={() => setShowInvite(true)}
-          className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm shrink-0"
+          className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm shrink-0 cursor-pointer"
         >
           <UserPlus className="w-4 h-4" />
-          <span>+ Пригласить по @username</span>
+          <span>+ Добавить друга</span>
         </button>
       </div>
 
@@ -504,13 +504,13 @@ export function FriendsView() {
             <div className="flex items-center gap-2.5 min-w-0">
               <Share2 className="w-4 h-4 text-primary shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">Инвайт-ссылка вашей команды</p>
+                <p className="text-xs font-bold text-foreground truncate">Ваша ссылка для добавления в друзья</p>
                 <p className="text-[11px] text-muted-foreground truncate">{inviteLink}</p>
               </div>
             </div>
             <button
               onClick={copyInviteLink}
-              className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold shrink-0 hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold shrink-0 hover:opacity-90 transition-opacity cursor-pointer"
             >
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
               <span>{copied ? 'Скопировано!' : 'Копировать'}</span>
@@ -524,7 +524,7 @@ export function FriendsView() {
                 <div className="flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-amber-500" />
                   <p className="text-xs font-bold text-foreground">
-                    Входящие приглашения в команду ({pendingRequests.length})
+                    Входящие заявки в друзья ({pendingRequests.length})
                   </p>
                 </div>
                 <button
@@ -702,19 +702,19 @@ export function FriendsView() {
 
         {/* Right Column: Shared Tasks, Birthdays & Access Security (4 cols on large screens) */}
         <div className="hidden lg:flex lg:col-span-5 xl:col-span-4 flex-col gap-4 sticky top-2">
-          {/* Team Tasks Section */}
+          {/* Friends Tasks Section */}
           <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <CheckSquare className="w-4 h-4 text-primary" />
-                Командные и порученные задачи
+                Задачи с друзьями
               </span>
               <span className="text-[11px] font-semibold text-muted-foreground">({teamTasks.length})</span>
             </div>
 
             {teamTasks.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2 leading-relaxed">
-                Пока нет общих или порученных задач. Поручите задачу в боте голосом или добавьте участника в редакторе задачи!
+                Пока нет общих задач с друзьями. Выберите друга и поручите задачу в один клик!
               </p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">

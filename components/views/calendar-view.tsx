@@ -6,10 +6,12 @@ import { useApp } from '@/lib/store'
 import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ArrowLeft,
-  Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon
+  Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon,
+  RefreshCw, Smartphone
 } from 'lucide-react'
 import type { Task } from '@/lib/types'
 import { TaskItem } from '@/components/task-item'
+import { CalendarSyncModal } from '@/components/calendar-sync-modal'
 
 // ── Priority color dots & badges ──────────────────────────────────────────────
 const PRIORITY_DOT: Record<string, string> = {
@@ -288,8 +290,9 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
 // ── Main CalendarView ─────────────────────────────────────────────────────────
 export function CalendarView() {
   const { state } = useApp()
-  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [syncModalOpen, setSyncModalOpen] = useState(false)
 
   const today = toYMD(new Date())
   const year = currentMonth.getFullYear()
@@ -370,7 +373,15 @@ export function CalendarView() {
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setSyncModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-all cursor-pointer"
+                  title="Синхронизация с Apple / Google Календарем"
+                >
+                  <CalendarIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Синхронизация</span>
+                </button>
                 <button
                   onClick={prevMonth}
                   className="w-8 h-8 flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
@@ -489,6 +500,12 @@ export function CalendarView() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Calendar Sync Modal */}
+      <CalendarSyncModal
+        isOpen={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+      />
     </div>
   )
 }

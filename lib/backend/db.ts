@@ -2026,6 +2026,10 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               streakDays: 0,
               lastStreakDate: null,
               ttsEnabled: false,
+              referralRewarded: false,
+              trialActivatedAt: null,
+              googleCalendarToken: null,
+              googleCalendarSync: false,
               addedAt: new Date(),
             }
           }

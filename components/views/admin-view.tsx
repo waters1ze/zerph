@@ -6,7 +6,8 @@ import {
   Shield, Crown, Users, Sparkles, Check, Search, RefreshCw,
   Send, UserX, AlertCircle, Copy, Clock, MessageSquare, Mic,
   CheckCircle2, XCircle, ChevronDown, RotateCcw, Megaphone, Trash2,
-  Ticket, Percent, Tag, Plus
+  Ticket, Percent, Tag, Plus, BarChart2, TrendingUp, TrendingDown,
+  DollarSign, UserCheck, Activity, Calendar
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/store'
@@ -18,9 +19,13 @@ interface AdminUser {
   lastName: string | null
   username: string | null
   plan: string
+  rawPlan?: string
   isPremiumActive: boolean
   daysRemaining: number
   subscriptionExpiry: string | null
+  trialActivatedAt?: string | null
+  isTrialActive?: boolean
+  referredBy?: string | null
   isAdmin: boolean
   isRoot: boolean
   voiceCountToday: number
@@ -41,6 +46,18 @@ interface AdminStats {
   totalNotes: number
 }
 
+interface AdminMetrics {
+  dau: number
+  wau: number
+  mrr: number
+  retentionD1: number | null
+  retentionD7: number | null
+  conversionPct: number
+  newUsersWeek: number
+  newUsersMonth: number
+  registrationsChart: { date: string; count: number }[]
+}
+
 interface AdminPromoCode {
   id: string
   code: string
@@ -55,11 +72,12 @@ interface AdminPromoCode {
   createdAt: string
 }
 
-type FilterPlan = 'all' | 'premium' | 'free' | 'admin'
+type FilterPlan = 'all' | 'sub' | 'plus' | 'pro' | 'corp' | 'trial' | 'free' | 'admin'
 
 export function AdminView() {
   const confirm = useConfirmDialog()
-  const [activeAdminTab, setActiveAdminTab] = useState<'users' | 'promocodes'>('users')
+  const [activeAdminTab, setActiveAdminTab] = useState<'users' | 'promocodes' | 'metrics'>('users')
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -80,6 +98,7 @@ export function AdminView() {
 
   // Modals state
   const [premiumModalUser, setPremiumModalUser] = useState<AdminUser | null>(null)
+  const [modalPlan, setModalPlan] = useState<'plus' | 'pro' | 'corp'>('plus')
   const [customDays, setCustomDays] = useState('30')
   const [messageModalUser, setMessageModalUser] = useState<AdminUser | null>(null)
   const [directMsgText, setDirectMsgText] = useState('')
@@ -120,6 +139,7 @@ export function AdminView() {
       if (data.success) {
         setUsers(data.users || [])
         setStats(data.stats || null)
+        setMetrics(data.metrics || null)
       } else {
         showNotice('error', data.error || 'Ошибка загрузки данных админа')
       }
@@ -256,8 +276,8 @@ export function AdminView() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  // Action: Grant / Revoke Premium
-  const handleSubscriptionAction = async (chatId: string, action: 'grant' | 'revoke', days = 30) => {
+  // Action: Grant / Revoke Subscription
+  const handleSubscriptionAction = async (chatId: string, action: 'grant' | 'revoke', days = 30, plan: 'plus' | 'pro' | 'corp' = modalPlan) => {
     setActionLoading(`sub_${chatId}`)
     try {
       const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
@@ -268,7 +288,7 @@ export function AdminView() {
           'Content-Type': 'application/json',
           ...(qChatId ? { 'x-chat-id': qChatId } : {})
         },
-        body: JSON.stringify({ chatId, action, days })
+        body: JSON.stringify({ chatId, action, days, plan })
       })
       const data = await res.json()
       if (data.success) {
@@ -473,7 +493,11 @@ export function AdminView() {
     if (!matchesSearch) return false
 
     // Filter pill
-    if (filter === 'premium') return u.isPremiumActive
+    if (filter === 'sub') return u.isPremiumActive
+    if (filter === 'plus') return u.plan === 'plus' && u.isPremiumActive
+    if (filter === 'pro') return u.plan === 'pro' && u.isPremiumActive
+    if (filter === 'corp') return u.plan === 'corp' && u.isPremiumActive
+    if (filter === 'trial') return Boolean(u.isTrialActive)
     if (filter === 'free') return !u.isPremiumActive
     if (filter === 'admin') return u.isAdmin
     return true
@@ -608,7 +632,20 @@ export function AdminView() {
           )}
         >
           <Ticket className="w-4 h-4" />
-          <span>🎟️ Управление промокодами ({promoCodes.length})</span>
+          <span>🎟️ Промокоды ({promoCodes.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('metrics')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all',
+            activeAdminTab === 'metrics'
+              ? 'bg-primary text-primary-foreground shadow-xs'
+              : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <BarChart2 className="w-4 h-4" />
+          <span>📊 Аналитика</span>
         </button>
       </div>
 
@@ -747,22 +784,28 @@ export function AdminView() {
               />
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-              {(['all', 'premium', 'free', 'admin'] as FilterPlan[]).map(p => (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+              {[
+                { id: 'all' as FilterPlan, label: `Все (${users.length})` },
+                { id: 'sub' as FilterPlan, label: `⭐ С подпиской (${users.filter(u => u.isPremiumActive).length})` },
+                { id: 'plus' as FilterPlan, label: `✨ Plus (${users.filter(u => u.plan === 'plus' && u.isPremiumActive).length})` },
+                { id: 'pro' as FilterPlan, label: `🚀 Pro (${users.filter(u => u.plan === 'pro' && u.isPremiumActive).length})` },
+                { id: 'corp' as FilterPlan, label: `🏢 Corp (${users.filter(u => u.plan === 'corp' && u.isPremiumActive).length})` },
+                { id: 'trial' as FilterPlan, label: `⏳ Триал (${users.filter(u => u.isTrialActive).length})` },
+                { id: 'free' as FilterPlan, label: `🆓 Free (${users.filter(u => !u.isPremiumActive).length})` },
+                { id: 'admin' as FilterPlan, label: `👑 Админы (${users.filter(u => u.isAdmin).length})` },
+              ].map(item => (
                 <button
-                  key={p}
-                  onClick={() => setFilter(p)}
+                  key={item.id}
+                  onClick={() => setFilter(item.id)}
                   className={cn(
-                    'px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
-                    filter === p
+                    'px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer',
+                    filter === item.id
                       ? 'bg-foreground text-background font-semibold shadow-sm'
                       : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {p === 'all' && `Все (${users.length})`}
-                  {p === 'premium' && `⭐ Premium (${users.filter(u => u.isPremiumActive).length})`}
-                  {p === 'free' && `🆓 Free (${users.filter(u => !u.isPremiumActive).length})`}
-                  {p === 'admin' && `👑 Админы (${users.filter(u => u.isAdmin).length})`}
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -835,10 +878,28 @@ export function AdminView() {
                             ) : null}
 
                             {/* Plan Badge */}
-                            {u.isPremiumActive ? (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wide uppercase border border-emerald-500/30 flex items-center gap-1">
-                                <Sparkles className="w-3 h-3" /> Premium
-                                {u.daysRemaining > 0 && u.daysRemaining < 999 && ` (${u.daysRemaining} дн.)`}
+                            {u.isRoot ? (
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold tracking-wide uppercase border border-indigo-500/30 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" /> Corp (Lifetime)
+                              </span>
+                            ) : u.isTrialActive ? (
+                              <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 text-[10px] font-bold tracking-wide uppercase border border-cyan-500/30 flex items-center gap-1">
+                                ⏳ Триал (24ч)
+                              </span>
+                            ) : u.isPremiumActive ? (
+                              <span className={cn(
+                                'px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border flex items-center gap-1',
+                                u.plan === 'corp'
+                                  ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                                  : u.plan === 'pro'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              )}>
+                                <Sparkles className="w-3 h-3" />
+                                <span>{u.plan.toUpperCase()}</span>
+                                {u.daysRemaining > 0 && u.daysRemaining < 999 && (
+                                  <span className="opacity-80">({u.daysRemaining} дн.)</span>
+                                )}
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-semibold tracking-wide uppercase border border-border">
@@ -851,14 +912,42 @@ export function AdminView() {
                           <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
                             <button
                               onClick={() => copyToClipboard(u.chatId)}
-                              className="hover:text-foreground font-mono bg-muted/60 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors"
+                              className="hover:text-foreground font-mono bg-muted/60 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
                               title="Нажмите, чтобы скопировать Chat ID"
                             >
                               <span>ID: {u.chatId}</span>
                               {copiedId === u.chatId ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 opacity-60" />}
                             </button>
 
+                            {/* Detailed Subscription status line */}
+                            {u.isRoot ? (
+                              <span className="text-indigo-500 dark:text-indigo-400 font-semibold">• Бессрочный доступ (Владелец)</span>
+                            ) : u.isTrialActive ? (
+                              <span className="text-cyan-500 font-medium">• 1-дневный триал активен</span>
+                            ) : u.isPremiumActive && u.subscriptionExpiry ? (
+                              <span className="text-foreground/90 font-medium">
+                                • Тариф {u.plan.toUpperCase()} до {new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU')} ({u.daysRemaining} дн.)
+                              </span>
+                            ) : u.subscriptionExpiry && !u.isPremiumActive ? (
+                              <span className="text-rose-500">• Подписка истекла {new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU')}</span>
+                            ) : (
+                              <span>• Тариф Free</span>
+                            )}
+
                             <span>• Сегодня: 🎙 {u.voiceCountToday} | 📌 {u.notesCountToday} | 💬 {u.chatMessagesToday}</span>
+
+                            {u.referredBy && (
+                              <span className="bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
+                                👤 Приглашён ID: {u.referredBy}
+                              </span>
+                            )}
+
+                            {u.referralCount > 0 && (
+                              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                                🎁 Рефералов: {u.referralCount}
+                              </span>
+                            )}
+
                             {u.lastActiveAt && (
                               <span>• Был: {new Date(u.lastActiveAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                             )}
@@ -868,23 +957,26 @@ export function AdminView() {
 
                       {/* Action Controls */}
                       <div className="flex items-center gap-2 flex-wrap shrink-0">
-                        {/* Subscription Dropdown / Button */}
+                        {/* Subscription Management Button */}
                         <button
-                          onClick={() => setPremiumModalUser(u)}
+                          onClick={() => {
+                            setPremiumModalUser(u)
+                            setModalPlan(u.plan === 'pro' ? 'pro' : u.plan === 'corp' ? 'corp' : 'plus')
+                          }}
                           disabled={isActionRunning}
-                          className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-medium border border-amber-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-medium border border-amber-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>{u.isPremiumActive ? 'Изменить Premium' : 'Выдать Premium'}</span>
+                          <span>Управление подпиской</span>
                         </button>
 
-                        {/* Revoke Premium */}
-                        {u.isPremiumActive && (
+                        {/* Revoke Subscription */}
+                        {u.isPremiumActive && !u.isRoot && (
                           <button
                             onClick={() => handleSubscriptionAction(u.chatId, 'revoke')}
                             disabled={isActionRunning}
-                            className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium border border-rose-500/20 transition-all disabled:opacity-50"
-                            title="Отозвать Premium (сбросить на Free)"
+                            className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium border border-rose-500/20 transition-all disabled:opacity-50 cursor-pointer"
+                            title="Отозвать подписку (сбросить на Free)"
                           >
                             <UserX className="w-3.5 h-3.5" />
                           </button>
@@ -1014,9 +1106,10 @@ export function AdminView() {
                     onChange={e => setNewTargetPlan(e.target.value)}
                     className="w-full h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary cursor-pointer"
                   >
-                    <option value="all">Любой тариф (Premium & Безлимит)</option>
-                    <option value="premium">Только Zerf Premium (99 ₽)</option>
-                    <option value="unlimited">Только Zerf Безлимит (299 ₽)</option>
+                    <option value="all">Любой тариф (Plus, Pro, Corp)</option>
+                    <option value="plus">Только Zerf Plus (99 ₽)</option>
+                    <option value="pro">Только Zerf Pro (299 ₽)</option>
+                    <option value="corp">Только Zerf Corp</option>
                   </select>
                 </div>
 
@@ -1182,59 +1275,123 @@ export function AdminView() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2 text-amber-500 font-bold">
                   <Sparkles className="w-5 h-5" />
-                  <span>Управление Premium</span>
+                  <span>Управление подпиской пользователя</span>
                 </div>
                 <button
                   onClick={() => setPremiumModalUser(null)}
-                  className="text-muted-foreground hover:text-foreground text-xs"
+                  className="text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
                 >
-                  Закрыть ✕
+                  ✕
                 </button>
               </div>
 
-              <div className="p-3 rounded-xl bg-muted/50 text-xs text-foreground space-y-1">
-                <p className="font-semibold">{[premiumModalUser.firstName, premiumModalUser.lastName].filter(Boolean).join(' ') || premiumModalUser.chatId}</p>
-                <p className="text-muted-foreground">ID: {premiumModalUser.chatId} {premiumModalUser.username && `• ${premiumModalUser.username}`}</p>
-                <p className="text-muted-foreground">
-                  Текущий статус: {premiumModalUser.isPremiumActive ? `✨ Premium (осталось ${premiumModalUser.daysRemaining} дн.)` : 'Free (Бесплатный)'}
-                </p>
+              <div className="p-3.5 rounded-xl bg-muted/50 text-xs text-foreground space-y-1.5 border border-border/60">
+                <p className="font-bold text-sm">{[premiumModalUser.firstName, premiumModalUser.lastName].filter(Boolean).join(' ') || premiumModalUser.chatId}</p>
+                <p className="text-muted-foreground font-mono">ID: {premiumModalUser.chatId} {premiumModalUser.username && `• ${premiumModalUser.username}`}</p>
+                <div className="pt-1 flex items-center gap-2 flex-wrap">
+                  <span className="text-muted-foreground">Текущий тариф:</span>
+                  <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary font-bold uppercase">
+                    {premiumModalUser.plan}
+                  </span>
+                  {premiumModalUser.isPremiumActive && premiumModalUser.subscriptionExpiry ? (
+                    <span className="text-muted-foreground">
+                      до {new Date(premiumModalUser.subscriptionExpiry).toLocaleDateString('ru-RU')} ({premiumModalUser.daysRemaining} дн.)
+                    </span>
+                  ) : premiumModalUser.isRoot ? (
+                    <span className="text-indigo-500 font-semibold">Бессрочно (Владелец)</span>
+                  ) : (
+                    <span className="text-muted-foreground">Бесплатный</span>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
+              {/* 1. Target Plan Selector */}
+              <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Выберите период начисления:
+                  1. Выберите тариф:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalPlan('plus')}
+                    className={cn(
+                      'p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5',
+                      modalPlan === 'plus'
+                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold shadow-xs'
+                        : 'bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    <span className="text-xs">✨ Plus</span>
+                    <span className="text-[10px] opacity-70">99 ₽/мес</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalPlan('pro')}
+                    className={cn(
+                      'p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5',
+                      modalPlan === 'pro'
+                        ? 'bg-amber-500/15 border-amber-500 text-amber-600 dark:text-amber-400 font-bold shadow-xs'
+                        : 'bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    <span className="text-xs">🚀 Pro</span>
+                    <span className="text-[10px] opacity-70">299 ₽/мес</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalPlan('corp')}
+                    className={cn(
+                      'p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5',
+                      modalPlan === 'corp'
+                        ? 'bg-indigo-500/15 border-indigo-500 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs'
+                        : 'bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    <span className="text-xs">🏢 Corp</span>
+                    <span className="text-[10px] opacity-70">Безлимит</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Duration Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  2. Выберите срок начисления:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 7)}
-                    className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left"
+                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 7, modalPlan)}
+                    className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left cursor-pointer"
                   >
                     ✦ +7 дней (Спринт)
                   </button>
                   <button
-                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 30)}
-                    className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left"
+                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 30, modalPlan)}
+                    className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left cursor-pointer"
                   >
                     ✦ +30 дней (1 месяц)
                   </button>
                   <button
-                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 90)}
-                    className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left"
+                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 90, modalPlan)}
+                    className="p-2.5 rounded-xl bg-muted/60 hover:bg-primary/20 hover:border-primary/40 border border-border text-xs font-medium transition-all text-left cursor-pointer"
                   >
-                    ✦ +90 дней (Квартал)
+                    ✦ +90 дней (3 месяца)
                   </button>
                   <button
-                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 365)}
-                    className="p-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all text-left"
+                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', 365, modalPlan)}
+                    className="p-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all text-left cursor-pointer"
                   >
                     ★ +1 год (365 дней)
                   </button>
                 </div>
               </div>
 
+              {/* 3. Custom days & Revoke */}
               <div className="space-y-2 pt-2 border-t border-border/60">
                 <label className="text-xs font-medium text-muted-foreground">Или введите количество дней вручную:</label>
                 <div className="flex gap-2">
@@ -1247,13 +1404,33 @@ export function AdminView() {
                     className="flex-1 px-3 py-2 text-xs rounded-xl bg-muted/50 border border-border outline-none text-foreground"
                   />
                   <button
-                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', parseInt(customDays, 10) || 30)}
-                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs transition-all hover:brightness-110"
+                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'grant', parseInt(customDays, 10) || 30, modalPlan)}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs transition-all hover:brightness-110 cursor-pointer"
                   >
-                    Выдать
+                    Выдать {modalPlan.toUpperCase()}
                   </button>
                 </div>
               </div>
+
+              {/* Danger Zone: Revoke */}
+              {premiumModalUser.isPremiumActive && !premiumModalUser.isRoot && (
+                <div className="pt-2 border-t border-border/60 flex justify-between items-center">
+                  <button
+                    type="button"
+                    onClick={() => handleSubscriptionAction(premiumModalUser.chatId, 'revoke')}
+                    className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Снять подписку (Free)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPremiumModalUser(null)}
+                    className="px-3 py-1.5 rounded-xl bg-muted text-foreground text-xs font-semibold hover:bg-muted/80 cursor-pointer"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
@@ -1315,6 +1492,144 @@ export function AdminView() {
         )}
       </AnimatePresence>
 
+      {/* ── TAB 3: Analytics & Metrics ── */}
+      {activeAdminTab === 'metrics' && (
+        <div className="space-y-5">
+          {!metrics ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+              <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Загружаем метрики…
+            </div>
+          ) : (
+            <>
+              {/* Row 1: Core KPI cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>DAU</span>
+                    <Activity className="w-4 h-4 text-emerald-500" />
+                  </div>
+                  <span className="text-2xl font-bold text-emerald-500">{metrics.dau}</span>
+                  <span className="text-[11px] text-muted-foreground">активны сегодня</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>WAU</span>
+                    <Calendar className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <span className="text-2xl font-bold text-blue-500">{metrics.wau}</span>
+                  <span className="text-[11px] text-muted-foreground">за 7 дней</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>MRR</span>
+                    <DollarSign className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <span className="text-2xl font-bold text-amber-500">{metrics.mrr.toLocaleString('ru')} ₽</span>
+                  <span className="text-[11px] text-muted-foreground">выручка в месяц</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Конверсия</span>
+                    <UserCheck className="w-4 h-4 text-purple-500" />
+                  </div>
+                  <span className="text-2xl font-bold text-purple-500">{metrics.conversionPct}%</span>
+                  <span className="text-[11px] text-muted-foreground">free → paid</span>
+                </div>
+              </div>
+
+              {/* Row 2: Retention + New users */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Retention D1</span>
+                    {metrics.retentionD1 !== null && metrics.retentionD1 >= 40
+                      ? <TrendingUp className="w-4 h-4 text-emerald-500" />
+                      : <TrendingDown className="w-4 h-4 text-rose-400" />}
+                  </div>
+                  <span className={`text-2xl font-bold ${metrics.retentionD1 === null ? 'text-muted-foreground' : metrics.retentionD1 >= 40 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                    {metrics.retentionD1 !== null ? `${metrics.retentionD1}%` : '—'}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">вернулись на 2-й день</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Retention D7</span>
+                    {metrics.retentionD7 !== null && metrics.retentionD7 >= 20
+                      ? <TrendingUp className="w-4 h-4 text-emerald-500" />
+                      : <TrendingDown className="w-4 h-4 text-rose-400" />}
+                  </div>
+                  <span className={`text-2xl font-bold ${metrics.retentionD7 === null ? 'text-muted-foreground' : metrics.retentionD7 >= 20 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                    {metrics.retentionD7 !== null ? `${metrics.retentionD7}%` : '—'}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">вернулись на 7-й день</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Новых за 7 дн</span>
+                    <Users className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-blue-400">+{metrics.newUsersWeek}</span>
+                  <span className="text-[11px] text-muted-foreground">регистраций</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Новых за 30 дн</span>
+                    <Users className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-2xl font-bold text-primary">+{metrics.newUsersMonth}</span>
+                  <span className="text-[11px] text-muted-foreground">регистраций</span>
+                </div>
+              </div>
+
+              {/* Registrations bar chart */}
+              <div className="p-5 rounded-2xl bg-card border border-border shadow-sm">
+                <div className="flex items-center gap-2 mb-5">
+                  <BarChart2 className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-bold text-foreground">Регистрации за 30 дней</h3>
+                </div>
+                {(() => {
+                  const chart = metrics.registrationsChart
+                  const maxCount = Math.max(...chart.map(d => d.count), 1)
+                  return (
+                    <div className="flex items-end gap-0.5 h-28 w-full">
+                      {chart.map((d) => {
+                        const pct = (d.count / maxCount) * 100
+                        const isToday = d.date === new Date().toISOString().slice(0, 10)
+                        const dayLabel = new Date(d.date).getDate()
+                        return (
+                          <div key={d.date} className="flex flex-col items-center flex-1 h-full justify-end gap-0.5 group relative" title={`${d.date}: ${d.count} рег.`}>
+                            <div
+                              style={{ height: `${Math.max(pct, d.count > 0 ? 6 : 1)}%` }}
+                              className={`w-full rounded-t transition-all ${isToday ? 'bg-primary' : 'bg-primary/30 group-hover:bg-primary/60'}`}
+                            />
+                            {/* tooltip on hover */}
+                            {d.count > 0 && (
+                              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border text-[10px] text-foreground px-1.5 py-0.5 rounded-md shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                {d.count}
+                              </div>
+                            )}
+                            {/* show day number every 5 days */}
+                            {(dayLabel === 1 || dayLabel % 5 === 0 || isToday) && (
+                              <span className={`text-[9px] ${isToday ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{dayLabel}</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* MODAL: Mass Broadcast */}
       <AnimatePresence>
         {broadcastOpen && (
@@ -1343,7 +1658,7 @@ export function AdminView() {
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { id: 'all', label: `Всем (${users.length})` },
-                    { id: 'premium', label: `Только Premium (${users.filter(u => u.isPremiumActive).length})` },
+                    { id: 'premium', label: `С подпиской (${users.filter(u => u.isPremiumActive).length})` },
                     { id: 'free', label: `Только Free (${users.filter(u => !u.isPremiumActive).length})` }
                   ].map(item => (
                     <button

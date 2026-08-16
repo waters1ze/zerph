@@ -7,7 +7,7 @@ import { useLanguage } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   Sun, Moon, Monitor, Bell, BellOff, Link, Key,
-  User, Mail, Palette, Save, Check, MessageSquare,
+  User, Users, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle
@@ -15,6 +15,9 @@ import {
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PLAN_CATALOG } from '@/lib/plans'
+import { GiftSection } from '@/components/settings/gift-section'
+import { ImportExportSection } from '@/components/settings/import-export-section'
+import { TeamsSection } from '@/components/settings/teams-section'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -75,7 +78,7 @@ const ACCENT_COLORS = [
   { id: '#0d9488', label: 'Морской', color: '#0d9488' },
 ] as const
 
-type SettingsTab = 'account' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data'
+type SettingsTab = 'account' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data' | 'teams'
 
 export function SettingsView() {
   const { state, dispatch } = useApp()
@@ -424,10 +427,11 @@ export function SettingsView() {
 
   const SECTIONS = [
     {
-      group: 'АККАУНТ',
+      group: 'АККАУНТ & КОМАНДЫ',
       items: [
         { id: 'account' as SettingsTab, label: 'Профиль & Вход', icon: User, desc: 'Имя, часовой пояс, Email, Telegram, VK' },
-        { id: 'subscription' as SettingsTab, label: 'Тарифные планы', icon: Sparkles, desc: 'Подписка Free, Plus, Pro, Corp' },
+        { id: 'subscription' as SettingsTab, label: 'Тарифные планы & Подарки', icon: Sparkles, desc: 'Подписка Free, Plus, Pro, Corp, подарки' },
+        { id: 'teams' as SettingsTab, label: 'Команды & Проекты', icon: Users, desc: 'Совместная работа, роли участников, приглашения' },
       ],
     },
     {
@@ -1702,64 +1706,16 @@ export function SettingsView() {
               </div>
             </div>
           </Section>
+
+          {/* Gift Subscription Section */}
+          <GiftSection />
         </div>
       )}
 
       {/* ── TAB 8: Data & Backup ─────────────────────────────────────────────── */}
       {activeTab === 'data' && (
         <div className="space-y-6">
-          <Section title="Резервное копирование и экспорт">
-            <Row label="Экспорт всех данных (JSON)" description="Скачать полный архив задач, заметок, целей и проектов">
-              <button
-                onClick={() => {
-                  const { tasks, goals, notes, projects, habits, scheduleGroups } = state
-                  const data = JSON.stringify({ exportedAt: new Date().toISOString(), tasks, goals, notes, projects, habits, scheduleGroups }, null, 2)
-                  const blob = new Blob([data], { type: 'application/json' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `zerf-backup-${new Date().toISOString().slice(0, 10)}.json`
-                  a.click()
-                  URL.revokeObjectURL(url)
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Скачать JSON</span>
-              </button>
-            </Row>
-
-            <Row label="Импорт данных из архива (JSON)" description="Восстановить или объединить задачи и заметки из ранее скачанного файла">
-              <div className="flex items-center gap-2">
-                <input
-                  ref={importFileRef}
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={handleImportJson}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => importFileRef.current?.click()}
-                  className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Загрузить JSON</span>
-                </button>
-              </div>
-            </Row>
-
-            {importStatus && (
-              <div className={cn(
-                'p-4 rounded-xl text-xs font-medium border flex items-center gap-2',
-                importStatus.type === 'success'
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                  : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
-              )}>
-                {importStatus.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                <span>{importStatus.text}</span>
-              </div>
-            )}
-          </Section>
+          <ImportExportSection />
 
           <Section title="Сброс локального кэша">
             <Row label="Очистить локальный кэш браузера" description="Перезагружает актуальные данные из облачной базы данных">
@@ -1786,6 +1742,11 @@ export function SettingsView() {
             </Row>
           </Section>
         </div>
+      )}
+
+      {/* ── TAB 9: Team & Corporate Workspaces ─────────────────────────────────── */}
+      {activeTab === 'teams' && (
+        <TeamsSection />
       )}
 
         </div>

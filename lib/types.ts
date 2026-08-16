@@ -16,6 +16,7 @@ export type View =
   | 'chat'
   | 'stats'
   | 'friends'
+  | 'teams'
   | 'settings'
   | 'admin'
 

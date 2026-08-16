@@ -23,7 +23,8 @@ const VIEW_LABELS: Record<string, string> = {
   calendar: 'Календарь',
   chat:     'AI Чат',
   stats:    'Аналитика',
-  friends:  'Команда',
+  friends:  'Друзья',
+  teams:    'Команды',
   settings: 'Настройки',
   admin:    'Админ-панель',
 }

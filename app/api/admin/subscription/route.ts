@@ -78,10 +78,25 @@ export async function POST(req: NextRequest) {
 
     if (action === 'grant') {
       const grantedPlan = plan === 'pro' ? 'pro' : plan === 'corp' ? 'corp' : 'plus'
-      await activateUserSubscription(chatId, days, grantedPlan)
+      const planName = grantedPlan === 'corp' ? 'Corp' : grantedPlan === 'pro' ? 'Pro' : 'Plus'
+      
+      const numDays = Number(days) || 30
+      await activateUserSubscription(chatId, numDays, grantedPlan)
+
+      const updated = await prisma.telegramChat.findUnique({
+        where: { chatId: cid },
+        select: { plan: true, subscriptionExpiry: true },
+      })
+
+      const expStr = updated?.subscriptionExpiry
+        ? updated.subscriptionExpiry.toLocaleDateString('ru-RU')
+        : 'бессрочно'
+
       return NextResponse.json({
         success: true,
-        message: `✅ Подписка ${grantedPlan.toUpperCase()} выдана пользователю ${chatId} на ${days} дней`,
+        plan: grantedPlan,
+        expiresAt: updated?.subscriptionExpiry?.toISOString() || null,
+        message: `✅ Подписка ${planName} успешно назначена до ${expStr} (${numDays} дн.)`,
       })
     }
 
@@ -93,7 +108,8 @@ export async function POST(req: NextRequest) {
       })
       return NextResponse.json({
         success: true,
-        message: `🚫 Подписка Premium у пользователя ${chatId} отозвана`,
+        plan: 'free',
+        message: `🚫 Подписка пользователя ${chatId} отозвана (переведён на Free)`,
       })
     }
 

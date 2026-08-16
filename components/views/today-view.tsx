@@ -105,6 +105,8 @@ export function TodayView() {
   const [showAllLessons, setShowAllLessons] = useState(false)
   const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
+  const [plannerLoading, setPlannerLoading] = useState(false)
+  const [plannerMsg, setPlannerMsg] = useState<string | null>(null)
 
   const handleSaveGroup = (group: ScheduleGroup) => {
     const exists = state.scheduleGroups?.some(g => g.id === group.id)
@@ -120,6 +122,34 @@ export function TodayView() {
   }
 
   const today = new Date().toISOString().slice(0, 10)
+
+  const planDay = async () => {
+    if (plannerLoading) return
+    setPlannerLoading(true)
+    setPlannerMsg(null)
+    try {
+      const res = await fetch('/api/ai-planner', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: today }),
+      })
+      const data = await res.json()
+      if (data.success && data.slots?.length > 0) {
+        // Update task dueTime in local state immediately
+        for (const slot of data.slots) {
+          dispatch({ type: 'UPDATE_TASK', id: slot.taskId, updates: { dueTime: slot.dueTime } })
+        }
+        setPlannerMsg(data.message || `Распланировано ${data.slots.length} задач`)
+      } else {
+        setPlannerMsg(data.message || 'Нечего планировать')
+      }
+    } catch {
+      setPlannerMsg('Ошибка планировщика')
+    } finally {
+      setPlannerLoading(false)
+      setTimeout(() => setPlannerMsg(null), 4000)
+    }
+  }
 
   const FIXED_TAGS = [
     { id: 'all', label: 'Все' },
@@ -379,19 +409,35 @@ export function TodayView() {
                   : `Сегодня — ${activeTasks.length} задач осталось`}
               </h2>
             </div>
-            <button
-              onClick={() => setEisenhowerSort(!eisenhowerSort)}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border",
-                eisenhowerSort 
-                  ? "bg-primary/10 text-primary border-primary/20" 
-                  : "bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground"
-              )}
-            >
-              <Sparkles className="w-3 h-3" />
-              Авто-план дня
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={planDay}
+                disabled={plannerLoading}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 disabled:opacity-60"
+                title="ИИ распланирует временные слоты для задач без времени"
+              >
+                <Sparkles className={`w-3 h-3 ${plannerLoading ? 'animate-spin' : ''}`} />
+                {plannerLoading ? 'Планирую...' : 'ИИ план'}
+              </button>
+              <button
+                onClick={() => setEisenhowerSort(!eisenhowerSort)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border",
+                  eisenhowerSort 
+                    ? "bg-amber-500/10 text-amber-600 border-amber-500/20" 
+                    : "bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground"
+                )}
+              >
+                Авто-сорт
+              </button>
+            </div>
           </div>
+          {/* AI Planner status toast */}
+          {plannerMsg && (
+            <div className="mb-2 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
+              ✨ {plannerMsg}
+            </div>
+          )}
           {/* School Schedule Card for Today */}
           {!activeHabit && schoolActiveTasks.length > 0 && (() => {
             const sortedLessons = [...schoolActiveTasks].sort((a, b) =>

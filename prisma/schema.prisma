@@ -105,10 +105,14 @@ model TelegramChat {
   lastActiveAt           DateTime? @default(now())
   referredBy             BigInt?   // ChatID of referrer who invited this user
   referralCount          Int       @default(0) // Number of friends invited via referral
+  referralRewarded       Boolean   @default(false) // True once referral bonus was already granted
   isAdmin                Boolean   @default(false) // Admin privilege
   streakDays             Int       @default(0)     // Consecutive days completed tasks
   lastStreakDate         String?   // YYYY-MM-DD
   ttsEnabled             Boolean   @default(false) // TTS Voice replies disabled by default
+  trialActivatedAt       DateTime? // Timestamp when 1-day trial was granted (new user)
+  googleCalendarToken    String?   // JSON: { access_token, refresh_token, expiry_date }
+  googleCalendarSync     Boolean   @default(false) // 2-way Google Calendar sync enabled
   addedAt                DateTime  @default(now())
 }
 
@@ -248,3 +252,16 @@ model PromoCode {
   createdAt       DateTime  @default(now())
 }
 
+// Corporate team workspaces with shared billing
+model Team {
+  id                 String    @id @default(cuid())
+  name               String
+  ownerChatId        BigInt
+  memberIds          BigInt[]  // All member chatIds
+  adminIds           BigInt[]  // Members with admin role (subset of memberIds)
+  plan               String    @default("corp")
+  subscriptionExpiry DateTime?
+  inviteCode         String    @unique @default(cuid()) // Join link token
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}

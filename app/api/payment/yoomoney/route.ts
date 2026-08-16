@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
       return new Response('OK', { status: 200 })
     }
 
-    const actualChatId = label.split('_')[0]
+    const buyerChatId = product.buyerChatId || label.split('_')[0]
     const amtNum = parseFloat(amount)
 
     if (isNaN(amtNum) || amtNum < product.minAmount) {
@@ -126,18 +126,81 @@ export async function POST(req: NextRequest) {
       return new Response('OK', { status: 200 })
     }
 
-    // Activate subscription in database (extends any active subscription)
+    const planName = PLAN_NAMES_RU[product.plan as PlanId] || 'Plus'
+    const periodName = product.days === 365 ? '1 год (365 дней)' : '30 дней'
+
+    if (product.isGift) {
+      // ── Gift purchase: generate a unique promo code and send to buyer ──
+      const giftCode = `GIFT-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+      await prisma.promoCode.create({
+        data: {
+          code: giftCode,
+          discountPercent: 100,
+          targetPlan: product.plan,
+          durationDays: product.days,
+          maxActivations: 1,
+          usedCount: 0,
+          usedByChatIds: [],
+          isActive: true,
+        },
+      })
+
+      // Store buyer association in Config
+      await prisma.config.create({
+        data: {
+          key: `gift_buyer_${giftCode}`,
+          value: JSON.stringify({ buyerChatId, plan: product.plan, days: product.days, createdAt: new Date().toISOString() }),
+        },
+      }).catch(() => {})
+
+      await sendTgNotification(
+        buyerChatId,
+        `🎁 *Подарочная подписка Zerf ${planName} (${periodName}) оформлена!*\n\n` +
+        `🎟 Код подарка: \`${giftCode}\`\n\n` +
+        `🔗 Быстрая ссылка для активации в боте:\n` +
+        `https://t.me/zerph_bot?start=promo_${giftCode}\n\n` +
+        `Отправьте этот код или ссылку другу — он сможет активировать подписку в один клик! ✨`
+      )
+
+      return new Response('OK', { status: 200 })
+    }
+
+    // ── Regular personal subscription ──
+    const actualChatId = buyerChatId
     const success = await activateUserSubscription(actualChatId, product.days, product.plan as 'plus' | 'pro' | 'corp')
 
     if (success) {
-      const planName = PLAN_NAMES_RU[product.plan as PlanId] || 'Plus'
-      const periodName = product.days === 365 ? '1 год (365 дней)' : '30 дней'
       await sendTgNotification(
         actualChatId,
         `🎉 *Подписка Zerf ${planName} успешно активирована на ${periodName}!* ⭐\n\n` +
         `✨ Спасибо за поддержку Zerf AI — ваш тариф обновлён!\n` +
         `• 📋 Управлять подпиской: /settings`
       )
+
+      // ── Referral bonus: if the paying user was referred, reward the referrer once ──
+      try {
+        const paidUserRecord = await prisma.telegramChat.findUnique({
+          where: { chatId: BigInt(actualChatId) },
+          select: { referredBy: true, referralRewarded: true },
+        })
+        if (paidUserRecord?.referredBy && !paidUserRecord.referralRewarded) {
+          const referrerId = paidUserRecord.referredBy
+          // Grant +7 days Plus to the referrer
+          await activateUserSubscription(String(referrerId), 7, 'plus')
+          // Mark as rewarded to prevent double-rewarding
+          await prisma.telegramChat.update({
+            where: { chatId: BigInt(actualChatId) },
+            data: { referralRewarded: true },
+          })
+          await sendTgNotification(
+            String(referrerId),
+            `🎁 *Ваш друг оформил Zerf Plus!*\n\nВам начислено *+7 дней Zerf Plus* в подарок за приглашение 🎉\n` +
+            `Продолжайте приглашать друзей — за каждого получайте бонусные дни!`
+          )
+        }
+      } catch (refErr) {
+        console.error('[YooMoney] Referral bonus error:', refErr)
+      }
     }
 
     return new Response('OK', { status: 200 })

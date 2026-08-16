@@ -986,20 +986,29 @@ async function handleRefCommand(chatId: number) {
   const refLink = `https://t.me/${botUsername}?start=ref_${chatId}`
 
   const user = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
-  const count = (user as any)?.referralCount || 0
-  const bonusDays = count * 3
+  const count = user?.referralCount || 0
+
+  // Count how many referrals already converted to paid (referralRewarded=true on those users)
+  const convertedReferrals = await prisma.telegramChat.count({
+    where: { referredBy: BigInt(chatId), referralRewarded: true },
+  })
+  const pendingReferrals = count - convertedReferrals
+  const bonusDaysEarned = count * 3 + convertedReferrals * 7
 
   let msg = `🎁 *Реферальная программа Zerf AI*\n\n`
-  msg += `Приглашай друзей и получай *+3 дня Zerf Premium* за каждого приведённого друга! Твой друг тоже получит +3 дня Premium!\n\n`
+  msg += `Приглашай друзей — получай бонусные дни!\n\n`
+  msg += `▪ *+3 дня Plus* сразу, когда друг присоединится\n`
+  msg += `▪ *+7 дней Plus* когда друг оформит платную подписку\n\n`
   msg += `🔗 *Твоя реферальная ссылка:*\n\`${refLink}\`\n\n`
   msg += `📊 Приглашено друзей: *${count}*\n`
-  msg += `⭐ Заработано Premium: *${bonusDays} дней*`
+  msg += `💳 Оформили подписку: *${convertedReferrals}* (ещё ждут: *${pendingReferrals}*)\n`
+  msg += `⭐ Всего заработано: *${bonusDaysEarned} дней Plus*`
 
   await send(chatId, msg, {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '📲 Поделиться ссылкой с другом', url: `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent('Присоединяйся к Zerf AI! Получи 3 дня Premium по моей ссылке 🚀')}` }
+          { text: '📲 Поделиться с другом', url: `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent('Присоединяйся к Zerf AI! Умный ИИ-помощник для задач и заметок. По моей ссылке — бонус при регистрации 🚀')}` }
         ]
       ]
     }

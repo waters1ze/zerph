@@ -189,9 +189,18 @@ const LEGACY_LABEL_MAP: Record<string, PaymentProduct> = {
   '365': { plan: 'plus', days: 365, minAmount: 950, labelSuffix: '365' },
 }
 
-export function findPaymentProduct(label: string): PaymentProduct | null {
-  const m = label.match(/^(\d{3,20})_(.+)$/)
+export function findPaymentProduct(label: string): (PaymentProduct & { isGift?: boolean; buyerChatId?: string }) | null {
+  // Support gift label: gift_<chatId>_<suffix>
+  const isGift = label.startsWith('gift_')
+  const cleanLabel = isGift ? label.replace(/^gift_/, '') : label
+
+  const m = cleanLabel.match(/^(\d{3,20})_(.+)$/)
   if (!m) return null
+  const buyerChatId = m[1]
   const suffix = m[2]
-  return PAYMENT_PRODUCTS.find(p => p.labelSuffix === suffix) || LEGACY_LABEL_MAP[suffix] || null
+  const product = PAYMENT_PRODUCTS.find(p => p.labelSuffix === suffix) || LEGACY_LABEL_MAP[suffix]
+  if (!product) return null
+
+  return { ...product, isGift, buyerChatId }
 }
+
