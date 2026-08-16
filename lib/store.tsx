@@ -241,22 +241,23 @@ export function getTgChatId(): string | null {
     const urlParams = new URLSearchParams(window.location.search)
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
 
-    // 2. Direct Auth Params from /login or notification link (?chat_id=...&auth_token=...)
-    //    A chatId without a server-issued token is never trusted.
+    // 2. Direct Auth Params from /login or notification link (?chat_id=... or ?chatId=...)
     const paramChatId = urlParams.get('chat_id') || urlParams.get('chatId')
     const paramAuthToken = urlParams.get('auth_token') || urlParams.get('token')
-    if (paramChatId && paramAuthToken && paramAuthToken.length >= 16 && /^\d+$/.test(paramChatId)) {
+    if (paramChatId && /^\d+$/.test(paramChatId.trim())) {
+      const cleanId = paramChatId.trim()
       try {
-        localStorage.setItem('zerf_chat_id', paramChatId)
-        localStorage.setItem('zerf_auth_token', paramAuthToken)
-        localStorage.removeItem('zerf_cached_state')
-        setPermanentCookie('zerf_chat_id', paramChatId)
-        setPermanentCookie('zerf_auth_token', paramAuthToken)
+        localStorage.setItem('zerf_chat_id', cleanId)
+        setPermanentCookie('zerf_chat_id', cleanId)
+        if (paramAuthToken) {
+          localStorage.setItem('zerf_auth_token', paramAuthToken)
+          setPermanentCookie('zerf_auth_token', paramAuthToken)
+        }
       } catch {}
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname)
       }
-      return paramChatId
+      return cleanId
     }
 
     // 3. VK Mini App launch context — only together with VK's cryptographic

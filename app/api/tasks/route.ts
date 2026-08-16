@@ -41,7 +41,9 @@ async function getOwnerChatId(req: NextRequest): Promise<string | null> {
 export async function GET(req: NextRequest) {
   try {
     const ownerChatId = await getOwnerChatId(req)
-    if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    if (!ownerChatId) {
+      return NextResponse.json({ tasks: [], goals: [], notes: [], friends: [], habits: [] })
+    }
     
     try {
       await touchUserLastActive(ownerChatId)
