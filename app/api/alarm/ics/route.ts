@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
+import { getFeedSignature, secretsMatch } from '@/lib/backend/auth'
+
+/** Escape user-controlled text for safe embedding into ICS fields. */
+function icsEscape(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;')
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const chatId = searchParams.get('chatId') || searchParams.get('chat_id')
 
   if (chatId) {
+    // Capability URL: the feed requires a valid per-user HMAC signature
+    // (calendar clients cannot send Authorization headers).
+    const sig = searchParams.get('sig') || ''
+    if (!secretsMatch(sig, getFeedSignature(chatId))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Generate Full Live Calendar Feed for Apple Calendar & Google Calendar (.ics subscription)
     try {
       const cid = BigInt(chatId)
@@ -43,14 +56,14 @@ export async function GET(req: NextRequest) {
           'BEGIN:VEVENT',
           `UID:zerf-${t.id}@zeprh.vercel.app`,
           `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-          `SUMMARY:${priorityEmoji}${t.title}`,
+          `SUMMARY:${icsEscape(priorityEmoji + t.title)}`,
           `DTSTART:${dtStart}`,
           `DTEND:${dtEnd}`,
-          `DESCRIPTION:${desc.replace(/\n/g, '\\n')}`,
+          `DESCRIPTION:${icsEscape(desc.replace(/\n/g, '\\n'))}`,
           'STATUS:CONFIRMED',
           'BEGIN:VALARM',
           'ACTION:DISPLAY',
-          `DESCRIPTION:Напоминание: ${t.title}`,
+          `DESCRIPTION:Напоминание: ${icsEscape(t.title)}`,
           'TRIGGER:-PT15M',
           'END:VALARM',
           'END:VEVENT',
@@ -83,10 +96,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Single Alarm Event fallback
+  // Single Alarm Event fallback (no user data — only query params)
   const time = searchParams.get('time') || '12:00'
   const title = searchParams.get('title') || 'Напоминание Zerf AI'
   const dateStr = searchParams.get('date') || new Date().toISOString().slice(0, 10)
+
+  if (!/^\d{1,2}:\d{2}$/.test(time) || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
+  }
+  const safeTitle = title.replace(/[\r\n]/g, ' ').slice(0, 120)
 
   const parts = time.split(':')
   const h = (parts[0] || '12').padStart(2, '0')
@@ -105,7 +123,7 @@ export async function GET(req: NextRequest) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `SUMMARY:⏰ ${title}`,
+    `SUMMARY:⏰ ${safeTitle}`,
     `DTSTART:${dtStart}`,
     `DTEND:${dtEnd}`,
     'DESCRIPTION:Напоминание и звуковой сигнал Zerf AI',

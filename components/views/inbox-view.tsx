@@ -1,16 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { Inbox, Users, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar, UserCheck, Sparkles } from 'lucide-react'
+import { Inbox, Users, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar, UserCheck, Sparkles, Hash, Plus, X } from 'lucide-react'
 import { cn, isBirthdayTask, isYearlyEventTask, groupTasksByDate } from '@/lib/utils'
 
-const FIXED_TAGS = [
-  { id: 'all', label: 'Все' },
-  { id: 'общая', label: 'Общие', icon: Users },
-  { id: 'поручение', label: 'Порученные', icon: UserCheck },
+// System sections cannot be deleted; default sections can be hidden and restored.
+const SYSTEM_TAGS = [
+  { id: 'all', label: 'Все', system: true },
+  { id: 'общая', label: 'Общие', icon: Users, system: true },
+  { id: 'поручение', label: 'Порученные', icon: UserCheck, system: true },
+]
+
+const DEFAULT_TAGS = [
   { id: 'работа', label: 'Работа', icon: Briefcase },
   { id: 'личное', label: 'Личное', icon: User },
   { id: 'срочно', label: 'Срочно', icon: Zap },
@@ -19,9 +23,72 @@ const FIXED_TAGS = [
   { id: 'спорт', label: 'Спорт', icon: Activity },
 ]
 
+const LS_CUSTOM = 'zerf_inbox_custom_sections'
+const LS_HIDDEN = 'zerf_inbox_hidden_sections'
+
+function loadCustomSections(): string[] {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem(LS_CUSTOM) || '[]') } catch { return [] }
+}
+function loadHiddenDefaults(): string[] {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]') } catch { return [] }
+}
+
 export function InboxView() {
   const { state } = useApp()
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [customSections, setCustomSections] = useState<string[]>([])
+  const [hiddenDefaults, setHiddenDefaults] = useState<string[]>([])
+  const [addingSection, setAddingSection] = useState(false)
+  const [newSectionName, setNewSectionName] = useState('')
+
+  useEffect(() => {
+    setCustomSections(loadCustomSections())
+    setHiddenDefaults(loadHiddenDefaults())
+  }, [])
+
+  const addSection = () => {
+    const name = newSectionName.trim().toLowerCase()
+    if (!name) return
+    const all = [...SYSTEM_TAGS.map(t => t.id), ...DEFAULT_TAGS.map(t => t.id), ...customSections]
+    if (all.includes(name)) {
+      // Restore if it was a hidden default
+      if (hiddenDefaults.includes(name)) {
+        const next = hiddenDefaults.filter(x => x !== name)
+        setHiddenDefaults(next)
+        localStorage.setItem(LS_HIDDEN, JSON.stringify(next))
+      }
+      setAddingSection(false)
+      setNewSectionName('')
+      return
+    }
+    const next = [...customSections, name]
+    setCustomSections(next)
+    localStorage.setItem(LS_CUSTOM, JSON.stringify(next))
+    setAddingSection(false)
+    setNewSectionName('')
+    setSelectedTag(name)
+  }
+
+  const removeSection = (id: string) => {
+    if (customSections.includes(id)) {
+      const next = customSections.filter(x => x !== id)
+      setCustomSections(next)
+      localStorage.setItem(LS_CUSTOM, JSON.stringify(next))
+    } else {
+      const next = [...hiddenDefaults, id]
+      setHiddenDefaults(next)
+      localStorage.setItem(LS_HIDDEN, JSON.stringify(next))
+    }
+    if (selectedTag === id) setSelectedTag('all')
+  }
+
+  const sections = useMemo(() => [
+    ...SYSTEM_TAGS,
+    ...DEFAULT_TAGS.filter(t => !hiddenDefaults.includes(t.id)),
+    ...customSections.map(id => ({ id, label: id.charAt(0).toUpperCase() + id.slice(1), icon: Hash })),
+  ], [customSections, hiddenDefaults])
 
   const isCommonSharedTask = (t: any) => {
     const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
@@ -74,25 +141,68 @@ export function InboxView() {
       <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-5">
         {/* Tag Filters Bar */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
-          {FIXED_TAGS.map(tag => {
+          {sections.map(tag => {
             const isActive = selectedTag === tag.id
             const Icon = (tag as any).icon
+            const isSystem = (tag as any).system
             return (
-              <button
-                key={tag.id}
-                onClick={() => setSelectedTag(tag.id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border shrink-0',
-                  isActive
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
-                    : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+              <div key={tag.id} className="relative group/chip shrink-0">
+                <button
+                  onClick={() => setSelectedTag(tag.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 pl-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border',
+                    isSystem ? 'pr-3' : 'pr-7',
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
+                      : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  {Icon && <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />}
+                  <span>{tag.label}</span>
+                </button>
+                {!isSystem && (
+                  <button
+                    onClick={e => { e.stopPropagation(); removeSection(tag.id) }}
+                    title="Удалить раздел"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-md flex items-center justify-center text-muted-foreground/60 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 )}
-              >
-                {Icon && <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />}
-                <span>{tag.label}</span>
-              </button>
+              </div>
             )
           })}
+
+          {addingSection ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <input
+                autoFocus
+                value={newSectionName}
+                onChange={e => setNewSectionName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') addSection()
+                  if (e.key === 'Escape') { setAddingSection(false); setNewSectionName('') }
+                }}
+                placeholder="Название раздела"
+                className="px-2.5 py-1.5 rounded-xl text-xs bg-card border border-primary/50 text-foreground focus:outline-none focus:border-primary w-36"
+              />
+              <button
+                onClick={addSection}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-primary text-primary-foreground border border-primary"
+              >
+                ОК
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setAddingSection(true); setNewSectionName('') }}
+              title="Добавить свой раздел"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/60 hover:bg-primary/5 transition-all shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Раздел</span>
+            </button>
+          )}
         </div>
 
         {/* 1. Общие задачи (напоминание приходит двоим) */}

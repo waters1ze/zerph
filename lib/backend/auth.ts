@@ -28,6 +28,14 @@ export function getVkAppSecret(): string | null {
   return process.env.VK_APP_SECRET || null
 }
 
+/**
+ * HMAC signature for capability URLs (e.g. the .ics calendar feed),
+ * since calendar clients cannot send auth headers.
+ */
+export function getFeedSignature(chatId: string | number | bigint): string {
+  return crypto.createHmac('sha256', getInternalPepper()).update(`feed:${chatId}`).digest('hex').slice(0, 32)
+}
+
 export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061')
   .split(',')
   .map(s => s.trim())
@@ -209,22 +217,9 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
-  // 5. Fallback to direct x-chat-id header, query parameter, or cookie
-  const directChatId =
-    req.headers.get('x-chat-id') ||
-    new URL(req.url).searchParams.get('chatId') ||
-    new URL(req.url).searchParams.get('chat_id') ||
-    req.cookies.get('zerf_chat_id')?.value
-
-  if (directChatId && directChatId.trim()) {
-    const cleanId = directChatId.trim()
-    return {
-      chatId: cleanId,
-      isRoot: ROOT_ADMIN_IDS.includes(cleanId),
-    }
-  }
-
-  // No valid authentication found -> unauthenticated
+  // No valid authentication found -> unauthenticated.
+  // NOTE: a bare x-chat-id header / ?chatId / zerf_chat_id cookie must NEVER
+  // authenticate — that would let anyone impersonate any user by ID.
   return null
 }
 

@@ -8,6 +8,7 @@ import { ParsedItem, stringSimilarity, generateReminderContext, extractCleanReci
 import { ROOT_ADMIN_IDS } from './admin'
 import { tokenMatchesCandidateName } from './name-aliases'
 import { createServerSession } from './auth'
+import { PLANS, normalizePlan, planAtLeast, getDailyCount, COUNTERS } from './plans'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
@@ -940,7 +941,7 @@ export async function checkGroupOrUserHasPremium(
         return { hasPremium: true, premiumPayerId: cid }
       }
       const limits = await getUserUsageAndLimits(cid)
-      if (limits.plan === 'premium') {
+      if (planAtLeast(limits.plan, 'plus')) {
         return { hasPremium: true, premiumPayerId: cid }
       }
     }
@@ -982,7 +983,7 @@ export async function deductGroupUsage(
     for (const idStr of uniqueIds) {
       try {
         const limits = await getUserUsageAndLimits(idStr)
-        if (limits.plan === 'premium') {
+        if (planAtLeast(limits.plan, 'plus')) {
           premiumMembers.push(idStr)
         } else {
           freeMembers.push(idStr)
@@ -1498,7 +1499,11 @@ export async function saveParsedItemToDb(
   // Delete specific task/note action
   if (item.action === 'delete') {
     if (item.targetId) {
-      const taskToDelete = await prisma.task.findUnique({ where: { id: item.targetId } })
+      // Ownership check: only delete records the owner is allowed to touch
+      const taskScope = taskActorScope(ownerChatId)
+      const taskToDelete = taskScope
+        ? await prisma.task.findFirst({ where: { id: item.targetId, ...taskScope } })
+        : await prisma.task.findUnique({ where: { id: item.targetId } })
       if (taskToDelete && taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
          const friendId = taskToDelete.assignees[1]
          await prisma.telegramChat.update({
@@ -1506,9 +1511,9 @@ export async function saveParsedItemToDb(
            data: { birthday: null }
          }).catch(() => {})
       }
-      await deleteTask(item.targetId)
-      await deleteGoal(item.targetId)
-      await deleteNote(item.targetId)
+      await deleteTask(item.targetId, ownerChatId)
+      await deleteGoal(item.targetId, ownerChatId)
+      await deleteNote(item.targetId, ownerChatId)
       return { item, updatedItem: true }
     } else {
       // Find matching task or goal by title similarity
@@ -1566,8 +1571,13 @@ export async function saveParsedItemToDb(
     if (item.dueTime !== undefined) updateData.dueTime = item.dueTime
     if (item.priority) updateData.priority = item.priority
 
-    // Try updating task first
+    // Try updating task first (ownership-scoped)
     try {
+      const taskScope = taskActorScope(ownerChatId)
+      if (taskScope) {
+        const allowed = await prisma.task.findFirst({ where: { id: item.targetId, ...taskScope } })
+        if (!allowed) throw new Error('access denied')
+      }
       await prisma.task.update({
         where: { id: item.targetId },
         data: updateData as never,
@@ -1575,12 +1585,17 @@ export async function saveParsedItemToDb(
       return { item, updatedItem: true }
     } catch {}
 
-    // Try updating goal
+    // Try updating goal (ownership-scoped)
     try {
       const goalUpdateData: Record<string, unknown> = {}
       if (item.title) goalUpdateData.title = item.title
       if (item.summary) goalUpdateData.description = item.summary
       if (item.dueDate !== undefined) goalUpdateData.deadline = item.dueDate
+      const goalScope = ownerActorScope(ownerChatId)
+      if (goalScope) {
+        const allowed = await prisma.goal.findFirst({ where: { id: item.targetId, ...goalScope } })
+        if (!allowed) throw new Error('access denied')
+      }
       await prisma.goal.update({
         where: { id: item.targetId },
         data: goalUpdateData as never,
@@ -1588,11 +1603,16 @@ export async function saveParsedItemToDb(
       return { item, updatedItem: true }
     } catch {}
 
-    // Try updating note
+    // Try updating note (ownership-scoped)
     try {
       const noteUpdateData: Record<string, unknown> = {}
       if (item.title) noteUpdateData.title = item.title
       if (item.summary) noteUpdateData.content = item.summary
+      const noteScope = ownerActorScope(ownerChatId)
+      if (noteScope) {
+        const allowed = await prisma.note.findFirst({ where: { id: item.targetId, ...noteScope } })
+        if (!allowed) throw new Error('access denied')
+      }
       await prisma.note.update({
         where: { id: item.targetId },
         data: noteUpdateData as never,
@@ -2380,7 +2400,10 @@ export async function markReminderSent(id: string, actorChatId?: number | bigint
 // ── Subscriptions & Daily Usage Limits ─────────────────────────────────────────
 
 export interface UserUsageLimits {
-  plan: 'free' | 'premium'
+  /** Normalized plan id (legacy premium -> plus, unlimited -> corp) */
+  plan: 'free' | 'plus' | 'pro' | 'corp'
+  /** True while a paid subscription is active (or permanent corp / root admin) */
+  isPaid: boolean
   subscriptionExpiry: string | null
   voice: {
     used: number
@@ -2396,66 +2419,50 @@ export interface UserUsageLimits {
     used: number
     max: number
   }
+  siri: { used: number; max: number }
+  photos: { used: number; max: number }
+  goals: { used: number; max: number }
   canSendVoice: boolean
   canCreateNote: boolean
   canSendChatMessage: boolean
+  canUseSiri: boolean
+  canUsePhoto: boolean
+  canCreateGoal: boolean
 }
 
 export async function getUserUsageAndLimits(ownerChatId?: number | bigint | string | null): Promise<UserUsageLimits> {
-  const defaultLimits: UserUsageLimits = {
+  const freeLimits = (): UserUsageLimits => ({
     plan: 'free',
+    isPaid: false,
     subscriptionExpiry: null,
-    voice: { used: 0, max: 5, secondsUsed: 0, maxSeconds: 180 },
-    notes: { used: 0, max: 5 },
-    chat: { used: 0, max: 20 },
+    voice: { used: 0, max: PLANS.free.voiceSecondsPerDay, secondsUsed: 0, maxSeconds: PLANS.free.voiceSecondsPerDay },
+    notes: { used: 0, max: PLANS.free.notesPerDay },
+    chat: { used: 0, max: PLANS.free.chatMessagesPerDay },
+    siri: { used: 0, max: PLANS.free.siriRequestsPerDay },
+    photos: { used: 0, max: PLANS.free.photosPerDay },
+    goals: { used: 0, max: PLANS.free.goalsPerDay },
     canSendVoice: true,
     canCreateNote: true,
     canSendChatMessage: true,
-  }
+    canUseSiri: true,
+    canUsePhoto: false,
+    canCreateGoal: true,
+  })
 
-  if (!ownerChatId) return defaultLimits
+  if (!ownerChatId) return freeLimits()
 
   try {
     const cid = BigInt(ownerChatId)
     const { mskDate } = getMskDateTime()
-
-    let chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
-
-    if (!chat) {
-      chat = await prisma.telegramChat.create({
-        data: { chatId: cid, lastResetDate: mskDate }
-      })
-    }
-
-    // Expiry check: ONLY Root Admin (Owner) has permanent unlimited Premium
     const chatIdStr = String(ownerChatId).trim()
     const isRoot = ROOT_ADMIN_IDS.includes(chatIdStr)
 
-    let isPremium = false
-
-    if (isRoot) {
-      isPremium = true
-    } else if (chat.plan === 'premium' && chat.subscriptionExpiry) {
-      if (new Date(chat.subscriptionExpiry) >= new Date()) {
-        isPremium = true
-      } else {
-        // Expired
-        isPremium = false
-        await prisma.telegramChat.update({
-          where: { chatId: cid },
-          data: { plan: 'free' }
-        }).catch(() => {})
-      }
-    } else if (chat.plan === 'premium' && !chat.subscriptionExpiry) {
-      // Erroneous premium without expiry
-      isPremium = false
-      await prisma.telegramChat.update({
-        where: { chatId: cid },
-        data: { plan: 'free' }
-      }).catch(() => {})
+    let chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
+    if (!chat) {
+      chat = await prisma.telegramChat.create({ data: { chatId: cid, lastResetDate: mskDate } })
     }
 
-    // Daily reset check
+    // Daily reset
     if (chat.lastResetDate !== mskDate) {
       chat = await prisma.telegramChat.update({
         where: { chatId: cid },
@@ -2469,40 +2476,61 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       })
     }
 
-    const voiceMax = isPremium ? Infinity : 5
-    const voiceMaxSeconds = isPremium ? 1200 : 300 // 20 min for premium, 5 min for free (1 min per message)
-    const notesMax = isPremium ? Infinity : 10
-    const chatMax = isPremium ? Infinity : 20
+    // Resolve the ACTIVE plan: root admin is always top tier; paid plans
+    // require a valid expiry (corp without expiry = permanent).
+    let planId = normalizePlan(chat.plan)
+    if (isRoot) {
+      planId = 'corp'
+    } else if (planId !== 'free') {
+      const expired = chat.subscriptionExpiry
+        ? new Date(chat.subscriptionExpiry) < new Date()
+        : planId !== 'corp'
+      if (expired) {
+        planId = 'free'
+        await prisma.telegramChat.update({
+          where: { chatId: cid },
+          data: { plan: 'free' }
+        }).catch(() => {})
+      }
+    }
 
-    const canSendVoice = isPremium
-      ? (chat.voiceSecondsToday < 1200)
-      : (chat.voiceCountToday < 5 && chat.voiceSecondsToday < 300)
-    const canCreateNote = isPremium ? true : (chat.notesCountToday < 10)
-    const canSendChatMessage = isPremium ? true : (chat.chatMessagesToday < 20)
+    const limits = PLANS[planId]
+
+    const [siriUsed, photoUsed, goalUsed] = await Promise.all([
+      getDailyCount(COUNTERS.siri, chatIdStr),
+      getDailyCount(COUNTERS.photo, chatIdStr),
+      getDailyCount(COUNTERS.goal, chatIdStr),
+    ])
+
+    const canSendVoice = chat.voiceSecondsToday < limits.voiceSecondsPerDay
+    const canUseSiri = siriUsed < limits.siriRequestsPerDay
+    const canUsePhoto = limits.photosPerDay > 0 && photoUsed < limits.photosPerDay
+    const canCreateGoal = goalUsed < limits.goalsPerDay
 
     return {
-      plan: isPremium ? 'premium' : 'free',
+      plan: planId,
+      isPaid: planId !== 'free',
       subscriptionExpiry: isRoot ? null : (chat.subscriptionExpiry ? chat.subscriptionExpiry.toISOString() : null),
       voice: {
         used: chat.voiceCountToday,
-        max: isPremium ? Infinity : 5,
+        max: limits.voiceSecondsPerDay,
         secondsUsed: chat.voiceSecondsToday,
-        maxSeconds: voiceMaxSeconds,
+        maxSeconds: limits.voiceSecondsPerDay,
       },
-      notes: {
-        used: chat.notesCountToday,
-        max: isPremium ? Infinity : 10,
-      },
-      chat: {
-        used: chat.chatMessagesToday,
-        max: isPremium ? Infinity : 20,
-      },
+      notes: { used: chat.notesCountToday, max: limits.notesPerDay },
+      chat: { used: chat.chatMessagesToday, max: limits.chatMessagesPerDay },
+      siri: { used: siriUsed, max: limits.siriRequestsPerDay },
+      photos: { used: photoUsed, max: limits.photosPerDay },
+      goals: { used: goalUsed, max: limits.goalsPerDay },
       canSendVoice,
-      canCreateNote,
-      canSendChatMessage,
+      canCreateNote: chat.notesCountToday < limits.notesPerDay,
+      canSendChatMessage: chat.chatMessagesToday < limits.chatMessagesPerDay,
+      canUseSiri,
+      canUsePhoto,
+      canCreateGoal,
     }
   } catch {
-    return defaultLimits
+    return freeLimits()
   }
 }
 
@@ -2564,18 +2592,25 @@ export async function incrementUserUsage(
   } catch {}
 }
 
-export async function activateUserSubscription(ownerChatId: number | bigint | string, days: number = 30) {
+export async function activateUserSubscription(
+  ownerChatId: number | bigint | string,
+  days: number = 30,
+  plan: 'plus' | 'pro' | 'corp' = 'plus'
+) {
   try {
     if (!Number.isFinite(days) || days <= 0 || days > 3650) return false
     if (!/^\d{3,20}$/.test(String(ownerChatId))) return false
     const cid = BigInt(ownerChatId)
 
-    // Extend from the current expiry when the subscription is still active,
-    // so repeat payments stack instead of replacing remaining time.
+    // Never downgrade an active corp subscription
     const existing = await prisma.telegramChat.findUnique({
       where: { chatId: cid },
       select: { plan: true, subscriptionExpiry: true },
     })
+    if (existing && normalizePlan(existing.plan) === 'corp' && plan !== 'corp') return true
+
+    // Extend from the current expiry when the subscription is still active,
+    // so repeat payments stack instead of replacing remaining time.
     const now = new Date()
     const base = existing?.subscriptionExpiry && new Date(existing.subscriptionExpiry) > now
       ? new Date(existing.subscriptionExpiry)
@@ -2584,15 +2619,8 @@ export async function activateUserSubscription(ownerChatId: number | bigint | st
 
     await prisma.telegramChat.upsert({
       where: { chatId: cid },
-      update: {
-        plan: existing?.plan === 'unlimited' ? 'unlimited' : 'premium',
-        subscriptionExpiry: expiry,
-      },
-      create: {
-        chatId: cid,
-        plan: 'premium',
-        subscriptionExpiry: expiry,
-      }
+      update: { plan, subscriptionExpiry: expiry },
+      create: { chatId: cid, plan, subscriptionExpiry: expiry }
     })
     return true
   } catch {
@@ -2630,14 +2658,24 @@ export async function getPublicItemsByUser(chatId: number | bigint | string) {
 export async function setItemVisibility(
   id: string,
   type: 'task' | 'goal' | 'note',
-  visibility: 'public' | 'private'
+  visibility: 'public' | 'private',
+  actorChatId?: number | bigint | string | null
 ) {
   try {
     if (type === 'task') {
+      const scope = taskActorScope(actorChatId)
+      const allowed = scope ? await prisma.task.findFirst({ where: { id, ...scope } }) : true
+      if (!allowed) return false
       await prisma.task.update({ where: { id }, data: { visibility } })
     } else if (type === 'goal') {
+      const scope = ownerActorScope(actorChatId)
+      const allowed = scope ? await prisma.goal.findFirst({ where: { id, ...scope } }) : true
+      if (!allowed) return false
       await prisma.goal.update({ where: { id }, data: { visibility } })
     } else {
+      const scope = ownerActorScope(actorChatId)
+      const allowed = scope ? await prisma.note.findFirst({ where: { id, ...scope } }) : true
+      if (!allowed) return false
       await prisma.note.update({ where: { id }, data: { visibility } })
     }
     return true
@@ -2648,11 +2686,20 @@ export async function setItemVisibility(
 
 // ── Note-Task Linking ──────────────────────────────────────────────────────────
 
-/** Link a note to a task */
-export async function linkNoteToTask(taskId: string, noteId: string) {
+/** Link a note to a task (both must belong to the actor) */
+export async function linkNoteToTask(taskId: string, noteId: string, actorChatId?: number | bigint | string | null) {
   try {
-    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    const taskScope = taskActorScope(actorChatId)
+    const task = taskScope
+      ? await prisma.task.findFirst({ where: { id: taskId, ...taskScope } })
+      : await prisma.task.findUnique({ where: { id: taskId } })
     if (!task) return false
+    if (actorChatId != null) {
+      const noteAllowed = await prisma.note.findFirst({
+        where: { id: noteId, ownerChatId: BigInt(actorChatId) }
+      })
+      if (!noteAllowed) return false
+    }
     const current = (task as any).linkedNoteIds as string[] || []
     if (current.includes(noteId)) return true
     await prisma.task.update({
@@ -2666,9 +2713,12 @@ export async function linkNoteToTask(taskId: string, noteId: string) {
 }
 
 /** Unlink a note from a task */
-export async function unlinkNoteFromTask(taskId: string, noteId: string) {
+export async function unlinkNoteFromTask(taskId: string, noteId: string, actorChatId?: number | bigint | string | null) {
   try {
-    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    const taskScope = taskActorScope(actorChatId)
+    const task = taskScope
+      ? await prisma.task.findFirst({ where: { id: taskId, ...taskScope } })
+      : await prisma.task.findUnique({ where: { id: taskId } })
     if (!task) return false
     const current = (task as any).linkedNoteIds as string[] || []
     await prisma.task.update({

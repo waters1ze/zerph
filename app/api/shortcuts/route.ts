@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { planAtLeast, incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 import crypto from 'crypto'
 import { parseIntentWithGroq, transcribeAudioWithGroq, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
 import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends, findFriendMatches } from '@/lib/backend/db'
@@ -331,17 +332,23 @@ export async function POST(req: NextRequest) {
 
     await registerChatId(chatId)
 
-    // Limits check
+    // Limits check: Siri requests quota + voice seconds quota
     const limits = await getUserUsageAndLimits(chatId)
-    if (!limits.canSendVoice) {
-      const limitMsg = limits.plan === 'premium'
-        ? '❌ Дневной лимит голосового ввода Premium исчерпан (20 минут в день).'
-        : '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте (20 минут в день)!'
+    if (!limits.canUseSiri) {
+      const limitMsg = `❌ Дневной лимит Siri-запросов исчерпан (${limits.siri.max} в день на бесплатном тарифе). Оформите Zerf Plus или Pro в боте — там Siri без ограничений!`
       if (format === 'json') {
         return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
       }
       return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
     }
+    if (!limits.canSendVoice) {
+      const limitMsg = `❌ Дневной лимит голосового распознавания исчерпан (${Math.round(limits.voice.maxSeconds / 60)} мин в день). Оформите Zerf Pro — там голосовой ввод безлимитный!`
+      if (format === 'json') {
+        return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
+      }
+      return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
+    }
+    await incrementDailyCount(COUNTERS.siri, chatId)
 
     // 1. Check if user asked Siri "What's on today?"
     if (isTodayQuery(inputText)) {
@@ -500,15 +507,21 @@ export async function GET(req: NextRequest) {
 
   // Limits check
   const limits = await getUserUsageAndLimits(chatId)
-  if (!limits.canSendVoice) {
-    const limitMsg = limits.plan === 'premium'
-      ? '❌ Дневной лимит голосового ввода Premium исчерпан (20 минут в день).'
-      : '❌ Дневной лимит голосовых запросов исчерпан (5 в день). Оформите Zerf Premium в боте (20 минут в день)!'
+  if (!limits.canUseSiri) {
+    const limitMsg = `❌ Дневной лимит Siri-запросов исчерпан (${limits.siri.max} в день на бесплатном тарифе). Оформите Zerf Plus или Pro в боте — там Siri без ограничений!`
     if (format === 'json') {
       return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
     }
     return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
   }
+  if (!limits.canSendVoice) {
+    const limitMsg = `❌ Дневной лимит голосового распознавания исчерпан (${Math.round(limits.voice.maxSeconds / 60)} мин в день). Оформите Zerf Pro — там голосовой ввод безлимитный!`
+    if (format === 'json') {
+      return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
+    }
+    return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
+  }
+  await incrementDailyCount(COUNTERS.siri, chatId)
 
   // Check today query
   if (isTodayQuery(text)) {

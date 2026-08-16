@@ -615,20 +615,30 @@ function ProjectModal({
     setSaving(true)
     const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
     try {
-      if (project) {
-        await fetch('/api/projects', {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ id: project.id, title, description, color, memberUsernames: members }),
-        })
-      } else {
-        await fetch('/api/projects', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ title, description, color, memberUsernames: members }),
-        })
+      const res = project
+        ? await fetch('/api/projects', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ id: project.id, title, description, color, memberUsernames: members }),
+          })
+        : await fetch('/api/projects', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ title, description, color, memberUsernames: members }),
+          })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        if (res.status === 401) {
+          alert('Требуется вход в аккаунт. Войдите через бота (/login) или по Email, затем попробуйте снова.')
+        } else {
+          alert(data.error || 'Не удалось сохранить проект. Проверьте подключение и попробуйте ещё раз.')
+        }
+        return
       }
       onSave()
+    } catch {
+      alert('Ошибка сети при сохранении проекта')
     } finally { setSaving(false) }
   }
 
@@ -1128,6 +1138,13 @@ export function ProjectsView() {
     setError('')
     try {
       const res = await fetch('/api/projects', { headers: getAuthHeaders() })
+      if (!res.ok) {
+        setError(res.status === 401
+          ? 'Требуется вход в аккаунт — projects недоступны для гостей.'
+          : 'Ошибка загрузки проектов. Попробуйте позже.')
+        setProjects([])
+        return
+      }
       const data = await res.json()
       const list: Project[] = data.projects || []
       setProjects(list)

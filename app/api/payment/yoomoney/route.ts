@@ -16,14 +16,10 @@ import crypto from 'crypto'
 import { prisma } from '@/lib/backend/prisma'
 import { activateUserSubscription } from '@/lib/backend/db'
 import { secretsMatch } from '@/lib/backend/auth'
+import { findPaymentProduct, PLAN_NAMES_RU, PlanId } from '@/lib/backend/plans'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const YOOMONEY_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || process.env.YOOMONEY_CLIENT_SECRET || ''
-
-const PLAN_PRICES: Record<string, { minAmount: number; days: number; name: string }> = {
-  '30': { minAmount: 95, days: 30, name: '30 дней' },
-  '365': { minAmount: 950, days: 365, name: '1 год (365 дней)' },
-}
 
 async function sendTgNotification(chatId: string | number, text: string) {
   if (!BOT_TOKEN) return
@@ -107,35 +103,32 @@ export async function POST(req: NextRequest) {
       return new Response('OK', { status: 200 })
     }
 
-    // Strict label format: <chatId>_<planDays>
-    const labelMatch = label.match(/^(\d{3,20})_(30|365)$/)
-    if (!labelMatch) {
+    // Strict label format: <chatId>_<product suffix> (plus30/pro365/…, legacy 30/365)
+    const product = findPaymentProduct(label)
+    if (!product) {
       console.warn('[YooMoney] Unexpected label format', label)
       return new Response('OK', { status: 200 })
     }
 
-    const actualChatId = labelMatch[1]
-    const plan = PLAN_PRICES[labelMatch[2]]
+    const actualChatId = label.split('_')[0]
     const amtNum = parseFloat(amount)
 
-    if (!plan || isNaN(amtNum) || amtNum < plan.minAmount) {
-      console.warn('[YooMoney] Amount below plan price', { label, amount, planDays: labelMatch[2] })
+    if (isNaN(amtNum) || amtNum < product.minAmount) {
+      console.warn('[YooMoney] Amount below plan price', { label, amount, product: product.labelSuffix })
       return new Response('OK', { status: 200 })
     }
 
     // Activate subscription in database (extends any active subscription)
-    const success = await activateUserSubscription(actualChatId, plan.days)
+    const success = await activateUserSubscription(actualChatId, product.days, product.plan as 'plus' | 'pro' | 'corp')
 
     if (success) {
+      const planName = PLAN_NAMES_RU[product.plan as PlanId] || 'Plus'
+      const periodName = product.days === 365 ? '1 год (365 дней)' : '30 дней'
       await sendTgNotification(
         actualChatId,
-        `🎉 *Подписка Zerf Premium успешно активирована на ${plan.name}!* ⭐\n\n` +
-        `✨ Вам открыт полный доступ ко всем возможностям Zerf AI:\n` +
-        `• 🎙 Неограниченный голосовой ввод и интеграция с Siri (до 10 мин/день)\n` +
-        `• 🧠 Безлимитное ИИ-перепланирование задач (/reschedule)\n` +
-        `• 🔥 Безлимитный режим фокуса и таймеры отдыха (/focus)\n` +
-        `• 📊 Полная аналитика продуктивности и недельные отчеты (/stats)\n` +
-        `• 📌 Заметки и ИИ-чат без ограничений`
+        `🎉 *Подписка Zerf ${planName} успешно активирована на ${periodName}!* ⭐\n\n` +
+        `✨ Спасибо за поддержку Zerf AI — ваш тариф обновлён!\n` +
+        `• 📋 Управлять подпиской: /settings`
       )
     }
 

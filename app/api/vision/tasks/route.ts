@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { extractTasksFromImageWithGroq } from '@/lib/backend/vision'
-import { createTask } from '@/lib/backend/db'
+import { createTask, getUserUsageAndLimits } from '@/lib/backend/db'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 import { Buffer } from 'buffer'
 
 export async function POST(req: NextRequest) {
@@ -10,6 +11,19 @@ export async function POST(req: NextRequest) {
     if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     }
+    const chatId = authUser.chatId
+
+    // Photo recognition is a Plus+ feature (Plus: 10/day, Pro/Corp: unlimited)
+    const limits = await getUserUsageAndLimits(chatId)
+    if (!limits.canUsePhoto) {
+      return NextResponse.json({
+        error: limits.photos.max === 0
+          ? '❌ Распознавание задач по фото доступно на тарифе Plus (99 ₽/мес) или Pro. Оформите подписку в настройках!'
+          : `❌ Дневной лимит распознаваний по фото исчерпан (${limits.photos.max} в день на Plus). На Pro — безлимит!`,
+        limitReached: true,
+      }, { status: 403 })
+    }
+    await incrementDailyCount(COUNTERS.photo, chatId)
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null

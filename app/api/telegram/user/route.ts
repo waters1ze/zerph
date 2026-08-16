@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 import { hashPassword, verifyPassword } from '@/lib/backend/passwords'
+import { normalizePlan, isNewsDisabled, planAtLeast } from '@/lib/backend/plans'
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,10 +26,11 @@ export async function GET(req: NextRequest) {
 
         if (chat) {
           const now = new Date()
-          let isPremium = chat.plan === 'premium'
-          if (isPremium && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < now) {
-            isPremium = false
+          let activePlan = normalizePlan(chat.plan)
+          if (activePlan !== 'free' && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < now) {
+            activePlan = 'free'
           }
+          const isPremium = activePlan !== 'free'
 
           const fullName = [chat.firstName, chat.lastName].filter(Boolean).join(' ') || chat.firstName || 'Пользователь Zerf'
 
@@ -45,10 +47,11 @@ export async function GET(req: NextRequest) {
             googleEmail: chat.googleEmail || null,
             authProvider: chat.authProvider || 'telegram',
             birthday: chat.birthday || null,
-            plan: isPremium ? 'premium' : 'free',
+            plan: activePlan,
             isPremium,
             subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
             isAdmin: Boolean(chat.isAdmin),
+            newsDisabled: await isNewsDisabled(cid),
           })
         }
       }
@@ -80,8 +83,9 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
+    const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
 
     const updateData: any = {}
 
@@ -137,6 +141,23 @@ export async function POST(req: NextRequest) {
       updateData.googleEmail = googleEmail ? String(googleEmail).trim().toLowerCase() : null
     }
 
+    // News digest opt-out — available on Plus and above
+    let newsDisabledApplied = false
+    if (newsDisabled !== undefined) {
+      const currentChat = await prisma.telegramChat.findUnique({
+        where: { chatId: userCid },
+        select: { plan: true, subscriptionExpiry: true },
+      })
+      const active = currentChat && currentChat.subscriptionExpiry && new Date(currentChat.subscriptionExpiry) > new Date()
+      if (!planAtLeast(currentChat?.plan, 'plus') || (!active && normalizePlan(currentChat?.plan) !== 'corp')) {
+        return NextResponse.json({
+          error: 'Отключение новостных сводок доступно на тарифе Plus или выше.',
+        }, { status: 403 })
+      }
+      await setNewsDisabled(cid, Boolean(newsDisabled))
+      newsDisabledApplied = true
+    }
+
     if (Object.keys(updateData).length > 0) {
       await prisma.telegramChat.upsert({
         where: { chatId: userCid },
@@ -148,7 +169,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, message: 'Профиль и способы входа успешно обновлены!' })
+    return NextResponse.json({
+      success: true,
+      message: newsDisabledApplied
+        ? (newsDisabled ? 'Новостные сводки отключены.' : 'Новостные сводки включены.')
+        : 'Профиль и способы входа успешно обновлены!',
+    })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

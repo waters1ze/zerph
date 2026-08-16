@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { planAtLeast } from '@/lib/backend/plans'
 import { isCallerAdmin } from '@/lib/backend/admin'
 import { prisma } from '@/lib/backend/prisma'
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     const now = new Date()
     let whereClause: any = {}
 
-    if (targetGroup === 'premium') {
+    if (targetGroup === 'premium' || targetGroup === 'paid') {
       whereClause = {
         plan: 'premium',
         OR: [

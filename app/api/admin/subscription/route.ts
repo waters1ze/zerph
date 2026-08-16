@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { chatId, action, days = 30 } = body
+    const { chatId, action, days = 30, plan = 'plus' } = body
 
     if (!chatId || !action) {
       return NextResponse.json({ error: 'chatId and action are required' }, { status: 400 })
@@ -77,10 +77,11 @@ export async function POST(req: NextRequest) {
     const cid = BigInt(chatId)
 
     if (action === 'grant') {
-      await activateUserSubscription(chatId, days)
+      const grantedPlan = plan === 'pro' ? 'pro' : plan === 'corp' ? 'corp' : 'plus'
+      await activateUserSubscription(chatId, days, grantedPlan)
       return NextResponse.json({
         success: true,
-        message: `✅ Подписка Premium выдана пользователю ${chatId} на ${days} дней`,
+        message: `✅ Подписка ${grantedPlan.toUpperCase()} выдана пользователю ${chatId} на ${days} дней`,
       })
     }
 

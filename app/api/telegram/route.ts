@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { planAtLeast, normalizePlan } from '@/lib/backend/plans'
 import { after } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem, generateSmartReschedulePlan, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
 import {
@@ -20,7 +21,7 @@ import {
   getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
   isHolidayTitle, isBirthdayTitle, cancelScheduleForDate,
 } from '@/lib/backend/db'
-import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret } from '@/lib/backend/auth'
+import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret, getFeedSignature } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -443,7 +444,7 @@ async function handleReschedule(chatId: number) {
   const limits = await getUserUsageAndLimits(chatId)
 
   // Free plan limit: max 2 reschedules per day
-  if (limits.plan !== 'premium') {
+  if (!planAtLeast(limits.plan, 'plus')) {
     const todayReschedule = await prisma.task.count({
       where: {
         ownerChatId: cid,
@@ -543,7 +544,7 @@ async function handleFocus(chatId: number, minutesStr?: string) {
   const mins = parseInt(minutesStr || '25', 10)
   let validMins = isNaN(mins) || mins <= 0 ? 25 : Math.min(mins, 180)
 
-  if (limits.plan !== 'premium' && validMins > 45) {
+  if (!planAtLeast(limits.plan, 'plus') && validMins > 45) {
     validMins = 45
     await send(chatId, `⭐ *На бесплатном тарифе длительность фокуса ограничена 45 минутами.* Запускаем на 45 мин.\n_Для сессий до 180 мин оформите /premium._`)
   }
@@ -716,7 +717,7 @@ async function handleSubscribe(chatId: number) {
   })
   const yearUrl = `https://yoomoney.ru/quickpay/confirm?${yearParams.toString()}`
 
-  if (limits.plan === 'premium') {
+  if (planAtLeast(limits.plan, 'plus')) {
     const exp = limits.subscriptionExpiry
       ? new Date(limits.subscriptionExpiry).toLocaleDateString('ru-RU')
       : '?'
@@ -836,7 +837,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
     matched.slice(0, 10).forEach(u => {
       const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Без имени'
       const uname = u.username ? `@${u.username}` : 'нет username'
-      const isPrem = u.plan === 'premium'
+      const isPrem = planAtLeast(u.plan, 'plus')
       const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : '—'
       msg += `👤 *${escMd(name)}* (${uname})\n`
       msg += `  ID: \`${u.chatId}\`\n`
@@ -895,11 +896,11 @@ async function handleAdminCommand(chatId: number, args: string[]) {
     const exp = data.subscriptionExpiry ? new Date(data.subscriptionExpiry).toLocaleDateString('ru-RU') : 'нет'
     await send(chatId,
       `👤 *Пользователь ${targetChatId}*\n\n` +
-      `📋 Тариф: *${data.plan === 'premium' ? '✨ Premium' : '🆓 Free'}*\n` +
+      `📋 Тариф: *${planAtLeast(data.plan, 'plus') ? '✨ ' + String(data.plan).toUpperCase() : '🆓 Free'}*\n` +
       `📅 Истекает: ${exp}\n\n` +
-      `🎙 Голос сегодня: ${data.voice?.used || 0}${data.plan === 'premium' ? ` (${Math.round((data.voice?.secondsUsed || 0)/60)} мин)` : '/5 (до 3 мин)'}\n` +
-      `📌 Заметки сегодня: ${data.notes?.used || 0}${data.plan !== 'premium' ? '/5' : ''}\n` +
-      `💬 Чат сегодня: ${data.chat?.used || 0}${data.plan !== 'premium' ? '/20' : ''}`
+      `🎙 Голос сегодня: ${data.voice?.used || 0}${planAtLeast(data.plan, 'plus') ? ` (${Math.round((data.voice?.secondsUsed || 0)/60)} мин)` : '/5 (до 3 мин)'}\n` +
+      `📌 Заметки сегодня: ${data.notes?.used || 0}${''}\n` +
+      `💬 Чат сегодня: ${data.chat?.used || 0}${planAtLeast(data.plan, 'plus') ? '' : `/${data.chat?.max ?? 10}`}`
     )
     return
   }
@@ -921,14 +922,14 @@ async function handleAdminCommand(chatId: number, args: string[]) {
     const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, { headers: { Authorization: `Bearer ${ADMIN_SECRET}` } })
     const data = await res.json()
     const users: any[] = data.users || []
-    const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
+    const premiums = users.filter((u: { plan: string }) => planAtLeast(u.plan, 'plus'))
     let msg = `👥 *Всего пользователей: ${users.length}*\n✨ Premium: ${premiums.length}\n\n`
     
     users.slice(0, 15).forEach((u: any) => {
       const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Без имени'
       const uname = u.username ? `@${u.username}` : ''
       const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry).toLocaleDateString('ru-RU') : '—'
-      const isPrem = u.plan === 'premium'
+      const isPrem = planAtLeast(u.plan, 'plus')
       msg += `• \`${u.chatId}\` *${escMd(name)}* ${uname} — ${isPrem ? `✨ до ${exp}` : '🆓 Free'}\n`
     })
 
@@ -957,7 +958,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
     const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, { headers: { Authorization: `Bearer ${ADMIN_SECRET}` } })
     const data = await res.json()
     const users: any[] = data.users || []
-    const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
+    const premiums = users.filter((u: { plan: string }) => planAtLeast(u.plan, 'plus'))
     const price = parseInt(await getConfig('subscription_price') || '99', 10)
     const monthlyRevenue = premiums.length * price
     const today = new Date().toLocaleDateString('ru-RU')
@@ -1008,7 +1009,7 @@ async function handleRefCommand(chatId: number) {
 async function handleWeeklyReport(chatId: number, senderId: number) {
   try {
     const limits = await getUserUsageAndLimits(chatId)
-    const isPremium = limits.plan === 'premium'
+    const isPremium = planAtLeast(limits.plan, 'plus')
     
     await send(chatId, 'Генерирую недельный отчет, подождите немного...')
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
@@ -1571,7 +1572,7 @@ async function processPhoto(chatId: number, photoArray: any[]) {
     const { ROOT_ADMIN_IDS } = await import('@/lib/backend/admin')
     const limits = await getUserUsageAndLimits(chatId)
     const isRoot = ROOT_ADMIN_IDS.includes(String(chatId).trim())
-    const isPremium = limits.plan === 'premium' || isRoot
+    const isPremium = planAtLeast(limits.plan, 'plus') || isRoot
     const maxPhotos = isRoot ? Infinity : (isPremium ? 30 : 3)
 
     const todayPhotosCount = await prisma.task.count({
@@ -1685,7 +1686,7 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
   const limits = await getUserUsageAndLimits(chatId)
 
   // Free tariff single voice length limit: 1 minute (60 seconds)
-  if (limits.plan === 'free' && duration > 60) {
+  if (!planAtLeast(limits.plan, 'plus') && duration > 60) {
     const mins = Math.floor(duration / 60)
     const secs = duration % 60
     await send(chatId,
@@ -1703,9 +1704,9 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
 
   if (!limits.canSendVoice) {
     await send(chatId,
-      limits.plan === 'premium'
-        ? '⏳ *Достигнут дневной лимит записи голоса (20 минут в день)*. Сброс наступит завтра в полночь!'
-        : '⏳ *Достигнут дневной лимит бесплатных голосовых сообщений (5 в день до 1 минуты каждое)*.\n\nОформите подписку Zerf Premium за 99 ₽ для расширенного лимита и безлимитных заметок!',
+      planAtLeast(limits.plan, 'plus')
+        ? `⏳ *Достигнут дневной лимит записи голоса (${Math.round(limits.voice.maxSeconds / 60)} мин в день)*. Сброс наступит завтра в полночь!`
+        : '⏳ *Достигнут дневной лимит голосовых сообщений на бесплатном тарифе (1 мин в день)*.\n\nОформите Zerf Plus (5 мин/день) или Pro (безлимит) в настройках!',
       {
         reply_markup: {
           inline_keyboard: [[
@@ -1857,9 +1858,9 @@ async function handleGroupAddCommand(msg: any) {
     const limits = await getUserUsageAndLimits(senderId)
     if (!limits.canSendVoice) {
       await send(senderId,
-        limits.plan === 'premium'
-          ? '❌ Ошибка в группе: Достигнут дневной лимит записи голоса (15 минут). Сброс наступит завтра!'
-          : '❌ Ошибка в группе: Достигнут дневной лимит бесплатных голосовых сообщений (5 в день по 3 мин). Оформите подписку Zerf Premium за 99 руб!'
+        planAtLeast(limits.plan, 'plus')
+          ? `❌ Ошибка в группе: Достигнут дневной лимит записи голоса (${Math.round(limits.voice.maxSeconds / 60)} мин). Сброс наступит завтра!`
+          : '❌ Ошибка в группе: Достигнут дневной лимит голосовых сообщений на бесплатном тарифе. Оформите Zerf Plus или Pro!'
       ).catch(() => {})
       return
     }
@@ -2422,8 +2423,8 @@ async function handleScheduleCommand(
 
 async function handlePublicCommand(chatId: number, taskId?: string) {
   if (taskId) {
-    // Make specific task public
-    const ok = await setItemVisibility(taskId, 'task', 'public')
+    // Make specific task public (only if the caller owns it)
+    const ok = await setItemVisibility(taskId, 'task', 'public', chatId)
     if (ok) {
       await send(chatId, `🔓 *Задача открыта!*\n\nТеперь другие могут видеть её через \`/schedule @твой_юзернейм\`\n\nЧтобы скрыть: \`/private ${taskId}\``)
     } else {
@@ -3015,8 +3016,9 @@ export async function POST(req: NextRequest) {
         await handleSettings(chatId)
       } else if (data === 'open_calendar_sync') {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
-        const webcalUrl = `${appUrl.replace(/^https?:\/\//, 'webcal://')}/api/alarm/ics?chatId=${chatId}`
-        const httpsUrl = `${appUrl}/api/alarm/ics?chatId=${chatId}`
+        const calSig = getFeedSignature(chatId)
+        const webcalUrl = `${appUrl.replace(/^https?:\/\//, 'webcal://')}/api/alarm/ics?chatId=${chatId}&sig=${calSig}`
+        const httpsUrl = `${appUrl}/api/alarm/ics?chatId=${chatId}&sig=${calSig}`
 
         await send(chatId,
           `📅 *Синхронизация с Apple и Google Календарём*\n\n` +
@@ -3459,7 +3461,7 @@ export async function POST(req: NextRequest) {
         if (!targetId) {
           await send(chatId, `🔒 Укажи ID задачи: \`/private <taskId>\``)
         } else {
-          const ok = await setItemVisibility(targetId, 'task', 'private')
+          const ok = await setItemVisibility(targetId, 'task', 'private', chatId)
           await send(chatId, ok ? `🔒 Задача скрыта от других пользователей.` : `❌ Задача не найдена.`)
         }
       } else if (cmd === '/link') {
@@ -3468,7 +3470,7 @@ export async function POST(req: NextRequest) {
         if (!taskId || !noteId) {
           await send(chatId, `📎 *Привязка заметки к задаче*\n\nИспользование: \`/link <taskId> <noteId>\``)
         } else {
-          const ok = await linkNoteToTask(taskId, noteId)
+          const ok = await linkNoteToTask(taskId, noteId, chatId)
           await send(chatId, ok ? `▪ Заметка привязана к задаче!` : `▫ Задача или заметка не найдена.`)
         }
       } else if (cmd === '/timezone' || cmd === '/tz') {

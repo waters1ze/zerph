@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
 
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { PAYMENT_PRODUCTS, PLAN_CATALOG } from '@/lib/backend/plans'
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,12 +34,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ownerChatId is required' }, { status: 400 })
     }
 
+    // Plan products: plus (99 ₽/мес, 1009 ₽/год) | pro (299 ₽/мес, 3049 ₽/год)
+    const plan = body.plan === 'pro' ? 'pro' : 'plus'
     const isYear = body.period === 'year' || body.period === 'annual' || body.duration === 'year'
-    const sum = isYear ? '1009' : '99'
+    const product = PAYMENT_PRODUCTS.find(p => p.plan === plan && p.days === (isYear ? 365 : 30))
+    if (!product) {
+      return NextResponse.json({ error: 'Unknown plan or period' }, { status: 400 })
+    }
+
+    const catalogEntry = PLAN_CATALOG.find(c => c.id === plan)!
+    const sum = String(isYear ? catalogEntry.priceYearly : catalogEntry.priceMonthly)
     const targets = isYear
-      ? 'Подписка Zerf Premium на 1 год (со скидкой 15%)'
-      : 'Подписка Zerf Premium (30 дней)'
-    const label = isYear ? `${ownerChatId}_365` : `${ownerChatId}_30`
+      ? `Подписка Zerf ${catalogEntry.name} на 1 год (со скидкой 15%)`
+      : `Подписка Zerf ${catalogEntry.name} (30 дней)`
+    const label = `${ownerChatId}_${product.labelSuffix}`
 
     const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
@@ -61,6 +70,7 @@ export async function POST(req: NextRequest) {
       success: true,
       paymentUrl,
       amount: Number(sum),
+      plan,
       period: isYear ? 'year' : 'month',
       days: isYear ? 365 : 30,
       currency: 'RUB',

@@ -9,7 +9,8 @@
  * 5. CHANNEL DIGESTS & POLLS: once per scheduled day
  */
 
-import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig } from './db'
+import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig, getUserUsageAndLimits } from './db'
+import { PLANS, getDailyCount, incrementDailyCount, COUNTERS, isNewsDisabled, planAtLeast } from './plans'
 import { generateMorningGreeting, generateEveningReview } from './groq'
 import { prisma } from './prisma'
 import { sendCommentReportToAdminsTelegram } from './comment-analyzer'
@@ -96,6 +97,24 @@ export async function runReminderCheck() {
     const allTasks = await getAllTasks()
     if (!allTasks.length) return
 
+    // Per-run cache of daily reminder quota per owner (free plan: 5/day)
+    const reminderQuota = new Map<string, { used: number; max: number }>()
+    const getQuota = async (chatId: number): Promise<{ used: number; max: number } | null> => {
+      if (!chatId) return null
+      const key = String(chatId)
+      let q = reminderQuota.get(key)
+      if (!q) {
+        try {
+          const limits = await getUserUsageAndLimits(chatId)
+          q = { used: await getDailyCount(COUNTERS.reminder, key), max: PLANS[limits.plan].remindersPerDay }
+        } catch {
+          q = { used: 0, max: PLANS.free.remindersPerDay }
+        }
+        reminderQuota.set(key, q)
+      }
+      return q
+    }
+
     for (const task of allTasks) {
       if (task.status === 'done' || task.status === 'draft') continue
       if (task.reminderSent) continue
@@ -137,6 +156,14 @@ export async function runReminderCheck() {
       }
 
       if (shouldFire) {
+        // Daily reminder cap for the task owner (free tier)
+        if (ownerChatId) {
+          const quota = await getQuota(ownerChatId)
+          if (quota && quota.used >= quota.max) {
+            continue
+          }
+        }
+
         // Strict anti-duplicate check for this task and stage
         if (isReminderInCooldown(task.id, sentCount + 1)) {
           continue
@@ -180,6 +207,14 @@ export async function runReminderCheck() {
 
         for (const recipient of Array.from(recipients)) {
           await sendTelegramMessage(recipient, text, replyMarkup).catch(() => {})
+          // Count the pushed reminder against the daily quota
+          if (ownerChatId) {
+            const quota = await getQuota(ownerChatId)
+            if (quota) {
+              quota.used += 1
+              incrementDailyCount(COUNTERS.reminder, String(ownerChatId)).catch(() => {})
+            }
+          }
         }
 
         const nextSentCount = sentCount + 1
@@ -264,6 +299,11 @@ export async function runMorningGreeting() {
           continue
         }
         await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+
+        // Plus+ users can disable news digests
+        if (await isNewsDisabled(chatId) && planAtLeast(chat.plan, 'plus')) {
+          continue
+        }
 
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 
@@ -354,6 +394,11 @@ export async function runEveningReview() {
           continue
         }
         await markUserCronDoneToday('evening_review', chatId, todayStr)
+
+        // Plus+ users can disable news digests
+        if (await isNewsDisabled(chatId) && planAtLeast(chat.plan, 'plus')) {
+          continue
+        }
 
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 

@@ -16,6 +16,7 @@ import {
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 
 startReminderScheduler()
 
@@ -80,6 +81,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     if (body.itemType === 'goal' || body.type === 'goal') {
+      // Free plan: max 5 goals per day
+      const limits = await getUserUsageAndLimits(ownerChatId)
+      if (!limits.canCreateGoal) {
+        return NextResponse.json({
+          error: `❌ Дневной лимит создания целей исчерпан (${limits.goals.max} в день на бесплатном тарифе). Оформите Zerf Plus — там цели без ограничений!`,
+          limitReached: true,
+        }, { status: 403 })
+      }
+      await incrementDailyCount(COUNTERS.goal, ownerChatId)
+
       const goal = await createGoal({
         title: body.title || 'Новая цель',
         description: body.description,
@@ -93,16 +104,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.itemType === 'note' || body.type === 'note') {
-      if (ownerChatId) {
-        const limits = await getUserUsageAndLimits(ownerChatId)
-        if (!limits.canCreateNote) {
-          return NextResponse.json({
-            error: '❌ Дневной лимит создания заметок исчерпан (5 заметок в день на бесплатном тарифе). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
-            limitReached: true,
-          }, { status: 403 })
-        }
-      }
-
+      // Notes are unlimited on every plan
       const note = await createNote({
         title: body.title || 'Новая заметка',
         content: body.content || '',

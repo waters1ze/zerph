@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { PLAN_RANK, PLAN_NAMES_RU, normalizePlan } from '@/lib/backend/plans'
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,10 +62,17 @@ export async function POST(req: NextRequest) {
       where: { chatId: numericChatId },
     })
 
-    // Determine target plan without downgrading unlimited users
-    let targetPlan = promo.targetPlan === 'unlimited' ? 'unlimited' : 'premium'
-    if (user?.plan === 'unlimited' && targetPlan === 'premium') {
-      targetPlan = 'unlimited'
+    // Determine target plan without downgrading higher tiers
+    // (legacy DB values premium/unlimited normalize to plus/corp)
+    const promoPlanRaw = (promo.targetPlan || 'all').toLowerCase()
+    let targetPlan: 'plus' | 'pro' | 'corp'
+    if (promoPlanRaw === 'unlimited') targetPlan = 'corp'
+    else if (promoPlanRaw === 'pro') targetPlan = 'pro'
+    else targetPlan = 'plus'
+
+    const userPlanRank = PLAN_RANK[normalizePlan(user?.plan)]
+    if (userPlanRank > PLAN_RANK[targetPlan]) {
+      targetPlan = normalizePlan(user?.plan) as 'plus' | 'pro' | 'corp'
     }
 
     const daysToAdd = promo.durationDays || 30
@@ -101,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Промокод успешно активирован! Тариф «${targetPlan === 'unlimited' ? 'Безлимит' : 'Premium'}» продлен на ${daysToAdd} дн.`,
+      message: `Промокод успешно активирован! Тариф «${PLAN_NAMES_RU[targetPlan]}» продлен на ${daysToAdd} дн.`,
       plan: targetPlan,
       expiresAt: newExpiry.toISOString(),
       discountPercent: promo.discountPercent,

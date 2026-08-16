@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { planAtLeast } from '@/lib/backend/plans'
 import { isCallerAdmin, ROOT_ADMIN_IDS } from '@/lib/backend/admin'
 import { prisma } from '@/lib/backend/prisma'
 
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     ])
 
     const activePremiumCount = users.filter(u => {
-      if (u.plan !== 'premium') return false
+      if (!planAtLeast(u.plan, 'plus')) return false
       if (!u.subscriptionExpiry) return true
       return new Date(u.subscriptionExpiry) >= now
     }).length
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
       if (isRoot) {
         isSubscriptionActive = true
         daysRemaining = 9999 // Owner / Root
-      } else if (u.plan === 'premium' && u.subscriptionExpiry) {
+      } else if (planAtLeast(u.plan, 'plus') && u.subscriptionExpiry) {
         const expDate = new Date(u.subscriptionExpiry)
         if (expDate >= now) {
           isSubscriptionActive = true

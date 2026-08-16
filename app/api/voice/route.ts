@@ -8,6 +8,7 @@ import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq
 import { processParsedItemWithDelegation, getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext, getFriends } from '@/lib/backend/db'
 import { GROQ_API_KEY } from '@/lib/config'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { planAtLeast } from '@/lib/backend/plans'
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,9 +19,9 @@ export async function POST(req: NextRequest) {
       const limits = await getUserUsageAndLimits(ownerChatId)
       if (!limits.canSendVoice) {
         return NextResponse.json({
-          error: limits.plan === 'premium'
-            ? '❌ Достигнут лимит голосового ввода на сегодня (10 минут). Наступит сброс завтра!'
-            : '❌ Достигнут дневной лимит (2 голосовых сообщения в день). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
+          error: planAtLeast(limits.plan, 'plus')
+            ? `❌ Достигнут лимит голосового ввода на сегодня (${Math.round(limits.voice.maxSeconds / 60)} мин). Наступит сброс завтра!`
+            : '❌ Достигнут дневной лимит (1 минута голоса в день). Оформите Zerf Plus (5 мин/день) или Pro (безлимит) в Настройках!',
           limitReached: true,
         }, { status: 403 })
       }
