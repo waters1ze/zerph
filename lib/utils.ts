@@ -57,12 +57,23 @@ export interface TaskDateGroupItem<T> {
   tasks: T[]
 }
 
-export function groupTasksByDate<T extends { dueDate?: string | null; createdAt?: string; status?: string }>(tasks: T[]): TaskDateGroupItem<T>[] {
-  const today = new Date().toISOString().slice(0, 10)
-  const tomorrowDate = new Date(Date.now() + 24 * 60 * 60 * 1000)
-  const tomorrow = tomorrowDate.toISOString().slice(0, 10)
-  const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const yesterday = yesterdayDate.toISOString().slice(0, 10)
+export function getLocalTodayDateString(): string {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function groupTasksByDate<T extends { dueDate?: string | null; dueTime?: string | null; createdAt?: string; status?: string }>(tasks: T[]): TaskDateGroupItem<T>[] {
+  const now = new Date()
+  const today = getLocalTodayDateString()
+
+  const tom = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const tomorrow = `${tom.getFullYear()}-${String(tom.getMonth() + 1).padStart(2, '0')}-${String(tom.getDate()).padStart(2, '0')}`
+
+  const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  const yesterday = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`
 
   const groupsMap = new Map<string, T[]>()
 
@@ -74,11 +85,44 @@ export function groupTasksByDate<T extends { dueDate?: string | null; createdAt?
     groupsMap.get(key)!.push(task)
   }
 
-  // Sort keys: Overdue / past dates first, then Today, then Tomorrow, then upcoming dates in ascending order, and 'no-date' last
+  // Sort tasks within each date group by dueTime (earliest time first)
+  for (const [, groupTaskList] of groupsMap.entries()) {
+    groupTaskList.sort((a, b) => {
+      if (a.dueTime && b.dueTime) return a.dueTime.localeCompare(b.dueTime)
+      if (a.dueTime && !b.dueTime) return -1
+      if (!a.dueTime && b.dueTime) return 1
+      return 0
+    })
+  }
+
+  // Sort keys:
+  // 1. TODAY (key === today) -> ALWAYS FIRST at the very top!
+  // 2. TOMORROW (key === tomorrow) & upcoming future dates (key > today) -> chronological order
+  // 3. OVERDUE / YESTERDAY / PAST dates (key < today) -> reverse chronological order (yesterday, then earlier)
+  // 4. NO-DATE ('no-date') -> at the very bottom
   const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) => {
+    if (a === b) return 0
+    if (a === today) return -1
+    if (b === today) return 1
+
     if (a === 'no-date') return 1
     if (b === 'no-date') return -1
-    return a.localeCompare(b)
+
+    const aIsFuture = a > today
+    const bIsFuture = b > today
+
+    if (aIsFuture && bIsFuture) {
+      return a.localeCompare(b)
+    }
+    if (aIsFuture && !bIsFuture) {
+      return -1
+    }
+    if (!aIsFuture && bIsFuture) {
+      return 1
+    }
+
+    // Both are past dates: closest past date first (yesterday before last week)
+    return b.localeCompare(a)
   })
 
   return sortedKeys.map(key => {
