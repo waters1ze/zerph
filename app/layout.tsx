@@ -153,6 +153,8 @@ const jsonLd = [
   }
 ]
 
+import { ConfirmDialogProvider } from '@/components/ui/confirm-dialog'
+
 export default function RootLayout({
   children,
 }: {
@@ -189,7 +191,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary`}>
         <LanguageProvider>
-          {children}
+          <ConfirmDialogProvider>
+            {children}
+          </ConfirmDialogProvider>
         </LanguageProvider>
       </body>
     </html>

@@ -24,6 +24,7 @@ model Task {
   linkedNoteIds String[] // IDs of linked notes shown in reminders
   projectId    String?
   goalId       String?
+  habitId      String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   completedAt  DateTime?
@@ -68,6 +69,7 @@ model Note {
   dueTime      String?
   projectId    String?
   goalId       String?
+  habitId      String?
   taskIds      String[]
   visibility   String   @default("private") // "private" | "public"
   createdAt    DateTime @default(now())
@@ -89,9 +91,10 @@ model TelegramChat {
   vkId                   String?
   googleEmail            String?
   birthday               String?   // YYYY-MM-DD or MM-DD
+  timezone               String?   @default("Europe/Moscow") // e.g. "Europe/Moscow", "Asia/Yekaterinburg", etc.
   reminderIntervalMinutes Int       @default(5)
   reminderRepeatCount    Int       @default(3)
-  plan                   String    @default("free") // "free" | "premium"
+  plan                   String    @default("free") // "free" | "premium" | "unlimited"
   subscriptionExpiry     DateTime?
   voiceCountToday        Int       @default(0)
   voiceSecondsToday      Int       @default(0)
@@ -227,5 +230,20 @@ model ChannelComment {
   createdAt     DateTime  @default(now())
 
   @@index([isAnalyzed])
+}
+
+// Promo codes system for discounts and free subscriptions
+model PromoCode {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  discountPercent Int       @default(100) // 100% = free, 30% = 30% off, etc.
+  targetPlan      String    @default("all") // "all" | "premium" | "unlimited"
+  durationDays    Int       @default(30) // duration granted if activated (e.g. 30, 90, 365 days)
+  maxActivations  Int       @default(1) // maximum allowed activations
+  usedCount       Int       @default(0) // total activations count
+  usedByChatIds   String[]  // array of stringified chatIds
+  expiresAt       DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
 }
 

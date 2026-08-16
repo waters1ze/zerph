@@ -36,16 +36,35 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
 const MINIAPP_URL = `${APP_URL}/tg`
 
 const P_EMOJI: Record<string, string> = {
-  urgent: '🔴', high: '🟠', medium: '🟡', low: '🟢',
+  urgent: '▪️', high: '▫️', medium: '▫️', low: '▫️',
 }
 const G_STATUS: Record<string, string> = {
-  on_track: '✅', at_risk: '⚠️', delayed: '❌', completed: '🏆',
+  on_track: '▪️', at_risk: '▫️', delayed: '▫️', completed: '▪️',
 }
 const PRIORITY_RU: Record<string, string> = {
   urgent: 'Срочный',
   high: 'Высокий',
   medium: 'Средний',
   low: 'Низкий',
+}
+
+export function parseTimezoneInput(input: string): string | null {
+  const text = input.toLowerCase().trim()
+  if (text.includes('калининград') || text.includes('+2') || text.includes('utc+2') || text.includes('gmt+2')) return 'Europe/Kaliningrad'
+  if (text.includes('москв') || text.includes('мск') || text.includes('+3') || text.includes('utc+3') || text.includes('gmt+3') || text.includes('питер') || text.includes('спб')) return 'Europe/Moscow'
+  if (text.includes('самара') || text.includes('+4') || text.includes('utc+4') || text.includes('gmt+4')) return 'Europe/Samara'
+  if (text.includes('екатеринбург') || text.includes('екб') || text.includes('+5') || text.includes('utc+5') || text.includes('gmt+5')) return 'Asia/Yekaterinburg'
+  if (text.includes('омск') || text.includes('+6') || text.includes('utc+6') || text.includes('gmt+6')) return 'Asia/Omsk'
+  if (text.includes('красноярск') || text.includes('новосибирск') || text.includes('+7') || text.includes('utc+7') || text.includes('gmt+7')) return 'Asia/Krasnoyarsk'
+  if (text.includes('иркутск') || text.includes('+8') || text.includes('utc+8') || text.includes('gmt+8')) return 'Asia/Irkutsk'
+  if (text.includes('якутск') || text.includes('+9') || text.includes('utc+9') || text.includes('gmt+9')) return 'Asia/Yakutsk'
+  if (text.includes('владивосток') || text.includes('+10') || text.includes('utc+10') || text.includes('gmt+10')) return 'Asia/Vladivostok'
+  if (text.includes('магадан') || text.includes('+11') || text.includes('utc+11') || text.includes('gmt+11')) return 'Asia/Magadan'
+  if (text.includes('камчатк') || text.includes('+12') || text.includes('utc+12') || text.includes('gmt+12')) return 'Asia/Kamchatka'
+  if (text.includes('europe/') || text.includes('asia/') || text.includes('america/') || text.includes('utc')) {
+    return input.trim()
+  }
+  return null
 }
 
 function escMd(s: string) {
@@ -3356,10 +3375,32 @@ export async function POST(req: NextRequest) {
           await send(chatId, `📎 *Привязка заметки к задаче*\n\nИспользование: \`/link <taskId> <noteId>\``)
         } else {
           const ok = await linkNoteToTask(taskId, noteId)
-          await send(chatId, ok ? `✅ Заметка привязана к задаче! При следующем напоминании она будет показана.` : `❌ Задача или заметка не найдена.`)
+          await send(chatId, ok ? `▪ Заметка привязана к задаче!` : `▫ Задача или заметка не найдена.`)
+        }
+      } else if (cmd === '/timezone' || cmd === '/tz') {
+        const tzArg = parts.slice(1).join(' ').trim()
+        if (!tzArg) {
+          const current = await prisma.telegramChat.findUnique({
+            where: { chatId: BigInt(chatId) },
+            select: { timezone: true }
+          })
+          const currentTz = current?.timezone || 'Europe/Moscow'
+          await send(chatId, `⏱ *Настройка часового пояса*\n\n▪ *Текущий пояс:* \`${currentTz}\`\n\nДля изменения отправьте:\n\`/timezone +3\` (Москва, СПб)\n\`/timezone +5\` (Екатеринбург)\n\`/timezone +7\` (Новосибирск, Красноярск)\n\`/timezone Europe/Moscow\`\n\nЛибо просто напишите сообщением: _«мой часовой пояс +3»_`)
+        } else {
+          const matched = parseTimezoneInput(tzArg)
+          if (matched) {
+            await prisma.telegramChat.upsert({
+              where: { chatId: BigInt(chatId) },
+              update: { timezone: matched },
+              create: { chatId: BigInt(chatId), timezone: matched },
+            })
+            await send(chatId, `⏱ *Часовой пояс успешно установлен: \`${matched}\`* ▪\nВсе напоминания и задачи синхронизированы по вашему местному времени.`)
+          } else {
+            await send(chatId, `▫ Не удалось определить часовой пояс. Примеры:\n\`/timezone +3\` (МСК)\n\`/timezone +5\` (Екатеринбург)\n\`/timezone Europe/Moscow\``)
+          }
         }
       } else if (!isGroup) {
-        await send(chatId, 'Попробуй /settings, /today, /invite, /report, /buy или /help')
+        await send(chatId, 'Попробуй /settings, /today, /timezone, /invite, /report, /buy или /help')
       }
 
     } else if (!isGroup) {
@@ -3370,6 +3411,21 @@ export async function POST(req: NextRequest) {
       } else if (text.trim()) {
         const trimmed = text.trim()
         const lowerText = trimmed.toLowerCase()
+
+        // 00. Natural language timezone setting ("мой часовой пояс +3", "часовой пояс мск", "поставь часовой пояс Екатеринбург")
+        const tzNaturalMatch = trimmed.match(/(?:мой\s+|установи\s+|поставь\s+|смени\s+)?часовой\s+пояс\s*(?:на|:)?\s*([+\w\s/–-]+)/i)
+        if (tzNaturalMatch && tzNaturalMatch[1]) {
+          const matchedTz = parseTimezoneInput(tzNaturalMatch[1])
+          if (matchedTz) {
+            await prisma.telegramChat.upsert({
+              where: { chatId: BigInt(chatId) },
+              update: { timezone: matchedTz },
+              create: { chatId: BigInt(chatId), timezone: matchedTz },
+            })
+            await send(chatId, `⏱ *Часовой пояс успешно установлен: \`${matchedTz}\`* ▪\nВсе напоминания и задачи будут приходить строго по вашему времени.`)
+            return NextResponse.json({ ok: true })
+          }
+        }
 
         // 0. Natural team schedule query ("график лера", "покажи график леры на завтра", "какой график у артема", "расписание артем", "график")
         const scheduleMatch = trimmed.match(/^(?:покажи\s+|какой\s+|посмотреть\s+|глянуть\s+)?(?:график|расписание|занятость|свободное время)(?:\s+у)?(?:\s+(.+))?$/i)

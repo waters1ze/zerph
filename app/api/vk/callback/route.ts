@@ -20,6 +20,7 @@ import {
   findFriendMatches,
 } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
+import { parseTimezoneInput } from '@/app/api/telegram/route'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
@@ -269,6 +270,32 @@ export async function POST(req: NextRequest) {
           `🎙 *Голосовой ввод:* Просто отправь голосовое сообщение, и ИИ сам расставит даты, приоритеты и теги!`
 
         await sendVkMessage(fromId, helpText, mainKeyboard)
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+      }
+
+      // ── 2.2 /timezone ────────────────────────────────────────────────────────
+      if (cmd === '/timezone' || cmd === '/tz' || lower.startsWith('часовой пояс') || lower.startsWith('мой часовой пояс')) {
+        const tzArg = parts.slice(1).join(' ').trim() || effectiveText.replace(/(?:мой\s+|установи\s+|поставь\s+|смени\s+)?часовой\s+пояс\s*(?:на|:)?/i, '').trim()
+        if (!tzArg) {
+          const current = await prisma.telegramChat.findUnique({
+            where: { chatId: BigInt(vkChatId) },
+            select: { timezone: true }
+          })
+          const currentTz = current?.timezone || 'Europe/Moscow'
+          await sendVkMessage(fromId, `⏱ *Настройка часового пояса*\n\n▪ *Текущий пояс:* ${currentTz}\n\nДля изменения отправь:\n• /timezone +3 (Москва, СПб)\n• /timezone +5 (Екатеринбург)\n• /timezone +7 (Новосибирск, Красноярск)\n• /timezone Europe/Moscow\n\nЛибо напиши: «мой часовой пояс +3»`, mainKeyboard)
+        } else {
+          const matched = parseTimezoneInput(tzArg)
+          if (matched) {
+            await prisma.telegramChat.upsert({
+              where: { chatId: BigInt(vkChatId) },
+              update: { timezone: matched },
+              create: { chatId: BigInt(vkChatId), timezone: matched },
+            })
+            await sendVkMessage(fromId, `⏱ *Часовой пояс успешно установлен: ${matched}* ▪\nВсе напоминания и задачи будут приходить строго по твоему местному времени.`, mainKeyboard)
+          } else {
+            await sendVkMessage(fromId, `▫ Не удалось определить часовой пояс. Примеры:\n/timezone +3 (МСК)\n/timezone +5 (Екатеринбург)\n/timezone Europe/Moscow`, mainKeyboard)
+          }
+        }
         return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
 

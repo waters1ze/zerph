@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import {
   Users, UserPlus, Trash2, CheckSquare, Circle,
   X, Mail, Send, Copy, Check, Share2, UserCheck, AlertCircle, Sparkles, RefreshCw,
-  Clock, Calendar, CalendarDays, Lock, ShieldCheck, Plus, Flame, CheckCircle2
+  Clock, Calendar, CalendarDays, Lock, ShieldCheck, Plus, Flame, CheckCircle2, Cake, Shield
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { Friend } from '@/lib/types'
 
 const STATUS_CONFIG = {
@@ -142,20 +143,22 @@ function FriendCard({
           </div>
 
           {/* Task permission toggle */}
-          <div className="flex flex-col gap-1 pt-2 mt-2 border-t border-border/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Разрешить задачи от этого человека</span>
+          <div className="flex flex-col gap-1 pt-2.5 mt-2.5 border-t border-border/40">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground font-medium">Разрешить задачи от этого человека</span>
               <button
+                type="button"
                 onClick={toggleAllowTasks}
                 disabled={updating}
+                aria-label="Переключить разрешение задач"
                 className={cn(
-                  'w-8 h-4.5 rounded-full relative transition-colors p-0.5',
+                  'w-11 h-6 rounded-full relative transition-colors duration-200 p-0.5 inline-flex items-center shrink-0 cursor-pointer',
                   allowTasks ? 'bg-emerald-500' : 'bg-muted-foreground/30'
                 )}
               >
                 <div className={cn(
-                  'w-3.5 h-3.5 rounded-full bg-white transition-transform',
-                  allowTasks ? 'translate-x-3.5' : 'translate-x-0'
+                  'w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out',
+                  allowTasks ? 'translate-x-5' : 'translate-x-0'
                 )} />
               </button>
             </div>
@@ -175,7 +178,7 @@ function FriendCard({
           {/* Birthday Date Input */}
           <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/40">
             <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-              🎂 День рождения
+              <span className="mono-emoji">🎂</span> День рождения
             </span>
             <input
               type="date"
@@ -381,16 +384,65 @@ export function FriendsView() {
     }
   }
 
+  const confirm = useConfirmDialog()
+
+  // Calculate team tasks and upcoming birthdays
+  const teamTasks = useMemo(() => {
+    return state.tasks.filter(t => 
+      t.assignees && t.assignees.length > 0 &&
+      !t.tags?.includes('день рождения') &&
+      !t.title.startsWith('🎂')
+    )
+  }, [state.tasks])
+
+  const friendBirthdays = useMemo(() => {
+    const now = new Date()
+    const currentMonth = now.getMonth() + 1
+    const currentDay = now.getDate()
+
+    const list: Array<{
+      friend: Friend
+      bDay: number
+      bMonth: number
+      diffDays: number
+      bDateFormatted: string
+    }> = []
+
+    for (const f of state.friends) {
+      if (!f.birthday) continue
+      const parts = f.birthday.split('-')
+      if (parts.length < 2) continue
+      const bMonth = parseInt(parts[parts.length - 2], 10)
+      const bDay = parseInt(parts[parts.length - 1], 10)
+      if (isNaN(bMonth) || isNaN(bDay)) continue
+
+      let nextBDate = new Date(now.getFullYear(), bMonth - 1, bDay)
+      if (nextBDate < new Date(now.getFullYear(), currentMonth - 1, currentDay)) {
+        nextBDate = new Date(now.getFullYear() + 1, bMonth - 1, bDay)
+      }
+      const diffDays = Math.ceil((nextBDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      list.push({
+        friend: f,
+        bDay,
+        bMonth,
+        diffDays,
+        bDateFormatted: `${bDay < 10 ? '0' + bDay : bDay}.${bMonth < 10 ? '0' + bMonth : bMonth}`
+      })
+    }
+
+    return list.sort((a, b) => a.diffDays - b.diffDays)
+  }, [state.friends])
+
   if (!mounted) {
     return (
-      <div className="flex flex-col gap-5 w-full max-w-5xl opacity-0">
+      <div className="flex flex-col gap-5 w-full opacity-0">
         <h2 className="text-base font-bold text-foreground">Команда и совместная работа</h2>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5 w-full max-w-5xl font-sans">
+    <div className="w-full font-sans">
       {/* Toast Notification */}
       <AnimatePresence>
         {notice && (
@@ -399,7 +451,7 @@ export function FriendsView() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             className={cn(
-              'p-3.5 rounded-xl border text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm',
+              'mb-4 p-3.5 rounded-2xl border text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm',
               notice.type === 'success' && 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400',
               notice.type === 'error' && 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400',
               notice.type === 'info' && 'bg-blue-500/15 border-blue-500/30 text-blue-600 dark:text-blue-400'
@@ -413,7 +465,7 @@ export function FriendsView() {
 
       {/* Telegram Auth Notice Banner for Guest sessions */}
       {isGuest && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2 text-amber-200">
+        <div className="mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2 text-amber-200">
           <p className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
             ⚠️ Гостевой режим веб-версии
           </p>
@@ -424,213 +476,331 @@ export function FriendsView() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h2 className="text-base font-bold text-foreground">Команда и совместная работа</h2>
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary" />
+            Команда и совместная работа
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Приглашайте друзей и коллег по @username для совместной работы
+            Приглашайте друзей и коллег по @username для делегирования и совместного ведения задач
           </p>
         </div>
         <button
           onClick={() => setShowInvite(true)}
-          className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl bg-primary text-primary-foreground text-[12px] font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm"
+          className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm shrink-0"
         >
-          <UserPlus className="w-3.5 h-3.5" />
+          <UserPlus className="w-4 h-4" />
           <span>+ Пригласить по @username</span>
         </button>
       </div>
 
-      {/* Quick Invite Link Banner */}
-      <div className="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3 shadow-sm">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <Share2 className="w-4 h-4 text-primary shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[12px] font-bold text-foreground truncate">Инвайт-ссылка вашей команды</p>
-            <p className="text-[11px] text-muted-foreground truncate">{inviteLink}</p>
-          </div>
-        </div>
-        <button
-          onClick={copyInviteLink}
-          className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium shrink-0 hover:opacity-90 transition-opacity"
-        >
-          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-          <span>{copied ? 'Скопировано!' : 'Копировать'}</span>
-        </button>
-      </div>
-
-      {/* PENDING FRIEND REQUESTS SECTION */}
-      {pendingRequests.length > 0 && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-amber-500" />
-              <p className="text-xs font-bold text-foreground">
-                Входящие приглашения в команду ({pendingRequests.length})
-              </p>
+      {/* 2-Column Responsive Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Friends List & Invites (8 cols on large screens) */}
+        <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+          {/* Quick Invite Link Banner */}
+          <div className="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Share2 className="w-4 h-4 text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">Инвайт-ссылка вашей команды</p>
+                <p className="text-[11px] text-muted-foreground truncate">{inviteLink}</p>
+              </div>
             </div>
             <button
-              onClick={loadFriendsAndRequests}
-              className="text-muted-foreground hover:text-foreground"
-              title="Обновить"
+              onClick={copyInviteLink}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold shrink-0 hover:opacity-90 transition-opacity"
             >
-              <RefreshCw className={cn('w-3.5 h-3.5', loadingRequests && 'animate-spin')} />
+              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              <span>{copied ? 'Скопировано!' : 'Копировать'}</span>
             </button>
           </div>
 
-          <div className="space-y-2">
-            {pendingRequests.map(req => (
-              <div
-                key={req.id}
-                className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                    {req.fromName[0]}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate">{req.fromName}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {req.fromUsername || `ID: ${req.fromChatId}`}
-                    </p>
-                  </div>
+          {/* PENDING FRIEND REQUESTS SECTION */}
+          {pendingRequests.length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-amber-500" />
+                  <p className="text-xs font-bold text-foreground">
+                    Входящие приглашения в команду ({pendingRequests.length})
+                  </p>
                 </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => handleRespondRequest(req.fromChatId, 'accept')}
-                    className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium transition-all"
-                  >
-                    Принять
-                  </button>
-                  <button
-                    onClick={() => handleRespondRequest(req.fromChatId, 'decline')}
-                    className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground text-xs font-medium transition-all"
-                  >
-                    Отклонить
-                  </button>
-                </div>
+                <button
+                  onClick={loadFriendsAndRequests}
+                  className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/60 transition-colors"
+                  title="Обновить"
+                >
+                  <RefreshCw className={cn('w-3.5 h-3.5', loadingRequests && 'animate-spin')} />
+                </button>
               </div>
-            ))}
+
+              <div className="space-y-2">
+                {pendingRequests.map(req => (
+                  <div
+                    key={req.id}
+                    className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                        {req.fromName[0]}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">{req.fromName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{req.fromUsername ? `@${req.fromUsername}` : 'ID: ' + req.fromChatId}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleRespondRequest(req.fromChatId, 'accept')}
+                        className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-all"
+                      >
+                        Принять
+                      </button>
+                      <button
+                        onClick={() => handleRespondRequest(req.fromChatId, 'decline')}
+                        className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground text-xs font-semibold transition-all"
+                      >
+                        Отклонить
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Invite Modal / Card */}
+          <AnimatePresence>
+            {showInvite && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-5 rounded-3xl bg-card border border-primary/40 space-y-3.5 shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-foreground font-bold text-sm">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span>Пригласить участника по Telegram @username</span>
+                    </div>
+                    <button
+                      onClick={() => setShowInvite(false)}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Укажите Telegram @username человека. Если он пользуется ботом Zerph AI, ему мгновенно придет уведомление в Telegram с кнопкой подтверждения!
+                  </p>
+
+                  <div className="flex flex-col gap-2.5">
+                    <input
+                      value={inviteUsername}
+                      onChange={e => setInviteUsername(e.target.value)}
+                      placeholder="@username друга в Telegram (например, @artem)"
+                      className="h-10 px-3.5 rounded-xl bg-muted/50 border border-border/80 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary transition-colors font-medium"
+                      autoFocus
+                    />
+                    <input
+                      value={inviteName}
+                      onChange={e => setInviteName(e.target.value)}
+                      placeholder="Имя друга (необязательно, подтянется из Telegram)"
+                      className="h-10 px-3.5 rounded-xl bg-muted/50 border border-border/80 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary transition-colors font-medium"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1 border-t border-border/40">
+                    <button
+                      onClick={() => setShowInvite(false)}
+                      className="h-8 px-4 rounded-xl border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      onClick={handleSendInvite}
+                      disabled={!inviteUsername.trim() || sendingInvite}
+                      className="flex items-center gap-1.5 h-8 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold disabled:opacity-40 hover:brightness-110 active:scale-95 transition-all shadow-xs"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{sendingInvite ? 'Отправка...' : 'Отправить приглашение'}</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Online summary */}
+          <div className="grid grid-cols-3 gap-3">
+            {(['online', 'away', 'offline'] as const).map(status => {
+              const count = state.friends.filter(f => f.status === status).length
+              const sc = STATUS_CONFIG[status]
+              return (
+                <div key={status} className="p-3.5 rounded-2xl bg-card border border-border/80 flex items-center gap-2.5 shadow-xs">
+                  <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', sc.dot)} />
+                  <div>
+                    <p className="text-base font-bold text-foreground leading-none">{count}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">{sc.label}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Friends list */}
+          {state.friends.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center bg-card/40 rounded-3xl border border-border/50">
+              <Users className="w-12 h-12 text-muted-foreground/20" />
+              <p className="text-sm font-bold text-foreground">В вашей команде пока нет участников</p>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                Укажите @username друга выше, чтобы отправить ему запрос на совместную работу
+              </p>
+              <button
+                onClick={() => setShowInvite(true)}
+                className="mt-2 flex items-center gap-1.5 h-8 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all shadow-xs"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Пригласить участника</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {state.friends.map(f => (
+                <FriendCard
+                  key={f.id}
+                  friend={f}
+                  onProfile={handleOpenProfile}
+                  onSchedule={handleOpenSchedule}
+                  onRemove={async () => {
+                    const ok = await confirm({
+                      title: `Удалить ${f.name} из команды?`,
+                      description: 'Участник потеряет доступ к совместным задачам.',
+                      confirmText: 'Удалить участника',
+                      variant: 'danger',
+                    })
+                    if (!ok) return
+
+                    dispatch({ type: 'REMOVE_FRIEND', id: f.id })
+                    const targetId = f.chatId || f.id
+                    await fetch(`/api/friends?id=${encodeURIComponent(targetId)}`, {
+                      method: 'DELETE',
+                      headers: getAuthHeaders()
+                    }).catch(() => {})
+                    loadFriendsAndRequests()
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Shared Tasks, Birthdays & Access Security (4 cols on large screens) */}
+        <div className="hidden lg:flex lg:col-span-5 xl:col-span-4 flex-col gap-4 sticky top-2">
+          {/* Team Tasks Section */}
+          <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <CheckSquare className="w-4 h-4 text-primary" />
+                Командные и порученные задачи
+              </span>
+              <span className="text-[11px] font-semibold text-muted-foreground">({teamTasks.length})</span>
+            </div>
+
+            {teamTasks.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2 leading-relaxed">
+                Пока нет общих или порученных задач. Поручите задачу в боте голосом или добавьте участника в редакторе задачи!
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {teamTasks.slice(0, 6).map(t => (
+                  <div
+                    key={t.id}
+                    onClick={() => {
+                      dispatch({ type: 'SELECT_TASK', id: t.id })
+                      dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                    }}
+                    className="p-2.5 rounded-2xl bg-muted/30 border border-border/60 hover:border-primary/40 transition-all cursor-pointer group flex items-start justify-between gap-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className={cn('text-xs font-semibold truncate leading-snug group-hover:text-primary transition-colors', t.status === 'done' && 'line-through text-muted-foreground')}>
+                        {t.title}
+                      </p>
+                      {t.dueDate && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Дедлайн: {t.dueDate}
+                        </p>
+                      )}
+                    </div>
+                    <span className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0',
+                      t.status === 'done' ? 'bg-[var(--status-done)]/10 text-[var(--status-done)]' : 'bg-primary/10 text-primary'
+                    )}>
+                      {t.status === 'done' ? 'Готово' : 'В работе'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Upcoming Team Birthdays */}
+          <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Cake className="w-4 h-4 text-pink-500" />
+                Дни рождения команды
+              </span>
+              <span className="text-[11px] font-semibold text-muted-foreground">({friendBirthdays.length})</span>
+            </div>
+
+            {friendBirthdays.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2 leading-relaxed">
+                Дни рождения участников не указаны. Их можно ввести в карточке каждого участника слева!
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {friendBirthdays.slice(0, 4).map(b => (
+                  <div
+                    key={b.friend.id}
+                    className="p-2.5 rounded-2xl bg-pink-500/5 border border-pink-500/20 flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-pink-500/15 text-pink-500 flex items-center justify-center font-bold text-xs shrink-0">
+                        {b.friend.name[0]}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">{b.friend.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{b.bDateFormatted}</p>
+                      </div>
+                    </div>
+
+                    <span className="text-[11px] font-bold text-pink-600 dark:text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded-full shrink-0">
+                      {b.diffDays === 0 ? 'Сегодня! 🎉' : b.diffDays === 1 ? 'Завтра 🎂' : `Через ${b.diffDays} дн.`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Privacy and Mutual Access Notice */}
+          <div className="p-5 rounded-3xl bg-gradient-to-br from-muted/40 via-card to-card border border-border/80 space-y-2.5 shadow-sm">
+            <div className="flex items-center gap-2 text-foreground font-bold text-xs">
+              <ShieldCheck className="w-4 h-4 text-[var(--status-done)]" />
+              <span>Взаимный доступ и приватность</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Чтобы поручать и делегировать задачи, оба участника должны включить переключатель «Разрешить задачи». Это предотвращает спам и гарантирует безопасность ваших списков.
+            </p>
           </div>
         </div>
-      )}
-
-      {/* Invite Modal / Card */}
-      <AnimatePresence>
-        {showInvite && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-foreground font-bold text-[13px]">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  <span>Пригласить участника по Telegram @username</span>
-                </div>
-                <button
-                  onClick={() => setShowInvite(false)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <p className="text-[11px] text-muted-foreground">
-                Достаточно просто указать Telegram @username человека. Если он пользуется ботом Zerf AI, ему мгновенно придет уведомление в Telegram с кнопкой подтверждения!
-              </p>
-
-              <div className="flex flex-col gap-2.5">
-                <input
-                  value={inviteUsername}
-                  onChange={e => setInviteUsername(e.target.value)}
-                  placeholder="@username друга в Telegram (например, @artem)"
-                  className="h-9 px-3 rounded-xl bg-muted/50 border border-border/80 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary transition-colors"
-                  autoFocus
-                />
-                <input
-                  value={inviteName}
-                  onChange={e => setInviteName(e.target.value)}
-                  placeholder="Имя друга (необязательно, подтянется из Telegram)"
-                  className="h-9 px-3 rounded-xl bg-muted/50 border border-border/80 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary transition-colors"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  onClick={() => setShowInvite(false)}
-                  className="h-8 px-3 rounded-xl border border-border text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={handleSendInvite}
-                  disabled={!inviteUsername.trim() || sendingInvite}
-                  className="flex items-center gap-1.5 h-8 px-4 rounded-xl bg-primary text-primary-foreground text-[12px] font-semibold disabled:opacity-40 hover:brightness-110 transition-all shadow-sm"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{sendingInvite ? 'Отправка...' : 'Отправить приглашение'}</span>
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Online summary */}
-      <div className="grid grid-cols-3 gap-3">
-        {(['online', 'away', 'offline'] as const).map(status => {
-          const count = state.friends.filter(f => f.status === status).length
-          const sc = STATUS_CONFIG[status]
-          return (
-            <div key={status} className="p-3.5 rounded-2xl bg-card border border-border flex items-center gap-2.5 shadow-sm">
-              <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', sc.dot)} />
-              <div>
-                <p className="text-base font-bold text-foreground leading-none">{count}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{sc.label}</p>
-              </div>
-            </div>
-          )
-        })}
       </div>
-
-      {/* Friends list */}
-      {state.friends.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-center bg-card/40 rounded-2xl border border-border/50">
-          <Users className="w-10 h-10 text-muted-foreground/30" />
-          <p className="text-sm font-medium text-foreground">В вашей команде пока нет участников</p>
-          <p className="text-xs text-muted-foreground">Укажите @username друга выше, чтобы отправить ему запрос в друзья</p>
-          <button
-            onClick={() => setShowInvite(true)}
-            className="mt-2 flex items-center gap-1.5 h-8 px-3.5 rounded-xl bg-primary/10 text-primary text-[12px] font-semibold hover:bg-primary/20 transition-colors"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Пригласить первого участника</span>
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {state.friends.map(f => (
-            <FriendCard
-              key={f.id}
-              friend={f}
-              onProfile={handleOpenProfile}
-              onSchedule={handleOpenSchedule}
-              onRemove={async () => {
-                dispatch({ type: 'REMOVE_FRIEND', id: f.id })
-                const targetId = f.chatId || f.id
-                await fetch(`/api/friends?id=${encodeURIComponent(targetId)}`, {
-                  method: 'DELETE',
-                  headers: getAuthHeaders()
-                }).catch(() => {})
-                loadFriendsAndRequests()
-              }}
-            />
-          ))}
-        </div>
-      )}
 
       {/* User Profile Modal */}
       <AnimatePresence>

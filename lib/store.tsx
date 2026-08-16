@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react'
 import type {
   Task, Goal, Project, Note, Friend, ChatMessage,
   UserSettings, View, Priority, TaskStatus, GoalStatus, Habit
@@ -198,7 +198,12 @@ const INITIAL_STATE: AppState = {
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
-const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | null>(null)
+const AppContext = createContext<{
+  state: AppState
+  dispatch: React.Dispatch<Action>
+  syncData: () => Promise<void>
+  isSyncing: boolean
+} | null>(null)
 
 function setPermanentCookie(name: string, value: string) {
   if (typeof document === 'undefined') return
@@ -383,20 +388,41 @@ function initAppState(initialState: AppState): AppState {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE, initAppState)
+  const [isSyncing, setIsSyncing] = useState(false)
+  // Track recently deleted item IDs to prevent race-condition resurrection during background sync
+  const recentlyDeletedIdsRef = useRef<Map<string, number>>(new Map())
+
+  const broadcastSync = useCallback(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const bc = new BroadcastChannel('zerf_sync_channel')
+      bc.postMessage('sync')
+      bc.close()
+    } catch {}
+  }, [])
 
   const enhancedDispatch: React.Dispatch<Action> = useCallback((action: Action) => {
     // Perform state change locally immediately
     dispatch(action)
+    broadcastSync()
 
     // Sync deletion / updates to cloud DB via API
     const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 
     if (action.type === 'DELETE_TASK') {
+      recentlyDeletedIdsRef.current.set(action.id, Date.now())
       fetch(`/api/tasks?id=${action.id}&type=task`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'DELETE_NOTE') {
+      recentlyDeletedIdsRef.current.set(action.id, Date.now())
       fetch(`/api/tasks?id=${action.id}&type=note`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'DELETE_GOAL') {
+      recentlyDeletedIdsRef.current.set(action.id, Date.now())
       fetch(`/api/tasks?id=${action.id}&type=goal`, { method: 'DELETE', headers }).catch(() => {})
+    } else if (action.type === 'DELETE_HABIT') {
+      recentlyDeletedIdsRef.current.set(action.id, Date.now())
+      fetch(`/api/tasks?id=${action.id}&type=habit`, { method: 'DELETE', headers }).catch(() => {})
+    } else if (action.type === 'REMOVE_FRIEND') {
+      recentlyDeletedIdsRef.current.set(action.id, Date.now())
     } else if (action.type === 'TOGGLE_TASK') {
       const target = state.tasks.find(t => t.id === action.id)
       const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
@@ -460,10 +486,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers,
         body: JSON.stringify({ id: action.id, itemType: 'habit', ...action.updates }),
       }).catch(() => {})
-    } else if (action.type === 'DELETE_HABIT') {
-      fetch(`/api/tasks?id=${action.id}&type=habit`, { method: 'DELETE', headers }).catch(() => {})
     }
-  }, [state.tasks])
+  }, [state.tasks, broadcastSync])
 
   // Apply accent color as CSS variable
   useEffect(() => {
@@ -502,49 +526,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const currentChatId = getTgChatId()
+      const filteredTasks = state.tasks.filter(t => !recentlyDeletedIdsRef.current.has(t.id))
+      const filteredGoals = state.goals.filter(g => !recentlyDeletedIdsRef.current.has(g.id))
+      const filteredNotes = state.notes.filter(n => !recentlyDeletedIdsRef.current.has(n.id))
+      const filteredProjects = state.projects.filter(p => !recentlyDeletedIdsRef.current.has(p.id))
+      const filteredFriends = state.friends.filter(f => !recentlyDeletedIdsRef.current.has(f.id))
+      const filteredHabits = state.habits.filter(h => !recentlyDeletedIdsRef.current.has(h.id))
+
       localStorage.setItem('zerf_cached_state', JSON.stringify({
         chatId: currentChatId,
-        tasks: state.tasks,
-        goals: state.goals,
-        notes: state.notes,
-        projects: state.projects,
-        friends: state.friends,
-        habits: state.habits,
+        tasks: filteredTasks,
+        goals: filteredGoals,
+        notes: filteredNotes,
+        projects: filteredProjects,
+        friends: filteredFriends,
+        habits: filteredHabits,
       }))
     } catch {}
   }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
 
-  // Sync from backend DB on mount, focus, visibility change, and periodic background timer
-  useEffect(() => {
-    const syncBackendData = () => {
+  // Core Sync Function
+  const syncBackendData = useCallback(async (showIndicator = false) => {
+    if (showIndicator) setIsSyncing(true)
+    try {
       const headers = getAuthHeaders()
       const chatId = headers['x-chat-id']
 
-      fetch('/api/tasks', { headers })
-        .then(r => {
-          if (!r.ok) return null
-          return r.json()
+      // Purge deleted IDs older than 60 seconds
+      const now = Date.now()
+      for (const [id, timestamp] of recentlyDeletedIdsRef.current.entries()) {
+        if (now - timestamp > 60000) {
+          recentlyDeletedIdsRef.current.delete(id)
+        }
+      }
+
+      const res = await fetch('/api/tasks', { headers, cache: 'no-store' })
+      if (!res.ok) return
+      const data = await res.json()
+
+      if (data && data.tasks !== undefined) {
+        const filteredTasks = (data.tasks || []).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
+        const filteredGoals = (data.goals || []).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
+        const filteredNotes = (data.notes || []).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))
+        const filteredFriends = (data.friends || []).filter((f: Friend) => !recentlyDeletedIdsRef.current.has(f.id))
+        const filteredHabits = (data.habits || []).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
+
+        dispatch({
+          type: 'LOAD_STATE',
+          state: {
+            tasks: filteredTasks,
+            goals: filteredGoals,
+            notes: filteredNotes,
+            friends: filteredFriends,
+            habits: filteredHabits,
+          },
         })
-        .then(data => {
-          if (!data) return
-          if (data.tasks !== undefined) {
-            dispatch({
-              type: 'LOAD_STATE',
-              state: {
-                tasks: data.tasks || [],
-                goals: data.goals || [],
-                notes: data.notes || [],
-                friends: data.friends || [],
-                habits: data.habits || [],
-              },
-            })
-          }
-        })
-        .catch(() => {})
+      }
 
       // Check connected Telegram profile from Neon DB for active user
       const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
-      fetch(userUrl, { headers })
+      fetch(userUrl, { headers, cache: 'no-store' })
         .then(r => r.json())
         .then(user => {
           if (user.connected && user.name) {
@@ -562,25 +603,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (chatId) {
         fetch(`/api/birthdays?chatId=${chatId}`, { headers }).catch(() => {})
       }
+    } catch {} finally {
+      if (showIndicator) {
+        setTimeout(() => setIsSyncing(false), 400)
+      }
     }
+  }, [])
 
+  // Sync from backend DB on mount, focus, visibility change, pageshow, and fast live interval
+  useEffect(() => {
     // Initial sync
-    syncBackendData()
+    syncBackendData(false)
 
-    // Sync on window focus (e.g. returning to app tab)
-    const handleFocus = () => syncBackendData()
-    window.addEventListener('focus', handleFocus)
+    // Window and mobile lifecycle events (e.g. returning to app from home screen or other apps)
+    const handleSyncNow = () => syncBackendData(false)
+    const handleSyncWithSpinner = () => syncBackendData(true)
 
-    // Sync on document visibility change
+    window.addEventListener('focus', handleSyncNow)
+    window.addEventListener('pageshow', handleSyncNow)
+    window.addEventListener('online', handleSyncNow)
+    window.addEventListener('zerf:sync', handleSyncWithSpinner)
+
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncBackendData()
+        syncBackendData(false)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
 
-    // Periodic live sync every 10 seconds
-    const syncInterval = setInterval(syncBackendData, 10000)
+    // Cross-instance broadcast channel
+    let channel: BroadcastChannel | null = null
+    try {
+      channel = new BroadcastChannel('zerf_sync_channel')
+      channel.onmessage = (e) => {
+        if (e.data === 'sync') syncBackendData(false)
+      }
+    } catch {}
+
+    // Fast live sync: every 3.5 seconds while app is visible, so voice/Telegram tasks appear immediately!
+    const syncInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncBackendData(false)
+      }
+    }, 3500)
 
     // Check Telegram reminders every 15 seconds
     const reminderInterval = setInterval(() => {
@@ -597,14 +662,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
 
     return () => {
-      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('focus', handleSyncNow)
+      window.removeEventListener('pageshow', handleSyncNow)
+      window.removeEventListener('online', handleSyncNow)
+      window.removeEventListener('zerf:sync', handleSyncWithSpinner)
       document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(syncInterval)
       clearInterval(reminderInterval)
+      try { channel?.close() } catch {}
     }
-  }, [])
+  }, [syncBackendData, state.currentView])
 
-  return <AppContext.Provider value={{ state, dispatch: enhancedDispatch }}>{children}</AppContext.Provider>
+  return (
+    <AppContext.Provider value={{ state, dispatch: enhancedDispatch, syncData: () => syncBackendData(true), isSyncing }}>
+      {children}
+    </AppContext.Provider>
+  )
 }
 
 export function useApp() {

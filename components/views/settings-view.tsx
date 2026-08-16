@@ -13,6 +13,7 @@ import {
   Send, Plus, CheckCircle
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -25,11 +26,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Row({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+function Row({ label, description, children }: { label: React.ReactNode; description?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 px-5 py-4">
       <div className="min-w-0">
-        <p className="text-[13px] font-medium text-foreground">{label}</p>
+        <div className="text-[13px] font-medium text-foreground">{label}</div>
         {description && <p className="text-[12px] text-muted-foreground mt-0.5">{description}</p>}
       </div>
       <div className="shrink-0">{children}</div>
@@ -70,6 +71,7 @@ export function SettingsView() {
   const { state, dispatch } = useApp()
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage()
+  const confirm = useConfirmDialog()
   const [activeTab, setActiveTab] = useState<SettingsTab>('account')
   const [saved, setSaved] = useState(false)
 
@@ -104,7 +106,15 @@ export function SettingsView() {
 
   const cachedBirthday = typeof window !== 'undefined' ? localStorage.getItem('zerf_birthday') || '' : ''
   const [userBirthday, setUserBirthday] = useState(cachedBirthday)
+  const cachedTimezone = typeof window !== 'undefined' ? localStorage.getItem('zerf_timezone') || 'Europe/Moscow' : 'Europe/Moscow'
+  const [userTimezone, setUserTimezone] = useState(cachedTimezone)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
+
+  // Subscriptions & Promo Code States
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
+  const [promoInput, setPromoInput] = useState('')
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [promoMsg, setPromoMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
@@ -155,6 +165,48 @@ export function SettingsView() {
         body: JSON.stringify({ birthday: val }),
       })
     } catch {}
+  }
+
+  const handleTimezoneChange = async (tz: string) => {
+    setUserTimezone(tz)
+    try { localStorage.setItem('zerf_timezone', tz) } catch {}
+    if (!currentChatId) return
+    try {
+      await fetch('/api/user/timezone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: currentChatId, timezone: tz }),
+      })
+    } catch {}
+  }
+
+  const handleActivatePromo = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!promoInput.trim()) return
+    setPromoLoading(true)
+    setPromoMsg(null)
+    try {
+      const res = await fetch('/api/promocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: promoInput.trim(),
+          chatId: currentChatId || '6136950061',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setPromoMsg({ type: 'error', text: data.error || 'Ошибка активации промокода' })
+      } else {
+        setPromoMsg({ type: 'success', text: data.message })
+        setPromoInput('')
+        fetchProfile()
+      }
+    } catch {
+      setPromoMsg({ type: 'error', text: 'Ошибка соединения с сервером' })
+    } finally {
+      setPromoLoading(false)
+    }
   }
 
   const handleLinkEmailSubmit = async (e: React.FormEvent) => {
@@ -288,8 +340,14 @@ export function SettingsView() {
     }
   }
 
-  const handleLogout = () => {
-    if (confirm('Выйти из этого аккаунта на текущем устройстве?')) {
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Выйти из аккаунта?',
+      description: 'Вы выйдете из текущего аккаунта на этом устройстве.',
+      confirmText: 'Выйти',
+      variant: 'danger',
+    })
+    if (ok) {
       try {
         localStorage.removeItem('zerf_chat_id')
         localStorage.removeItem('zerf_auth_token')
@@ -307,7 +365,7 @@ export function SettingsView() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-card border border-border">
         <div>
           <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
-            <span>⚙️ Настройки Zerf Note</span>
+            <span><span className="mono-emoji mr-1.5">⚙️</span>Настройки Zerf Note</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Управление единым аккаунтом, связками входа, голосовыми командами и внешним видом
@@ -417,13 +475,36 @@ export function SettingsView() {
               />
             </Row>
 
-            <Row label="🎂 День рождения" description="Друзья в Zerf Note автоматически увидят напоминание в календаре">
+            <Row label={<span className="flex items-center gap-1.5"><span className="mono-emoji">🎂</span> День рождения</span>} description="Друзья в Zerf Note автоматически увидят напоминание в календаре">
               <input
                 type="date"
                 value={userBirthday}
                 onChange={e => handleUserBirthdayChange(e.target.value)}
                 className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-44 cursor-pointer"
               />
+            </Row>
+
+            <Row label={<span className="flex items-center gap-1.5"><span className="mono-emoji">⏱</span> Часовой пояс</span>} description="Время отправки утренних сводок, вечерних отчетов и напоминаний">
+              <select
+                value={userTimezone}
+                onChange={e => handleTimezoneChange(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors cursor-pointer w-52"
+              >
+                <option value="Europe/Kaliningrad">Калининград (UTC+2)</option>
+                <option value="Europe/Moscow">Москва / СПб (UTC+3)</option>
+                <option value="Europe/Samara">Самара (UTC+4)</option>
+                <option value="Asia/Yekaterinburg">Екатеринбург (UTC+5)</option>
+                <option value="Asia/Omsk">Омск (UTC+6)</option>
+                <option value="Asia/Krasnoyarsk">Красноярск / Новосибирск (UTC+7)</option>
+                <option value="Asia/Irkutsk">Иркутск (UTC+8)</option>
+                <option value="Asia/Yakutsk">Якутск (UTC+9)</option>
+                <option value="Asia/Vladivostok">Владивосток (UTC+10)</option>
+                <option value="Asia/Magadan">Магадан (UTC+11)</option>
+                <option value="Asia/Kamchatka">Камчатка (UTC+12)</option>
+                <option value="UTC">UTC (00:00)</option>
+                <option value="America/New_York">Нью-Йорк (UTC-5)</option>
+                <option value="America/Los_Angeles">Лос-Анджелес (UTC-8)</option>
+              </select>
             </Row>
           </Section>
 
@@ -872,39 +953,207 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ── TAB 5: Subscription & Limits ─────────────────────────────────────── */}
+      {/* ── TAB 5: Subscription, Plans & Promo Codes ────────────────────────── */}
       {activeTab === 'subscription' && (
         <div className="space-y-6">
-          <Section title="Тарифный план">
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-primary/10 border border-primary/20">
+          <Section title="Тарифные планы">
+            <div className="p-5 space-y-5">
+              {/* Billing Cycle Switcher (Monthly / Yearly -10%) */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-muted/40 border border-border">
                 <div>
-                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <span>Zerf Premium</span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Безлимитный ИИ-ассистент, голосовые ответы TTS, расширенная аналитика и приоритетная доставка
-                  </p>
+                  <p className="text-xs font-bold text-foreground">Период оплаты</p>
+                  <p className="text-[11px] text-muted-foreground">При оплате на 1 год действует постоянная скидка 10%</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-base font-bold text-foreground">99 ₽</span>
-                  <span className="text-xs text-muted-foreground"> / мес</span>
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-card border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('monthly')}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                      billingCycle === 'monthly'
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    Месяц
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('yearly')}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1',
+                      billingCycle === 'yearly'
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <span>Год</span>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.2 rounded-full",
+                      billingCycle === 'yearly' ? "bg-primary-foreground/20 text-primary-foreground" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    )}>
+                      -10%
+                    </span>
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    const cid = getTgChatId()
-                    window.open(`https://yoomoney.ru/to/410011887754321?comment=zerf_${cid}`, '_blank')
-                  }}
-                  className="py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs hover:brightness-110 active:scale-95 transition-all shadow-md shadow-primary/20"
-                >
-                  Оформить подписку (99 ₽ / месяц)
-                </button>
+              {/* 3 Pricing Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Free / Base Plan */}
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Базовый</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                        Текущий
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-extrabold text-foreground">0 ₽</p>
+                      <p className="text-[11px] text-muted-foreground">Бесплатно навсегда</p>
+                    </div>
+                    <ul className="space-y-1.5 text-[11px] text-muted-foreground pt-2 border-t border-border/50">
+                      <li className="flex items-center gap-1.5">✓ 1 активная долгосрочная цель</li>
+                      <li className="flex items-center gap-1.5">✓ До 5 проектов</li>
+                      <li className="flex items-center gap-1.5">✓ Базовый ИИ-ассистент</li>
+                      <li className="flex items-center gap-1.5">✓ Ежедневные задачи и напоминания</li>
+                    </ul>
+                  </div>
+                  <button
+                    disabled
+                    className="w-full py-2 rounded-xl bg-muted/60 text-muted-foreground text-xs font-semibold cursor-default"
+                  >
+                    Активен по умолчанию
+                  </button>
+                </div>
 
+                {/* 2. Zerf Premium */}
+                <div className="p-4 rounded-2xl bg-card border-2 border-primary/40 flex flex-col justify-between space-y-4 relative shadow-sm">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-primary">Premium</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        Популярный
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-extrabold text-foreground">
+                        {billingCycle === 'monthly' ? '99 ₽' : '1 069 ₽'}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {billingCycle === 'monthly' ? 'в месяц' : 'в год (скидка 10%)'}
+                      </p>
+                    </div>
+                    <ul className="space-y-1.5 text-[11px] text-foreground/90 pt-2 border-t border-border/50">
+                      <li className="flex items-center gap-1.5">✓ <b>Безлимитные</b> цели и проекты</li>
+                      <li className="flex items-center gap-1.5">✓ Точное время напоминаний</li>
+                      <li className="flex items-center gap-1.5">✓ Голосовые ответы AI (TTS)</li>
+                      <li className="flex items-center gap-1.5">✓ Матрица Эйзенхауэра и аналитика</li>
+                      <li className="flex items-center gap-1.5">✓ Приоритетная доставка уведомлений</li>
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const cid = getTgChatId()
+                      const amount = billingCycle === 'monthly' ? 99 : 1069
+                      window.open(`https://yoomoney.ru/to/410011887754321?comment=zerf_premium_${cid}&sum=${amount}`, '_blank')
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-md shadow-primary/20"
+                  >
+                    Оформить Premium ({billingCycle === 'monthly' ? '99 ₽' : '1 069 ₽'})
+                  </button>
+                </div>
+
+                {/* 3. Zerf Unlimited */}
+                <div className="p-4 rounded-2xl bg-gradient-to-b from-card to-primary/[0.04] border-2 border-border flex flex-col justify-between space-y-4 shadow-sm">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-foreground">Безлимит</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-foreground border border-border">
+                        Максимум
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-extrabold text-foreground">
+                        {billingCycle === 'monthly' ? '299 ₽' : '3 229 ₽'}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {billingCycle === 'monthly' ? 'в месяц' : 'в год (скидка 10%)'}
+                      </p>
+                    </div>
+                    <ul className="space-y-1.5 text-[11px] text-foreground/90 pt-2 border-t border-border/50">
+                      <li className="flex items-center gap-1.5">✓ <b>Полный безлимит</b> всех функций</li>
+                      <li className="flex items-center gap-1.5">✓ Безлимитные аудио и голос</li>
+                      <li className="flex items-center gap-1.5">✓ Все ИИ-модели без ограничений</li>
+                      <li className="flex items-center gap-1.5">✓ Совместный доступ для команды</li>
+                      <li className="flex items-center gap-1.5">✓ Экспорт и резервное копирование</li>
+                      <li className="flex items-center gap-1.5">✓ VIP персональная поддержка</li>
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const cid = getTgChatId()
+                      const amount = billingCycle === 'monthly' ? 299 : 3229
+                      window.open(`https://yoomoney.ru/to/410011887754321?comment=zerf_unlimited_${cid}&sum=${amount}`, '_blank')
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-foreground text-background text-xs font-bold hover:opacity-90 active:scale-95 transition-all shadow-md"
+                  >
+                    Оформить Безлимит ({billingCycle === 'monthly' ? '299 ₽' : '3 229 ₽'})
+                  </button>
+                </div>
+              </div>
+
+              {/* Promo Code Activation Box */}
+              <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Активация промокода</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Введите промокод от администратора для получения скидки или бесплатного периода подписки
+                  </p>
+                </div>
+
+                <form onSubmit={handleActivatePromo} className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={promoInput}
+                    onChange={e => setPromoInput(e.target.value.toUpperCase())}
+                    placeholder="ПРОМОКОД (например: PROMO30)"
+                    className="flex-1 h-9 px-3.5 rounded-xl bg-muted/50 border border-border text-xs font-mono font-bold tracking-wider text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-all"
+                  />
+                  <button
+                    type="submit"
+                    disabled={promoLoading || !promoInput.trim()}
+                    className="h-9 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center shrink-0"
+                  >
+                    {promoLoading ? 'Проверка...' : 'Применить'}
+                  </button>
+                </form>
+
+                {promoMsg && (
+                  <p className={cn(
+                    'text-xs font-medium px-3 py-2 rounded-xl border',
+                    promoMsg.type === 'success'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                      : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                  )}>
+                    {promoMsg.text}
+                  </p>
+                )}
+              </div>
+
+              {/* Referral Invite Card */}
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <span className="mono-emoji">🎁</span> Реферальная программа
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Пригласите 3 друзей и получите Premium подписку на 1 месяц бесплатно!
+                  </p>
+                </div>
                 <button
+                  type="button"
                   onClick={() => {
                     const cid = getTgChatId()
                     const refLink = `https://t.me/Zerph_bot?start=ref_${cid}`
@@ -912,9 +1161,10 @@ export function SettingsView() {
                     setCopiedRef(true)
                     setTimeout(() => setCopiedRef(false), 2000)
                   }}
-                  className="py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-colors flex items-center justify-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-colors flex items-center justify-center gap-1.5 shrink-0"
                 >
-                  {copiedRef ? 'Ссылка скопирована!' : '🎁 Пригласить друга (Получить Premium)'}
+                  <span className="mono-emoji">🎁</span>
+                  <span>{copiedRef ? 'Ссылка скопирована!' : 'Пригласить друга'}</span>
                 </button>
               </div>
             </div>

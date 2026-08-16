@@ -36,6 +36,7 @@ export interface Task {
   parentTaskId?: string
   projectId?: string
   goalId?: string
+  habitId?: string
   tags: string[]
   assignees: string[]
   isShared: boolean
@@ -106,6 +107,7 @@ export interface Note {
   dueTime?: string             // Optional linked time (HH:MM)
   projectId?: string
   goalId?: string
+  habitId?: string
   taskIds?: string[]
   createdAt: string
   updatedAt: string

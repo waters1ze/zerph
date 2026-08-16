@@ -294,11 +294,17 @@ function TaskCountdownSelector({
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <span>Текущий отсчет:</span>
               {selectedItem?.isBirthday ? (
-                <span className="text-rose-500 font-semibold lowercase">🎂 день рождения</span>
+                <span className="text-rose-500 font-semibold lowercase flex items-center gap-1">
+                  <span className="mono-emoji">🎂</span> день рождения
+                </span>
               ) : selectedItem?.isTimed ? (
-                <span className="text-amber-500 font-semibold lowercase">⏰ точное время</span>
+                <span className="text-amber-500 font-semibold lowercase flex items-center gap-1">
+                  <span className="mono-emoji">⏰</span> точное время
+                </span>
               ) : (
-                <span className="text-primary font-semibold lowercase">📅 задача</span>
+                <span className="text-primary font-semibold lowercase flex items-center gap-1">
+                  <span className="mono-emoji">📅</span> задача
+                </span>
               )}
             </span>
             <span className="text-sm sm:text-base font-bold text-foreground truncate mt-0.5">
@@ -310,7 +316,14 @@ function TaskCountdownSelector({
         {/* Right Info Pill & Chevron */}
         <div className="flex items-center gap-2.5 shrink-0">
           {selectedItem && (
-            <span className="hidden md:flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+            <span className={cn(
+              "hidden md:flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border",
+              selectedItem.isBirthday
+                ? "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                : selectedItem.isTimed
+                  ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                  : "bg-primary/10 text-primary border-primary/20"
+            )}>
               {selectedItem.relativeText}
             </span>
           )}
@@ -338,12 +351,13 @@ function TaskCountdownSelector({
               {/* Category Tabs */}
               <div className="flex items-center gap-1 overflow-x-auto no-scrollbar select-none">
                 {[
-                  { id: 'all',       label: '✨ Все вместе', count: items.length },
-                  { id: 'birthdays', label: '🎂 Дни рождения', count: bdayCount },
-                  { id: 'timed',     label: '⏰ С временем',   count: timedCount },
-                  { id: 'dated',     label: '📅 По дате',      count: datedCount },
+                  { id: 'all',       label: 'Все вместе', icon: Sparkles, count: items.length },
+                  { id: 'birthdays', label: 'Дни рождения', icon: Cake, count: bdayCount },
+                  { id: 'timed',     label: 'С временем',   icon: Clock, count: timedCount },
+                  { id: 'dated',     label: 'По дате',      icon: CalendarIcon, count: datedCount },
                 ].map(tab => {
                   const active = activeCategory === tab.id
+                  const Icon = tab.icon
                   return (
                     <button
                       key={tab.id}
@@ -356,6 +370,7 @@ function TaskCountdownSelector({
                           : 'bg-card/70 border border-border/50 text-muted-foreground hover:bg-muted hover:text-foreground'
                       )}
                     >
+                      <Icon className="w-3.5 h-3.5" />
                       <span>{tab.label}</span>
                       <span className={cn(
                         'text-[10px] font-bold px-1.5 py-0.2 rounded-full',
@@ -390,7 +405,7 @@ function TaskCountdownSelector({
               </div>
             </div>
 
-            {/* List of Tasks */}
+            {/* List of Tasks with Color Coding */}
             <div className="overflow-y-auto p-2 space-y-1 flex-1">
               {filteredItems.length > 0 ? (
                 filteredItems.map(item => {
@@ -404,21 +419,25 @@ function TaskCountdownSelector({
                         setIsOpen(false)
                       }}
                       className={cn(
-                        'w-full flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl text-left transition-all group',
+                        'w-full flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl text-left transition-all group border',
                         isSelected
-                          ? 'bg-primary/15 border border-primary/40 text-primary'
-                          : 'hover:bg-muted/60 border border-transparent text-foreground'
+                          ? 'bg-primary/15 border-primary/40 text-primary font-medium'
+                          : item.isBirthday
+                            ? 'bg-rose-500/[0.04] hover:bg-rose-500/10 border-rose-500/20 text-foreground'
+                            : item.isTimed
+                              ? 'bg-amber-500/[0.04] hover:bg-amber-500/10 border-amber-500/20 text-foreground'
+                              : 'bg-card/40 hover:bg-muted/60 border-border/40 text-foreground'
                       )}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {/* Icon badge */}
                         <div className={cn(
-                          'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                          'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border',
                           item.isBirthday
-                            ? 'bg-rose-500/15 text-rose-500'
+                            ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
                             : item.isTimed
-                              ? 'bg-amber-500/15 text-amber-500'
-                              : 'bg-primary/10 text-primary'
+                              ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                              : 'bg-primary/10 text-primary border-primary/20'
                         )}>
                           {item.isBirthday ? (
                             <Cake className="w-4 h-4" />
@@ -430,13 +449,21 @@ function TaskCountdownSelector({
                         </div>
 
                         <div className="flex flex-col min-w-0 flex-1">
-                          <span className="text-[13px] font-bold truncate">
+                          <span className={cn(
+                            "text-[13px] font-bold truncate",
+                            item.isBirthday ? "text-rose-400 dark:text-rose-300" : "text-foreground"
+                          )}>
                             {item.task.title}
                           </span>
                           <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5 mt-0.5">
                             {item.dateLabel && <span>{item.dateLabel}</span>}
                             {item.task.tags && item.task.tags.length > 0 && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground border border-border/40">
+                              <span className={cn(
+                                "text-[10px] px-1.5 py-0.2 rounded-md font-semibold border",
+                                item.isBirthday
+                                  ? "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                                  : "bg-muted text-muted-foreground border-border/40"
+                              )}>
                                 {item.task.tags[0]}
                               </span>
                             )}
@@ -450,7 +477,11 @@ function TaskCountdownSelector({
                           'text-[11px] font-semibold px-2.5 py-0.8 rounded-full border',
                           isSelected
                             ? 'bg-primary text-primary-foreground border-primary'
-                            : 'bg-muted/80 text-muted-foreground border-border/50'
+                            : item.isBirthday
+                              ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                              : item.isTimed
+                                ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                : 'bg-muted/80 text-muted-foreground border-border/50'
                         )}>
                           {item.relativeText}
                         </span>

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Monitor, Smartphone, Globe, Trash2, LogOut, RefreshCw, Shield, Clock } from 'lucide-react'
 import { getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Session {
   id: string
@@ -42,6 +43,7 @@ function formatDate(iso: string): string {
 }
 
 export function SessionsPanel() {
+  const confirm = useConfirmDialog()
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [revoking, setRevoking] = useState<string | null>(null)
@@ -69,6 +71,14 @@ export function SessionsPanel() {
   useEffect(() => { fetchSessions() }, [fetchSessions])
 
   const revokeSession = async (id: string) => {
+    const ok = await confirm({
+      title: 'Завершить эту сессию?',
+      description: 'Устройство будет отключено от вашего аккаунта.',
+      confirmText: 'Завершить',
+      variant: 'danger',
+    })
+    if (!ok) return
+
     setRevoking(id)
     try {
       const res = await fetch(`/api/sessions?id=${id}`, {
@@ -87,7 +97,14 @@ export function SessionsPanel() {
   }
 
   const revokeAll = async () => {
-    if (!confirm('Завершить все остальные сессии? Вы останетесь в текущей.')) return
+    const ok = await confirm({
+      title: 'Завершить все остальные сессии?',
+      description: 'Вы останетесь авторизованы только на текущем устройстве.',
+      confirmText: 'Завершить все',
+      variant: 'danger',
+    })
+    if (!ok) return
+
     setRevokingAll(true)
     try {
       const res = await fetch('/api/sessions?all=true', {

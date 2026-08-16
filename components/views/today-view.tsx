@@ -15,10 +15,36 @@ interface DailyContext {
   tip: string
 }
 
+const getInitialDailyContext = (): DailyContext => {
+  const now = new Date()
+  const days = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота']
+  const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+  const formattedDate = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`
+
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('zerf_daily_context')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        return {
+          formattedDate,
+          weather: parsed.weather || 'Москва, +20°C, Ясно',
+          tip: parsed.tip || 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.',
+        }
+      }
+    } catch {}
+  }
+  return {
+    formattedDate,
+    weather: 'Москва, +20°C, Ясно',
+    tip: 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.',
+  }
+}
+
 export function TodayView() {
   const { state, dispatch } = useApp()
   const today = new Date().toISOString().slice(0, 10)
-  const [context, setContext] = useState<DailyContext | null>(null)
+  const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
 
@@ -40,11 +66,18 @@ export function TodayView() {
     return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
   }
 
-  // Fetch daily context on mount
+  // Fetch updated daily context in background without delaying initial render
   useEffect(() => {
     fetch('/api/daily-context', { headers: getAuthHeaders() })
       .then(r => r.json())
-      .then(d => { if (d.formattedDate) setContext(d) })
+      .then(d => {
+        if (d.formattedDate) {
+          setContext(d)
+          try {
+            localStorage.setItem('zerf_daily_context', JSON.stringify(d))
+          } catch {}
+        }
+      })
       .catch(() => {})
   }, [])
 

@@ -10,18 +10,34 @@ export default function TgPage() {
   useEffect(() => {
     setMounted(true)
 
-    // Initialize Telegram WebApp SDK with dark theme matching the site
+    // Initialize Telegram WebApp SDK with full expansion and theme color
     if (typeof window !== 'undefined') {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
         try {
           tg.ready?.()
           tg.expand?.()
-          if (tg.setHeaderColor) tg.setHeaderColor('#090d16')
-          if (tg.setBackgroundColor) tg.setBackgroundColor('#090d16')
+          if (typeof tg.requestFullscreen === 'function') {
+            try { tg.requestFullscreen() } catch {}
+          }
+          if (typeof tg.enableClosingConfirmation === 'function') {
+            try { tg.enableClosingConfirmation() } catch {}
+          }
+          const isDark = !document.documentElement.classList.contains('light')
+          const bgHex = isDark ? '#090d16' : '#ffffff'
+          if (tg.setHeaderColor) tg.setHeaderColor(bgHex)
+          if (tg.setBackgroundColor) tg.setBackgroundColor(bgHex)
+          if (tg.setBottomBarColor) tg.setBottomBarColor(bgHex)
         } catch (e) {
           console.error('Tg WebApp initialization error:', e)
         }
+      }
+      document.body.classList.add('telegram-webapp-mode')
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        document.body.classList.remove('telegram-webapp-mode')
       }
     }
   }, [])
@@ -29,8 +45,10 @@ export default function TgPage() {
   if (!mounted) return null
 
   return (
-    <AppProvider>
-      <AppShell />
-    </AppProvider>
+    <div className="w-full h-full min-h-[100dvh] max-w-full overflow-hidden">
+      <AppProvider>
+        <AppShell />
+      </AppProvider>
+    </div>
   )
 }

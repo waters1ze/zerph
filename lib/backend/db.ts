@@ -1702,6 +1702,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               reminderIntervalMinutes: 5,
               reminderRepeatCount: 3,
               plan: 'free',
+              timezone: 'Europe/Moscow',
               subscriptionExpiry: null,
               voiceCountToday: 0,
               voiceSecondsToday: 0,

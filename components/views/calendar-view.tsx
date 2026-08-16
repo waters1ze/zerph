@@ -62,8 +62,8 @@ function DayCell({
       className={cn(
         'relative min-h-[48px] sm:min-h-[60px] md:min-h-[70px] lg:min-h-[78px] xl:min-h-[86px] p-1.5 sm:p-2 rounded-xl border transition-all duration-150 cursor-pointer flex flex-col justify-between overflow-hidden group shadow-2xs',
         isToday
-          ? 'border-primary/60 bg-primary/10 shadow-sm shadow-primary/15 ring-1 ring-primary/40'
-          : 'border-border/60 bg-card/60 hover:border-primary/35 hover:bg-card/90',
+          ? 'border-primary/80 bg-primary/10 shadow-sm shadow-primary/15 ring-1 ring-primary/40'
+          : 'border-border/90 bg-card/80 hover:border-primary/60 hover:bg-card',
         !isCurrentMonth && 'opacity-25 hover:opacity-70'
       )}
     >

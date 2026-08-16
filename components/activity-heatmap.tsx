@@ -152,7 +152,7 @@ export function ActivityHeatmap({ completedDates = [], totalCompleted = 0, curre
         <div>
           {hoveredDay ? (
             <span className="text-foreground font-medium">
-              📅 {hoveredDay.date}: <strong>{hoveredDay.count}</strong> задач выполнено
+              <span className="mono-emoji mr-1">📅</span> {hoveredDay.date}: <strong>{hoveredDay.count}</strong> задач выполнено
             </span>
           ) : (
             <span>Наведите на квадрат, чтобы увидеть детали</span>

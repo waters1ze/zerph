@@ -26,9 +26,10 @@ import { EisenhowerView } from '@/components/views/eisenhower-view'
 import { AdminView } from '@/components/views/admin-view'
 import { ClockView } from '@/components/views/clock-view'
 import { AuthGateModal } from '@/components/auth-gate-modal'
+import { PullToRefresh } from '@/components/ui/pull-to-refresh'
 
 export function AppShell() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, syncData } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -152,18 +153,20 @@ export function AppShell() {
                 : 'app-main flex-1 min-w-0 overflow-y-auto px-3.5 sm:px-6 py-3.5 sm:py-5'
             }
           >
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={state.currentView}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                className={isFullHeight ? 'flex-1 flex flex-col overflow-hidden' : undefined}
-              >
-                {VIEW_MAP[state.currentView] ?? <TodayView />}
-              </motion.div>
-            </AnimatePresence>
+            <PullToRefresh onRefresh={syncData}>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={state.currentView}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                  className={isFullHeight ? 'flex-1 flex flex-col overflow-hidden' : undefined}
+                >
+                  {VIEW_MAP[state.currentView] ?? <TodayView />}
+                </motion.div>
+              </AnimatePresence>
+            </PullToRefresh>
           </main>
 
           {/* Task detail drawer — responsive overlay on mobile, inline panel on desktop */}

@@ -117,20 +117,20 @@ export function TasksView() {
           })}
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border w-fit overflow-x-auto max-w-full">
+        {/* Tabs — single line on all screen sizes */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border w-full sm:w-fit overflow-x-auto no-scrollbar flex-nowrap shrink-0">
           {statusTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setFilterStatus(tab.id)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150 shrink-0',
+                'flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11.5px] sm:text-[12px] font-medium transition-all duration-150 shrink-0 whitespace-nowrap',
                 filterStatus === tab.id
                   ? 'bg-card text-foreground shadow-sm border border-border/50 font-bold'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {tab.label}
+              <span>{tab.label}</span>
               {tab.count > 0 && (
                 <span className={cn('text-[10px] font-semibold min-w-[16px] text-center px-1 rounded-full',
                   filterStatus === tab.id ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'

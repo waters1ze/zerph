@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface ProjectMember { chatId: string; name: string }
 interface ProjectTask {
@@ -806,6 +807,7 @@ function ProjectDetail({
   onRefresh: () => void
   onDelete: () => void
 }) {
+  const confirm = useConfirmDialog()
   const [viewMode, setViewMode] = useState<'tree' | 'kanban' | 'list'>('tree')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [modalParentId, setModalParentId] = useState<string | undefined>(undefined)
@@ -856,7 +858,14 @@ function ProjectDetail({
   }
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('Удалить эту задачу?')) return
+    const ok = await confirm({
+      title: 'Удалить эту задачу?',
+      description: 'Задача будет удалена из дерева проекта.',
+      confirmText: 'Удалить',
+      variant: 'danger',
+    })
+    if (!ok) return
+
     try {
       const qChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
       await fetch(`/api/tasks?id=${taskId}&type=task`, {
@@ -1106,6 +1115,7 @@ function ProjectDetail({
 
 export function ProjectsView() {
   const { state } = useApp()
+  const confirm = useConfirmDialog()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Project | null>(null)
@@ -1143,7 +1153,14 @@ export function ProjectsView() {
   }
 
   const handleDeleteProject = async (id: string) => {
-    if (!confirm('Точно удалить проект?')) return
+    const ok = await confirm({
+      title: 'Удалить этот проект?',
+      description: 'Все связанные с проектом данные будут удалены.',
+      confirmText: 'Удалить проект',
+      variant: 'danger',
+    })
+    if (!ok) return
+
     try {
       await fetch('/api/projects?id=' + id, { method: 'DELETE', headers: getAuthHeaders() })
       setSelected(null)

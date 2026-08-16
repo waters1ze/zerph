@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import { NotificationsPanel } from '@/components/notifications-panel'
-import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu } from 'lucide-react'
+import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
 import { Clock } from 'lucide-react'
@@ -32,7 +32,7 @@ interface Props {
 }
 
 export function TopBar({ onNewTask, onMenuOpen }: Props) {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, syncData, isSyncing } = useApp()
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [nextTaskCountdown, setNextTaskCountdown] = useState<{ title: string; timeStr: string } | null>(null)
@@ -198,9 +198,9 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
         {/* Streak Flame Badge */}
         <div
           title="Стрик продуктивности: выполняйте задачи каждый день, чтобы получать бонусы!"
-          className="flex items-center gap-1 px-2.5 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold shrink-0 cursor-default"
+          className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-muted/60 border border-border text-foreground text-xs font-bold shrink-0 cursor-default"
         >
-          <span className="text-sm">🔥</span>
+          <span className="text-sm mono-emoji">🔥</span>
           <span>{state.tasks.filter(t => t.status === 'done').length > 0 ? Math.max(1, state.tasks.filter(t => t.status === 'done').length) : 0}</span>
         </div>
 
@@ -213,6 +213,20 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
           aria-label="Голосовая команда"
         >
           <Mic className="w-4 h-4" />
+        </motion.button>
+
+        {/* Live Refresh / Sync */}
+        <motion.button
+          whileTap={{ scale: 0.93 }}
+          onClick={() => syncData()}
+          title="Синхронизировать задачи"
+          className={cn(
+            'w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors shrink-0',
+            isSyncing && 'text-primary'
+          )}
+          aria-label="Синхронизировать задачи"
+        >
+          <RefreshCw className={cn('w-3.5 h-3.5', isSyncing && 'animate-spin text-primary')} />
         </motion.button>
 
         {/* Notifications */}

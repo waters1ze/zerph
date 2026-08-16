@@ -271,7 +271,7 @@ export function InboxView() {
           <div className="p-3.5 rounded-xl bg-muted/40 border border-border/60 text-xs text-muted-foreground leading-relaxed">
             {totalInboxCount === 0 ? (
               <p className="text-[var(--status-done)] font-medium">
-                🎉 У вас нет необработанных задач! Все дела распределены по проектам или выполнены.
+                <span className="mono-emoji mr-1">🎉</span> У вас нет необработанных задач! Все дела распределены по проектам или выполнены.
               </p>
             ) : (
               <p>
@@ -281,58 +281,35 @@ export function InboxView() {
           </div>
         </div>
 
-        {/* 1. Общие дела Snapshot */}
-        {commonSharedTasks.length > 0 && (
-          <div className="p-5 rounded-2xl bg-card border border-emerald-500/20 flex flex-col gap-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-500">
-                  <Users className="w-3.5 h-3.5" />
-                </div>
-                <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">Общие задачи</h2>
+        {/* 1. ОБЩИЕ ЗАДАЧИ Snapshot (Always Visible) */}
+        <div className="p-5 rounded-2xl bg-card border border-border flex flex-col gap-3 shadow-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <Users className="w-4 h-4" />
               </div>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                {commonSharedTasks.length} {commonSharedTasks.length === 1 ? 'задача' : 'задач'}
-              </span>
+              <div>
+                <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">Общие задачи</h2>
+                <p className="text-[11px] text-muted-foreground">Совместные дела с командой</p>
+              </div>
             </div>
+            <span className={cn(
+              'text-[11px] font-bold px-2 py-0.5 rounded-full border',
+              commonSharedTasks.length > 0
+                ? 'bg-primary/10 text-primary border-primary/20'
+                : 'bg-muted text-muted-foreground border-border'
+            )}>
+              {commonSharedTasks.length} {commonSharedTasks.length === 1 ? 'задача' : 'задач'}
+            </span>
+          </div>
 
+          {commonSharedTasks.length > 0 ? (
             <div className="space-y-2">
               {commonSharedTasks.slice(0, 4).map((t) => (
-                <div key={t.id} className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[11px]">🤝</span>
-                    <span className="text-xs text-foreground truncate font-medium">{t.title}</span>
-                  </div>
-                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
-                    {t.dueTime || 'Сегодня'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 2. Порученные дела Snapshot */}
-        {delegatedTasks.length > 0 && (
-          <div className="p-5 rounded-2xl bg-card border border-border flex flex-col gap-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center text-primary">
-                  <UserCheck className="w-3.5 h-3.5" />
-                </div>
-                <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">Порученные задачи</h2>
-              </div>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                {delegatedTasks.length} {delegatedTasks.length === 1 ? 'задача' : 'задач'}
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {delegatedTasks.slice(0, 4).map((t) => (
                 <div key={t.id} className="p-2.5 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[11px]">👤</span>
-                    <span className="text-xs text-foreground truncate">{t.title}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground truncate font-medium">{t.title}</span>
                   </div>
                   <span className="text-[10px] font-semibold text-primary shrink-0">
                     {t.dueTime || 'Сегодня'}
@@ -340,12 +317,63 @@ export function InboxView() {
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-muted/20 border border-border/40 text-center">
+              <p className="text-[11px] text-muted-foreground">
+                Нет общих дел. Назначьте тег <span className="font-mono text-primary font-bold">#общая</span> или отправьте задачу боту для двоих.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* 2. ПОРУЧЕННЫЕ ЗАДАЧИ Snapshot (Always Visible) */}
+        <div className="p-5 rounded-2xl bg-card border border-border flex flex-col gap-3 shadow-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <UserCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-[13px] font-bold text-foreground uppercase tracking-wide">Порученные задачи</h2>
+                <p className="text-[11px] text-muted-foreground">Делегировано вам</p>
+              </div>
+            </div>
+            <span className={cn(
+              'text-[11px] font-bold px-2 py-0.5 rounded-full border',
+              delegatedTasks.length > 0
+                ? 'bg-primary/10 text-primary border-primary/20'
+                : 'bg-muted text-muted-foreground border-border'
+            )}>
+              {delegatedTasks.length} {delegatedTasks.length === 1 ? 'задача' : 'задач'}
+            </span>
           </div>
-        )}
+
+          {delegatedTasks.length > 0 ? (
+            <div className="space-y-2">
+              {delegatedTasks.slice(0, 4).map((t) => (
+                <div key={t.id} className="p-2.5 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <UserCheck className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground truncate font-medium">{t.title}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-primary shrink-0">
+                    {t.dueTime || 'Сегодня'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-muted/20 border border-border/40 text-center">
+              <p className="text-[11px] text-muted-foreground">
+                Нет поручений. Назначьте тег <span className="font-mono text-primary font-bold">#поручение</span> или делегируйте задачу.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* GTD 2-Minute Rule Card */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-card via-card to-primary/5 border border-primary/20 flex items-start gap-3 shadow-xs">
-          <div className="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0 mt-0.5">
+        <div className="p-4 rounded-2xl bg-card border border-border flex items-start gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-primary/15 flex items-center justify-center text-primary shrink-0 mt-0.5">
             <Zap className="w-4 h-4" />
           </div>
           <div>

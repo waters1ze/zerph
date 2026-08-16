@@ -5,10 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Priority } from '@/lib/types'
-import { X, Tag } from 'lucide-react'
+import { X, Tag, FolderKanban, Flame } from 'lucide-react'
 import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
 import { DatePicker } from '@/components/ui/date-picker'
-import { FolderKanban } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -31,13 +30,14 @@ export function NewTaskModal({ open, onClose }: Props) {
   const [priority, setPriority] = useState<Priority>('medium')
   const [dueDate, setDueDate] = useState<string | undefined>(undefined)
   const [projectId, setProjectId] = useState('')
+  const [habitId, setHabitId] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
 
   const reset = () => {
     setTitle(''); setDescription(''); setPriority('medium')
     setDueDate(undefined)
-    setProjectId(''); setTagInput(''); setTags([])
+    setProjectId(''); setHabitId(''); setTagInput(''); setTags([])
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -61,6 +61,7 @@ export function NewTaskModal({ open, onClose }: Props) {
         status: 'todo',
         dueDate: dueDate || undefined,
         projectId: projectId || undefined,
+        habitId: habitId || undefined,
         tags,
         assignees: [],
         isShared: false,
@@ -155,8 +156,8 @@ export function NewTaskModal({ open, onClose }: Props) {
                 </div>
               </div>
 
-              {/* Due date + Project */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Due date + Project + Habit */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Срок выполнения</p>
                   <DatePicker
@@ -166,7 +167,7 @@ export function NewTaskModal({ open, onClose }: Props) {
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Привязать к проекту</p>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Проект</p>
                   <CustomSelect
                     value={projectId}
                     onChange={setProjectId}
@@ -176,6 +177,19 @@ export function NewTaskModal({ open, onClose }: Props) {
                       ...state.projects.map(p => ({ value: p.id, label: p.title, color: p.color })),
                     ]}
                     placeholder="Без проекта"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Привычка</p>
+                  <CustomSelect
+                    value={habitId}
+                    onChange={setHabitId}
+                    icon={<Flame className="w-3.5 h-3.5 text-orange-500" />}
+                    options={[
+                      { value: '', label: 'Без привычки' },
+                      ...state.habits.map(h => ({ value: h.id, label: `${h.icon || '🔥'} ${h.title}` })),
+                    ]}
+                    placeholder="Без привычки"
                   />
                 </div>
               </div>

@@ -240,9 +240,10 @@ export function AiChatPanel() {
                 <button
                   key={prompt}
                   onClick={() => { setInput(prompt); inputRef.current?.focus() }}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all"
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all flex items-center gap-1"
                 >
-                  {prompt}
+                  <span className="mono-emoji">{prompt.slice(0, 2)}</span>
+                  <span>{prompt.slice(2)}</span>
                 </button>
               ))}
             </div>

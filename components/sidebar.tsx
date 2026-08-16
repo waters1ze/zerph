@@ -29,7 +29,6 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { id: 'calendar',   label: 'Календарь',   icon: Calendar,    section: 'planning' },
   { id: 'goals',      label: 'Цели',        icon: Target,      section: 'planning' },
   { id: 'projects',   label: 'Проекты',     icon: FolderOpen,  section: 'planning' },
-  { id: 'eisenhower', label: 'Эйзенхауэр', icon: LayoutGrid,  section: 'planning' },
   { id: 'stats',      label: 'Аналитика',   icon: BarChart2,   section: 'аналитика' },
   { id: 'friends',    label: 'Команда',     icon: Users,       section: 'совместная работа' },
   { id: 'settings',   label: 'Настройки',   icon: Settings,    section: 'аккаунт' },

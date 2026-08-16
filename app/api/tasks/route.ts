@@ -51,7 +51,13 @@ export async function GET(req: NextRequest) {
       getFriends(ownerChatId),
       getAllHabits(ownerChatId),
     ])
-    return NextResponse.json(serialize({ tasks, goals, notes, friends, habits }))
+    return NextResponse.json(serialize({ tasks, goals, notes, friends, habits }), {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

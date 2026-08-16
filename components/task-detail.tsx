@@ -10,11 +10,12 @@ import { format, parseISO } from 'date-fns'
 import {
   X, Tag, FolderKanban, Sparkles,
   Trash2, ChevronDown, Target, Edit3, Check,
-  Clock, Bell, Mic
+  Clock, Bell, Mic, Flame, Users
 } from 'lucide-react'
 import type { Priority, TaskStatus } from '@/lib/types'
 import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
 import { DatePicker } from '@/components/ui/date-picker'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'К исполнению', inprogress: 'В процессе', done: 'Завершено', overdue: 'Просрочено'
@@ -36,6 +37,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 
 export function TaskDetail() {
   const { state, dispatch } = useApp()
+  const confirm = useConfirmDialog()
   const [showSource, setShowSource] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -43,6 +45,7 @@ export function TaskDetail() {
   const task = state.selectedTaskId ? state.tasks.find(t => t.id === state.selectedTaskId) : null
   const project = task?.projectId ? state.projects.find(p => p.id === task.projectId) : null
   const goal = task?.goalId ? state.goals.find(g => g.id === task.goalId) : null
+  const habit = task?.habitId ? state.habits.find(h => h.id === task.habitId) : null
 
   if (!task) return null
 
@@ -288,24 +291,51 @@ export function TaskDetail() {
           </div>
         )}
 
-        {/* Project & Goal */}
-        {(project || goal) && (
-          <div className="flex flex-col gap-2.5">
-            {project && (
-              <div className="flex items-center gap-2">
-                <FolderKanban className="w-3.5 h-3.5 text-muted-foreground" />
-                <div className="w-2 h-2 rounded-full" style={{ background: project.color }} />
-                <span className="text-[13px] text-foreground">{project.title}</span>
-              </div>
-            )}
-            {goal && (
-              <div className="flex items-center gap-2">
-                <Target className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-[13px] text-foreground">{goal.title}</span>
-              </div>
-            )}
+        {/* Project, Goal & Habit Linkings */}
+        <div className="space-y-2.5">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ПРИВЯЗКА К ПРОЕКТАМ, ЦЕЛЯМ И ПРИВЫЧКАМ</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Проект</p>
+              <CustomSelect
+                value={task.projectId || ''}
+                onChange={v => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { projectId: v || undefined } })}
+                icon={<FolderKanban className="w-3.5 h-3.5" />}
+                options={[
+                  { value: '', label: 'Без проекта' },
+                  ...state.projects.map(p => ({ value: p.id, label: p.title, color: p.color })),
+                ]}
+                placeholder="Без проекта"
+              />
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Цель</p>
+              <CustomSelect
+                value={task.goalId || ''}
+                onChange={v => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { goalId: v || undefined } })}
+                icon={<Target className="w-3.5 h-3.5" />}
+                options={[
+                  { value: '', label: 'Без цели' },
+                  ...state.goals.map(g => ({ value: g.id, label: g.title, color: g.color })),
+                ]}
+                placeholder="Без цели"
+              />
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Привычка</p>
+              <CustomSelect
+                value={task.habitId || ''}
+                onChange={v => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { habitId: v || undefined } })}
+                icon={<Flame className="w-3.5 h-3.5 text-orange-500" />}
+                options={[
+                  { value: '', label: 'Без привычки' },
+                  ...state.habits.map(h => ({ value: h.id, label: `${h.icon || '🔥'} ${h.title}` })),
+                ]}
+                placeholder="Без привычки"
+              />
+            </div>
           </div>
-        )}
+        </div>
 
         {/* Tags */}
         {task.tags.length > 0 && (
@@ -326,7 +356,7 @@ export function TaskDetail() {
         {task.assignees && task.assignees.length > 0 && (
           <div className="p-3.5 rounded-xl bg-accent/40 border border-border/60">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2.5 flex items-center gap-1.5">
-              👥 КОМАНДА И УЧАСТНИКИ ЗАДАЧИ
+              <Users className="w-3.5 h-3.5 text-primary" /> КОМАНДА И УЧАСТНИКИ ЗАДАЧИ
             </p>
             <div className="flex flex-wrap gap-2">
               {task.assignees.map(aid => {
@@ -409,7 +439,18 @@ export function TaskDetail() {
       {/* Footer */}
       <div className="px-5 py-3.5 border-t border-border flex items-center justify-between shrink-0">
         <button
-          onClick={() => dispatch({ type: 'DELETE_TASK', id: task.id })}
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Удалить задачу «${task.title}»?`,
+              description: 'Задача будет удалена без возможности восстановления.',
+              confirmText: 'Удалить задачу',
+              variant: 'danger',
+            })
+            if (ok) {
+              dispatch({ type: 'DELETE_TASK', id: task.id })
+              dispatch({ type: 'SELECT_TASK', id: null })
+            }
+          }}
           className="flex items-center gap-1.5 text-[12px] text-destructive/70 hover:text-destructive transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
