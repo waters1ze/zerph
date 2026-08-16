@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
 import { getMskDateTime } from './db'
-import { fetchMorningNewsContext } from './news-fetcher'
+import { fetchMorningNewsContext, fetchEveningNewsContext } from './news-fetcher'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const DEFAULT_CHANNEL = process.env.TELEGRAM_CHANNEL_ID || '@zerph_off'
@@ -212,11 +212,12 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
       : context.headlines.slice(0, 4).join('\n')
 
     const prompt =
-      `Ты — главный редактор официального Telegram-канала Zerf AI (@zerph_off).\n` +
+      `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
       `Напиши ПОДРОБНУЮ, глубокую и качественную утреннюю сводку ключевых новостей из мира IT, технологий и искусственного интеллекта за вчера и сегодня (${context.date}).\n\n` +
       `Свежие материалы с реальными ссылками:\n${newsData}\n\n` +
       `Курсы валют и активов: ${ratesStr || '$ 84.5 ₽ | € 97.5 ₽ | ¥ 12.5 ₽ | ₿ $62,900 | 💎 $1.33'}\n\n` +
       `ТРЕБОВАНИЯ К СОДЕРЖАНИЮ:\n` +
+      `- Пиши ТОЛЬКО на чистом, грамотном русском литературном языке без каких-либо иностранных слов или опечаток.\n` +
       `- НЕ пиши одни сухие заголовки! По каждому событию дай емкое раскрытие (1-2 содержательных предложения): что произошло, главные цифры, технологии или практический эффект.\n` +
       `- ОБЯЗАТЕЛЬНО: в конце описания каждой новости приложи кликабельную ссылку на соответствующий источник из списка выше в формате: <a href="URL">[Источник]</a>.\n` +
       `- Строгий минимализм: без разноцветных эмодзи (никаких 🚀🔥⚡️📱). Используй только благородные ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>, <a>.\n\n` +
@@ -269,32 +270,34 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
 /** 4. Post 21:00 MSK Evening News Digest & Reflection (Detailed, Minimalist B&W) */
 export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   try {
-    const context = await fetchMorningNewsContext()
+    const context = await fetchEveningNewsContext()
     const newsData = context.news && context.news.length > 0
       ? context.news.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://habr.com'})`).join('\n')
       : context.headlines.slice(0, 3).join('\n')
 
     const prompt =
-      `Ты — автор официального Telegram-канала Zerf AI (@zerph_off).\n` +
-      `Напиши подробный вечерний дайджест итогов дня за сегодня (${context.date}) для подписчиков.\n\n` +
-      `Темы дня с ссылками на источники:\n${newsData}\n\n` +
-      `СТРОГИЕ ПРАВИЛА СТИЛЯ:\n` +
+      `Ты — автор официального Telegram-канала Zerf Note (@zerph_off).\n` +
+      `Напиши глубокую, качественную ВЕЧЕРНЮЮ аналитическую сводку ключевых инсайтов за сегодня (${context.date}).\n\n` +
+      `Вечерние аналитические темы и разборы (разработка, инженерия, безопасность):\n${newsData}\n\n` +
+      `СТРОГИЕ ПРАВИЛА:\n` +
       `1. НЕ ИСПОЛЬЗУЙ цветные эмодзи. Только строгие ч/б символы: ✦, ◈, ▪, ▫, <blockquote>, <b>, <i>, <code>.\n` +
-      `2. ОБЯЗАТЕЛЬНО включай кликабельные ссылки на источники в формате <a href="URL">[Источник]</a> в конце ключевых тем.\n` +
-      `3. Структура поста:\n` +
-      `   • ✦ <b>ИТОГИ ДНЯ | ВЕЧЕРНЯЯ СВОДКА</b>\n\n` +
-      `   • ◈ <b>Главные инсайты дня:</b>\n` +
-      `     ▪ <b>[Тема 1]</b> — развернутый итог события <a href="[URL_темы_1]">[Источник]</a>\n` +
-      `     ▪ <b>[Тема 2]</b> — развернутый итог события <a href="[URL_темы_2]">[Источник]</a>\n\n` +
-      `   • <b>Рефлексия продуктивности:</b> 1-2 предложения о важности фиксации сделанного и очистки ума перед сном в Zerf AI.\n\n` +
-      `   • <blockquote>❝ [Вдохновляющая мысль о дисциплине и системности]</blockquote>\n\n` +
-      `   • <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
+      `2. Пиши ТОЛЬКО на чистом, грамотном русском литературном языке без каких-либо иностранных слов или опечаток.\n` +
+      `3. ОБЯЗАТЕЛЬНО включай кликабельные ссылки на источники в формате <a href="URL">[Источник]</a> в конце каждого инсайта.\n` +
+      `4. Структура вечерней сводки:\n` +
+      `   ✦ <b>ИТОГИ ДНЯ | ВЕЧЕРНЯЯ СВОДКА</b>\n\n` +
+      `   ◈ <b>Главные инсайты и разборы:</b>\n` +
+      `   ▪ <b>[Тема 1]</b> — развернутый анализ и выводы <a href="[URL_темы_1]">[Источник]</a>\n\n` +
+      `   ▪ <b>[Тема 2]</b> — развернутый анализ и выводы <a href="[URL_темы_2]">[Источник]</a>\n\n` +
+      `   ▪ <b>[Тема 3]</b> — развернутый анализ и выводы <a href="[URL_темы_3]">[Источник]</a>\n\n` +
+      `   <b>Рефлексия продуктивности:</b> 1-2 предложения о пользе фиксации выполненных дел и разгрузки мыслей перед сном в Zerf Note.\n\n` +
+      `   <blockquote>❝ [Вдохновляющая мысль о дисциплине, спокойствии и планировании следующего дня]</blockquote>\n\n` +
+      `   ▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
     const result = await callGroqChatCompletion({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.65,
-      max_tokens: 900,
+      temperature: 0.6,
+      max_tokens: 1000,
     })
 
     const text = result.content?.trim()

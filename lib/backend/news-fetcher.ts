@@ -158,3 +158,85 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     sources
   }
 }
+
+/**
+ * Evening News & Insights Context Fetcher
+ * Distinct sources: Programming, CyberSecurity, Product Design & Popular Science.
+ */
+export async function fetchEveningNewsContext(): Promise<NewsDigestContext> {
+  const now = new Date()
+  const dateStr = new Intl.DateTimeFormat('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(now)
+
+  const newsItems: NewsItem[] = []
+  const sources: string[] = ['Хабр Разработка', 'Хабр Безопасность', 'Научпоп']
+
+  // 1. Fetch Programming & Dev articles
+  try {
+    const devRss = await fetch('https://habr.com/ru/rss/hub/programming/all/?fl=ru', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      next: { revalidate: 1800 }
+    })
+    if (devRss.ok) {
+      const xml = await devRss.text()
+      const itemBlocks = xml.split('<item>').slice(1)
+      for (const block of itemBlocks) {
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+        const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
+
+        if (titleMatch) {
+          const title = cleanHtmlText(titleMatch[1])
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const url = linkMatch ? linkMatch[1].trim() : undefined
+          if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+            newsItems.push({ title, summary, url, source: 'Разработка' })
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Evening dev RSS error:', e)
+  }
+
+  // 2. Fetch CyberSecurity & Popular Science
+  if (newsItems.length < 5) {
+    try {
+      const secRss = await fetch('https://habr.com/ru/rss/hub/infosecurity/all/?fl=ru', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 1800 }
+      })
+      if (secRss.ok) {
+        const xml = await secRss.text()
+        const itemBlocks = xml.split('<item>').slice(1)
+        for (const block of itemBlocks) {
+          const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+          const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+          const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
+          if (titleMatch) {
+            const title = cleanHtmlText(titleMatch[1])
+            const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+            const url = linkMatch ? linkMatch[1].trim() : undefined
+            if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+              newsItems.push({ title, summary, url, source: 'Инфобезопасность' })
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const finalNews = newsItems.slice(0, 5)
+  return {
+    date: dateStr,
+    rates: {},
+    news: finalNews,
+    headlines: finalNews.map(n => n.title),
+    sources
+  }
+}
+
