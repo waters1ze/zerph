@@ -6,7 +6,7 @@ import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { cn, isBirthdayVisible, groupTasksByDate } from '@/lib/utils'
 import type { Priority, TaskStatus } from '@/lib/types'
-import { CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar } from 'lucide-react'
+import { CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar, Users, UserCheck } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
 
 type FilterStatus = 'all' | TaskStatus
@@ -23,6 +23,8 @@ export function TasksView() {
 
   const FIXED_TAGS = [
     { id: 'all', label: 'Все' },
+    { id: 'общая', label: 'Общие', icon: Users },
+    { id: 'поручение', label: 'Порученные', icon: UserCheck },
     { id: 'работа', label: 'Работа', icon: Briefcase },
     { id: 'личное', label: 'Личное', icon: User },
     { id: 'срочно', label: 'Срочно', icon: Zap },
@@ -31,10 +33,19 @@ export function TasksView() {
     { id: 'спорт', label: 'Спорт', icon: Activity },
   ]
 
-  const matchesTag = (t: { tags?: string[]; priority?: string }) => {
+  const matchesTag = (t: { tags?: string[]; priority?: string; isShared?: boolean }) => {
     if (selectedTag === 'all') return true
     if (selectedTag === 'срочно') {
       return t.priority === 'urgent' || t.tags?.some(tag => tag.toLowerCase().includes('срочн'))
+    }
+    const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
+    if (selectedTag === 'общая') {
+      return tags.includes('общая') || tags.includes('совместная') || tags.includes('совместно') || tags.includes('общие')
+    }
+    if (selectedTag === 'поручение') {
+      const isCommon = tags.includes('общая') || tags.includes('совместная') || tags.includes('совместно') || tags.includes('общие')
+      const hasDel = tags.includes('поручение') || tags.includes('делегировано') || tags.includes('поручено')
+      return (t.isShared || hasDel) && !isCommon
     }
     return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
   }
