@@ -52,34 +52,12 @@ async function checkAndSendSundayWeeklyReport() {
   }
 }
 
+import { runReminderCheck } from './cron-runner'
+
 export async function checkAndSendReminders() {
   try {
     await checkAndSendSundayWeeklyReport()
-    const dueTasks = await getTasksDueNow()
-    if (dueTasks.length === 0) return
-
-    for (const task of dueTasks) {
-      const ownerChatId = task.ownerChatId ? Number(task.ownerChatId) : null
-      if (!ownerChatId || isNaN(ownerChatId) || ownerChatId === 0) {
-        // No valid owner to notify
-        await markReminderSent(task.id)
-        continue
-      }
-
-      const timeStr = task.dueTime || 'сейчас'
-      let msg = `⏰ *НАПОМИНАНИЕ*\n\n` +
-        `📌 *${task.title}*\n`
-      if (task.description) {
-        msg += `\n${task.description.slice(0, 200)}\n`
-      }
-      msg += `\n📍 *Время:* ${timeStr}\n` +
-        `✨ _Отправлено из Zerf AI_`
-
-      // Send STRICTLY to the owner of the task ONLY
-      await sendTgNotification(ownerChatId, msg)
-
-      await markReminderSent(task.id)
-    }
+    await runReminderCheck()
   } catch (err) {
     console.error('Error in reminder scheduler:', err)
   }

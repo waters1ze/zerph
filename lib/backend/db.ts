@@ -407,7 +407,13 @@ export async function notifyAuthorTaskCompleted(task: any) {
     const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
     const authorCidStr = String(task.authorChatId)
 
-    const msg = `🎉 *Порученная задача выполнена!*\n\n` +
+    const tags = (task.tags || []).map((x: string) => String(x).toLowerCase())
+    const isCommon = tags.includes('общая') || tags.includes('общие') || tags.includes('совместная') || tags.includes('совместно') || tags.includes('совместная задача') || tags.includes('общая задача')
+    const isDelegated = tags.includes('поручение') || tags.includes('делегировано') || tags.includes('поручено')
+
+    const taskTypeLabel = (isCommon || !isDelegated) ? 'Общая задача' : 'Порученная задача'
+
+    const msg = `🎉 *${taskTypeLabel} выполнена!*\n\n` +
       `👤 *${doerName}* выполнил(а) задачу:\n` +
       `📌 *«${task.title}»*\n` +
       (task.dueTime ? `⏰ Время: ${task.dueTime}\n` : '') +
@@ -434,7 +440,7 @@ export async function notifyAuthorTaskCompleted(task: any) {
     if (!tgSent) {
       try {
         const { sendVkMessage } = await import('./vk')
-        const vkMsg = `🎉 Порученная задача выполнена!\n\n` +
+        const vkMsg = `🎉 ${taskTypeLabel} выполнена!\n\n` +
           `👤 ${doerName} выполнил(а) задачу:\n` +
           `📌 «${task.title}»\n` +
           (task.dueTime ? `⏰ Время: ${task.dueTime}\n` : '') +
@@ -2275,6 +2281,7 @@ export async function getTasksDueNow(): Promise<DbTask[]> {
   const allActiveTasks = await prisma.task.findMany({
     where: {
       status: { notIn: ['done', 'draft'] },
+      reminderSent: false,
     },
   })
 
@@ -2282,7 +2289,7 @@ export async function getTasksDueNow(): Promise<DbTask[]> {
   const nowMs = new Date(`${mskDate}T${mskTime}:00+03:00`).getTime()
 
   for (const task of allActiveTasks as any[]) {
-    if (!task.dueDate) continue
+    if (!task.dueDate || task.reminderSent) continue
     const tTime = task.dueTime || '09:00'
 
     // Determine target year/month/date for task
@@ -2297,9 +2304,9 @@ export async function getTasksDueNow(): Promise<DbTask[]> {
     const offsetMs = (task.reminderOffsetMinutes || 0) * 60 * 1000
     const reminderTriggerMs = taskTargetMs - offsetMs
 
-    // If current MSK minute matches reminderTriggerMs (within 90s window)
+    // If current MSK minute matches reminderTriggerMs (within 60s window)
     const diffSeconds = Math.abs((nowMs - reminderTriggerMs) / 1000)
-    if (diffSeconds < 90) {
+    if (diffSeconds <= 60) {
       dueNow.push(task as DbTask)
     }
   }

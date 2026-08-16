@@ -60,7 +60,8 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
   }
 }
 
-// ── Reminder check — per-task owner with configurable multi-stage intervals ──
+// In-memory guard to prevent duplicate reminders within 2 minutes for the same task
+const lastSentReminderTimestampMap = new Map<string, number>()
 
 export async function runReminderCheck() {
   try {
@@ -85,6 +86,10 @@ export async function runReminderCheck() {
       if (task.status === 'done' || task.status === 'draft') continue
       if (task.reminderSent) continue
       if (task.dueDate && task.dueDate !== todayStr) continue
+
+      // Anti-duplicate timestamp guard (minimum 100 seconds between reminder triggers)
+      const lastSentMs = lastSentReminderTimestampMap.get(task.id) || 0
+      if (Date.now() - lastSentMs < 100_000) continue
 
       const [dueH, dueM] = task.dueTime.split(':').map((n: string) => parseInt(n, 10))
       if (isNaN(dueH) || isNaN(dueM)) continue
@@ -115,6 +120,7 @@ export async function runReminderCheck() {
       const isCatchUp = actualDiffMin <= 0 && actualDiffMin >= -15 && sentCount === 0 && !task.reminderSent
 
       if (isWindowMatch || isCatchUp) {
+        lastSentReminderTimestampMap.set(task.id, Date.now())
         const isRecipientMsg =
           task.description?.includes('📩 Отправить') ||
           task.title?.toLowerCase().includes('отправь') ||
@@ -658,9 +664,11 @@ export async function runChannelAndAiCron() {
       if (inMemoryChannelEveningDate !== todayStr) {
         const lastEvening = await getConfig('last_channel_evening_post_date')
         if (lastEvening !== todayStr) {
-          inMemoryChannelEveningDate = todayStr
-          await setConfig('last_channel_evening_post_date', todayStr)
-          await postDailyEveningPostToChannel()
+          const ok = await postDailyEveningPostToChannel()
+          if (ok) {
+            inMemoryChannelEveningDate = todayStr
+            await setConfig('last_channel_evening_post_date', todayStr)
+          }
         } else {
           inMemoryChannelEveningDate = todayStr
         }

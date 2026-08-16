@@ -218,9 +218,13 @@ export function groupTasksByDate<T extends { dueDate?: string | null; dueTime?: 
 
   // Sort keys:
   // 1. TODAY (key === today) -> ALWAYS FIRST at the very top!
-  // 2. TOMORROW (key === tomorrow) & upcoming future dates (key > today) -> chronological order
-  // 3. OVERDUE / YESTERDAY / PAST dates (key < today) -> reverse chronological order (yesterday, then earlier)
-  // 4. NO-DATE ('no-date') -> at the very bottom
+  // 2. TOMORROW (key === tomorrow)
+  // 3. YESTERDAY (key === yesterday)
+  // 4. Upcoming near days (within next 7 days, closest first)
+  // 5. Recent past days (within last 7 days, closest first)
+  // 6. Far future (> 7 days)
+  // 7. Far past (> 7 days ago)
+  // 8. NO-DATE ('no-date') -> at the very bottom
   const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) => {
     if (a === b) return 0
     if (a === today) return -1
@@ -229,21 +233,37 @@ export function groupTasksByDate<T extends { dueDate?: string | null; dueTime?: 
     if (a === 'no-date') return 1
     if (b === 'no-date') return -1
 
+    if (a === tomorrow) return -1
+    if (b === tomorrow) return 1
+
+    if (a === yesterday) return -1
+    if (b === yesterday) return 1
+
     const aIsFuture = a > today
     const bIsFuture = b > today
 
+    // If both are future dates: closest future first
     if (aIsFuture && bIsFuture) {
       return a.localeCompare(b)
     }
-    if (aIsFuture && !bIsFuture) {
-      return -1
-    }
-    if (!aIsFuture && bIsFuture) {
-      return 1
+
+    // If both are past dates: closest past first (yesterday before last week)
+    if (!aIsFuture && !bIsFuture) {
+      return b.localeCompare(a)
     }
 
-    // Both are past dates: closest past date first (yesterday before last week)
-    return b.localeCompare(a)
+    // Compare distance in days to today
+    const todayMs = new Date(today + 'T00:00:00').getTime()
+    const aMs = new Date(a + 'T00:00:00').getTime()
+    const bMs = new Date(b + 'T00:00:00').getTime()
+    const aDist = Math.abs(aMs - todayMs)
+    const bDist = Math.abs(bMs - todayMs)
+
+    if (aDist !== bDist) {
+      return aDist - bDist
+    }
+
+    return aIsFuture ? -1 : 1
   })
 
   return sortedKeys.map(key => {

@@ -65,7 +65,7 @@ const THEMES = [
   { id: 'system',label: 'Системная',icon: Monitor },
 ] as const
 
-type SettingsTab = 'account' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data'
+type SettingsTab = 'account' | 'notifications' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data'
 
 export function SettingsView() {
   const { state, dispatch } = useApp()
@@ -393,6 +393,17 @@ export function SettingsView() {
         >
           <User className="w-3.5 h-3.5" />
           <span>Профиль & Вход</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('notifications')}
+          className={cn(
+            'px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all',
+            activeTab === 'notifications' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Bell className="w-3.5 h-3.5 text-primary" />
+          <span>Уведомления & Каналы</span>
         </button>
 
         <button
@@ -748,7 +759,238 @@ export function SettingsView() {
         </div>
       )}
 
-      {/* ── TAB 2: Voice Automation (iOS & Android) ──────────────────────────── */}
+      {/* ── TAB 2: Notifications & Channels ─────────────────────────────────── */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-6">
+          <Section title="Куда доставлять напоминания и уведомления">
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Выберите удобные каналы для мгновенного получения уведомлений о задачах, напоминаниях и отчетах:
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Telegram */}
+                <div
+                  onClick={() => update({
+                    notifications: {
+                      ...settings.notifications,
+                      telegram: settings.notifications.telegram === false ? true : false
+                    }
+                  })}
+                  className={cn(
+                    'p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between gap-3',
+                    settings.notifications.telegram !== false
+                      ? 'bg-primary/10 border-primary/40 shadow-sm'
+                      : 'bg-card border-border hover:bg-muted/50'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center font-bold">
+                      <Send className="w-4 h-4" />
+                    </div>
+                    <span className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                      settings.notifications.telegram !== false
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-muted text-muted-foreground border-border'
+                    )}>
+                      {settings.notifications.telegram !== false ? 'Включено' : 'Выключено'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">Telegram-бот</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Личные сообщения от @Zerph_bot</p>
+                  </div>
+                </div>
+
+                {/* 2. VK */}
+                <div
+                  onClick={() => update({
+                    notifications: {
+                      ...settings.notifications,
+                      vk: settings.notifications.vk === false ? true : false
+                    }
+                  })}
+                  className={cn(
+                    'p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between gap-3',
+                    settings.notifications.vk !== false
+                      ? 'bg-primary/10 border-primary/40 shadow-sm'
+                      : 'bg-card border-border hover:bg-muted/50'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center font-bold">
+                      <MessageSquare className="w-4 h-4" />
+                    </div>
+                    <span className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                      settings.notifications.vk !== false
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-muted text-muted-foreground border-border'
+                    )}>
+                      {settings.notifications.vk !== false ? 'Включено' : 'Выключено'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">ВКонтакте</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Сообщения сообщества VK</p>
+                  </div>
+                </div>
+
+                {/* 3. Browser / Web Push */}
+                <div
+                  onClick={async () => {
+                    const nextVal = settings.notifications.web === false ? true : false
+                    update({
+                      notifications: {
+                        ...settings.notifications,
+                        web: nextVal,
+                        desktop: nextVal
+                      }
+                    })
+                    if (nextVal && typeof window !== 'undefined' && 'Notification' in window) {
+                      try {
+                        const perm = await Notification.requestPermission()
+                        if (perm === 'granted') {
+                          new Notification('⏰ Zerf Note: Уведомления включены!', {
+                            body: 'Теперь вы будете получать напоминания прямо на сайте и на рабочем столе.',
+                            icon: '/icon.png'
+                          })
+                        }
+                      } catch {}
+                    }
+                  }}
+                  className={cn(
+                    'p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between gap-3',
+                    settings.notifications.web !== false
+                      ? 'bg-primary/10 border-primary/40 shadow-sm'
+                      : 'bg-card border-border hover:bg-muted/50'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center font-bold">
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <span className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                      settings.notifications.web !== false
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-muted text-muted-foreground border-border'
+                    )}>
+                      {settings.notifications.web !== false ? 'Включено' : 'Выключено'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">Сайт & Web Push</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Браузерные всплывающие пуши и звук</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Row
+              label="Браузерные Push-уведомления (Desktop / Mobile Web)"
+              description="Всплывающие карточки напоминаний поверх всех окон браузера"
+            >
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (typeof window !== 'undefined' && 'Notification' in window) {
+                      const perm = await Notification.requestPermission()
+                      if (perm === 'granted') {
+                        new Notification('🔔 Тестовое уведомление Zerf AI', {
+                          body: 'Проверка работы уведомлений на сайте выполнена успешно!',
+                          icon: '/icon.png'
+                        })
+                      } else {
+                        alert('Уведомления заблокированы в браузере. Разрешите их в настройках сайта.')
+                      }
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors"
+                >
+                  Тест пуша
+                </button>
+                <Toggle
+                  checked={settings.notifications.web !== false}
+                  onChange={async v => {
+                    update({
+                      notifications: {
+                        ...settings.notifications,
+                        web: v,
+                        desktop: v
+                      }
+                    })
+                    if (v && typeof window !== 'undefined' && 'Notification' in window) {
+                      await Notification.requestPermission()
+                    }
+                  }}
+                />
+              </div>
+            </Row>
+
+            <Row
+              label="Звуковой сигнал напоминаний (Chime / Alarm)"
+              description="Воспроизведение звукового оповещения при наступлении срока задачи"
+            >
+              <Toggle
+                checked={settings.notifications.dueReminders ?? true}
+                onChange={v => update({
+                  notifications: {
+                    ...settings.notifications,
+                    dueReminders: v
+                  }
+                })}
+              />
+            </Row>
+
+            <Row
+              label="Интервал повторов напоминаний"
+              description="За сколько минут присылать повторные напоминания"
+            >
+              <select
+                value={settings.notifications.reminderIntervalMinutes || 5}
+                onChange={e => update({
+                  notifications: {
+                    ...settings.notifications,
+                    reminderIntervalMinutes: Number(e.target.value)
+                  }
+                })}
+                className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+              >
+                <option value={5}>5 минут (Рекомендуется)</option>
+                <option value={10}>10 минут</option>
+                <option value={15}>15 минут</option>
+                <option value={30}>30 минут</option>
+              </select>
+            </Row>
+
+            <Row
+              label="Количество ступеней напоминания"
+              description="Сколько раз повторять напоминание до завершения задачи"
+            >
+              <select
+                value={settings.notifications.reminderRepeatCount || 3}
+                onChange={e => update({
+                  notifications: {
+                    ...settings.notifications,
+                    reminderRepeatCount: Number(e.target.value)
+                  }
+                })}
+                className="text-xs bg-muted/50 rounded-xl px-3 py-1.5 border border-border outline-none cursor-pointer text-foreground"
+              >
+                <option value={1}>1 раз (Только в срок)</option>
+                <option value={2}>2 раза (Заранее и в срок)</option>
+                <option value={3}>3 раза (Рекомендуется)</option>
+                <option value={5}>5 раз (Настойчиво)</option>
+              </select>
+            </Row>
+          </Section>
+        </div>
+      )}
+
+      {/* ── TAB 3: Voice Automation (iOS & Android) ──────────────────────────── */}
       {activeTab === 'automation' && (
         <div className="space-y-6">
           <div className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3">
@@ -778,7 +1020,7 @@ export function SettingsView() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="font-bold text-foreground flex items-center gap-1.5 text-sm">
-                    <span>🍏</span> Для iPhone (Siri & Action Button)
+                    <span>🍏</span> Для iPhone (Siri, Action Button и жесты)
                   </p>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold border border-primary/20">
                     Шаблон в 1 клик
@@ -821,12 +1063,19 @@ export function SettingsView() {
                       🔊 <b>4. Произнести текст</b> [Содержимое URL]
                     </div>
                   </div>
+
+                  {/* Gestures and Fast Entry */}
+                  <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-1.5 text-[11px] mt-2 text-foreground">
+                    <div className="font-bold text-primary flex items-center gap-1.5 text-xs">
+                      <span>✨</span> Быстрый вход жестами и виджетами на iPhone:
+                    </div>
+                    <p>• <b>Двойной стук по крышке (Back Tap):</b> <i>Настройки ➔ Универсальный доступ ➔ Касание ➔ Касание задней панели ➔ «Двойное касание» ➔ выберите «Запиши в zerf»</i>.</p>
+                    <p>• <b>Action Button (iPhone 15/16 Pro):</b> <i>Настройки ➔ Кнопка действия ➔ Быстрая команда ➔ «Запиши в zerf»</i>.</p>
+                    <p>• <b>Виджет на экране блокировки:</b> <i>Зажмите Lock Screen ➔ Настроить ➔ Добавить виджет «Команды» ➔ «Запиши в zerf»</i>.</p>
+                    <p>• <b>Иконка на экран «Домой»:</b> <i>Откройте сайт в Safari ➔ Поделиться ➔ «На экран "Домой"»</i>.</p>
+                  </div>
                 </div>
               </div>
-
-              <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/50">
-                💡 <i>Привяжите к Action Button на iPhone 15/16 Pro или к двойному постукиванию по задней крышке!</i>
-              </p>
             </div>
 
             {/* Android Card */}
@@ -854,6 +1103,7 @@ export function SettingsView() {
                     </li>
                     <li>В разделе <i>«Ответ» (Response)</i> включите: <b>Озвучивать текст (TTS)</b>.</li>
                     <li>Вынесите созданный ярлык-виджет на главный экран Android!</li>
+                    <li>Для установки PWA: откройте сайт в Chrome ➔ Меню ➔ «Установить приложение».</li>
                   </ol>
                 </div>
               </div>

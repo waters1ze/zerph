@@ -209,12 +209,12 @@ export function HabitsWidget({ selectedHabitId, onSelectHabit }: HabitsWidgetPro
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={cn(
-                'relative p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 group',
+                'relative p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 group select-none',
                 isSelected
-                  ? 'bg-primary/20 border-primary ring-2 ring-primary/40 shadow-sm'
+                  ? 'bg-primary/15 border-primary ring-2 ring-primary/50 shadow-sm'
                   : isDone
-                  ? 'bg-primary/10 border-primary/25 shadow-xs'
-                  : 'bg-card border-border/60 hover:border-primary/40'
+                  ? 'bg-primary/10 border-primary/35 shadow-xs'
+                  : 'bg-card/70 border-border/60 hover:border-border hover:bg-card text-muted-foreground'
               )}
               onClick={() => {
                 if (onSelectHabit) {
@@ -225,12 +225,15 @@ export function HabitsWidget({ selectedHabitId, onSelectHabit }: HabitsWidgetPro
               }}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xl">{habit.icon || '📌'}</span>
+                <span className="text-xl mono-emoji">{habit.icon || '📌'}</span>
                 
                 <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                   {habit.streak > 0 && (
-                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded-full">
-                      <Flame className="w-3 h-3" /> {habit.streak}
+                    <span className={cn(
+                      "flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                      isDone ? "text-orange-400 bg-orange-500/15" : "text-muted-foreground bg-muted/60"
+                    )}>
+                      <Flame className="w-3 h-3 text-orange-400" /> {habit.streak}
                     </span>
                   )}
 
@@ -241,7 +244,7 @@ export function HabitsWidget({ selectedHabitId, onSelectHabit }: HabitsWidgetPro
                         e.stopPropagation()
                         setActiveMenuHabitId(isMenuOpen ? null : habit.id)
                       }}
-                      className="text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg p-1 transition-colors"
+                      className="text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 rounded-lg p-1 transition-colors"
                       title="Действия с привычкой"
                     >
                       <MoreVertical className="w-3.5 h-3.5" />
@@ -293,8 +296,11 @@ export function HabitsWidget({ selectedHabitId, onSelectHabit }: HabitsWidgetPro
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-1 mt-0.5">
-                <p className={cn('text-[13px] font-medium leading-tight truncate flex-1', isDone ? 'text-primary font-semibold' : 'text-foreground')}>
+              <div className="flex items-center justify-between gap-2 mt-0.5">
+                <p className={cn(
+                  'text-[13px] leading-tight truncate flex-1 transition-colors',
+                  isDone ? 'text-foreground font-semibold' : 'text-muted-foreground group-hover:text-foreground font-medium'
+                )}>
                   {habit.title}
                 </p>
 
@@ -302,14 +308,14 @@ export function HabitsWidget({ selectedHabitId, onSelectHabit }: HabitsWidgetPro
                 <button
                   onClick={(e) => toggleHabit(e, habit)}
                   className={cn(
-                    'w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all',
+                    'w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all border',
                     isDone 
-                      ? 'bg-primary text-primary-foreground shadow-xs' 
-                      : 'border border-border/80 hover:border-primary text-transparent'
+                      ? 'bg-primary border-primary text-primary-foreground shadow-xs' 
+                      : 'border-border/80 hover:border-primary/80 bg-background/50 text-transparent'
                   )}
                   title={isDone ? 'Отменить выполнение' : 'Выполнить за сегодня'}
                 >
-                  <Check className="w-3 h-3" strokeWidth={3} />
+                  <Check className={cn('w-3 h-3', isDone ? 'opacity-100' : 'opacity-0')} strokeWidth={3} />
                 </button>
               </div>
             </motion.div>

@@ -11,7 +11,7 @@ import remarkGfm from 'remark-gfm'
 import {
   FileText, Plus, Folder, Pin, Tag, Edit3, Save,
   Trash2, Search, Calendar as CalendarIcon,
-  ChevronLeft, BookOpen, Users, Sparkles, Loader2, Check, X, FolderPlus,
+  ChevronLeft, ChevronRight, BookOpen, Users, Sparkles, Loader2, Check, X, FolderPlus,
   Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Flame,
   PanelLeft, PanelLeftClose, ChevronDown, FolderTree
 } from 'lucide-react'
@@ -27,6 +27,7 @@ export function NotesView() {
 
   const [selectedFolder, setSelectedFolder] = useState('all')
   const [selectedId, setSelectedId] = useState<string | null>(notes[0]?.id || null)
+  const [activeFolderView, setActiveFolderView] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showMobileList, setShowMobileList] = useState(true)
@@ -284,6 +285,254 @@ ${activeNote.content}"
     }
   }
 
+  if (activeFolderView === null) {
+    return (
+      <div className="flex flex-col h-full w-full bg-background overflow-y-auto rounded-2xl border border-border shadow-2xl font-sans p-5 sm:p-7 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
+          <div>
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <FolderTree className="w-5 h-5 text-primary" />
+              <span>Папки заметок</span>
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Выберите папку, чтобы открыть и редактировать относящиеся к ней заметки
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowNewFolderModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-semibold border border-border transition-all"
+            >
+              <FolderPlus className="w-4 h-4 text-primary" />
+              <span>Новая папка</span>
+            </button>
+            <button
+              onClick={() => {
+                handleCreateNote()
+                setActiveFolderView('Общее')
+                setSelectedFolder('Общее')
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-md hover:opacity-90 transition-opacity"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Быстрая заметка</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative max-w-md">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Поиск по всем заметкам и папкам…"
+            className="w-full h-10 pl-10 pr-4 rounded-xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+          />
+        </div>
+
+        {/* Quick Collections Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* 1. All Notes */}
+          <div
+            onClick={() => {
+              setSelectedFolder('all')
+              setActiveFolderView('all')
+            }}
+            className="p-4 rounded-2xl bg-card hover:bg-muted/40 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex items-center justify-between group shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
+                  Все заметки
+                </h3>
+                <p className="text-[11px] text-muted-foreground">{notes.length} заметок</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+          </div>
+
+          {/* 2. Pinned */}
+          <div
+            onClick={() => {
+              setSelectedFolder('pinned')
+              setActiveFolderView('pinned')
+            }}
+            className="p-4 rounded-2xl bg-card hover:bg-muted/40 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex items-center justify-between group shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
+                <Pin className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-foreground group-hover:text-amber-500 transition-colors">
+                  Закрепленные
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {notes.filter(n => n.pinned).length} заметок
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
+          </div>
+
+          {/* 3. Group / Team Shared Notes */}
+          <div
+            onClick={() => {
+              setSelectedFolder('Группа')
+              setActiveFolderView('Группа')
+            }}
+            className="p-4 rounded-2xl bg-card hover:bg-muted/40 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex items-center justify-between group shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center font-bold">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-foreground group-hover:text-sky-400 transition-colors">
+                  Общие (Группа)
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {notes.filter(n => n.folder === 'Группа' || n.visibility === 'public' || n.tags?.includes('группа') || n.tags?.includes('команда')).length} заметок
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-sky-400 group-hover:translate-x-0.5 transition-all" />
+          </div>
+        </div>
+
+        {/* Categories Grid */}
+        <div className="space-y-3 pt-2">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Категории и папки ({allFolders.length})
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {allFolders.map(folder => {
+              const folderNotes = notes.filter(n => (n.folder || 'Общее').toLowerCase() === folder.toLowerCase())
+              const recentNote = folderNotes[0]
+
+              return (
+                <div
+                  key={folder}
+                  onClick={() => {
+                    setSelectedFolder(folder)
+                    setActiveFolderView(folder)
+                    if (folderNotes.length > 0) {
+                      setSelectedId(folderNotes[0].id)
+                    }
+                  }}
+                  className="p-5 rounded-2xl bg-card hover:bg-muted/30 border border-border/80 hover:border-primary/50 cursor-pointer transition-all flex flex-col justify-between gap-4 group shadow-sm hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                        <Folder className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+                          {folder}
+                        </h3>
+                        <span className="text-[11px] text-muted-foreground font-medium">
+                          {folderNotes.length} {folderNotes.length === 1 ? 'заметка' : folderNotes.length >= 2 && folderNotes.length <= 4 ? 'заметки' : 'заметок'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/50">
+                      Открыть →
+                    </span>
+                  </div>
+
+                  {/* Recent Preview Snippet */}
+                  <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                    {recentNote ? (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-foreground truncate">{recentNote.title}</p>
+                        <p className="line-clamp-1 opacity-70">
+                          {recentNote.content ? recentNote.content.slice(0, 60) : 'Без содержимого'}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="italic text-muted-foreground/60">Папка пуста</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* New Folder Modal */}
+        <AnimatePresence>
+          {showNewFolderModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-card border border-border p-5 rounded-2xl shadow-2xl max-w-sm w-full space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-foreground">Новая папка</h3>
+                  <button onClick={() => setShowNewFolderModal(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  autoFocus
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  placeholder="Название папки (напр. 'Документы', 'Финансы')..."
+                  className="w-full h-9 px-3 rounded-xl bg-muted/60 border border-border text-xs text-foreground outline-none focus:border-primary"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (newFolderName.trim()) {
+                        setSelectedFolder(newFolderName.trim())
+                        setActiveFolderView(newFolderName.trim())
+                        setNewFolderName('')
+                        setShowNewFolderModal(false)
+                      }
+                    }
+                  }}
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowNewFolderModal(false)}
+                    className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-xs font-semibold text-muted-foreground"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (newFolderName.trim()) {
+                        setSelectedFolder(newFolderName.trim())
+                        setActiveFolderView(newFolderName.trim())
+                        setNewFolderName('')
+                        setShowNewFolderModal(false)
+                      }
+                    }}
+                    className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold"
+                  >
+                    Создать
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full w-full bg-background overflow-hidden rounded-2xl border border-border shadow-2xl font-sans">
       {/* ── 1. iOS Style Collapsible Folders Sidebar ── */}
@@ -297,9 +546,13 @@ ${activeNote.content}"
             className="hidden lg:flex flex-col bg-card/90 border-r border-border p-3 select-none shrink-0 overflow-hidden"
           >
             <div className="flex items-center justify-between px-2 py-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                Папки
-              </span>
+              <button
+                onClick={() => setActiveFolderView(null)}
+                className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+                title="Вернуться к списку папок"
+              >
+                <span>← Папки</span>
+              </button>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowNewFolderModal(true)}
@@ -417,11 +670,11 @@ ${activeNote.content}"
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <button
-                onClick={() => setIsFoldersOpen(p => !p)}
-                className="hidden lg:flex items-center justify-center w-8 h-8 rounded-xl bg-muted/60 border border-border/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-all shrink-0"
-                title={isFoldersOpen ? "Скрыть папки" : "Показать папки"}
+                onClick={() => setActiveFolderView(null)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted hover:bg-muted/80 text-[11px] font-semibold text-foreground border border-border shrink-0 transition-colors"
+                title="Все папки"
               >
-                {isFoldersOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+                <span>← Папки</span>
               </button>
 
               {/* Folder Selector / Title */}
@@ -429,7 +682,7 @@ ${activeNote.content}"
                 <select
                   value={selectedFolder}
                   onChange={e => setSelectedFolder(e.target.value)}
-                  className="bg-transparent text-base font-bold tracking-tight text-foreground font-sans outline-none cursor-pointer truncate max-w-[150px]"
+                  className="bg-transparent text-sm font-bold tracking-tight text-foreground font-sans outline-none cursor-pointer truncate max-w-[120px]"
                 >
                   <option value="all" className="bg-card text-foreground">Все заметки</option>
                   <option value="pinned" className="bg-card text-foreground">Закрепленные</option>

@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   email: '',
   avatar: '',
   accentColor: '#2d7a4f',
-  notifications: { desktop: true, email: false, dueReminders: true, teamUpdates: true, reminderIntervalMinutes: 5, reminderRepeatCount: 3 },
+  notifications: { desktop: true, web: true, telegram: true, vk: true, email: false, dueReminders: true, teamUpdates: true, reminderIntervalMinutes: 5, reminderRepeatCount: 3 },
   integrations: { telegram: false, aiApiKey: '', aiModel: 'llama-3.3-70b-versatile', groqApiKey: '', telegramBotToken: '' },
   weekStartsOn: 1,
   focusModeEnabled: false,

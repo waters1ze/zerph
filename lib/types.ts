@@ -152,6 +152,9 @@ export interface UserSettings {
   accentColor: string
   notifications: {
     desktop: boolean
+    web?: boolean
+    telegram?: boolean
+    vk?: boolean
     email: boolean
     dueReminders: boolean
     teamUpdates: boolean
