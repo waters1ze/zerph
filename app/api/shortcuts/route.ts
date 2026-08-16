@@ -160,8 +160,9 @@ async function processShortcutsItems(
     }
 
     if (matchedFriend) {
-      // Delegate to friend
-      const isBothShared = item.isShared || /(?:нам с|для нас с|общая задача|совместн\w*)/i.test(inputText)
+      // Strict distinction: "нам" / "для нас" -> shared for BOTH vs "дай [Имя]" -> delegated to ONE person
+      const hasUsKeywords = /(?:^|[^а-яёa-z0-9])(?:нам|для нас|вместе|обоим|общая|совместная|совместно|для меня и)(?:[^а-яёa-z0-9]|$)/i.test(inputText)
+      const isBothShared = Boolean(item.isBothShared === true || (hasUsKeywords && item.isBothShared !== false))
       const friendChatId = BigInt(matchedFriend.chatId)
 
       const newTask = await prisma.task.create({
@@ -173,7 +174,7 @@ async function processShortcutsItems(
           dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
           dueTime: item.dueTime || null,
           repeat: item.repeat || null,
-          tags: isBothShared ? ['общая', ...(item.tags || [])] : (item.tags || []),
+          tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
           ownerChatId: friendChatId,
           authorChatId: BigInt(chatId),
           assignees: [String(chatId)],
@@ -184,6 +185,7 @@ async function processShortcutsItems(
       })
 
       if (isBothShared) {
+        // Also create a synchronized task copy in author's own workspace so both have it
         await prisma.task.create({
           data: {
             title: item.title,
@@ -215,7 +217,9 @@ async function processShortcutsItems(
       if (item.dueTime) {
         notifyFriendMsg += `⏰ *Время:* ${item.dueTime}\n`
       }
-      notifyFriendMsg += `\n_Задача добавлена в ваши «Входящие» и календарь в Zerf AI_`
+      notifyFriendMsg += isBothShared
+        ? `\n_Совместная задача добавлена вам обоим в «Входящие» и календарь в Zerf AI_`
+        : `\n_Задача добавлена в ваши «Входящие» и календарь в Zerf AI_`
 
       let webAppUrl = `${appUrl}/tg?chatId=${friendChatId}`
       try {
@@ -238,8 +242,13 @@ async function processShortcutsItems(
       })
 
       const friendDisplayName = matchedFriend.name?.split(' ')?.[0] || matchedFriend.name || recipientCandidate
-      spokenParts.push(`Задача «${item.title}» отправлена ${friendDisplayName}`)
-      tgMsg += `🤝 Задача *«${item.title}»* успешно отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
+      if (isBothShared) {
+        spokenParts.push(`Совместная задача «${item.title}» создана для вас двоих и отправлена ${friendDisplayName}`)
+        tgMsg += `🤝 Совместная задача *«${item.title}»* создана для вас двоих и отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
+      } else {
+        spokenParts.push(`Задача «${item.title}» отправлена ${friendDisplayName}`)
+        tgMsg += `🤝 Задача *«${item.title}»* успешно отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
+      }
     } else {
       // Regular save to personal DB
       await saveParsedItemToDb(item, chatId)

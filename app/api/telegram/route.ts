@@ -19,7 +19,7 @@ import {
   getPublicItemsByUser, setItemVisibility, linkNoteToTask, setConfig, getConfig,
   getUserProductivityStats, completeTask, updateTask,
 } from '@/lib/backend/db'
-import { getUserAuthToken } from '@/lib/backend/auth'
+import { getUserAuthToken, createServerSession } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -1352,7 +1352,8 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             }
           }
 
-          const isBothShared = item.isShared || (item.rawText && /(?:нам с|для нас с|общая задача|совместн\w*)/i.test(item.rawText))
+          const hasUsKeywords = /(?:^|[^а-яёa-z0-9])(?:нам|для нас|вместе|обоим|общая|совместная|совместно|для меня и)(?:[^а-яёa-z0-9]|$)/i.test(item.rawText || '')
+          const isBothShared = Boolean(item.isBothShared === true || (hasUsKeywords && item.isBothShared !== false))
 
           const newTask = await prisma.task.create({
             data: {
@@ -1363,7 +1364,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
               dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
               dueTime: item.dueTime || null,
               repeat: item.repeat || null,
-              tags: isBothShared ? ['общая', ...(item.tags || [])] : (item.tags || []),
+              tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
               ownerChatId: friend.chatId,
               authorChatId: BigInt(chatId),
               assignees: [String(chatId)],
@@ -1372,7 +1373,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           })
 
           if (isBothShared) {
-            // Also create a linked copy for the author so it appears in author's calendar and dashboard
+            // Also create a linked copy for the author so it appears in author's calendar, dashboard, and triggers reminders for both
             await prisma.task.create({
               data: {
                 title: item.title,
@@ -1401,12 +1402,24 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           if (item.dueTime) {
             notifyMsg += `⏰ *Время:* ${item.dueTime}${notifyConflictNotice}\n`
           }
-          notifyMsg += `\n_Задача добавлена в ваши «Входящие» и календарь на сайте Zerf AI_`
+          notifyMsg += isBothShared
+            ? `\n_Совместная задача добавлена вам обоим в «Входящие» и календарь на сайте Zerf AI_`
+            : `\n_Задача добавлена в ваши «Входящие» и календарь на сайте Zerf AI_`
+
+          let webAppUrl = `${appUrl}/tg?chatId=${friend.chatId}`
+          try {
+            const sessionToken = await createServerSession(friend.chatId, 'Telegram Delegation Notification')
+            if (sessionToken) {
+              webAppUrl = `${appUrl}/tg?chat_id=${friend.chatId}&auth_token=${sessionToken}`
+            }
+          } catch (e) {
+            console.error('Error creating session for telegram notification:', e)
+          }
 
           await send(Number(friend.chatId), notifyMsg, {
             reply_markup: {
               inline_keyboard: [
-                [{ text: '📱 Открыть в Zerf App', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
+                [{ text: '📱 Открыть в Zerf App', web_app: { url: webAppUrl } }],
                 [
                   { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
                   { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
@@ -1415,7 +1428,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             }
           })
           msg += isBothShared
-            ? `🤝 Совместная задача *«${escMd(item.title)}»* создана у вас и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
+            ? `🤝 Совместная задача *«${escMd(item.title)}»* создана для вас двоих и отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
             : `🤝 Задача *«${escMd(item.title)}»* успешно отправлена *${escMd(friend.firstName || item.recipientName)}*!${conflictNotice}\n\n`
         } else {
           // Note or Goal
@@ -2834,10 +2847,18 @@ export async function POST(req: NextRequest) {
                 if (item.dueTime) notifyMsg += `⏰ *Время:* ${item.dueTime}\n`
                 notifyMsg += `\n_Задача добавлена в ваши «Входящие» на сайте Zerf AI_`
       
+                let webAppUrl = `${appUrl}/tg?chatId=${friend.chatId}`
+                try {
+                  const sessionToken = await createServerSession(friend.chatId, 'Telegram Delegation Notification')
+                  if (sessionToken) {
+                    webAppUrl = `${appUrl}/tg?chat_id=${friend.chatId}&auth_token=${sessionToken}`
+                  }
+                } catch {}
+
                 await send(Number(friend.chatId), notifyMsg, {
                   reply_markup: {
                     inline_keyboard: [
-                      [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: `${appUrl}/tg?chatId=${friend.chatId}` } }],
+                      [{ text: '📱 Открыть во Входящих (Zerf App)', web_app: { url: webAppUrl } }],
                       [
                         { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
                         { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
