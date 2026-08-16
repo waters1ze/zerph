@@ -1134,15 +1134,12 @@ export function ProjectsView() {
   const [error, setError] = useState('')
 
   const loadProjects = useCallback(async () => {
-    setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/projects', { headers: getAuthHeaders() })
       if (!res.ok) {
-        setError(res.status === 401
-          ? 'Требуется вход в аккаунт — projects недоступны для гостей.'
-          : 'Ошибка загрузки проектов. Попробуйте позже.')
         setProjects([])
+        setLoading(false)
         return
       }
       const data = await res.json()
@@ -1155,13 +1152,20 @@ export function ProjectsView() {
         if (fresh) setSelected(fresh)
       }
     } catch {
-      setError('Ошибка загрузки проектов')
+      setProjects([])
     } finally {
       setLoading(false)
     }
   }, [selected?.id])
 
-  useEffect(() => { loadProjects() }, [loadProjects])
+  useEffect(() => {
+    loadProjects()
+    // Safety timeout in case fetch hangs
+    const timer = setTimeout(() => {
+      setLoading(false)
+    }, 3500)
+    return () => clearTimeout(timer)
+  }, [loadProjects])
 
   const handleModalSave = async () => {
     setShowModal(false)
@@ -1210,7 +1214,7 @@ export function ProjectsView() {
               }
               setShowModal(true)
             }}
-            className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-md shadow-primary/20 flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-md shadow-primary/20 flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Создать проект</span>
@@ -1218,17 +1222,10 @@ export function ProjectsView() {
         </div>
       )}
 
-      {loading && !selected ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground text-center">
-          <AlertCircle className="w-8 h-8 text-rose-500" />
-          <p className="text-xs">{error}</p>
-          <button onClick={loadProjects} className="px-4 py-2 rounded-xl bg-muted text-xs font-semibold hover:bg-muted/80 transition-colors">
-            Повторить
-          </button>
+      {loading && !selected && projects.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-3">
+          <Loader2 className="w-7 h-7 animate-spin text-primary" />
+          <p className="text-xs text-muted-foreground">Загрузка проектов и задач…</p>
         </div>
       ) : selected ? (
         <ProjectDetail
@@ -1238,6 +1235,64 @@ export function ProjectsView() {
           onRefresh={loadProjects}
           onDelete={() => handleDeleteProject(selected.id)}
         />
+      ) : projects.length === 0 ? (
+        /* Empty State */
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-8 sm:p-12 rounded-3xl bg-card border border-border shadow-sm flex flex-col items-center text-center space-y-6 max-w-2xl mx-auto w-full my-4"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
+            <FolderOpen className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold text-foreground">Проекты ещё не созданы</h2>
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-lg">
+              Пространство проектов объединяет связанные задачи в единую древовидную систему (Google Stitch style), позволяет вести совместную работу с коллегами, назначать исполнителей и визуализировать этапы на Канбан-досках.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-6 py-3 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-md shadow-primary/20 flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Создать первый проект</span>
+          </button>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full pt-4 border-t border-border/60 text-left">
+            <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <Network className="w-3.5 h-3.5 text-primary" />
+                <span>Дерево задач</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Декомпозиция целей на задачи и подзадачи с наглядной иерархией.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <LayoutGrid className="w-3.5 h-3.5 text-primary" />
+                <span>Канбан-доска</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Контроль стадий выполнения: «Сделать», «В работе» и «Готово».
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <Users className="w-3.5 h-3.5 text-primary" />
+                <span>Команда</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Совместный доступ по Telegram @username и распределение ролей.
+              </p>
+            </div>
+          </div>
+        </motion.div>
       ) : (
         /* Projects Grid */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1298,7 +1353,7 @@ export function ProjectsView() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             onClick={() => setShowModal(true)}
-            className="flex flex-col items-center justify-center gap-2.5 h-44 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all"
+            className="flex flex-col items-center justify-center gap-2.5 h-44 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all cursor-pointer"
           >
             <Plus className="w-6 h-6" />
             <span className="text-xs font-semibold">Создать новый проект</span>
