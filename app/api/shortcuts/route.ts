@@ -6,8 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { parseIntentWithGroq, transcribeAudioWithGroq } from '@/lib/backend/groq'
-import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage } from '@/lib/backend/db'
+import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
+import { prisma } from '@/lib/backend/prisma'
+import { tokenMatchesCandidateName } from '@/lib/backend/name-aliases'
 import { GROQ_API_KEY } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
@@ -63,13 +65,15 @@ export function getSiriUserKey(chatId: number | string | bigint): string {
   return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
 }
 
-async function sendTgNotification(chatId: number, text: string) {
+async function sendTgNotification(chatId: number, text: string, replyMarkup?: any) {
   if (!BOT_TOKEN) return
   try {
+    const payload: any = { chat_id: chatId, text, parse_mode: 'Markdown' }
+    if (replyMarkup) payload.reply_markup = replyMarkup
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+      body: JSON.stringify(payload),
     })
   } catch {}
 }
@@ -112,6 +116,130 @@ async function handleTodaySpeech(chatId: number): Promise<string> {
     .join('. ')
 
   return `На сегодня ${pending.length} ${countWord}: ${itemsList}.`
+}
+
+async function processShortcutsItems(
+  items: any[],
+  chatId: number,
+  inputText: string,
+  friends: any[]
+): Promise<{ spokenText: string; tgMsg: string; items: any[] }> {
+  const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(inputText)
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const senderRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+  const senderName = senderRec?.firstName || 'Друг'
+
+  const spokenParts: string[] = []
+  let tgMsg = ''
+
+  for (const item of items) {
+    if (item.type === 'answer' && hasActionVerb) {
+      item.type = 'task'
+      item.action = 'create'
+    }
+
+    // Check delegation / recipient match
+    let recipientCandidate: string | null = item.recipientName || null
+    if (!recipientCandidate) {
+      const match = inputText.toLowerCase().match(/(?:дай задачу|дать задачу|поручи|поручить|отправь задачу|передай задачу|передай|создай задачу для|задача для|назначь|кинь|скинь|напиши)\s+([а-яА-Яa-zA-Z0-9_@]+)/i)
+      if (match && match[1]) {
+        recipientCandidate = match[1].trim()
+      }
+    }
+
+    let matchedFriend: any = null
+    if (recipientCandidate && friends.length > 0) {
+      const cleanCandidate = recipientCandidate.replace(/^@/, '').toLowerCase().trim()
+      matchedFriend = friends.find(f => {
+        const u = (f.username || '').toLowerCase()
+        const n = (f.name || '').toLowerCase()
+        if (u === cleanCandidate || n.includes(cleanCandidate)) return true
+        return tokenMatchesCandidateName(cleanCandidate, [f.name, f.username || '', ...(f.name?.split(/\s+/) || [])])
+      })
+    }
+
+    if (matchedFriend) {
+      // Delegate to friend
+      const isBothShared = item.isShared || /(?:нам с|для нас с|общая задача|совместн\w*)/i.test(inputText)
+      const friendChatId = BigInt(matchedFriend.chatId)
+
+      const newTask = await prisma.task.create({
+        data: {
+          title: item.title,
+          description: item.summary || '',
+          priority: item.priority || 'medium',
+          status: 'todo',
+          dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+          dueTime: item.dueTime || null,
+          repeat: item.repeat || null,
+          tags: isBothShared ? ['общая', ...(item.tags || [])] : (item.tags || []),
+          ownerChatId: friendChatId,
+          authorChatId: BigInt(chatId),
+          assignees: [String(chatId)],
+          isShared: true,
+          aiGenerated: true,
+          source: inputText,
+        } as any
+      })
+
+      if (isBothShared) {
+        await prisma.task.create({
+          data: {
+            title: item.title,
+            description: item.summary || '',
+            priority: item.priority || 'medium',
+            status: 'todo',
+            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueTime: item.dueTime || null,
+            repeat: item.repeat || null,
+            tags: ['общая', ...(item.tags || [])],
+            ownerChatId: BigInt(chatId),
+            authorChatId: BigInt(chatId),
+            assignees: [String(friendChatId)],
+            isShared: true,
+            aiGenerated: true,
+            source: inputText,
+          } as any
+        })
+      }
+
+      // Send Telegram notification to friend
+      let notifyFriendMsg = isBothShared
+        ? `🤝 *${senderName}* создал(а) совместную задачу для вас двоих!\n\n`
+        : `🤝 *${senderName}* поручил(а) тебе задачу через Siri!\n\n`
+      notifyFriendMsg += `📌 *Задача:* ${item.title}\n`
+      if (item.summary && item.summary !== item.title) {
+        notifyFriendMsg += `📝 *Описание:* ${item.summary}\n`
+      }
+      if (item.dueTime) {
+        notifyFriendMsg += `⏰ *Время:* ${item.dueTime}\n`
+      }
+      notifyFriendMsg += `\n_Задача добавлена в ваши «Входящие» и календарь в Zerf AI_`
+
+      await sendTgNotification(Number(friendChatId), notifyFriendMsg, {
+        inline_keyboard: [
+          [{ text: '📱 Открыть в Zerf App', web_app: { url: `${appUrl}/tg?chatId=${friendChatId}` } }],
+          [
+            { text: '✓ Принять', callback_data: `delegate_accept_${newTask.id}` },
+            { text: '✗ Отклонить', callback_data: `delegate_decline_${newTask.id}` }
+          ]
+        ]
+      })
+
+      const friendDisplayName = matchedFriend.name?.split(' ')?.[0] || matchedFriend.name || recipientCandidate
+      spokenParts.push(`Задача «${item.title}» отправлена ${friendDisplayName}`)
+      tgMsg += `🤝 Задача *«${item.title}»* успешно отправлена *${matchedFriend.name}* (@${matchedFriend.username || ''})!\n`
+    } else {
+      // Regular save to personal DB
+      await saveParsedItemToDb(item, chatId)
+      if (recipientCandidate && friends.length === 0) {
+        spokenParts.push(`Контакт не найден в друзьях. Задача «${item.title}» сохранена в вашем личном списке.`)
+      }
+    }
+  }
+
+  const finalSpokenText = spokenParts.length > 0 ? spokenParts.join('. ') : createSpokenSummary(items)
+  return { spokenText: finalSpokenText, tgMsg, items }
 }
 
 export async function POST(req: NextRequest) {
@@ -209,7 +337,9 @@ export async function POST(req: NextRequest) {
 
     // 2. Parse and save task/goal/note
     const context = await getExistingItemsContext(chatId)
-    const items = await parseIntentWithGroq(inputText, key, undefined, context)
+    const friends = await getFriends(chatId)
+    const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
+    const items = await parseIntentWithGroq(inputText, key, undefined, context, friendsContext)
 
     if (!items || items.length === 0) {
       const failText = 'Не удалось распознать задачу. Попробуйте сказать иначе.'
@@ -221,40 +351,32 @@ export async function POST(req: NextRequest) {
       }, { headers: NO_CACHE_HEADERS })
     }
 
-    // If item was classified as answer but prompt contains actionable intent, override to task
-    const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(inputText)
-    for (const item of items) {
-      if (item.type === 'answer' && hasActionVerb) {
-        item.type = 'task'
-        item.action = 'create'
-      }
-      await saveParsedItemToDb(item, chatId)
-    }
+    const { spokenText, tgMsg: delegationTgMsg } = await processShortcutsItems(items, chatId, inputText, friends)
 
     // Track usage
     const estimatedSec = Math.max(5, Math.round(inputText.length / 15))
     await incrementUserUsage(chatId, 'voice', estimatedSec).catch(() => {})
 
-    const spokenText = createSpokenSummary(items)
-
     // Send confirmation in Telegram
-    let tgMsg = ''
-    if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
-      tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
-    } else {
-      tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
-      items.forEach((item, idx) => {
-        if (item.action === 'delete') {
-          tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
-        } else if (item.action === 'delete_all') {
-          tgMsg += `▪ *Все задачи очищены*\n`
-        } else if (item.action === 'completion' || item.type === 'completion') {
-          tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
-        } else {
-          const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-          tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
-        }
-      })
+    let tgMsg = delegationTgMsg
+    if (!tgMsg) {
+      if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
+        tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
+      } else {
+        tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
+        items.forEach((item, idx) => {
+          if (item.action === 'delete') {
+            tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
+          } else if (item.action === 'delete_all') {
+            tgMsg += `▪ *Все задачи очищены*\n`
+          } else if (item.action === 'completion' || item.type === 'completion') {
+            tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
+          } else {
+            const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+            tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+          }
+        })
+      }
     }
 
     // Send confirmation in Telegram or VK if applicable
@@ -376,42 +498,38 @@ export async function GET(req: NextRequest) {
   }
 
   const context = await getExistingItemsContext(chatId)
-  const items = await parseIntentWithGroq(text, key, undefined, context)
+  const friends = await getFriends(chatId)
+  const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
+  const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext)
 
-  const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(text)
-  for (const item of items) {
-    if (item.type === 'answer' && hasActionVerb) {
-      item.type = 'task'
-      item.action = 'create'
-    }
-    await saveParsedItemToDb(item, chatId)
-  }
+  const { spokenText, tgMsg: delegationTgMsg } = await processShortcutsItems(items, chatId, text, friends)
 
   // Track usage
   const estimatedSec = Math.max(5, Math.round(text.length / 15))
   await incrementUserUsage(chatId, 'voice', estimatedSec).catch(() => {})
 
-  const spokenText = createSpokenSummary(items)
-
   // Send confirmation in Telegram
-  let tgMsg = ''
-  if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
-    tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
-  } else {
-    tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
-    items.forEach((item, idx) => {
-      if (item.action === 'delete') {
-        tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
-      } else if (item.action === 'delete_all') {
-        tgMsg += `▪ *Все задачи очищены*\n`
-      } else if (item.action === 'completion' || item.type === 'completion') {
-        tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
-      } else {
-        const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-        tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
-      }
-    })
+  let tgMsg = delegationTgMsg
+  if (!tgMsg) {
+    if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
+      tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
+    } else {
+      tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
+      items.forEach((item, idx) => {
+        if (item.action === 'delete') {
+          tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
+        } else if (item.action === 'delete_all') {
+          tgMsg += `▪ *Все задачи очищены*\n`
+        } else if (item.action === 'completion' || item.type === 'completion') {
+          tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
+        } else {
+          const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+          tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+        }
+      })
+    }
   }
+
   // Send confirmation in Telegram or VK if applicable
   try {
     const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })

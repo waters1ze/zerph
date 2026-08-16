@@ -35,8 +35,8 @@ export const NAME_CLUSTERS: string[][] = [
   ['евгений', 'женя', 'женька', 'жека', 'evgeny', 'evgeniy', 'eugene', 'zhenya', 'zheka'],
   ['иван', 'ваня', 'ванечка', 'ванёк', 'ванюша', 'ванька', 'ivan', 'vanya', 'vanyusha'],
   ['игорь', 'игорёк', 'игорёша', 'игорян', 'igor'],
-  ['илья', 'илюша', 'илюха', 'илюшка', 'иля', 'ilya', 'ilja', 'ilyusha'],
-  ['кирилл', 'кирюша', 'кирюха', 'кирюшка', 'киря', 'кир', 'kirill', 'kyrill', 'kiryusha'],
+  ['илья', 'илье', 'илью', 'илюша', 'илюше', 'илюха', 'илюхе', 'илюшка', 'иля', 'ilya', 'ilja', 'ilyusha'],
+  ['кирилл', 'кириллу', 'кирилла', 'кирюша', 'кирюше', 'кирюшу', 'кирюха', 'кирюхе', 'кирюху', 'кирюшка', 'киря', 'кире', 'кир', 'киру', 'kirill', 'kyrill', 'kiryusha'],
   ['константин', 'костя', 'костик', 'косик', 'костян', 'konstantin', 'kostya', 'kostik'],
   ['лев', 'лёва', 'лёвка', 'lev', 'leo', 'lyova'],
   ['леонид', 'лёня', 'лёнька', 'лёнечка', 'leonid', 'lyonya'],
@@ -154,15 +154,24 @@ export function getNameCluster(name: string): string[] | null {
  * Проверяет, совпадает ли queryToken с любой формой candidateName через кластеры
  */
 export function tokenMatchesCandidateName(queryToken: string, candidateNames: string[]): boolean {
-  const qL = queryToken.toLowerCase().trim()
+  const qL = queryToken.toLowerCase().trim().replace(/^@/, '')
   const qCluster = NAME_TO_CLUSTER_MAP.get(qL)
 
+  // Russian stem stripping (remove case endings like -е, -у, -ю, -а, -я, -ом, -ем, -ой)
+  const qStem = qL.replace(/(?:[еуюая]|ом|ем|ой|ей)$/i, '')
+
   for (const candidateName of candidateNames) {
-    const cL = candidateName.toLowerCase().trim()
+    const cL = candidateName.toLowerCase().trim().replace(/^@/, '')
+    if (!cL) continue
     if (qL === cL) return true
 
     const cCluster = NAME_TO_CLUSTER_MAP.get(cL)
     if (qCluster && cCluster && qCluster === cCluster) return true
+
+    const cStem = cL.replace(/(?:[еуюая]|ом|ем|ой|ей)$/i, '')
+    if (qStem.length >= 3 && cStem.length >= 3 && (qStem === cStem || qStem.startsWith(cStem) || cStem.startsWith(qStem))) {
+      return true
+    }
 
     // Prefix fallback: если имя кандидата начинается с qL (3+ буквы)
     if (qL.length >= 3 && cL.startsWith(qL)) return true
