@@ -25,6 +25,8 @@ export interface NewsDigestContext {
     btc?: string
     ton?: string
   }
+  geoNews?: NewsItem[]
+  techNews?: NewsItem[]
   news: NewsItem[]
   headlines: string[]
   sources: string[]
@@ -53,8 +55,9 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
   }).format(now)
 
   const rates: { usd?: string; eur?: string; cny?: string; btc?: string; ton?: string } = {}
-  const newsItems: NewsItem[] = []
-  const sources: string[] = ['Центральный Банк РФ', 'CoinGecko', 'Хабр', 'РБК Tech']
+  const geoNews: NewsItem[] = []
+  const techNews: NewsItem[] = []
+  const sources: string[] = ['Центральный Банк РФ', 'CoinGecko', 'Lenta Мир', 'Хабр AI']
 
   // 1. Fetch Central Bank of Russia rates
   try {
@@ -93,7 +96,36 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     rates.ton = '$1.33'
   }
 
-  // 3. Fetch latest AI & Tech News RSS (Habr AI) with rich descriptions & URLs
+  // 3. Fetch World, Geopolitical & Global Conflict Developments (Lenta / RBC RSS)
+  try {
+    const geoRes = await fetch('https://lenta.ru/rss/news', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      next: { revalidate: 1800 }
+    })
+    if (geoRes.ok) {
+      const xml = await geoRes.text()
+      const itemBlocks = xml.split('<item>').slice(1)
+      for (const block of itemBlocks) {
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+        const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
+
+        if (titleMatch) {
+          const title = cleanHtmlText(titleMatch[1])
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const url = linkMatch ? linkMatch[1].trim() : undefined
+          if (title && title.length > 15) {
+            geoNews.push({ title, summary, url, source: 'Мировая повестка' })
+            if (geoNews.length >= 3) break
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Geo RSS error:', e)
+  }
+
+  // 4. Fetch latest AI & Tech News RSS (Habr AI) with rich descriptions & URLs
   try {
     const rssRes = await fetch('https://habr.com/ru/rss/hub/artificial_intelligence/all/?fl=ru', {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -113,7 +145,8 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
           const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
           const url = linkMatch ? linkMatch[1].trim() : undefined
           if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
-            newsItems.push({ title, summary, url, source: 'Хабр AI' })
+            techNews.push({ title, summary, url, source: 'Хабр AI' })
+            if (techNews.length >= 3) break
           }
         }
       }
@@ -122,8 +155,8 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     console.error('Habr RSS fetch error:', e)
   }
 
-  // 4. Supplementary feed (Tech/Dev articles)
-  if (newsItems.length < 4) {
+  // Supplementary tech feed if needed
+  if (techNews.length < 3) {
     try {
       const generalRss = await fetch('https://habr.com/ru/rss/articles/?fl=ru', {
         headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -141,7 +174,8 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
             const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
             const url = linkMatch ? linkMatch[1].trim() : undefined
             if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
-              newsItems.push({ title, summary, url, source: 'IT Новости' })
+              techNews.push({ title, summary, url, source: 'IT Новости' })
+              if (techNews.length >= 3) break
             }
           }
         }
@@ -149,12 +183,14 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     } catch {}
   }
 
-  const finalNews = newsItems.slice(0, 5)
+  const combinedNews = [...geoNews, ...techNews]
   return {
     date: dateStr,
     rates,
-    news: finalNews,
-    headlines: finalNews.map(n => n.title),
+    geoNews,
+    techNews,
+    news: combinedNews,
+    headlines: combinedNews.map(n => n.title),
     sources
   }
 }
