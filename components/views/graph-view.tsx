@@ -32,7 +32,7 @@ export function GraphView() {
   }
 
   return (
-    <div className="w-full h-[calc(100vh-100px)]">
+    <div className="w-full h-full flex-1 flex flex-col min-h-0 overflow-hidden">
       <KnowledgeGraphModal
         isOpen={true}
         notes={notes}

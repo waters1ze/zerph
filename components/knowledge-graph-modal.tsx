@@ -477,6 +477,104 @@ export function KnowledgeGraphModal({
     isDraggingRef.current = false
   }
 
+  // Touch Handlers for Mobile & Tablets
+  const touchStartDistRef = useRef<number | null>(null)
+  const touchStartCenterRef = useRef<{ x: number; y: number } | null>(null)
+  const touchStartTimeRef = useRef<number>(0)
+  const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    setContextMenuPos(null)
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      touchStartTimeRef.current = Date.now()
+      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+      const node = getNodeAtCoords(touch.clientX, touch.clientY)
+      if (node) {
+        draggedNodeRef.current = node
+        setSelectedNode(node)
+      } else {
+        isDraggingRef.current = true
+        dragStartRef.current = { x: touch.clientX - camera.x, y: touch.clientY - camera.y }
+      }
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
+      touchStartDistRef.current = dist
+      touchStartCenterRef.current = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+      }
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      if (draggedNodeRef.current) {
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const rect = canvas.getBoundingClientRect()
+        const worldX = (touch.clientX - rect.left - camera.x) / camera.zoom
+        const worldY = (touch.clientY - rect.top - camera.y) / camera.zoom
+        draggedNodeRef.current.x = worldX
+        draggedNodeRef.current.y = worldY
+        draggedNodeRef.current.vx = 0
+        draggedNodeRef.current.vy = 0
+      } else if (isDraggingRef.current) {
+        setCamera(prev => ({
+          ...prev,
+          x: touch.clientX - dragStartRef.current.x,
+          y: touch.clientY - dragStartRef.current.y,
+        }))
+      }
+    } else if (e.touches.length === 2 && touchStartDistRef.current) {
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
+      const factor = currentDist / touchStartDistRef.current
+      touchStartDistRef.current = currentDist
+
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      const centerX = (t1.clientX + t2.clientX) / 2 - rect.left
+      const centerY = (t1.clientY + t2.clientY) / 2 - rect.top
+
+      setCamera(prev => {
+        const newZoom = Math.max(0.15, Math.min(3.5, prev.zoom * factor))
+        return {
+          zoom: newZoom,
+          x: centerX - (centerX - prev.x) * (newZoom / prev.zoom),
+          y: centerY - (centerY - prev.y) * (newZoom / prev.zoom),
+        }
+      })
+    }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 0) {
+      const duration = Date.now() - touchStartTimeRef.current
+      if (duration < 300) {
+        const touch = e.changedTouches[0]
+        if (touch) {
+          const moveDist = Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y)
+          if (moveDist < 12) {
+            const node = getNodeAtCoords(touch.clientX, touch.clientY)
+            if (node) {
+              setSelectedNode(node)
+            }
+          }
+        }
+      }
+      draggedNodeRef.current = null
+      isDraggingRef.current = false
+      touchStartDistRef.current = null
+      touchStartCenterRef.current = null
+    }
+  }
+
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault()
     const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88
@@ -534,47 +632,47 @@ export function KnowledgeGraphModal({
   return (
     <div className={cn(
       isFullView 
-        ? 'w-full h-full flex flex-col overflow-hidden bg-[#0a0d14] text-foreground rounded-3xl border border-border/80 shadow-2xl'
-        : 'fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200'
+        ? 'w-full h-full flex flex-col overflow-hidden bg-[#0a0d14] text-foreground rounded-none sm:rounded-3xl border-0 sm:border border-border/80 shadow-2xl'
+        : 'fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200'
     )}>
       <div className={cn(
         isFullView
           ? 'relative w-full h-full flex flex-col overflow-hidden'
-          : 'relative w-full max-w-7xl h-[92vh] bg-[#090c14] border border-border/80 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-foreground'
+          : 'relative w-full sm:max-w-7xl h-[100dvh] sm:h-[92vh] bg-[#090c14] border-0 sm:border border-border/80 rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden text-foreground'
       )}>
         
-        {/* ── Top Header Bar ── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-border/70 bg-muted/20 z-10 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary shadow-sm">
+        {/* ── Top Header Bar (Responsive for Mobile & Desktop) ── */}
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-5 py-2.5 sm:py-3 border-b border-border/70 bg-muted/20 z-10 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary shadow-sm shrink-0">
               <Network className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-foreground">Граф знаний</h2>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-xs sm:text-sm font-bold text-foreground truncate">Граф знаний</h2>
                 {localNoteId && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
-                    Локальный граф
+                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 shrink-0">
+                    Локальный
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground truncate">
                 {graphData.nodes.length} узлов • {graphData.edges.length} связей
               </p>
             </div>
           </div>
 
           {/* Quick Controls Row */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Search Input */}
-            <div className="relative w-36 sm:w-44">
+            <div className="relative w-24 sm:w-44">
               <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-2.5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по графу…"
-                className="w-full pl-8 pr-3 py-1.5 rounded-xl text-xs bg-card border border-border/80 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Поиск…"
+                className="w-full pl-8 pr-2.5 py-1.5 rounded-xl text-xs bg-card border border-border/80 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
 
@@ -585,7 +683,7 @@ export function KnowledgeGraphModal({
                 setFolderFilter(e.target.value === 'all' ? null : e.target.value)
                 setLocalNoteId(null)
               }}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-card border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[140px] truncate"
+              className="px-2 py-1.5 rounded-xl text-xs font-semibold bg-card border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[85px] sm:max-w-[140px] truncate"
             >
               <option value="all">🌐 Вся база</option>
               {foldersList.map(f => (
@@ -597,42 +695,42 @@ export function KnowledgeGraphModal({
             <div className="flex items-center bg-card border border-border rounded-xl p-0.5">
               <button
                 onClick={() => setActivePanel(activePanel === 'filters' ? null : 'filters')}
-                className={cn('p-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1',
+                className={cn('p-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer',
                   activePanel === 'filters' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
                 title="Фильтры узлов и связей"
               >
                 <Filter className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Фильтры</span>
+                <span className="hidden md:inline">Фильтры</span>
               </button>
 
               <button
                 onClick={() => setActivePanel(activePanel === 'colors' ? null : 'colors')}
-                className={cn('p-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1',
+                className={cn('p-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer',
                   activePanel === 'colors' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
                 title="Цветовые группы"
               >
                 <Palette className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Группы</span>
+                <span className="hidden md:inline">Группы</span>
               </button>
 
               <button
                 onClick={() => setActivePanel(activePanel === 'forces' ? null : 'forces')}
-                className={cn('p-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1',
+                className={cn('p-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer',
                   activePanel === 'forces' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
                 title="Силы физики"
               >
                 <Sliders className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Физика</span>
+                <span className="hidden md:inline">Физика</span>
               </button>
             </div>
 
             {onClose && (
               <button
                 onClick={onClose}
-                className="w-8 h-8 rounded-xl flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-8 h-8 rounded-xl flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                 title="Закрыть граф"
               >
                 <X className="w-4 h-4" />
@@ -648,30 +746,34 @@ export function KnowledgeGraphModal({
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
             onWheel={handleWheel}
             onContextMenu={e => e.preventDefault()}
-            className="w-full h-full cursor-grab active:cursor-grabbing block select-none"
+            className="w-full h-full cursor-grab active:cursor-grabbing block select-none touch-none"
           />
 
           {/* Floating Zoom & Physics Control Bar */}
-          <div className="absolute bottom-4 left-4 flex items-center gap-1 p-1 rounded-2xl bg-card/90 border border-border shadow-2xl backdrop-blur-md z-20">
+          <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 flex items-center gap-1 p-1 rounded-2xl bg-card/90 border border-border shadow-2xl backdrop-blur-md z-20">
             <button
               onClick={() => setCamera(prev => ({ ...prev, zoom: Math.min(3.5, prev.zoom * 1.2) }))}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Приблизить"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
               onClick={() => setCamera(prev => ({ ...prev, zoom: Math.max(0.15, prev.zoom * 0.8) }))}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Отдалить"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
             <button
               onClick={handleResetCamera}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Сбросить центрирование"
             >
               <RotateCcw className="w-4 h-4" />
@@ -680,7 +782,7 @@ export function KnowledgeGraphModal({
             <button
               onClick={() => setIsPhysicsPaused(!isPhysicsPaused)}
               className={cn(
-                'px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-colors',
+                'px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer',
                 isPhysicsPaused ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'text-muted-foreground hover:text-foreground'
               )}
               title="Пауза/продолжение физической симуляции"
@@ -689,21 +791,21 @@ export function KnowledgeGraphModal({
             </button>
           </div>
 
-          {/* ── Collapsible Control Drawers (Obsidian Style) ── */}
+          {/* ── Collapsible Control Drawers (Obsidian Style - Mobile Responsive) ── */}
           <AnimatePresence>
             {activePanel === 'filters' && (
               <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="absolute top-4 left-4 w-72 p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute top-3 left-3 right-3 sm:right-auto sm:left-4 sm:top-4 w-auto sm:w-80 max-h-[65vh] overflow-y-auto p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
               >
                 <div className="flex items-center justify-between pb-1 border-b border-border">
                   <h4 className="font-bold text-foreground flex items-center gap-1.5">
                     <Filter className="w-3.5 h-3.5 text-primary" />
                     <span>Фильтры отображения</span>
                   </h4>
-                  <button onClick={() => setActivePanel(null)} className="text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setActivePanel(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -718,7 +820,7 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showTags}
                       onChange={e => setShowTags(e.target.checked)}
-                      className="w-4 h-4 rounded text-primary focus:ring-primary"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>
 
@@ -731,7 +833,7 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showFolders}
                       onChange={e => setShowFolders(e.target.checked)}
-                      className="w-4 h-4 rounded text-primary focus:ring-primary"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>
 
@@ -744,7 +846,7 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showUnresolved}
                       onChange={e => setShowUnresolved(e.target.checked)}
-                      className="w-4 h-4 rounded text-primary focus:ring-primary"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>
 
@@ -757,7 +859,7 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showArrows}
                       onChange={e => setShowArrows(e.target.checked)}
-                      className="w-4 h-4 rounded text-primary focus:ring-primary"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>
                 </div>
@@ -766,17 +868,17 @@ export function KnowledgeGraphModal({
 
             {activePanel === 'colors' && (
               <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="absolute top-4 left-4 w-80 p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute top-3 left-3 right-3 sm:right-auto sm:left-4 sm:top-4 w-auto sm:w-80 max-h-[65vh] overflow-y-auto p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
               >
                 <div className="flex items-center justify-between pb-1 border-b border-border">
                   <h4 className="font-bold text-foreground flex items-center gap-1.5">
                     <Palette className="w-3.5 h-3.5 text-primary" />
                     <span>Цветовые группы (Obsidian)</span>
                   </h4>
-                  <button onClick={() => setActivePanel(null)} className="text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setActivePanel(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -791,7 +893,7 @@ export function KnowledgeGraphModal({
                       </div>
                       <button
                         onClick={() => handleRemoveColorGroup(grp.id)}
-                        className="text-muted-foreground hover:text-red-400 p-1"
+                        className="text-muted-foreground hover:text-red-400 p-1 cursor-pointer"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -815,7 +917,7 @@ export function KnowledgeGraphModal({
                         <button
                           key={c}
                           onClick={() => setNewGroupColor(c)}
-                          className={cn('w-4 h-4 rounded-full transition-transform', newGroupColor === c && 'ring-2 ring-foreground scale-110')}
+                          className={cn('w-4 h-4 rounded-full transition-transform cursor-pointer', newGroupColor === c && 'ring-2 ring-foreground scale-110')}
                           style={{ backgroundColor: c }}
                         />
                       ))}
@@ -823,7 +925,7 @@ export function KnowledgeGraphModal({
                     <button
                       onClick={handleAddColorGroup}
                       disabled={!newGroupQuery.trim()}
-                      className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 disabled:opacity-50"
+                      className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 disabled:opacity-50 cursor-pointer"
                     >
                       + Добавить
                     </button>
@@ -834,17 +936,17 @@ export function KnowledgeGraphModal({
 
             {activePanel === 'forces' && (
               <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="absolute top-4 left-4 w-72 p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute top-3 left-3 right-3 sm:right-auto sm:left-4 sm:top-4 w-auto sm:w-80 max-h-[65vh] overflow-y-auto p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
               >
                 <div className="flex items-center justify-between pb-1 border-b border-border">
                   <h4 className="font-bold text-foreground flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5 text-primary" />
                     <span>Силы физики</span>
                   </h4>
-                  <button onClick={() => setActivePanel(null)} className="text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setActivePanel(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -858,10 +960,10 @@ export function KnowledgeGraphModal({
                     <input
                       type="range"
                       min="30"
-                      max="350"
+                      max="300"
                       value={repulsion}
                       onChange={e => setRepulsion(Number(e.target.value))}
-                      className="w-full accent-primary"
+                      className="w-full accent-primary cursor-pointer"
                     />
                   </div>
 
@@ -872,11 +974,27 @@ export function KnowledgeGraphModal({
                     </div>
                     <input
                       type="range"
-                      min="25"
-                      max="200"
+                      min="30"
+                      max="250"
                       value={linkDistance}
                       onChange={e => setLinkDistance(Number(e.target.value))}
-                      className="w-full accent-primary"
+                      className="w-full accent-primary cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                      <span>Центральное притяжение:</span>
+                      <span>{centerGravity}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.01"
+                      max="0.3"
+                      step="0.01"
+                      value={centerGravity}
+                      onChange={e => setCenterGravity(Number(e.target.value))}
+                      className="w-full accent-primary cursor-pointer"
                     />
                   </div>
 
@@ -892,7 +1010,7 @@ export function KnowledgeGraphModal({
                       step="0.1"
                       value={nodeSizeScale}
                       onChange={e => setNodeSizeScale(Number(e.target.value))}
-                      className="w-full accent-primary"
+                      className="w-full accent-primary cursor-pointer"
                     />
                   </div>
                 </div>
@@ -900,7 +1018,7 @@ export function KnowledgeGraphModal({
             )}
           </AnimatePresence>
 
-          {/* ── Selected Node Inspector Drawer ── */}
+          {/* ── Selected Node Inspector Drawer (Mobile Responsive) ── */}
           <AnimatePresence>
             {selectedNode && (
               <motion.div

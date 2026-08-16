@@ -99,7 +99,7 @@ export function AppShell() {
     admin:      <AdminView />,
   }
 
-  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph'
+  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings'
 
   return (
     <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]">
@@ -149,7 +149,7 @@ export function AppShell() {
           <main
             className={
               isFullHeight
-                ? 'app-main flex-1 min-w-0 overflow-hidden px-3.5 sm:px-6 py-3.5 sm:py-5 flex flex-col'
+                ? 'app-main flex-1 min-w-0 overflow-hidden p-0 sm:p-2 flex flex-col'
                 : 'app-main flex-1 min-w-0 overflow-y-auto px-3.5 sm:px-6 py-3.5 sm:py-5'
             }
           >
@@ -161,7 +161,7 @@ export function AppShell() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                  className={isFullHeight ? 'flex-1 flex flex-col overflow-hidden' : undefined}
+                  className={isFullHeight ? 'flex-1 flex flex-col overflow-hidden h-full' : undefined}
                 >
                   {VIEW_MAP[state.currentView] ?? <TodayView />}
                 </motion.div>
