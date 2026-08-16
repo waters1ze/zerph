@@ -9,7 +9,7 @@ import { parseIntentWithGroq, transcribeAudioWithGroq, extractCleanRecipientAndS
 import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends, findFriendMatches } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { prisma } from '@/lib/backend/prisma'
-import { createServerSession } from '@/lib/backend/auth'
+import { createServerSession, secretsMatch } from '@/lib/backend/auth'
 import { tokenMatchesCandidateName } from '@/lib/backend/name-aliases'
 import { GROQ_API_KEY } from '@/lib/config'
 
@@ -62,7 +62,8 @@ export function cleanShortcutsInput(raw: string): string {
 }
 
 export function getSiriUserKey(chatId: number | string | bigint): string {
-  const secret = process.env.TELEGRAM_BOT_TOKEN || 'zerf-siri-secret-key-2026'
+  const secret = process.env.TELEGRAM_BOT_TOKEN
+  if (!secret) return ''
   return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
 }
 
@@ -306,11 +307,17 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Optional Key Verification
+    // Required per-user key verification (HMAC-derived, timing-safe).
     const providedKey = searchParams.get('key') || bodyObj.key
-    if (providedKey) {
+    if (!providedKey) {
+      return NextResponse.json({
+        error: 'Security key required. Send /siri to @Zerph_bot to get your personal URL with the key.',
+        spokenResponse: 'Нужен ключ безопасности. Отправьте команду siri боту, чтобы получить новую ссылку.',
+      }, { status: 403, headers: NO_CACHE_HEADERS })
+    }
+    {
       const expectedKey = getSiriUserKey(chatId)
-      if (providedKey !== expectedKey) {
+      if (!secretsMatch(String(providedKey), expectedKey)) {
         return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403, headers: NO_CACHE_HEADERS })
       }
     }
@@ -474,10 +481,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid chatId' }, { status: 400, headers: NO_CACHE_HEADERS })
   }
 
-  // Optional Key Verification
-  if (providedKey) {
+  // Required per-user key verification (timing-safe)
+  if (!providedKey) {
+    return NextResponse.json({
+      error: 'Security key required. Send /siri to @Zerph_bot to get your personal URL with the key.',
+      spokenResponse: 'Нужен ключ безопасности. Отправьте команду siri боту, чтобы получить новую ссылку.',
+    }, { status: 403, headers: NO_CACHE_HEADERS })
+  }
+  {
     const expectedKey = getSiriUserKey(chatId)
-    if (providedKey !== expectedKey) {
+    if (!secretsMatch(String(providedKey), expectedKey)) {
       return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403, headers: NO_CACHE_HEADERS })
     }
   }

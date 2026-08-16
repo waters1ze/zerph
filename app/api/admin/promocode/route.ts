@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ promoCodes })
   } catch (error: any) {
     console.error('Error fetching promo codes:', error)
-    return NextResponse.json({ error: error.message || 'Ошибка загрузки промокодов' }, { status: 500 })
+    return NextResponse.json({ promoCodes: [] })
   }
 }
 

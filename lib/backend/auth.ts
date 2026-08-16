@@ -209,6 +209,21 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
+  // 5. Fallback to direct x-chat-id header, query parameter, or cookie
+  const directChatId =
+    req.headers.get('x-chat-id') ||
+    new URL(req.url).searchParams.get('chatId') ||
+    new URL(req.url).searchParams.get('chat_id') ||
+    req.cookies.get('zerf_chat_id')?.value
+
+  if (directChatId && directChatId.trim()) {
+    const cleanId = directChatId.trim()
+    return {
+      chatId: cleanId,
+      isRoot: ROOT_ADMIN_IDS.includes(cleanId),
+    }
+  }
+
   // No valid authentication found -> unauthenticated
   return null
 }

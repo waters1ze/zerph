@@ -20,7 +20,7 @@ import {
   getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
   isHolidayTitle, isBirthdayTitle, cancelScheduleForDate,
 } from '@/lib/backend/db'
-import { getUserAuthToken, createServerSession } from '@/lib/backend/auth'
+import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -770,7 +770,7 @@ async function handleSubscribe(chatId: number) {
 }
 
 async function handleAdminCommand(chatId: number, args: string[]) {
-  const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
+  const ADMIN_SECRET = getAdminSecret() || ''
   const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061,5078516086').split(',').map(s => s.trim()).filter(Boolean)
   const cid = BigInt(chatId)
 
@@ -815,7 +815,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
     const q = args.slice(1).join(' ').trim()
     if (!q) { await send(chatId, '⚠️ Укажи запрос: `/admin search <имя или @username или ID>`'); return }
     
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, { headers: { Authorization: `Bearer ${ADMIN_SECRET}` } })
     const data = await res.json()
     const allUsers: any[] = data.users || []
     
@@ -890,7 +890,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   if (subCmd === 'status') {
     const targetChatId = targetQuery
     if (!targetChatId) { await send(chatId, '⚠️ Укажи chatId: `/admin status <chatId>`'); return }
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?chatId=${targetChatId}&secret=${ADMIN_SECRET}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?chatId=${targetChatId}`, { headers: { Authorization: `Bearer ${ADMIN_SECRET}` } })
     const data = await res.json()
     const exp = data.subscriptionExpiry ? new Date(data.subscriptionExpiry).toLocaleDateString('ru-RU') : 'нет'
     await send(chatId,
@@ -918,7 +918,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   if (subCmd === 'list') {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, { headers: { Authorization: `Bearer ${ADMIN_SECRET}` } })
     const data = await res.json()
     const users: any[] = data.users || []
     const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
@@ -954,7 +954,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   if (subCmd === 'stats') {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription?secret=${ADMIN_SECRET}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/subscription`, { headers: { Authorization: `Bearer ${ADMIN_SECRET}` } })
     const data = await res.json()
     const users: any[] = data.users || []
     const premiums = users.filter((u: { plan: string }) => u.plan === 'premium')
@@ -2654,6 +2654,19 @@ async function handleCleanupCommand(chatId: number) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Verify the Telegram webhook secret token. Telegram echoes back the
+    // secret_token configured via /api/setup in the
+    // X-Telegram-Bot-Api-Secret-Token header on every update — forged
+    // requests from third parties are rejected here.
+    const webhookSecret = getTelegramWebhookSecret()
+    if (webhookSecret) {
+      const headerSecret = req.headers.get('x-telegram-bot-api-secret-token') || ''
+      if (!secretsMatch(headerSecret, webhookSecret)) {
+        console.warn('[Telegram webhook] Rejected update: invalid secret token')
+        return NextResponse.json({ ok: true })
+      }
+    }
+
     const update = await req.json()
     ensureBotCommandsRegistered().catch(() => {})
 
@@ -2902,7 +2915,8 @@ export async function POST(req: NextRequest) {
         const taskId = data.replace('rem_done_', '')
         const task = await prisma.task.findUnique({ where: { id: taskId } })
         if (task) {
-          await updateTask(taskId, { status: 'done', completedAt: new Date(), reminderSent: true })
+          // Only someone the task is visible to (owner/author/assignee) may complete it
+          await updateTask(taskId, { status: 'done', completedAt: new Date(), reminderSent: true }, chatId)
           await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: '✅ Задача выполнена!' })
           await safeEditOrSend(chatId, cb.message.message_id, `✅ *Задача выполнена:* ~${escMd(task.title)}~ 🎉`)
         } else {
@@ -3216,11 +3230,11 @@ export async function POST(req: NextRequest) {
         await handleInviteCommand(senderId, firstName, parts[1])
       } else if (cmd === '/login' || cmd === '/web' || (cmd === '/start' && param === 'login')) {
         try {
-          const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
+          const adminSecret = getAdminSecret() || ''
           const tokenRes = await fetch(`${APP_URL}/api/auth/login-token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatId, secret: ADMIN_SECRET }),
+            body: JSON.stringify({ chatId, secret: adminSecret }),
           })
           const tokenData = await tokenRes.json()
           const loginUrl = tokenData.token ? `${APP_URL}/api/auth/login-token?token=${tokenData.token}&redirect=true` : APP_URL

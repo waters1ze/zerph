@@ -1,24 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runAllCronTasks, runMorningGreeting, runEveningReview, runReminderCheck } from '@/lib/backend/cron-runner'
 import { postDailyMorningPostToChannel, postDailyPollToChannel, postDailyEveningPostToChannel, closeDailyPollAndNotifyAdmins } from '@/lib/backend/channel-poster'
+import { getAdminSecret, secretsMatch } from '@/lib/backend/auth'
 
-const OWNER_CHAT_ID = process.env.OWNER_CHAT_ID || '6136950061'
-const ADMIN_SECRET = process.env.ADMIN_SECRET || process.env.CRON_SECRET || 'zerph_secret_admin_7788'
+function isAuthorizedCronCall(req: NextRequest, searchParams: URLSearchParams): boolean {
+  const adminSecret = getAdminSecret()
+  if (!adminSecret) return false
+  // Vercel Cron sends: Authorization: Bearer $CRON_SECRET
+  const bearer = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+  const headerSecret = req.headers.get('x-admin-secret') || ''
+  const querySecret = searchParams.get('secret') || ''
+  return secretsMatch(bearer, adminSecret) ||
+    secretsMatch(bearer, process.env.CRON_SECRET || null) ||
+    secretsMatch(headerSecret, adminSecret) ||
+    secretsMatch(querySecret, adminSecret)
+}
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const action = searchParams.get('action')
 
-    // If a manual trigger action is requested, strictly check the secret/owner access
+    // Manual action triggers require a valid secret (header or query).
     if (action) {
-      const secret = searchParams.get('secret') || searchParams.get('key') || req.headers.get('x-admin-secret')
-      const owner = searchParams.get('owner')
-
-      const isAuthorized = (secret && (secret === ADMIN_SECRET || secret === 'zerph_secret_admin_7788')) ||
-                           (owner && (owner === OWNER_CHAT_ID || owner === '6136950061'))
-
-      if (!isAuthorized) {
+      if (!isAuthorizedCronCall(req, searchParams)) {
         return NextResponse.json(
           { error: 'Доступ запрещен. Только владелец может запускать ручные тесты.' },
           { status: 403 }

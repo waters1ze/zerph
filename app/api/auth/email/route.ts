@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { createServerSession } from '@/lib/backend/auth'
-import crypto from 'crypto'
+import { hashPassword, verifyPassword, isLegacyPasswordHash, generateEmailChatId } from '@/lib/backend/passwords'
 
-function hashPassword(password: string): string {
-  const salt = 'zerf_salt_2026'
-  return crypto.pbkdf2Sync(password, salt, 1000, 32, 'sha256').toString('hex')
+const COOKIE_OPTS = {
+  path: '/',
+  maxAge: 60 * 60 * 24 * 365,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
 }
 
-function generateDeterministicChatId(email: string): bigint {
-  let hash = 0
-  for (let i = 0; i < email.length; i++) {
-    hash = (hash << 5) - hash + email.charCodeAt(i)
-    hash |= 0
-  }
-  // Generate positive unique 10-digit ID starting with 90
-  const positive = Math.abs(hash)
-  return BigInt(`90${String(positive).padStart(8, '0').slice(0, 8)}`)
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)
 }
 
 export async function POST(req: NextRequest) {
@@ -25,39 +20,36 @@ export async function POST(req: NextRequest) {
     const { action, email, password, firstName } = body
 
     const cleanEmail = (email || '').trim().toLowerCase()
-    if (!cleanEmail || !cleanEmail.includes('@')) {
+    if (!isValidEmail(cleanEmail)) {
       return NextResponse.json({ error: 'Пожалуйста, введите корректный Email' }, { status: 400 })
     }
 
-    if (!password || password.length < 4) {
-      return NextResponse.json({ error: 'Пароль должен содержать не менее 4 символов' }, { status: 400 })
+    if (!password || password.length < 6) {
+      return NextResponse.json({ error: 'Пароль должен содержать не менее 6 символов' }, { status: 400 })
     }
 
     const passHash = hashPassword(password)
-    const existingCid = req.headers.get('x-chat-id') || req.cookies.get('zerf_chat_id')?.value
 
     if (action === 'register' || action === 'link') {
       const existing = await prisma.telegramChat.findUnique({
         where: { email: cleanEmail }
       })
 
-      if (existing && String(existing.chatId) !== existingCid) {
+      if (existing) {
         return NextResponse.json({ error: 'Пользователь с таким Email уже существует. Пожалуйста, выполните вход.' }, { status: 400 })
       }
 
-      const targetChatId = (existingCid && !existingCid.startsWith('guest_'))
-        ? BigInt(existingCid)
-        : generateDeterministicChatId(cleanEmail)
+      // Create a brand-new account with a random non-colliding ID.
+      // (Never trust client-supplied chatId — it is not authenticated here.)
+      let targetChatId = generateEmailChatId()
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const clash = await prisma.telegramChat.findUnique({ where: { chatId: targetChatId } })
+        if (!clash) break
+        targetChatId = generateEmailChatId()
+      }
 
-      const user = await prisma.telegramChat.upsert({
-        where: { chatId: targetChatId },
-        update: {
-          email: cleanEmail,
-          passwordHash: passHash,
-          firstName: firstName || undefined,
-          lastActiveAt: new Date()
-        },
-        create: {
+      const user = await prisma.telegramChat.create({
+        data: {
           chatId: targetChatId,
           email: cleanEmail,
           passwordHash: passHash,
@@ -83,8 +75,8 @@ export async function POST(req: NextRequest) {
         message: 'Регистрация успешна!'
       })
 
-      res.cookies.set('zerf_chat_id', String(user.chatId), { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
-      res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
+      res.cookies.set('zerf_chat_id', String(user.chatId), COOKIE_OPTS)
+      res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
 
       return res
     }
@@ -95,18 +87,27 @@ export async function POST(req: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'Аккаунт с таким Email не найден. Нажмите «Зарегистрироваться».' }, { status: 404 })
+      // Generic message to prevent account enumeration
+      return NextResponse.json({ error: 'Неверный Email или пароль' }, { status: 401 })
     }
 
-    if (user.passwordHash && user.passwordHash !== passHash) {
-      return NextResponse.json({ error: 'Неверный пароль. Попробуйте снова.' }, { status: 401 })
-    }
-
-    // Update password if previously unset
+    // Accounts without a password (e.g. Telegram users who only linked an email)
+    // can NOT be claimed via this endpoint.
     if (!user.passwordHash) {
+      return NextResponse.json({
+        error: 'Этот Email привязан к аккаунту, входящему через Telegram/VK. Используйте вход через бота (/login).'
+      }, { status: 403 })
+    }
+
+    if (!verifyPassword(password, user.passwordHash)) {
+      return NextResponse.json({ error: 'Неверный Email или пароль' }, { status: 401 })
+    }
+
+    // Transparent upgrade of legacy static-salt hashes
+    if (isLegacyPasswordHash(user.passwordHash)) {
       await prisma.telegramChat.update({
         where: { chatId: user.chatId },
-        data: { passwordHash: passHash, authProvider: 'email' }
+        data: { passwordHash: passHash }
       })
     }
 
@@ -126,8 +127,8 @@ export async function POST(req: NextRequest) {
       message: 'Успешный вход!'
     })
 
-    res.cookies.set('zerf_chat_id', String(user.chatId), { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
-    res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
+    res.cookies.set('zerf_chat_id', String(user.chatId), COOKIE_OPTS)
+    res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
 
     return res
   } catch (err: unknown) {

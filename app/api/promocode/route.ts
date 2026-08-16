@@ -1,24 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
   try {
-    const { code, chatId } = await req.json()
+    // Identity comes strictly from the authenticated session — never from the body
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Требуется вход в аккаунт' }, { status: 401 })
+    }
+
+    const { code } = await req.json()
 
     if (!code || !code.trim()) {
       return NextResponse.json({ error: 'Введите промокод' }, { status: 400 })
     }
 
-    if (!chatId) {
-      return NextResponse.json({ error: 'Не удалось определить пользователя' }, { status: 400 })
-    }
+    const strChatId = authUser.chatId
+    const numericChatId = BigInt(strChatId)
 
     const cleanCode = code.trim().toUpperCase()
-    const numericChatId = BigInt(String(chatId).replace(/\D/g, '') || '0')
-    const strChatId = numericChatId.toString()
 
-    if (!numericChatId) {
-      return NextResponse.json({ error: 'Неверный ID пользователя' }, { status: 400 })
+    // Basic rate limiting: max 10 activation attempts per 5 minutes per user
+    const recentKey = `promo_attempts_${strChatId}`
+    const recent = await prisma.config.findUnique({ where: { key: recentKey } })
+    const now = Date.now()
+    if (recent) {
+      const attempts: number[] = JSON.parse(recent.value || '[]').filter((t: number) => now - t < 5 * 60 * 1000)
+      if (attempts.length >= 10) {
+        return NextResponse.json({ error: 'Слишком много попыток. Попробуйте позже.' }, { status: 429 })
+      }
+      attempts.push(now)
+      await prisma.config.update({ where: { key: recentKey }, data: { value: JSON.stringify(attempts) } })
+    } else {
+      await prisma.config.create({ data: { key: recentKey, value: JSON.stringify([now]) } }).catch(() => {})
     }
 
     const promo = await prisma.promoCode.findUnique({

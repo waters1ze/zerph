@@ -106,34 +106,9 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-// POST /api/sessions — create or update a session (called on login-token verify)
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json()
-    const { chatId, sessionToken, userAgent, ipAddress } = body
-    if (!chatId || !sessionToken) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
-
-    const { name: deviceName, type: deviceType } = parseDeviceName(userAgent || '')
-
-    // Upsert: if this token already exists, update lastSeen
-    await prisma.userSession.upsert({
-      where: { sessionToken },
-      update: { lastSeenAt: new Date(), ipAddress },
-      create: {
-        chatId: BigInt(chatId),
-        sessionToken,
-        deviceName,
-        deviceType,
-        ipAddress,
-        userAgent,
-        isRevoked: false,
-      },
-    })
-
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
-  }
-}
+// NOTE: there is intentionally no public POST handler.
+// Sessions are created exclusively server-side (login-token consume, email/Google
+// login) via createServerSession(). Accepting client-supplied session records
+// would allow anyone to mint credentials for arbitrary accounts.
 
 export { parseDeviceName }

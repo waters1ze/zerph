@@ -318,28 +318,6 @@ export function SettingsView() {
     }
   }
 
-  const handleGoogleAuth = async () => {
-    const emailPrompt = prompt('Введите ваш Google Email:')
-    if (!emailPrompt || !emailPrompt.includes('@')) return
-
-    setAuthLoading(true)
-    try {
-      const res = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailPrompt, name: emailPrompt.split('@')[0] })
-      })
-      const data = await res.json()
-      if (data.chatId) {
-        localStorage.setItem('zerf_chat_id', data.chatId)
-        if (data.token) localStorage.setItem('zerf_auth_token', data.token)
-        window.location.reload()
-      }
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
   const handleLogout = async () => {
     const ok = await confirm({
       title: 'Выйти из аккаунта?',

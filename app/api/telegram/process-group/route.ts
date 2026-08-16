@@ -17,7 +17,6 @@ import {
   autoAddFriends,
   deductGroupUsage,
 } from '@/lib/backend/db'
-import { getUserAuthToken } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
 
@@ -42,12 +41,11 @@ async function tgApi(method: string, body: object) {
 }
 
 function miniAppKeyboard(chatId: number) {
-  const token = getUserAuthToken(chatId)
-  const query = `?chatId=${chatId}&token=${token}`
+  // The Mini App authenticates via Telegram's signed initData, so no token in URL is needed.
   return {
     inline_keyboard: [
-      [{ text: 'Open Zerf App', web_app: { url: `${MINIAPP_URL}${query}` } }],
-      [{ text: 'Open Full Web Site', url: `${APP_URL}${query}` } ],
+      [{ text: 'Open Zerf App', web_app: { url: MINIAPP_URL } }],
+      [{ text: 'Open Full Web Site', url: APP_URL } ],
     ],
   }
 }
@@ -70,6 +68,15 @@ async function safeEditOrSend(
 
 export async function POST(req: NextRequest) {
   try {
+    // Internal endpoint: only callable with the server admin secret
+    const { getAdminSecret, secretsMatch } = await import('@/lib/backend/auth')
+    const adminSecret = getAdminSecret()
+    const bearer = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+    const headerSecret = req.headers.get('x-admin-secret') || ''
+    if (!adminSecret || !(secretsMatch(bearer, adminSecret) || secretsMatch(headerSecret, adminSecret))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const {
       groupChatId,

@@ -29,7 +29,7 @@ import {
   generateAndSendFridayAiProposal
 } from './channel-poster'
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
 async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any) {
   let delivered = false

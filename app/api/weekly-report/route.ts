@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 function getDayOfWeek(date: Date) {
   const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
@@ -8,10 +9,12 @@ function getDayOfWeek(date: Date) {
 }
 
 export async function GET(req: NextRequest) {
-  const chatId = req.nextUrl.searchParams.get('chatId')
-  if (!chatId) return NextResponse.json({ error: 'Missing chatId' }, { status: 400 })
+  const authUser = await getAuthenticatedUser(req)
+  if (!authUser) {
+    return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+  }
 
-  const cid = BigInt(chatId)
+  const cid = BigInt(authUser.chatId)
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 

@@ -26,16 +26,17 @@ import { getAuthenticatedUser } from '@/lib/backend/auth'
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
-    const ownerChatId = authUser ? authUser.chatId : null
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    }
+    const ownerChatId = authUser.chatId
 
-    if (ownerChatId) {
-      const limits = await getUserUsageAndLimits(ownerChatId)
-      if (!limits.canSendChatMessage) {
-        return NextResponse.json({
-          error: '❌ Дневной лимит сообщений в ИИ чат исчерпан (10 сообщений в день на бесплатном тарифе). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
-          limitReached: true,
-        }, { status: 403 })
-      }
+    const limits = await getUserUsageAndLimits(ownerChatId)
+    if (!limits.canSendChatMessage) {
+      return NextResponse.json({
+        error: '❌ Дневной лимит сообщений в ИИ чат исчерпан (10 сообщений в день на бесплатном тарифе). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
+        limitReached: true,
+      }, { status: 403 })
     }
 
     const body = await req.json()

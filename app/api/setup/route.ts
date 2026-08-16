@@ -1,18 +1,24 @@
 /**
- * GET /api/setup — One-click setup endpoint
- * 1. Sets Telegram Webhook to Railway app URL
- * 2. Registers Telegram Bot Command Menu (/today, /goals, /notes, /help)
+ * GET /api/setup — One-click setup endpoint (admin only)
+ * 1. Sets Telegram Webhook (with secret token) to the app URL
+ * 2. Registers Telegram Bot Command Menu
+ *
+ * Requires: Authorization: Bearer <ADMIN_SECRET> or ?secret=<ADMIN_SECRET>
+ * After deploying with a fresh bot, call this ONCE to finish configuration.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAdminSecret, getTelegramWebhookSecret, secretsMatch } from '@/lib/backend/auth'
 
 export async function GET(req: NextRequest) {
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-  const host = req.headers.get('host')
-  const protocol = req.headers.get('x-forwarded-proto') || 'https'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`
-  const webhookUrl = `${appUrl}/api/telegram`
+  const adminSecret = getAdminSecret()
+  const authHeader = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+  const querySecret = new URL(req.url).searchParams.get('secret') || ''
+  if (!adminSecret || !(secretsMatch(authHeader, adminSecret) || secretsMatch(querySecret, adminSecret))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
   if (!BOT_TOKEN) {
     return NextResponse.json(
       { error: 'TELEGRAM_BOT_TOKEN is missing in environment variables.' },
@@ -20,15 +26,22 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`
+  const webhookUrl = `${appUrl}/api/telegram`
+  const webhookSecret = getTelegramWebhookSecret()
+
   try {
-    // 1. Set Webhook
+    // 1. Set Webhook (with secret token so forged updates are rejected)
+    const webhookBody: Record<string, unknown> = {
+      url: webhookUrl,
+      allowed_updates: ['message', 'callback_query', 'channel_post', 'chat_member'],
+    }
+    if (webhookSecret) webhookBody.secret_token = webhookSecret
+
     const webhookRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webhookUrl,
-        allowed_updates: ['message', 'callback_query', 'channel_post', 'chat_member'],
-      }),
+      body: JSON.stringify(webhookBody),
     })
     const webhookData = await webhookRes.json()
 
@@ -75,6 +88,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: webhookData.ok && privateCommandsData.ok && groupCommandsData.ok,
       webhookUrl,
+      secretTokenConfigured: Boolean(webhookSecret),
       webhookResult: webhookData,
       privateCommandsResult: privateCommandsData,
       groupCommandsResult: groupCommandsData,

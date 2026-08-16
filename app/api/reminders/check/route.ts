@@ -1,12 +1,14 @@
 /**
  * GET /api/reminders/check — Checks and pushes due Telegram notifications respecting user timezones
+ * Protected: requires ADMIN_SECRET (Authorization: Bearer ... or x-admin-secret header).
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAllTasks, updateTask } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
+import { getAdminSecret, secretsMatch } from '@/lib/backend/auth'
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
 async function sendTelegramMessage(chatId: number, text: string) {
   try {
@@ -54,8 +56,15 @@ function getUserCurrentTimeAndDate(timezone: string = 'Europe/Moscow') {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const adminSecret = getAdminSecret()
+    const bearer = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+    const headerSecret = req.headers.get('x-admin-secret') || ''
+    if (!adminSecret || !(secretsMatch(bearer, adminSecret) || secretsMatch(headerSecret, adminSecret))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const tasks = await getAllTasks()
     let sentCount = 0
 

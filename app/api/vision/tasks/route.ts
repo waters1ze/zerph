@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { extractTasksFromImageWithGroq } from '@/lib/backend/vision'
 import { createTask } from '@/lib/backend/db'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { Buffer } from 'buffer'
 
 export async function POST(req: NextRequest) {
   try {
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    }
+
     const formData = await req.formData()
     const file = formData.get('file') as File | null
-    const chatId = formData.get('chatId') as string | null
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Файл слишком большой (максимум 15 МБ)' }, { status: 400 })
     }
 
     const arrayBuffer = await file.arrayBuffer()
@@ -29,7 +38,7 @@ export async function POST(req: NextRequest) {
         dueTime: t.dueTime || undefined,
         tags: ['фото', 'ocr'],
         aiGenerated: true,
-        ownerChatId: chatId ? BigInt(chatId) : null,
+        ownerChatId: BigInt(authUser.chatId),
         subtasks: (t.subtasks || []).map((st, i) => ({
           id: `st_vis_${i}_${Date.now()}`,
           title: st,

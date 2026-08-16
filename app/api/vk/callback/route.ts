@@ -43,11 +43,14 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 2. Secret Key check (if present in request and configured)
+    // 2. Secret Key check — REQUIRED when VK_SECRET_KEY is configured.
+    //    Requests without a valid secret are dropped.
     const secretKey = getVkSecretKey()
-    if (secretKey && body.secret && body.secret !== secretKey) {
-      console.warn('[VK Callback] Secret mismatch:', body.secret, 'expected:', secretKey)
-      return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    if (secretKey) {
+      if (!body.secret || body.secret !== secretKey) {
+        console.warn('[VK Callback] Dropped request: missing or invalid secret')
+        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+      }
     }
 
     // 3. Inline Button Callback (message_event)
@@ -66,14 +69,22 @@ export async function POST(req: NextRequest) {
         const taskId = rawAction.replace('rem_done_', '').replace('done_', '')
         try {
           const { completeTask } = await import('@/lib/backend/db')
-          await completeTask(taskId)
+          // Only the owner/author/assignee may complete the task
+          await completeTask(taskId, userId)
           await callVkApi('messages.sendMessageEventAnswer', {
             event_id: eventId,
             user_id: userId,
             peer_id: obj.peer_id || userId,
             event_data: JSON.stringify({ type: 'show_snackbar', text: '✅ Задача отмечена выполненной!' }),
           })
-        } catch {}
+        } catch {
+          await callVkApi('messages.sendMessageEventAnswer', {
+            event_id: eventId,
+            user_id: userId,
+            peer_id: obj.peer_id || userId,
+            event_data: JSON.stringify({ type: 'show_snackbar', text: 'Задача недоступна' }),
+          }).catch(() => {})
+        }
       } else {
         await callVkApi('messages.sendMessageEventAnswer', {
           event_id: eventId,

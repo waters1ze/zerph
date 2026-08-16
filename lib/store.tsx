@@ -242,9 +242,10 @@ export function getTgChatId(): string | null {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
 
     // 2. Direct Auth Params from /login or notification link (?chat_id=...&auth_token=...)
+    //    A chatId without a server-issued token is never trusted.
     const paramChatId = urlParams.get('chat_id') || urlParams.get('chatId')
     const paramAuthToken = urlParams.get('auth_token') || urlParams.get('token')
-    if (paramChatId && paramAuthToken && paramAuthToken.length >= 16) {
+    if (paramChatId && paramAuthToken && paramAuthToken.length >= 16 && /^\d+$/.test(paramChatId)) {
       try {
         localStorage.setItem('zerf_chat_id', paramChatId)
         localStorage.setItem('zerf_auth_token', paramAuthToken)
@@ -258,28 +259,28 @@ export function getTgChatId(): string | null {
       return paramChatId
     }
 
-    // 3. Param chatId without explicit token (e.g. from Telegram WebApp or verified link)
-    if (paramChatId) {
-      try {
-        localStorage.setItem('zerf_chat_id', paramChatId)
-        setPermanentCookie('zerf_chat_id', paramChatId)
-      } catch {}
-      return paramChatId
-    }
-
-    // 4. VK Mini App launch context (vk_user_id from launch URL)
-    const vkUserId =
-      urlParams.get('vk_user_id') ||
-      hashParams.get('vk_user_id') ||
-      urlParams.get('userId') ||
-      urlParams.get('user_id')
-    if (vkUserId) {
-      const vkId = String(vkUserId)
-      try {
-        localStorage.setItem('zerf_chat_id', vkId)
-        setPermanentCookie('zerf_chat_id', vkId)
-      } catch {}
-      return vkId
+    // 3. VK Mini App launch context — only together with VK's cryptographic
+    //    sign, which the server verifies via VK_APP_SECRET.
+    const vkUserId = urlParams.get('vk_user_id') || hashParams.get('vk_user_id')
+    if (vkUserId && /^\d+$/.test(vkUserId)) {
+      const hasSign = Boolean(urlParams.get('sign') || hashParams.get('sign'))
+      if (hasSign) {
+        const vkId = String(vkUserId)
+        const vkLaunch = [
+          ...Array.from(urlParams.entries()),
+          ...Array.from(hashParams.entries()),
+        ]
+          .filter(([k]) => k.startsWith('vk_'))
+          .map(([k, v]) => `${k}=${v}`)
+          .join('&')
+        try {
+          localStorage.setItem('zerf_chat_id', vkId)
+          localStorage.setItem('zerf_vk_launch', vkLaunch)
+          setPermanentCookie('zerf_chat_id', vkId)
+        } catch {}
+        return vkId
+      }
+      return null
     }
 
     // 5. One-time login token from bot (/login command) — verified server-side and consumed
@@ -335,11 +336,13 @@ export function getAuthHeaders(): Record<string, string> {
   const chatId = getTgChatId()
   const token = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')) : null
   const initData = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initData : null
-  
+  const vkLaunch = typeof window !== 'undefined' ? localStorage.getItem('zerf_vk_launch') : null
+
   const headers: Record<string, string> = {}
   if (chatId) headers['x-chat-id'] = chatId
   if (token) headers['x-auth-token'] = token
   if (initData) headers['x-tg-init-data'] = initData
+  if (vkLaunch) headers['x-vk-launch'] = vkLaunch
   return headers
 }
 

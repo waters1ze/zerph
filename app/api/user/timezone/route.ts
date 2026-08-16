@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { parseTimezoneInput } from '@/lib/backend/timezone'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
   try {
-    const { chatId, timezone } = await req.json()
-
-    if (!chatId) {
-      return NextResponse.json({ error: 'Chat ID required' }, { status: 400 })
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const { timezone } = await req.json()
 
     if (!timezone || !timezone.trim()) {
       return NextResponse.json({ error: 'Timezone required' }, { status: 400 })
     }
 
-    const numericChatId = BigInt(String(chatId).replace(/\D/g, '') || '0')
+    const numericChatId = BigInt(authUser.chatId)
     if (!numericChatId) {
       return NextResponse.json({ error: 'Invalid Chat ID' }, { status: 400 })
     }

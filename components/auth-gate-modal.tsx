@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Send, Lock, ExternalLink, Mail, Key, User, Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
+import { Sparkles, Send, Lock, ExternalLink, Mail, Key, User, Loader2, CheckCircle2 } from 'lucide-react'
 import { getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
@@ -20,8 +20,13 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
   useEffect(() => {
     const checkAuth = () => {
       const chatId = getTgChatId()
-      const hasAuth = Boolean(chatId && !chatId.startsWith('guest_'))
-      setIsAuth(hasAuth)
+      // Authenticated means: real chatId AND verifiable credentials
+      // (session token, Telegram initData, or signed VK launch params).
+      const token = localStorage.getItem('zerf_auth_token')
+      const initData = (window as any).Telegram?.WebApp?.initData
+      const vkLaunch = localStorage.getItem('zerf_vk_launch')
+      const hasCredentials = Boolean(token || initData || vkLaunch)
+      setIsAuth(Boolean(chatId && !chatId.startsWith('guest_') && hasCredentials))
     }
     checkAuth()
     window.addEventListener('storage', checkAuth)
@@ -70,28 +75,6 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
     }
   }
 
-  const handleGoogleMockAuth = async () => {
-    const emailPrompt = prompt('Введите ваш Google Email для быстрого входа:')
-    if (!emailPrompt || !emailPrompt.includes('@')) return
-
-    setLoading(true)
-    try {
-      const res = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailPrompt, name: emailPrompt.split('@')[0] })
-      })
-      const data = await res.json()
-      if (data.chatId) {
-        localStorage.setItem('zerf_chat_id', data.chatId)
-        if (data.token) localStorage.setItem('zerf_auth_token', data.token)
-        window.location.reload()
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <AnimatePresence>
       {shouldOpen && (
@@ -124,9 +107,9 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                   Вход в Zerf Note
                   <Sparkles className="w-4 h-4 text-amber-400 fill-amber-400" />
                 </h3>
-                <p className="text-[12px] text-muted-foreground">
-                  Войдите по Email, Google, Telegram или VK
-                </p>
+                    <p className="text-[12px] text-muted-foreground">
+                      Войдите по Email, Telegram или VK
+                    </p>
               </div>
             </div>
 
@@ -244,22 +227,13 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                   <span>{isRegister ? 'Зарегистрироваться' : 'Войти в аккаунт'}</span>
                 </button>
 
-                <div className="flex items-center justify-between text-xs pt-1">
+                <div className="flex items-center justify-end text-xs pt-1">
                   <button
                     type="button"
                     onClick={() => { setIsRegister(!isRegister); setError(null) }}
                     className="text-primary hover:underline font-medium"
                   >
                     {isRegister ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleGoogleMockAuth}
-                    className="text-muted-foreground hover:text-foreground font-medium flex items-center gap-1"
-                  >
-                    <span>Google вход</span>
-                    <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
               </form>

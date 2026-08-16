@@ -5,13 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { getAuthenticatedUser } from '@/lib/backend/auth'
-import crypto from 'crypto'
-
-function hashPassword(password: string): string {
-  const salt = 'zerf_salt_2026'
-  return crypto.pbkdf2Sync(password, salt, 1000, 32, 'sha256').toString('hex')
-}
+import { getAuthenticatedUser, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
+import { hashPassword, verifyPassword } from '@/lib/backend/passwords'
 
 export async function GET(req: NextRequest) {
   try {
@@ -66,7 +61,7 @@ export async function GET(req: NextRequest) {
         name: 'Пользователь Zerf',
         plan: 'free',
         isPremium: false,
-        isAdmin: cid === '6136950061',
+        isAdmin: ROOT_ADMIN_IDS.includes(cid),
       })
     }
 
@@ -85,7 +80,7 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, vkId, googleEmail } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
 
     const updateData: any = {}
@@ -118,8 +113,18 @@ export async function POST(req: NextRequest) {
     }
 
     if (password) {
-      if (password.length < 4) {
-        return NextResponse.json({ error: 'Пароль должен быть не менее 4 символов' }, { status: 400 })
+      if (password.length < 6) {
+        return NextResponse.json({ error: 'Пароль должен быть не менее 6 символов' }, { status: 400 })
+      }
+      // If the account already has a password, changing it requires the current one
+      const existingChat = await prisma.telegramChat.findUnique({
+        where: { chatId: userCid },
+        select: { passwordHash: true },
+      })
+      if (existingChat?.passwordHash) {
+        if (!currentPassword || !verifyPassword(currentPassword, existingChat.passwordHash)) {
+          return NextResponse.json({ error: 'Неверный текущий пароль' }, { status: 403 })
+        }
       }
       updateData.passwordHash = hashPassword(password)
     }

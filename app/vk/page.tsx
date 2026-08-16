@@ -31,18 +31,25 @@ export default function VkPage() {
         setTimeout(initBridge, 100)
         setTimeout(initBridge, 500)
 
-        // 2. Parse launch parameters from URL search / hash
+        // 2. Parse launch parameters from URL search / hash.
+        //    vk_user_id is only accepted together with VK's cryptographic sign —
+        //    the server verifies it via VK_APP_SECRET.
         const urlParams = new URLSearchParams(window.location.search)
         const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
 
-        const vkUserId =
-          urlParams.get('vk_user_id') ||
-          hashParams.get('vk_user_id') ||
-          urlParams.get('userId') ||
-          urlParams.get('user_id')
+        const vkUserId = urlParams.get('vk_user_id') || hashParams.get('vk_user_id')
+        const vkSign = urlParams.get('sign') || hashParams.get('sign')
 
-        if (vkUserId) {
+        if (vkUserId && /^\d+$/.test(vkUserId) && vkSign) {
+          const vkLaunch = [
+            ...Array.from(urlParams.entries()),
+            ...Array.from(hashParams.entries()),
+          ]
+            .filter(([k]) => k.startsWith('vk_'))
+            .map(([k, v]) => `${k}=${v}`)
+            .join('&')
           localStorage.setItem('zerf_chat_id', vkUserId)
+          localStorage.setItem('zerf_vk_launch', vkLaunch)
           document.cookie = `zerf_chat_id=${vkUserId}; path=/; max-age=31536000`
         }
 
