@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSettings, useApp, getTgChatId, getAuthHeaders } from '@/lib/store'
 import { useLanguage } from '@/lib/i18n'
@@ -124,6 +124,38 @@ export function SettingsView() {
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}&text=`
+  const [nameSavedStatus, setNameSavedStatus] = useState<boolean>(false)
+  const nameSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const saveUserNameToServer = async (newName: string) => {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    update({ name: trimmed })
+    if (currentChatId) {
+      try {
+        await fetch(`/api/telegram/user?chatId=${currentChatId}`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: trimmed })
+        })
+        setNameSavedStatus(true)
+        setTimeout(() => setNameSavedStatus(false), 2500)
+      } catch {}
+    }
+  }
+
+  const handleNameChange = (val: string) => {
+    setName(val)
+    if (nameSaveTimerRef.current) clearTimeout(nameSaveTimerRef.current)
+    nameSaveTimerRef.current = setTimeout(() => {
+      saveUserNameToServer(val)
+    }, 700)
+  }
+
+  const handleNameBlur = () => {
+    if (nameSaveTimerRef.current) clearTimeout(nameSaveTimerRef.current)
+    saveUserNameToServer(name)
+  }
 
   const fetchProfile = () => {
     if (currentChatId) {
@@ -145,6 +177,9 @@ export function SettingsView() {
               newsDisabled: d.newsDisabled,
             })
             if (d.email) setLinkEmail(d.email)
+            if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf') {
+              setName(d.name)
+            }
           }
           if (d.birthday) {
             setUserBirthday(d.birthday)
@@ -488,26 +523,28 @@ export function SettingsView() {
 
       {/* ── TAB 1: Account & Multi-Provider Authentication ──────────────────── */}
       {activeTab === 'account' && (
+        
+
         <div className="space-y-6">
           <Section title="Ваш Профиль">
             <Row label="Имя пользователя" description="Отображается в команде, совместных проектах и чате">
-              <input
-                type="text"
-                value={name}
-                onChange={e => {
-                  setName(e.target.value)
-                  update({ name: e.target.value })
-                  if (currentChatId) {
-                    fetch(`/api/telegram/user?chatId=${currentChatId}`, {
-                      method: 'POST',
-                      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ name: e.target.value })
-                    }).catch(() => {})
-                  }
-                }}
-                placeholder="Ваше имя"
-                className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-48"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => handleNameChange(e.target.value)}
+                  onBlur={handleNameBlur}
+                  onKeyDown={e => e.key === 'Enter' && handleNameBlur()}
+                  placeholder="Ваше имя и фамилия"
+                  className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-56 sm:w-64"
+                />
+                {nameSavedStatus && (
+                  <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 shrink-0 animate-in fade-in">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Сохранено</span>
+                  </span>
+                )}
+              </div>
             </Row>
 
             <Row label={<span className="flex items-center gap-1.5"><span className="mono-emoji">🎂</span> День рождения</span>} description="Друзья в Zerf Note автоматически увидят напоминание в календаре">

@@ -148,7 +148,7 @@ export function Sidebar() {
   const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done' && !isYearlyEventTask(t)).length
   const notesCount = notes.length
 
-  const displayName = tgUser?.name || (settings.name && settings.name !== 'Kirill Perekatnov' ? settings.name : null) || 'Мой профиль'
+  const displayName = (settings.name && settings.name.trim() && settings.name !== 'Мой профиль' ? settings.name.trim() : null) || tgUser?.name || 'Мой профиль'
   const isConnected = settings.integrations.telegram || !!tgUser || (!!settings.name && settings.name !== 'Kirill Perekatnov')
   const userSubtext = tgUser?.username
     ? `${tgUser.username} · Подключено`
@@ -157,8 +157,12 @@ export function Sidebar() {
   return (
     <aside className="flex flex-col h-full bg-card text-card-foreground border-r border-border select-none w-full font-sans">
       {/* Dynamic User Profile Card */}
-      <div className="mx-3 mt-4 mb-3 px-3.5 py-3 rounded-xl bg-muted/50 border border-border/60 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary">
+      <div 
+        onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+        className="mx-3 mt-4 mb-3 px-3.5 py-3 rounded-xl bg-muted/50 border border-border/60 flex items-center gap-3 cursor-pointer hover:bg-muted/80 transition-colors group"
+        title={`Профиль: ${displayName} (кликните для настроек)`}
+      >
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
           {tgUser?.photoUrl ? (
             <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
           ) : displayName !== 'Мой профиль' ? (
@@ -168,7 +172,7 @@ export function Sidebar() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-bold text-foreground truncate font-sans">
+          <p className="text-[13px] font-bold text-foreground truncate font-sans" title={displayName}>
             {displayName}
           </p>
           <p className="text-[11px] text-muted-foreground truncate font-sans">

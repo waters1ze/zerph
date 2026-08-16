@@ -3586,7 +3586,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 2. Name + Birthday setting detection (e.g. "Артём Смирнов 15.04.1995" or "Меня зовут Кирилл Перекатнов 03.04.2010" or "03.04.2010")
-        const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
+        const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
         const rawDateMatch = trimmed.match(/\b(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\b/)
         const parsedBday = rawDateMatch ? parseBirthday(rawDateMatch[1]) : parseBirthday(trimmed)
 
@@ -3603,11 +3603,13 @@ export async function POST(req: NextRequest) {
           if (ln) updateData.lastName = ln
           if (parsedBday) updateData.birthday = parsedBday.iso
 
-          await prisma.telegramChat.upsert({
-            where: { chatId: BigInt(chatId) },
-            update: updateData,
-            create: { chatId: BigInt(chatId), ...updateData },
-          })
+          await updateUserNameCascade(BigInt(chatId), fn, ln)
+          if (parsedBday) {
+            await prisma.telegramChat.update({
+              where: { chatId: BigInt(chatId) },
+              data: { birthday: parsedBday.iso },
+            }).catch(() => {})
+          }
 
           if (parsedBday) {
             await broadcastMyBirthdayToFriends(chatId)
