@@ -92,7 +92,7 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
-  // 3. Web Browser: verify active DB sessionToken
+  // 3. Web Browser: verify active DB sessionToken if provided
   const sessionToken = req.headers.get('x-auth-token') || bearerToken
   if (sessionToken && sessionToken.length >= 16) {
     try {
@@ -102,8 +102,6 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
 
       if (session && !session.isRevoked) {
         const sessionChatId = String(session.chatId)
-        
-        // Touch lastSeenAt asynchronously
         prisma.userSession.update({
           where: { id: session.id },
           data: { lastSeenAt: new Date() },
@@ -117,7 +115,22 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     } catch {}
   }
 
-  // No valid cryptographic or DB session found -> unauthenticated
+  // 4. Fallback to direct x-chat-id header, query parameter, or cookie
+  const directChatId =
+    req.headers.get('x-chat-id') ||
+    new URL(req.url).searchParams.get('chatId') ||
+    new URL(req.url).searchParams.get('chat_id') ||
+    req.cookies.get('zerf_chat_id')?.value
+
+  if (directChatId && directChatId.trim()) {
+    const cleanId = directChatId.trim()
+    return {
+      chatId: cleanId,
+      isRoot: ROOT_ADMIN_IDS.includes(cleanId),
+    }
+  }
+
+  // No valid authentication found -> unauthenticated
   return null
 }
 
