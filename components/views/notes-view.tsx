@@ -1019,9 +1019,17 @@ ${activeNote.content}"
         onClose={() => setIsGraphModalOpen(false)}
         notes={notes}
         initialFolder={graphFolderFilter}
+        initialNoteId={activeNote?.id}
         onSelectNote={(noteId) => {
           setSelectedId(noteId)
           setShowMobileList(false)
+        }}
+        onCreateNoteWithTitle={(title) => {
+          handleNavigateWikilink(title)
+        }}
+        onDeleteNote={(noteId) => {
+          dispatch({ type: 'DELETE_NOTE', id: noteId })
+          if (selectedId === noteId) setSelectedId(null)
         }}
       />
     </div>

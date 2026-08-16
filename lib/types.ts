@@ -10,6 +10,7 @@ export type View =
   | 'projects'
   | 'eisenhower'
   | 'notes'
+  | 'graph'
   | 'calendar'
   | 'clock'
   | 'chat'

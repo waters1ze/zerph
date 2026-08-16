@@ -42,7 +42,6 @@ export function findBacklinks(targetTitle: string, allNotes: Note[]): { note: No
     const hasLink = links.some(l => l.targetTitle.toLowerCase() === normalizedTarget)
 
     if (hasLink) {
-      // Extract a short sentence/line snippet around the link
       const lines = note.content.split('\n')
       const matchingLine = lines.find(line => {
         const lineLinks = extractWikilinks(line)
@@ -77,10 +76,28 @@ export function findOutgoingLinks(note: Note, allNotes: Note[]): { targetTitle: 
   })
 }
 
+export interface ColorGroup {
+  id: string
+  query: string // e.g. "tag:#физика" or "path:Школа" or "теорема"
+  color: string // hex code
+  label: string
+}
+
+export interface GraphFilterOptions {
+  folderFilter?: string | null
+  showTags?: boolean
+  showFolders?: boolean
+  showUnresolved?: boolean
+  searchQuery?: string
+  colorGroups?: ColorGroup[]
+  localNoteId?: string | null
+  localDepth?: number // default 1 or 2
+}
+
 export interface GraphNode {
   id: string
   title: string
-  type: 'note' | 'folder' | 'tag'
+  type: 'note' | 'folder' | 'tag' | 'unresolved'
   folder?: string
   color: string
   connectionCount: number
@@ -89,13 +106,14 @@ export interface GraphNode {
   vx?: number
   vy?: number
   radius?: number
+  tags?: string[]
 }
 
 export interface GraphEdge {
   id: string
   source: string
   target: string
-  type: 'wikilink' | 'folder' | 'tag'
+  type: 'wikilink' | 'folder' | 'tag' | 'unresolved'
 }
 
 export interface GraphData {
@@ -103,16 +121,16 @@ export interface GraphData {
   edges: GraphEdge[]
 }
 
-const FOLDER_COLORS = [
+export const DEFAULT_COLOR_PALETTE = [
   '#f59e0b', // Amber / Gold
   '#10b981', // Emerald
   '#6366f1', // Indigo
-  '#3b82f6', // Blue
+  '#a855f7', // Purple
   '#ec4899', // Pink
-  '#8b5cf6', // Purple
+  '#3b82f6', // Blue
   '#06b6d4', // Cyan
   '#ef4444', // Red
-  '#14b8a6', // Teal
+  '#f97316', // Orange
 ]
 
 export function getFolderColor(folderPath: string = ''): string {
@@ -123,44 +141,139 @@ export function getFolderColor(folderPath: string = ''): string {
     hash = (hash << 5) - hash + root.charCodeAt(i)
     hash |= 0
   }
-  const idx = Math.abs(hash) % FOLDER_COLORS.length
-  return FOLDER_COLORS[idx]
+  const idx = Math.abs(hash) % DEFAULT_COLOR_PALETTE.length
+  return DEFAULT_COLOR_PALETTE[idx]
+}
+
+function matchColorGroup(node: GraphNode, colorGroups: ColorGroup[]): string | null {
+  for (const group of colorGroups) {
+    const q = group.query.trim().toLowerCase()
+    if (!q) continue
+
+    if (q.startsWith('tag:') || q.startsWith('#')) {
+      const targetTag = q.replace(/^tag:/, '').replace(/^#/, '').toLowerCase()
+      if (node.type === 'tag' && node.title.toLowerCase().replace(/^#/, '') === targetTag) {
+        return group.color
+      }
+      if (node.tags && node.tags.some(t => t.toLowerCase() === targetTag)) {
+        return group.color
+      }
+    } else if (q.startsWith('path:') || q.startsWith('folder:')) {
+      const targetPath = q.replace(/^path:/, '').replace(/^folder:/, '').toLowerCase()
+      if ((node.folder || '').toLowerCase().includes(targetPath)) {
+        return group.color
+      }
+    } else {
+      if (node.title.toLowerCase().includes(q) || (node.folder || '').toLowerCase().includes(q)) {
+        return group.color
+      }
+    }
+  }
+  return null
 }
 
 /**
- * Generates nodes and edges for Obsidian-style Interactive Graph
+ * Generates full-featured nodes and edges for Obsidian-style Interactive Graph
  */
-export function buildGraphData(allNotes: Note[], folderFilter?: string | null): GraphData {
-  const notesToInclude = folderFilter
+export function buildGraphData(
+  allNotes: Note[],
+  options: GraphFilterOptions = {}
+): GraphData {
+  const {
+    folderFilter = null,
+    showTags = true,
+    showFolders = false,
+    showUnresolved = true,
+    colorGroups = [],
+    localNoteId = null,
+    localDepth = 1,
+  } = options
+
+  // 1. Initial filter by folder
+  let candidateNotes = folderFilter
     ? allNotes.filter(n => (n.folder || 'Общее').startsWith(folderFilter))
     : allNotes
 
   const titleToNodeId = new Map<string, string>()
+  const noteMap = new Map<string, Note>()
+  candidateNotes.forEach(n => {
+    titleToNodeId.set(n.title.toLowerCase().trim(), n.id)
+    noteMap.set(n.id, n)
+  })
+
+  // 2. Local note filtering if localNoteId is specified
+  if (localNoteId) {
+    const visited = new Set<string>([localNoteId])
+    let currentLevel = new Set<string>([localNoteId])
+
+    for (let d = 0; d < localDepth; d++) {
+      const nextLevel = new Set<string>()
+      currentLevel.forEach(nId => {
+        const note = noteMap.get(nId)
+        if (note) {
+          // Outgoing links
+          extractWikilinks(note.content || '').forEach(l => {
+            const tId = titleToNodeId.get(l.targetTitle.toLowerCase().trim())
+            if (tId && !visited.has(tId)) {
+              visited.add(tId)
+              nextLevel.add(tId)
+            }
+          })
+          // Backlinks
+          allNotes.forEach(other => {
+            if (other.id !== note.id && !visited.has(other.id)) {
+              const links = extractWikilinks(other.content || '')
+              if (links.some(l => l.targetTitle.toLowerCase().trim() === note.title.toLowerCase().trim())) {
+                visited.add(other.id)
+                nextLevel.add(other.id)
+              }
+            }
+          })
+        }
+      })
+      currentLevel = nextLevel
+    }
+
+    candidateNotes = candidateNotes.filter(n => visited.has(n.id))
+  }
+
   const nodes: GraphNode[] = []
   const edges: GraphEdge[] = []
   const edgeSet = new Set<string>()
+  const existingNodeIds = new Set<string>()
 
-  // 1. Create note nodes
-  notesToInclude.forEach(n => {
-    const nodeId = n.id
-    titleToNodeId.set(n.title.toLowerCase().trim(), nodeId)
+  // 3. Create Note Nodes
+  candidateNotes.forEach(n => {
+    const customColor = matchColorGroup({
+      id: n.id,
+      title: n.title,
+      type: 'note',
+      folder: n.folder || 'Общее',
+      color: '',
+      connectionCount: 0,
+      tags: n.tags,
+    }, colorGroups)
 
     nodes.push({
-      id: nodeId,
+      id: n.id,
       title: n.title || 'Без названия',
       type: 'note',
       folder: n.folder || 'Общее',
-      color: getFolderColor(n.folder || 'Общее'),
+      color: customColor || getFolderColor(n.folder || 'Общее'),
       connectionCount: 0,
+      tags: n.tags || [],
     })
+    existingNodeIds.add(n.id)
   })
 
-  // 2. Build Wikilink edges
-  notesToInclude.forEach(sourceNote => {
+  // 4. Build Wikilink Edges & Ghost / Unresolved Nodes
+  candidateNotes.forEach(sourceNote => {
     const links = extractWikilinks(sourceNote.content || '')
     links.forEach(link => {
-      const targetId = titleToNodeId.get(link.targetTitle.toLowerCase().trim())
-      if (targetId && targetId !== sourceNote.id) {
+      const normTarget = link.targetTitle.toLowerCase().trim()
+      const targetId = titleToNodeId.get(normTarget)
+
+      if (targetId && existingNodeIds.has(targetId) && targetId !== sourceNote.id) {
         const edgeKey = [sourceNote.id, targetId].sort().join(':::')
         if (!edgeSet.has(edgeKey)) {
           edgeSet.add(edgeKey)
@@ -171,11 +284,109 @@ export function buildGraphData(allNotes: Note[], folderFilter?: string | null): 
             type: 'wikilink',
           })
         }
+      } else if (showUnresolved && !targetId && normTarget) {
+        // Ghost/Unresolved node
+        const ghostId = `ghost_${normTarget}`
+        if (!existingNodeIds.has(ghostId)) {
+          existingNodeIds.add(ghostId)
+          nodes.push({
+            id: ghostId,
+            title: link.targetTitle,
+            type: 'unresolved',
+            folder: sourceNote.folder || 'Общее',
+            color: '#64748b',
+            connectionCount: 0,
+          })
+        }
+        const edgeKey = [sourceNote.id, ghostId].sort().join(':::')
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey)
+          edges.push({
+            id: `edge_${sourceNote.id}_${ghostId}`,
+            source: sourceNote.id,
+            target: ghostId,
+            type: 'unresolved',
+          })
+        }
       }
     })
   })
 
-  // 3. Compute connection counts for node sizing
+  // 5. Add Tags as Graph Nodes
+  if (showTags) {
+    const tagToNodeId = new Map<string, string>()
+    candidateNotes.forEach(note => {
+      (note.tags || []).forEach(tag => {
+        const cleanTag = tag.trim().replace(/^#/, '')
+        if (!cleanTag) return
+        const tagNodeId = `tag_${cleanTag.toLowerCase()}`
+
+        if (!tagToNodeId.has(cleanTag.toLowerCase())) {
+          tagToNodeId.set(cleanTag.toLowerCase(), tagNodeId)
+          const customColor = matchColorGroup({
+            id: tagNodeId,
+            title: `#${cleanTag}`,
+            type: 'tag',
+            color: '',
+            connectionCount: 0,
+          }, colorGroups)
+
+          nodes.push({
+            id: tagNodeId,
+            title: `#${cleanTag}`,
+            type: 'tag',
+            color: customColor || '#a855f7', // Purple for tags
+            connectionCount: 0,
+          })
+        }
+
+        const edgeKey = [note.id, tagNodeId].sort().join(':::')
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey)
+          edges.push({
+            id: `edge_${note.id}_${tagNodeId}`,
+            source: note.id,
+            target: tagNodeId,
+            type: 'tag',
+          })
+        }
+      })
+    })
+  }
+
+  // 6. Add Folders as Cluster Nodes
+  if (showFolders) {
+    const folderToNodeId = new Map<string, string>()
+    candidateNotes.forEach(note => {
+      const folderName = note.folder || 'Общее'
+      const folderNodeId = `folder_${folderName.toLowerCase()}`
+
+      if (!folderToNodeId.has(folderName.toLowerCase())) {
+        folderToNodeId.set(folderName.toLowerCase(), folderNodeId)
+        nodes.push({
+          id: folderNodeId,
+          title: `📁 ${folderName}`,
+          type: 'folder',
+          folder: folderName,
+          color: getFolderColor(folderName),
+          connectionCount: 0,
+        })
+      }
+
+      const edgeKey = [note.id, folderNodeId].sort().join(':::')
+      if (!edgeSet.has(edgeKey)) {
+        edgeSet.add(edgeKey)
+        edges.push({
+          id: `edge_${note.id}_${folderNodeId}`,
+          source: note.id,
+          target: folderNodeId,
+          type: 'folder',
+        })
+      }
+    })
+  }
+
+  // 7. Compute connection counts and node radii
   const counts = new Map<string, number>()
   edges.forEach(e => {
     counts.set(e.source, (counts.get(e.source) || 0) + 1)
@@ -184,7 +395,15 @@ export function buildGraphData(allNotes: Note[], folderFilter?: string | null): 
 
   nodes.forEach(n => {
     n.connectionCount = counts.get(n.id) || 0
-    n.radius = Math.max(5, Math.min(18, 5 + n.connectionCount * 2.5))
+    if (n.type === 'tag') {
+      n.radius = Math.max(4, Math.min(14, 4 + n.connectionCount * 1.8))
+    } else if (n.type === 'folder') {
+      n.radius = Math.max(7, Math.min(22, 7 + n.connectionCount * 2.2))
+    } else if (n.type === 'unresolved') {
+      n.radius = 4.5
+    } else {
+      n.radius = Math.max(5, Math.min(18, 5 + n.connectionCount * 2.5))
+    }
   })
 
   return { nodes, edges }

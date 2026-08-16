@@ -22,9 +22,9 @@ import { FriendsView }  from '@/components/views/friends-view'
 import { SettingsView } from '@/components/views/settings-view'
 
 import { ProjectsView } from '@/components/views/projects-view'
-import { EisenhowerView } from '@/components/views/eisenhower-view'
 import { AdminView } from '@/components/views/admin-view'
 import { ClockView } from '@/components/views/clock-view'
+import { GraphView } from '@/components/views/graph-view'
 import { AuthGateModal } from '@/components/auth-gate-modal'
 import { PullToRefresh } from '@/components/ui/pull-to-refresh'
 
@@ -90,16 +90,16 @@ export function AppShell() {
     clock:      <ClockView />,
     goals:      <GoalsView />,
     notes:      <NotesView />,
+    graph:      <GraphView />,
     calendar:   <CalendarView />,
     stats:      <StatsView />,
     friends:    <FriendsView />,
     settings:   <SettingsView />,
     projects:   <ProjectsView />,
-    eisenhower: <EisenhowerView />,
     admin:      <AdminView />,
   }
 
-  const isFullHeight = state.currentView === 'notes'
+  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph'
 
   return (
     <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]">
