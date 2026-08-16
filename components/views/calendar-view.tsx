@@ -51,67 +51,67 @@ function DayCell({
   onClick: () => void
 }) {
   const dayNum = date.getDate()
-  const topTasks = tasks.slice(0, 3)
-  const more = tasks.length - 3
+  const topTasks = tasks.slice(0, 2)
+  const more = tasks.length - 2
 
   return (
     <motion.div
-      whileHover={{ scale: 1.012 }}
+      whileHover={{ scale: 1.015 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
       className={cn(
-        'relative min-h-[68px] sm:min-h-[96px] md:min-h-[115px] lg:min-h-[130px] 2xl:min-h-[145px] p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-all duration-150 cursor-pointer flex flex-col justify-between overflow-hidden group',
+        'relative min-h-[48px] sm:min-h-[60px] md:min-h-[70px] lg:min-h-[78px] xl:min-h-[86px] p-1.5 sm:p-2 rounded-xl border transition-all duration-150 cursor-pointer flex flex-col justify-between overflow-hidden group shadow-2xs',
         isToday
           ? 'border-primary/60 bg-primary/10 shadow-sm shadow-primary/15 ring-1 ring-primary/40'
           : 'border-border/60 bg-card/60 hover:border-primary/35 hover:bg-card/90',
-        !isCurrentMonth && 'opacity-30 hover:opacity-75'
+        !isCurrentMonth && 'opacity-25 hover:opacity-70'
       )}
     >
       {/* Day number & count header */}
-      <div className="flex items-center justify-between mb-0.5 sm:mb-1">
+      <div className="flex items-center justify-between mb-0.5">
         <span
           className={cn(
-            'text-[12px] sm:text-[13px] font-bold leading-none select-none transition-colors',
+            'text-[11px] sm:text-[12px] font-bold leading-none select-none transition-colors',
             isToday
-              ? 'w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] sm:text-[11px] shadow-xs'
+              ? 'w-5 h-5 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-extrabold shadow-xs'
               : 'text-foreground/85 group-hover:text-primary'
           )}
         >
           {dayNum}
         </span>
         {tasks.length > 0 && (
-          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground border border-border/40 select-none">
+          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-muted/80 text-muted-foreground border border-border/40 select-none">
             {tasks.length}
           </span>
         )}
       </div>
 
       {/* Task list inside day */}
-      <div className="flex flex-col gap-1 flex-1 justify-start overflow-hidden w-full">
+      <div className="flex flex-col gap-0.5 flex-1 justify-start overflow-hidden w-full mt-0.5">
         {/* Desktop view (sm+): full task pills */}
-        <div className="hidden sm:flex flex-col gap-[3px] overflow-hidden w-full">
+        <div className="hidden sm:flex flex-col gap-[2px] overflow-hidden w-full">
           {topTasks.map(t => (
-            <div key={t.id} className="flex items-center gap-1.5 w-full">
+            <div key={t.id} className="flex items-center gap-1 w-full">
               <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', PRIORITY_DOT[t.priority])} />
-              <div className={cn('h-[18px] rounded-md flex-1 px-1.5 flex items-center overflow-hidden', PRIORITY_BAR[t.priority])}>
-                <p className="text-[10px] font-medium truncate leading-none">
-                  {t.dueTime ? `${t.dueTime} · ` : ''}{t.title}
+              <div className={cn('h-[17px] rounded-md flex-1 px-1.5 flex items-center overflow-hidden', PRIORITY_BAR[t.priority])}>
+                <p className="text-[9.5px] font-medium truncate leading-none">
+                  {t.dueTime ? `${t.dueTime} ` : ''}{t.title}
                 </p>
               </div>
             </div>
           ))}
           {more > 0 && (
-            <p className="text-[10px] text-muted-foreground/70 font-semibold pl-2 pt-0.5">+{more} ещё</p>
+            <p className="text-[9px] text-muted-foreground/70 font-semibold pl-1.5">+{more} ещё</p>
           )}
         </div>
 
         {/* Mobile view (< sm): priority dot indicators */}
-        <div className="flex sm:hidden flex-wrap items-center gap-1 pt-1">
-          {tasks.slice(0, 4).map(t => (
+        <div className="flex sm:hidden flex-wrap items-center gap-1 pt-0.5">
+          {tasks.slice(0, 3).map(t => (
             <div key={t.id} className={cn('w-1.5 h-1.5 rounded-full shrink-0', PRIORITY_DOT[t.priority] || 'bg-primary')} />
           ))}
-          {tasks.length > 4 && (
-            <span className="text-[8px] text-muted-foreground font-bold leading-none">+{tasks.length - 4}</span>
+          {tasks.length > 3 && (
+            <span className="text-[8px] text-muted-foreground font-bold leading-none">+{tasks.length - 3}</span>
           )}
         </div>
       </div>
@@ -326,7 +326,7 @@ export function CalendarView() {
   })
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-5 h-full w-full max-w-none">
+    <div className="flex flex-col gap-3 h-full w-full max-w-none">
       <AnimatePresence mode="wait">
         {selectedDate ? (
           <DayDetail key="detail" dateStr={selectedDate} onBack={() => setSelectedDate(null)} />
@@ -337,71 +337,71 @@ export function CalendarView() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -15 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-col gap-4 sm:gap-5 w-full"
+            className="flex flex-col gap-2.5 sm:gap-3.5 w-full"
           >
             {/* Header */}
             <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
-                  {RU_MONTHS[month]} <span className="text-muted-foreground font-normal text-base sm:text-xl lg:text-2xl">{year}</span>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
+                  {RU_MONTHS[month]} <span className="text-muted-foreground font-normal text-base sm:text-xl">{year}</span>
                 </h1>
                 {toYMD(currentMonth).slice(0, 7) !== today.slice(0, 7) && (
                   <button
                     onClick={goToToday}
-                    className="text-[11px] sm:text-xs font-semibold px-3 py-1 rounded-xl border border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all"
+                    className="text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all"
                   >
                     Сегодня
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={prevMonth}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                 >
-                  <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={nextMonth}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                 >
-                  <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Month mini-strip (year overview) */}
-            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 no-scrollbar select-none w-full">
+            <div className="flex gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 no-scrollbar select-none w-full">
               {allMonths.map(m => (
                 <button
                   key={m.month}
                   onClick={() => setCurrentMonth(new Date(year, m.month, 1))}
                   className={cn(
-                    'flex flex-col items-center gap-0.5 px-3 sm:px-4 py-1.5 rounded-xl text-[11px] sm:text-xs font-medium shrink-0 transition-all',
+                    'flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-medium shrink-0 transition-all',
                     month === m.month
-                      ? 'bg-primary text-primary-foreground shadow-sm font-semibold ring-1 ring-primary/50'
+                      ? 'bg-primary text-primary-foreground shadow-sm font-bold ring-1 ring-primary/50'
                       : 'bg-card/70 border border-border/50 text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   {m.label}
                   {m.hasTasks && month !== m.month && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <div className="w-1 h-1 rounded-full bg-primary" />
                   )}
                 </button>
               ))}
             </div>
 
             {/* Day-of-week header */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-2.5 w-full">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 md:gap-2 w-full">
               {RU_DAYS_SHORT.map(d => (
-                <div key={d} className="text-center text-[11px] sm:text-[12px] uppercase tracking-widest font-bold text-muted-foreground/75 py-1 select-none">
+                <div key={d} className="text-center text-[10px] sm:text-[11px] uppercase tracking-widest font-bold text-muted-foreground/75 py-0.5 select-none">
                   {d}
                 </div>
               ))}
             </div>
 
             {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-2.5 w-full">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 md:gap-2 w-full">
               {cells.map((date, i) => {
                 const ymd = toYMD(date)
                 const isCurrentMonth = date.getMonth() === month
@@ -421,8 +421,8 @@ export function CalendarView() {
             </div>
 
             {/* Legend */}
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6 pt-2">
-              <span className="text-[11px] sm:text-xs font-semibold text-muted-foreground">Приоритеты:</span>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5 pt-1">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Приоритеты:</span>
               {[
                 { label: 'Срочно', color: 'bg-[var(--priority-urgent)]' },
                 { label: 'Высокий', color: 'bg-[var(--priority-high)]' },
@@ -430,8 +430,8 @@ export function CalendarView() {
                 { label: 'Низкий', color: 'bg-[var(--priority-low)]' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5">
-                  <div className={cn('w-2.5 h-2.5 rounded-full', l.color)} />
-                  <span className="text-[11px] sm:text-xs text-muted-foreground/80 font-medium">{l.label}</span>
+                  <div className={cn('w-2 h-2 rounded-full', l.color)} />
+                  <span className="text-[10px] sm:text-[11px] text-muted-foreground/80 font-medium">{l.label}</span>
                 </div>
               ))}
             </div>
