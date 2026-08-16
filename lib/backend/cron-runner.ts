@@ -1,16 +1,33 @@
 /**
- * Background Cron Runner — Runs every 10 seconds in Node.js process
+ * Background Cron Runner — Runs scheduled tasks with strict multi-layer deduplication
  *
  * Features:
- * 1. REMINDER: send to ownerChatId only (never broadcast)
- * 2. MORNING GREETING: every day at 08:00 MSK to all registered users
- *    — personalized by their recent tasks + notes via Groq AI
+ * 1. REMINDER: send to ownerChatId only with strict cooldown
+ * 2. MORNING GREETING: once per day per user (08:00-13:00 MSK)
+ * 3. EVENING REVIEW: once per day per user (20:00-23:59 MSK)
+ * 4. SUNDAY REPORT: once per week on Sunday (20:00-23:59 MSK)
+ * 5. CHANNEL DIGESTS & POLLS: once per scheduled day
  */
 
 import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig } from './db'
 import { generateMorningGreeting, generateEveningReview } from './groq'
 import { prisma } from './prisma'
 import { sendCommentReportToAdminsTelegram } from './comment-analyzer'
+import {
+  isCronAlreadyDoneToday,
+  markCronDoneToday,
+  isUserCronDoneToday,
+  markUserCronDoneToday,
+  isReminderInCooldown,
+  markReminderSent,
+} from './cron-lock'
+import {
+  postDailyPollToChannel,
+  closeDailyPollAndNotifyAdmins,
+  postDailyMorningPostToChannel,
+  postDailyEveningPostToChannel,
+  generateAndSendFridayAiProposal
+} from './channel-poster'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8649326236:AAH0dqSDP4akzWrM-5ncS68wZhlrwZISbxw'
 
@@ -60,9 +77,6 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
   }
 }
 
-// In-memory guard to prevent duplicate reminders within 2 minutes for the same task
-const lastSentReminderTimestampMap = new Map<string, number>()
-
 export async function runReminderCheck() {
   try {
     const now = new Date()
@@ -79,74 +93,63 @@ export async function runReminderCheck() {
     const currentTotalMin = currentHour * 60 + currentMin
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    const tasks = await getAllTasks()
+    const allTasks = await getAllTasks()
+    if (!allTasks.length) return
 
-    for (const task of tasks) {
-      if (!task.dueTime) continue
+    for (const task of allTasks) {
       if (task.status === 'done' || task.status === 'draft') continue
       if (task.reminderSent) continue
-      if (task.dueDate && task.dueDate !== todayStr) continue
+      if (!task.dueDate || task.dueDate !== todayStr) continue
+      if (!task.dueTime) continue
 
-      // Anti-duplicate timestamp guard (minimum 100 seconds between reminder triggers)
-      const lastSentMs = lastSentReminderTimestampMap.get(task.id) || 0
-      if (Date.now() - lastSentMs < 100_000) continue
-
-      const [dueH, dueM] = task.dueTime.split(':').map((n: string) => parseInt(n, 10))
+      const [dueHStr, dueMStr] = task.dueTime.split(':')
+      const dueH = parseInt(dueHStr, 10)
+      const dueM = parseInt(dueMStr, 10)
       if (isNaN(dueH) || isNaN(dueM)) continue
-      const targetTotalMin = dueH * 60 + dueM
 
-      const ownerChatId = task.ownerChatId ? Number(task.ownerChatId) : null
+      const taskDueTotalMin = dueH * 60 + dueM
+      const actualDiffMin = taskDueTotalMin - currentTotalMin
 
-      // Get owner's custom reminder interval settings from DB
-      let intervalMinutes = 5
-      let repeatCount = 3
-      if (ownerChatId) {
-        try {
-          const userChat = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(ownerChatId) } })
-          if (userChat) {
-            intervalMinutes = userChat.reminderIntervalMinutes || 5
-            repeatCount = userChat.reminderRepeatCount || 3
-          }
-        } catch {}
+      const ownerChatId = (task as any).ownerChatId ? Number((task as any).ownerChatId) : null
+      let intervalMin = (task as any).reminderIntervalMinutes ?? 5
+      let repeatCount = (task as any).reminderRepeatCount ?? 3
+
+      if (intervalMin === 0) intervalMin = 5
+      if (repeatCount === 0) repeatCount = 3
+
+      const sentCount = (task as any).remindersSentCount || 0
+      if (sentCount >= repeatCount) continue
+
+      let shouldFire = false
+      let stageText = 'через 5 минут'
+
+      if (sentCount === 0) {
+        if (actualDiffMin <= intervalMin && actualDiffMin >= -5) {
+          shouldFire = true
+          stageText = actualDiffMin <= 0 ? 'прямо сейчас' : `через ${actualDiffMin} мин`
+        }
+      } else {
+        const nextExpectedDiff = -(sentCount * intervalMin)
+        if (actualDiffMin <= nextExpectedDiff && actualDiffMin >= nextExpectedDiff - 5) {
+          shouldFire = true
+          stageText = `повтор #${sentCount + 1}`
+        }
       }
 
-      const sentCount = (task as { remindersSentCount?: number }).remindersSentCount || 0
-      const remainingStages = repeatCount - 1 - sentCount
-      const expectedDiffMin = remainingStages * intervalMinutes
-      const actualDiffMin = targetTotalMin - currentTotalMin
-
-      // Check if current time matches scheduled stage or catch up missed overdue reminders (within 15m)
-      const isWindowMatch = actualDiffMin <= expectedDiffMin && actualDiffMin >= expectedDiffMin - 1
-      const isCatchUp = actualDiffMin <= 0 && actualDiffMin >= -15 && sentCount === 0 && !task.reminderSent
-
-      if (isWindowMatch || isCatchUp) {
-        lastSentReminderTimestampMap.set(task.id, Date.now())
-        const isRecipientMsg =
-          task.description?.includes('📩 Отправить') ||
-          task.title?.toLowerCase().includes('отправь') ||
-          task.title?.toLowerCase().includes('напиши')
-
-        // For delegated tasks (isShared=true), skip the AI-generated description
-        // because it was written by the sender and may say "Ване необходимо..." in third person
-        const isSharedTask = (task as any).isShared === true
-        const authorChatId = (task as any).authorChatId
-        const hasDifferentAuthor = authorChatId && ownerChatId && String(authorChatId) !== String(ownerChatId)
-
-        let stageText = 'СЕЙЧАС'
-        if (actualDiffMin > 0) {
-          stageText = `за ${actualDiffMin} мин`
+      if (shouldFire) {
+        // Strict anti-duplicate check for this task and stage
+        if (isReminderInCooldown(task.id, sentCount + 1)) {
+          continue
         }
+        markReminderSent(task.id, sentCount + 1)
 
-        const isGroupTask = task.source && task.source.startsWith('group:')
-        const groupHeader = isGroupTask ? '👥 *ГРУППОВОЕ НАПОМИНАНИЕ*\n' : ''
+        const isGroupTask = (task as any).source?.startsWith('group:')
+        const groupHeader = isGroupTask ? `👥 *Групповая задача*\n\n` : ''
+        const descLine = task.description ? `\n📝 ${task.description}\n` : '\n'
+        const isQuickNote = task.tags?.includes('заметка') || task.tags?.includes('быстрое')
 
-        // Build description line: skip for delegated tasks to avoid third-person text
-        const descLine = (!isSharedTask || !hasDifferentAuthor) && task.description
-          ? `\n${task.description}\n\n`
-          : '\n'
-
-        const text = isRecipientMsg
-          ? `📩 *СООБЩЕНИЕ ДЛЯ ПОЛУЧАТЕЛЯ*\n\n` +
+        const text = isQuickNote
+          ? `${groupHeader}💬 *НАПОМИНАНИЕ О ЗАМЕТКЕ!*\n\n` +
             `📌 *Сообщение:* ${task.title}\n` +
             (task.description ? `_«${task.description}»_\n\n` : '\n') +
             `⏰ *Время:* ${task.dueTime}\n` +
@@ -157,22 +160,6 @@ export async function runReminderCheck() {
             `📍 *Срок:* ${task.dueTime}\n` +
             `✨ _Отправлено из Zerf AI_`
 
-        // Check for linked notes
-        const linkedNoteIds = (task as any).linkedNoteIds as string[] || []
-        let linkedNotesText = ''
-        if (linkedNoteIds.length > 0) {
-          try {
-            const notes = await prisma.note.findMany({
-              where: { id: { in: linkedNoteIds } },
-              select: { id: true, title: true }
-            })
-            if (notes.length > 0) {
-              linkedNotesText = `\n\n📎 *Связанные заметки:*\n` + notes.map((n: any) => `• ${n.title}`).join('\n')
-            }
-          } catch {}
-        }
-
-        const finalText = text + linkedNotesText
         const replyMarkup = {
           inline_keyboard: [
             [
@@ -183,43 +170,30 @@ export async function runReminderCheck() {
           ]
         }
 
-        // SECURITY FIX: Send reminder ONLY to the task owner (ownerChatId).
-        // assignees[] = chatId of whoever delegated the task — they must NOT receive
-        // reminders about tasks they assigned to someone else.
-        // Group chat gets a separate copy only if task came from a group.
         const recipients = new Set<string | number>()
         if (ownerChatId) recipients.add(ownerChatId)
 
         if (isGroupTask) {
-          const gId = task.source!.replace('group:', '').trim()
+          const gId = (task as any).source!.replace('group:', '').trim()
           if (gId) recipients.add(gId)
         }
 
-        // NEVER add assignees to reminder recipients — assignees are the delegators, not the doers.
-        // Only ownerChatId is the person responsible for this task.
-
-        // Broadcast reminder to all targets
         for (const recipient of Array.from(recipients)) {
-          await sendTelegramMessage(recipient, finalText, replyMarkup).catch(() => {})
+          await sendTelegramMessage(recipient, text, replyMarkup).catch(() => {})
         }
 
         const nextSentCount = sentCount + 1
         const isFinal = nextSentCount >= repeatCount || actualDiffMin <= 0
 
-        if (isFinal) {
+        try {
           await prisma.task.update({
             where: { id: task.id },
             data: {
               remindersSentCount: nextSentCount,
-              reminderSent: true,
+              reminderSent: isFinal,
             }
           })
-        } else {
-          await prisma.task.update({
-            where: { id: task.id },
-            data: { remindersSentCount: nextSentCount, reminderSent: false }
-          })
-        }
+        } catch {}
       }
     }
   } catch (err) {
@@ -227,14 +201,7 @@ export async function runReminderCheck() {
   }
 }
 
-// In-memory locks to prevent duplicate executions within the same process / day
-let inMemoryMorningGreetingDate: string | null = null
-let inMemoryEveningReviewDate: string | null = null
-let inMemoryChannelMorningDate: string | null = null
-let inMemoryChannelEveningDate: string | null = null
-let inMemoryChannelPollDate: string | null = null
-
-// ── Morning greeting — 08:00-12:00 MSK to all users ────────────────────────────
+// ── Morning greeting — 08:00-13:00 MSK to all users ────────────────────────────
 
 export async function runMorningGreeting() {
   try {
@@ -250,20 +217,18 @@ export async function runMorningGreeting() {
     const hour = parseInt(getPart('hour'), 10)
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Fire between 08:00 and 13:00 MSK, exactly once per day (persisted in DB)
     if (hour < 8 || hour >= 13) return
-    if (inMemoryMorningGreetingDate === todayStr) return
 
-    const lastSent = await getConfig('last_morning_greeting_date')
-    if (lastSent === todayStr) {
-      inMemoryMorningGreetingDate = todayStr
-      return
-    }
+    // Global lock check
+    const isDone = await isCronAlreadyDoneToday('morning_greeting_global', todayStr)
+    if (isDone) return
 
-    inMemoryMorningGreetingDate = todayStr
-    await setConfig('last_morning_greeting_date', todayStr)
+    await markCronDoneToday('morning_greeting_global', todayStr)
 
-    const chats = await prisma.telegramChat.findMany()
+    let chats: any[] = []
+    try {
+      chats = await prisma.telegramChat.findMany()
+    } catch {}
     if (!chats.length) return
 
     const seenChatIds = new Set<string>()
@@ -295,6 +260,11 @@ export async function runMorningGreeting() {
     for (const chat of uniqueChats) {
       try {
         const chatId = Number(chat.chatId)
+        if (await isUserCronDoneToday('morning_greeting', chatId, todayStr)) {
+          continue
+        }
+        await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 
         const userTasks = allTasks.filter(t => {
@@ -334,7 +304,7 @@ export async function runMorningGreeting() {
   }
 }
 
-// ── Evening Review — 21:00-23:59 MSK to all users ────────────────────────────
+// ── Evening Review — 20:00-23:59 MSK to all users ────────────────────────────
 
 export async function runEveningReview() {
   try {
@@ -350,20 +320,18 @@ export async function runEveningReview() {
     const hour = parseInt(getPart('hour'), 10)
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Fire starting at 20:00 (8 PM) MSK to 23:59 MSK, exactly once per day (persisted in DB)
     if (hour < 20) return
-    if (inMemoryEveningReviewDate === todayStr) return
 
-    const lastSent = await getConfig('last_evening_review_date')
-    if (lastSent === todayStr) {
-      inMemoryEveningReviewDate = todayStr
-      return
-    }
+    // Global lock check: strictly once per day across all lambdas/processes
+    const isDone = await isCronAlreadyDoneToday('evening_review_global', todayStr)
+    if (isDone) return
 
-    inMemoryEveningReviewDate = todayStr
-    await setConfig('last_evening_review_date', todayStr)
+    await markCronDoneToday('evening_review_global', todayStr)
 
-    const chats = await prisma.telegramChat.findMany()
+    let chats: any[] = []
+    try {
+      chats = await prisma.telegramChat.findMany()
+    } catch {}
     if (!chats.length) return
 
     const seenChatIds = new Set<string>()
@@ -380,6 +348,13 @@ export async function runEveningReview() {
     for (const chat of uniqueChats) {
       try {
         const chatId = Number(chat.chatId)
+
+        // Per-user lock check: strictly once per user per day
+        if (await isUserCronDoneToday('evening_review', chatId, todayStr)) {
+          continue
+        }
+        await markUserCronDoneToday('evening_review', chatId, todayStr)
+
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 
         const userTasks = allTasks.filter(t => {
@@ -398,7 +373,6 @@ export async function runEveningReview() {
           .filter(t => t.status !== 'done' && t.status !== 'draft' && (t.dueDate === todayStr || !t.dueDate))
           .map(t => t.title)
 
-        // Only send if the user had activity today or has tasks
         if (completedToday.length === 0 && pendingToday.length === 0) continue
 
         const reviewText = await generateEveningReview(
@@ -430,7 +404,6 @@ export async function runEveningReview() {
 }
 
 // ── Sunday Weekly Infographic Report — 20:00-23:59 MSK to all users ───────────
-let inMemoryWeeklyReportDate: string | null = null
 
 export async function runWeeklySundayReport() {
   try {
@@ -448,20 +421,18 @@ export async function runWeeklySundayReport() {
     const day = getPart('weekday').toLowerCase() // 'sun'
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // Only fire on Sunday starting at 20:00 MSK
     if (day !== 'sun' || hour < 20) return
-    if (inMemoryWeeklyReportDate === todayStr) return
 
-    const lastSent = await getConfig('last_weekly_report_date')
-    if (lastSent === todayStr) {
-      inMemoryWeeklyReportDate = todayStr
-      return
-    }
+    // Global lock check
+    const isDone = await isCronAlreadyDoneToday('weekly_sunday_report', todayStr)
+    if (isDone) return
 
-    inMemoryWeeklyReportDate = todayStr
-    await setConfig('last_weekly_report_date', todayStr)
+    await markCronDoneToday('weekly_sunday_report', todayStr)
 
-    const chats = await prisma.telegramChat.findMany()
+    let chats: any[] = []
+    try {
+      chats = await prisma.telegramChat.findMany()
+    } catch {}
     if (!chats.length) return
 
     const seenChatIds = new Set<string>()
@@ -474,12 +445,19 @@ export async function runWeeklySundayReport() {
     })
 
     const allTasks = await getAllTasks()
-    const allGoals = await prisma.goal.findMany()
+    let allGoals: any[] = []
+    try {
+      allGoals = await prisma.goal.findMany()
+    } catch {}
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
     for (const chat of uniqueChats) {
       try {
         const chatId = Number(chat.chatId)
+        if (await isUserCronDoneToday('weekly_sunday_report', chatId, todayStr)) {
+          continue
+        }
+        await markUserCronDoneToday('weekly_sunday_report', chatId, todayStr)
 
         const userTasks = allTasks.filter(t => {
           const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
@@ -505,7 +483,6 @@ export async function runWeeklySundayReport() {
         const completionPct = weekTotal.length > 0 ? Math.round((weekCompleted.length / weekTotal.length) * 100) : 0
         const hoursSaved = (weekCompleted.length * 0.5).toFixed(1)
 
-        // Count completions by day of week
         const dayCounts: Record<string, number> = { 'Пн': 0, 'Вт': 0, 'Ср': 0, 'Чт': 0, 'Пт': 0, 'Сб': 0, 'Вс': 0 }
         const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
         weekCompleted.forEach(t => {
@@ -550,7 +527,7 @@ export async function runWeeklySundayReport() {
 
 interface FocusSession {
   chatId: number
-  expiresAt: number // timestamp ms
+  expiresAt: number
   minutes: number
   taskTitle?: string
 }
@@ -597,14 +574,6 @@ export async function runFocusCheck() {
   }
 }
 
-import {
-  postDailyPollToChannel,
-  closeDailyPollAndNotifyAdmins,
-  postDailyMorningPostToChannel,
-  postDailyEveningPostToChannel,
-  generateAndSendFridayAiProposal
-} from './channel-poster'
-
 export async function runChannelAndAiCron() {
   try {
     const now = new Date()
@@ -621,39 +590,29 @@ export async function runChannelAndAiCron() {
     const day = getPart('weekday').toLowerCase() // 'fri', 'mon', etc.
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    // 1. Friday 09:00-20:59 MSK: Weekly Poll on Improvements and New Features
+    // 1. Friday 09:00-20:59 MSK: Weekly Poll on Improvements
     if (day === 'fri' && hour >= 9 && hour < 21) {
-      if (inMemoryChannelPollDate !== todayStr) {
-        const lastPoll = await getConfig('last_channel_poll_date')
-        if (lastPoll !== todayStr) {
-          inMemoryChannelPollDate = todayStr
-          await setConfig('last_channel_poll_date', todayStr)
-          await postDailyPollToChannel()
-        } else {
-          inMemoryChannelPollDate = todayStr
-        }
+      const isDone = await isCronAlreadyDoneToday('channel_friday_poll', todayStr)
+      if (!isDone) {
+        await markCronDoneToday('channel_friday_poll', todayStr)
+        await postDailyPollToChannel()
       }
     }
 
     // 2. Daily (Mon-Thu, Sat-Sun) 08:00-14:00 MSK: Morning News Digest
     if (day !== 'fri' && hour >= 8 && hour < 14) {
-      if (inMemoryChannelMorningDate !== todayStr) {
-        const lastPost = await getConfig('last_channel_morning_post_date')
-        if (lastPost !== todayStr) {
-          inMemoryChannelMorningDate = todayStr
-          await setConfig('last_channel_morning_post_date', todayStr)
-          await postDailyMorningPostToChannel()
-        } else {
-          inMemoryChannelMorningDate = todayStr
-        }
+      const isDone = await isCronAlreadyDoneToday('channel_morning_post', todayStr)
+      if (!isDone) {
+        await markCronDoneToday('channel_morning_post', todayStr)
+        await postDailyMorningPostToChannel()
       }
     }
 
-    // 3. Friday 21:00-23:59 MSK: Close Weekly Poll & Send Results and Comment Sentiment STRICTLY to Owner & Admins
+    // 3. Friday 21:00-23:59 MSK: Close Weekly Poll
     if (day === 'fri' && hour >= 21) {
-      const lastClose = await getConfig('last_channel_close_poll_date')
-      if (lastClose !== todayStr) {
-        await setConfig('last_channel_close_poll_date', todayStr)
+      const isDone = await isCronAlreadyDoneToday('channel_close_poll', todayStr)
+      if (!isDone) {
+        await markCronDoneToday('channel_close_poll', todayStr)
         await closeDailyPollAndNotifyAdmins()
         await sendCommentReportToAdminsTelegram().catch(() => {})
       }
@@ -661,26 +620,19 @@ export async function runChannelAndAiCron() {
 
     // 4. Every Day 20:00 (8 PM) - 23:59 MSK: Evening News Digest & Daily Reflection
     if (hour >= 20) {
-      if (inMemoryChannelEveningDate !== todayStr) {
-        const lastEvening = await getConfig('last_channel_evening_post_date')
-        if (lastEvening !== todayStr) {
-          const ok = await postDailyEveningPostToChannel()
-          if (ok) {
-            inMemoryChannelEveningDate = todayStr
-            await setConfig('last_channel_evening_post_date', todayStr)
-          }
-        } else {
-          inMemoryChannelEveningDate = todayStr
-        }
+      const isDone = await isCronAlreadyDoneToday('channel_evening_post', todayStr)
+      if (!isDone) {
+        await markCronDoneToday('channel_evening_post', todayStr)
+        await postDailyEveningPostToChannel()
       }
     }
 
     // 5. Friday 00:00-07:59 MSK: AI Autonomous Feature Evolution Proposal to Admins
     if (day === 'fri' && hour >= 0 && hour < 8) {
-      const lastProp = await getConfig('last_friday_proposal_date')
-      if (lastProp !== todayStr) {
-        const ok = await generateAndSendFridayAiProposal()
-        if (ok) await setConfig('last_friday_proposal_date', todayStr)
+      const isDone = await isCronAlreadyDoneToday('friday_ai_proposal', todayStr)
+      if (!isDone) {
+        await markCronDoneToday('friday_ai_proposal', todayStr)
+        await generateAndSendFridayAiProposal()
       }
     }
   } catch (err) {
@@ -689,7 +641,7 @@ export async function runChannelAndAiCron() {
 }
 
 /**
- * Main Cron Entrypoint — Called by /api/cron/reminders and webhook updates
+ * Main Cron Entrypoint — Called by /api/cron/reminders
  */
 export async function runAllCronTasks() {
   await Promise.allSettled([
@@ -702,34 +654,29 @@ export async function runAllCronTasks() {
   ])
 }
 
-// ── Global daemon (Node.js runtime) ──────────────────────────────────────────
-
+// Global daemon for continuous Node.js processes (e.g. server/bot.ts)
 const globalObj = globalThis as unknown as { __reminderCronStarted?: boolean }
 
-if (!globalObj.__reminderCronStarted) {
+if (process.env.RUN_CRON_DAEMON === 'true' && !globalObj.__reminderCronStarted) {
   globalObj.__reminderCronStarted = true
 
-  // Reminders & Focus check: every 10 seconds
   setInterval(() => {
     runReminderCheck().catch(() => {})
     runFocusCheck().catch(() => {})
   }, 10_000)
 
-  // Morning greeting check: every 30 seconds
   setInterval(() => {
     runMorningGreeting().catch(() => {})
   }, 30_000)
 
-  // Evening review & Sunday weekly report check: every 30 seconds
   setInterval(() => {
     runEveningReview().catch(() => {})
     runWeeklySundayReport().catch(() => {})
   }, 30_000)
 
-  // Channel posts, polls & Friday AI proposal: every 30 seconds
   setInterval(() => {
     runChannelAndAiCron().catch(() => {})
   }, 30_000)
 
-  console.log('[Zerf Cron] Reminder + Morning Greeting + Evening Review + Sunday Report + Channel Daemon started.')
+  console.log('[Zerf Cron] Dedicated Daemon active.')
 }

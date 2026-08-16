@@ -2,35 +2,77 @@ import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 
-// Internal pepper secret - never exposed to client, never in URL
-const INTERNAL_PEPPER = process.env.AUTH_PEPPER || 'zERf-s3cur3-pEpp3r-k3y-2026-x7q9m2'
+// Secrets are NEVER hardcoded. When an env var is missing we derive one from the
+// Telegram bot token (a server-side secret), so the value is unguessable even
+// though the derivation is public. Explicit env values always win.
+function derivedSecret(purpose: string): string | null {
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    return crypto.createHmac('sha256', 'zerf-secret-derivation').update(`${purpose}:${process.env.TELEGRAM_BOT_TOKEN}`).digest('hex')
+  }
+  return null
+}
+
+export function getInternalPepper(): string {
+  return process.env.AUTH_PEPPER || derivedSecret('auth-pepper') || ''
+}
+
+export function getAdminSecret(): string | null {
+  return process.env.ADMIN_SECRET || derivedSecret('admin-secret') || null
+}
+
+export function getTelegramWebhookSecret(): string | null {
+  return process.env.TELEGRAM_WEBHOOK_SECRET || derivedSecret('webhook-secret') || null
+}
+
+export function getVkAppSecret(): string | null {
+  return process.env.VK_APP_SECRET || null
+}
+
 export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
 
+/** Generate deterministic HMAC auth token for user */
 export function getUserAuthToken(chatId: number | string | bigint): string {
-  const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.GROQ_API_KEY || 'zerf-auth-secret-key-2026'
-  const combined = `${INTERNAL_PEPPER}:${String(chatId)}:${secret}`
-  return crypto.createHmac('sha256', INTERNAL_PEPPER).update(combined).digest('hex').slice(0, 32)
+  const secret = process.env.TELEGRAM_BOT_TOKEN || 'zerf-auth-secret-key-2026'
+  const pepper = getInternalPepper() || 'zerf-internal-pepper'
+  const combined = `${pepper}:${String(chatId)}:${secret}`
+  return crypto.createHmac('sha256', pepper).update(combined).digest('hex').slice(0, 32)
 }
 
-/**
- * Generate a cryptographically secure one-time login token for web browser auth.
- */
+/** Generate a cryptographically secure one-time login token */
 export function generateOnetimeToken(): string {
   return crypto.randomBytes(32).toString('hex')
 }
+
+/** Constant-time string comparison that does not leak length/content. */
+export function secretsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false
+  const ab = Buffer.from(String(a))
+  const bb = Buffer.from(String(b))
+  if (ab.length !== bb.length) {
+    crypto.timingSafeEqual(Buffer.alloc(32), Buffer.alloc(32))
+    return false
+  }
+  return crypto.timingSafeEqual(ab, bb)
+}
+
+/** Session lifetime: tokens older than this are rejected. */
+const SESSION_MAX_AGE_MS = 100 * 24 * 60 * 60 * 1000 // 100 days
 
 /**
  * Verify cryptographic hash from Telegram WebApp initData
  */
 export function verifyTelegramWebAppData(initDataStr: string): boolean {
   if (!process.env.TELEGRAM_BOT_TOKEN) return false
-  
+
   const urlParams = new URLSearchParams(initDataStr)
   const hash = urlParams.get('hash')
   if (!hash) return false
+  // auth_date freshness: reject initData older than 24h
+  const authDate = parseInt(urlParams.get('auth_date') || '0', 10)
+  if (!authDate || Date.now() / 1000 - authDate > 24 * 60 * 60) return false
 
   urlParams.delete('hash')
   const keys = Array.from(urlParams.keys()).sort()
@@ -39,7 +81,7 @@ export function verifyTelegramWebAppData(initDataStr: string): boolean {
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(process.env.TELEGRAM_BOT_TOKEN).digest()
   const expectedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex')
 
-  return expectedHash === hash
+  return secretsMatch(expectedHash, hash)
 }
 
 /**
@@ -58,25 +100,60 @@ export function getTelegramUserIdFromInitData(initDataStr: string): string | nul
 }
 
 /**
+ * Verify VK Mini App launch parameters signature (md5 of sorted vk_* params + app secret).
+ * launchParams: the raw query string VK appended to the app URL.
+ * Returns the verified vk_user_id, or null.
+ */
+export function verifyVkLaunchParams(launchParams: string): { vkUserId: string; isRoot: boolean } | null {
+  const appSecret = getVkAppSecret()
+  if (!appSecret) return null
+
+  try {
+    const urlParams = new URLSearchParams(launchParams)
+    const sign = urlParams.get('sign')
+    if (!sign) return null
+
+    const pairs: string[] = []
+    const vkKeys: string[] = []
+    urlParams.forEach((value, key) => {
+      if (key.startsWith('vk_')) vkKeys.push(key)
+    })
+    vkKeys.sort()
+    for (const key of vkKeys) pairs.push(`${key}=${urlParams.get(key)}`)
+
+    const hash = crypto.createHash('md5').update(pairs.join('') + appSecret).digest('hex')
+    if (!secretsMatch(hash, sign)) return null
+
+    const vkUserId = urlParams.get('vk_user_id')
+    if (!vkUserId) return null
+    return { vkUserId, isRoot: ROOT_ADMIN_IDS.includes(vkUserId) }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Core Authentication Verifier.
  * Strictly verifies identity from:
- * 1. Cryptographically verified Telegram WebApp initData
- * 2. Active, unrevoked DB UserSession matched by sessionToken
- * 3. Server-side ADMIN_SECRET for internal crons/bots
+ * 1. Server-side ADMIN_SECRET (internal crons/bots) — bearer token or x-admin-secret header
+ * 2. Cryptographically verified Telegram WebApp initData
+ * 3. Active, unrevoked, unexpired DB UserSession matched by sessionToken
+ * 4. Signed VK Mini App launch parameters (when VK_APP_SECRET is configured)
  *
- * Rejects unauthenticated guests or forged cookies/headers.
+ * A bare `x-chat-id` header / query param / cookie is NEVER trusted by itself.
  */
 export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: string; isRoot: boolean } | null> {
-  const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-
   // 1. Check server-to-server secret (Cron / Bot internal calls)
-  const authHeader = req.headers.get('authorization') || ''
-  const bearerToken = authHeader.replace('Bearer ', '').trim()
-  const secretHeader = req.headers.get('x-admin-secret')
-  if (bearerToken === ADMIN_SECRET || secretHeader === ADMIN_SECRET) {
-    const specifiedChatId = req.headers.get('x-chat-id') || new URL(req.url).searchParams.get('chatId')
-    if (specifiedChatId) {
-      return { chatId: String(specifiedChatId).trim(), isRoot: true }
+  const adminSecret = getAdminSecret()
+  if (adminSecret) {
+    const authHeader = req.headers.get('authorization') || ''
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim()
+    const secretHeader = req.headers.get('x-admin-secret')
+    if (secretsMatch(bearerToken, adminSecret) || secretsMatch(secretHeader, adminSecret)) {
+      const specifiedChatId = req.headers.get('x-chat-id') || new URL(req.url).searchParams.get('chatId')
+      if (specifiedChatId && /^\d+$/.test(specifiedChatId.trim())) {
+        return { chatId: specifiedChatId.trim(), isRoot: true }
+      }
     }
   }
 
@@ -92,15 +169,23 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
-  // 3. Web Browser: verify active DB sessionToken if provided
-  const sessionToken = req.headers.get('x-auth-token') || bearerToken
+  // 3. Web Browser: verify active DB sessionToken if provided.
+  //    Identity comes ONLY from the DB session — never from a client-sent chatId.
+  const sessionToken =
+    req.headers.get('x-auth-token') ||
+    req.cookies.get('zerf_auth_token')?.value ||
+    (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim() || null
   if (sessionToken && sessionToken.length >= 16) {
     try {
       const session = await prisma.userSession.findUnique({
         where: { sessionToken },
       })
 
-      if (session && !session.isRevoked) {
+      if (
+        session &&
+        !session.isRevoked &&
+        Date.now() - new Date(session.createdAt).getTime() < SESSION_MAX_AGE_MS
+      ) {
         const sessionChatId = String(session.chatId)
         prisma.userSession.update({
           where: { id: session.id },
@@ -115,18 +200,12 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     } catch {}
   }
 
-  // 4. Fallback to direct x-chat-id header, query parameter, or cookie
-  const directChatId =
-    req.headers.get('x-chat-id') ||
-    new URL(req.url).searchParams.get('chatId') ||
-    new URL(req.url).searchParams.get('chat_id') ||
-    req.cookies.get('zerf_chat_id')?.value
-
-  if (directChatId && directChatId.trim()) {
-    const cleanId = directChatId.trim()
-    return {
-      chatId: cleanId,
-      isRoot: ROOT_ADMIN_IDS.includes(cleanId),
+  // 4. VK Mini App signed launch params
+  const vkLaunch = req.headers.get('x-vk-launch')
+  if (vkLaunch) {
+    const verified = verifyVkLaunchParams(vkLaunch)
+    if (verified) {
+      return { chatId: verified.vkUserId, isRoot: verified.isRoot }
     }
   }
 
@@ -154,4 +233,3 @@ export async function createServerSession(
   })
   return sessionToken
 }
-

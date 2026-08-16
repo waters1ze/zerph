@@ -453,6 +453,23 @@ export async function notifyAuthorTaskCompleted(task: any) {
   }
 }
 
+/**
+ * Ownership scope for task mutations. A task is actionable by its owner,
+ * author (delegator) or any assignee. When actorChatId is omitted the call is
+ * treated as trusted server-side (cron) access.
+ */
+function taskActorScope(actorChatId?: number | bigint | string | null) {
+  if (actorChatId === undefined || actorChatId === null) return undefined
+  const cid = BigInt(actorChatId)
+  const strId = String(actorChatId)
+  return { OR: [{ ownerChatId: cid }, { authorChatId: cid }, { assignees: { has: strId } }] }
+}
+
+function ownerActorScope(actorChatId?: number | bigint | string | null) {
+  if (actorChatId === undefined || actorChatId === null) return undefined
+  return { ownerChatId: BigInt(actorChatId) }
+}
+
 export async function updateTask(id: string, data: Partial<{
   status: string
   priority: string
@@ -461,10 +478,18 @@ export async function updateTask(id: string, data: Partial<{
   reminderSent: boolean
   remindersSentCount: number
   completedAt: Date
-}>) {
+}>, actorChatId?: number | bigint | string | null) {
+  const scope = taskActorScope(actorChatId)
+  const existing = scope
+    ? await prisma.task.findFirst({ where: { id, ...scope } })
+    : await prisma.task.findUnique({ where: { id } })
+
+  if (!existing) {
+    throw new Error('Task not found or access denied')
+  }
+
   if (data.status === 'done') {
-    const existing = await prisma.task.findUnique({ where: { id } })
-    if (existing && existing.status !== 'done' && existing.repeat) {
+    if (existing.status !== 'done' && existing.repeat) {
       const nextDateStr = calculateNextRecurrenceDate(existing.dueDate, existing.repeat)
 
       await prisma.task.create({
@@ -489,7 +514,7 @@ export async function updateTask(id: string, data: Partial<{
       data = { ...data, repeat: null } as any
     }
 
-    if (existing && data.status === 'done' && existing.status !== 'done') {
+    if (data.status === 'done' && existing.status !== 'done') {
       if (existing.ownerChatId) {
         recordTaskCompletionStreak(existing.ownerChatId).catch(() => {})
       }
@@ -501,12 +526,12 @@ export async function updateTask(id: string, data: Partial<{
   return prisma.task.update({ where: { id }, data })
 }
 
-export async function completeTask(id: string) {
+export async function completeTask(id: string, actorChatId?: number | bigint | string | null) {
   return updateTask(id, {
     status: 'done',
     completedAt: new Date(),
     reminderSent: true,
-  })
+  }, actorChatId)
 }
 
 export async function recordTaskCompletionStreak(
@@ -631,9 +656,10 @@ export async function getUserProductivityStats(ownerChatId: number | bigint | st
   }
 }
 
-export async function deleteTask(id: string) {
+export async function deleteTask(id: string, actorChatId?: number | bigint | string | null) {
   try {
-    return await prisma.task.deleteMany({ where: { id } })
+    const scope = taskActorScope(actorChatId)
+    return await prisma.task.deleteMany({ where: scope ? { id, ...scope } : { id } })
   } catch {
     return { count: 0 }
   }
@@ -677,13 +703,19 @@ export async function updateHabit(id: string, data: Partial<{
   streak: number
   lastCompletedAt: string | null
   frequency: string
-}>) {
+}>, actorChatId?: number | bigint | string | null) {
+  const scope = ownerActorScope(actorChatId)
+  const existing = scope
+    ? await prisma.habit.findFirst({ where: { id, ...scope } })
+    : await prisma.habit.findUnique({ where: { id } })
+  if (!existing) throw new Error('Habit not found or access denied')
   return prisma.habit.update({ where: { id }, data })
 }
 
-export async function deleteHabit(id: string) {
+export async function deleteHabit(id: string, actorChatId?: number | bigint | string | null) {
   try {
-    return await prisma.habit.delete({ where: { id } })
+    const scope = ownerActorScope(actorChatId)
+    return await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
   } catch {
     return { count: 0 }
   }
@@ -693,9 +725,11 @@ export async function deleteHabit(id: string) {
  * Find the best matching non-done task by title similarity
  */
 export async function completeTaskByTitle(targetTitle: string, ownerChatId?: number | bigint | string | null): Promise<DbTask | null> {
-  const whereClause: Record<string, unknown> = { status: { notIn: ['done', 'draft'] } }
-  if (ownerChatId) {
-    whereClause.OR = [{ ownerChatId: BigInt(ownerChatId) }, { ownerChatId: null }]
+  if (!ownerChatId) return null
+  const cid = BigInt(ownerChatId)
+  const whereClause: Record<string, unknown> = {
+    status: { notIn: ['done', 'draft'] },
+    OR: [{ ownerChatId: cid }, { authorChatId: cid }, { assignees: { has: String(ownerChatId) } }],
   }
 
   const tasks = await prisma.task.findMany({
@@ -746,13 +780,34 @@ export async function createGoal(data: {
   })
 }
 
-export async function updateGoal(id: string, data: object) {
+/** Whitelisted, type-safe goal fields — prevents mass assignment (e.g. ownerChatId). */
+export async function updateGoal(
+  id: string,
+  data: Partial<{
+    title: string
+    description: string | null
+    motivation: string | null
+    status: string
+    deadline: string | null
+    progress: number
+    color: string
+    milestones: object[]
+    visibility: string
+  }>,
+  actorChatId?: number | bigint | string | null
+) {
+  const scope = ownerActorScope(actorChatId)
+  const existing = scope
+    ? await prisma.goal.findFirst({ where: { id, ...scope } })
+    : await prisma.goal.findUnique({ where: { id } })
+  if (!existing) throw new Error('Goal not found or access denied')
   return prisma.goal.update({ where: { id }, data: data as never })
 }
 
-export async function deleteGoal(id: string) {
+export async function deleteGoal(id: string, actorChatId?: number | bigint | string | null) {
   try {
-    return await prisma.goal.deleteMany({ where: { id } })
+    const scope = ownerActorScope(actorChatId)
+    return await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
   } catch {
     return { count: 0 }
   }
@@ -803,13 +858,19 @@ export async function updateNote(id: string, data: Partial<{
   dueTime: string | null
   pinned: boolean
   folder: string | null
-}>) {
+}>, actorChatId?: number | bigint | string | null) {
+  const scope = ownerActorScope(actorChatId)
+  const existing = scope
+    ? await prisma.note.findFirst({ where: { id, ...scope } })
+    : await prisma.note.findUnique({ where: { id } })
+  if (!existing) throw new Error('Note not found or access denied')
   return prisma.note.update({ where: { id }, data })
 }
 
-export async function deleteNote(id: string) {
+export async function deleteNote(id: string, actorChatId?: number | bigint | string | null) {
   try {
-    return await prisma.note.deleteMany({ where: { id } })
+    const scope = ownerActorScope(actorChatId)
+    return await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
   } catch {
     return { count: 0 }
   }
@@ -883,20 +944,9 @@ export async function checkGroupOrUserHasPremium(
         return { hasPremium: true, premiumPayerId: cid }
       }
     }
-
-    // Fallback: Check if ANY registered chat in DB has active Premium
-    const allPremium = await prisma.telegramChat.findMany({
-      where: { plan: 'premium' }
-    })
-
-    const activePremium = allPremium.find(p => {
-      if (!p.subscriptionExpiry) return true
-      return new Date(p.subscriptionExpiry) >= new Date()
-    })
-
-    if (activePremium) {
-      return { hasPremium: true, premiumPayerId: activePremium.chatId }
-    }
+    // No premium among sender/group members -> locked.
+    // (Previously this fell back to "any premium user in the whole DB unlocks
+    // the feature for everyone", which bypassed the paywall entirely.)
   } catch {}
   return { hasPremium: false }
 }
@@ -2314,10 +2364,11 @@ export async function getTasksDueNow(): Promise<DbTask[]> {
   return dueNow
 }
 
-export async function markReminderSent(id: string) {
+export async function markReminderSent(id: string, actorChatId?: number | bigint | string | null) {
   try {
-    await prisma.task.update({
-      where: { id },
+    const scope = taskActorScope(actorChatId)
+    await prisma.task.updateMany({
+      where: scope ? { id, ...scope } : { id },
       data: {
         reminderSent: true,
         remindersSentCount: { increment: 1 },
@@ -2515,14 +2566,26 @@ export async function incrementUserUsage(
 
 export async function activateUserSubscription(ownerChatId: number | bigint | string, days: number = 30) {
   try {
+    if (!Number.isFinite(days) || days <= 0 || days > 3650) return false
+    if (!/^\d{3,20}$/.test(String(ownerChatId))) return false
     const cid = BigInt(ownerChatId)
-    const expiry = new Date()
-    expiry.setDate(expiry.getDate() + days)
+
+    // Extend from the current expiry when the subscription is still active,
+    // so repeat payments stack instead of replacing remaining time.
+    const existing = await prisma.telegramChat.findUnique({
+      where: { chatId: cid },
+      select: { plan: true, subscriptionExpiry: true },
+    })
+    const now = new Date()
+    const base = existing?.subscriptionExpiry && new Date(existing.subscriptionExpiry) > now
+      ? new Date(existing.subscriptionExpiry)
+      : now
+    const expiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000)
 
     await prisma.telegramChat.upsert({
       where: { chatId: cid },
       update: {
-        plan: 'premium',
+        plan: existing?.plan === 'unlimited' ? 'unlimited' : 'premium',
         subscriptionExpiry: expiry,
       },
       create: {

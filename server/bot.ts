@@ -254,59 +254,16 @@ async function sendAIResult(chatId: number, data: {
 // ── Reminder scheduler — runs every 60 seconds ────────────────────────────────
 
 function startReminderScheduler() {
-  console.log('⏰ Reminder scheduler started')
-
+  console.log('⏰ Centralized Cron & Reminder scheduler started')
+  // Run every 20 seconds using the deduplicated cron runner
   setInterval(async () => {
     try {
-      const db = getDb()
-      if (!db.chatIds?.length) return
-
-      const now = new Date()
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-      const todayStr = now.toISOString().slice(0, 10)
-
-      const due = db.tasks.filter((t: {
-        dueTime?: string; dueDate?: string; status: string; reminderSent?: boolean
-      }) =>
-        t.dueTime === timeStr &&
-        (t.dueDate === todayStr || !t.dueDate) &&
-        t.status !== 'done' &&
-        !t.reminderSent
-      )
-
-      for (const task of due) {
-        console.log(`⏰ Reminder: "${task.title}" at ${timeStr}`)
-
-        for (const chatId of db.chatIds) {
-          await send(chatId,
-            `⏰ *Напоминание!*\n\n` +
-            `${P_EMOJI[task.priority] || '⚪'} *${task.title}*\n` +
-            (task.description ? `_${task.description.slice(0, 120)}_\n` : '') +
-            `\nВремя: *${timeStr}*`,
-            { reply_markup: MINIAPP_KB }
-          )
-        }
-
-        // Mark reminder as sent via API
-        try {
-          await fetch(`${APP_URL}/api/tasks`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reminderId: task.id }),
-          })
-        } catch { /* update directly */ }
-
-        // Update directly in DB as fallback
-        const idx = db.tasks.findIndex((t: { id: string }) => t.id === task.id)
-        if (idx !== -1) {
-          db.tasks[idx].reminderSent = true
-          saveDb(db)
-        }
-      }
+      const { runAllCronTasks } = await import('@/lib/backend/cron-runner')
+      await runAllCronTasks()
     } catch (err) {
       console.error('⚠️ Reminder scheduler error:', err)
     }
-  }, 60 * 1000)
+  }, 20 * 1000)
 }
 
 // ── Main polling loop ─────────────────────────────────────────────────────────

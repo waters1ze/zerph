@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConfig, setConfig } from '@/lib/backend/db'
+import { getAdminSecret, secretsMatch } from '@/lib/backend/auth'
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
+function authorized(req: NextRequest): boolean {
+  const secretValue = getAdminSecret()
+  if (!secretValue) return false
+  const authHeader = req.headers.get('authorization') || ''
+  const bearer = authHeader.replace(/^Bearer\s+/i, '').trim()
+  const header = req.headers.get('x-admin-secret') || ''
+  // Query param kept for backward compat with internal callers only
+  const query = req.nextUrl.searchParams.get('secret') || ''
+  return secretsMatch(bearer, secretValue) || secretsMatch(header, secretValue) || secretsMatch(query, secretValue)
+}
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret')
-  if (secret !== ADMIN_SECRET) {
+  if (!authorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -27,8 +36,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret')
-  if (secret !== ADMIN_SECRET) {
+  if (!authorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

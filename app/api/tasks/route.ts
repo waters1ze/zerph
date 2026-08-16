@@ -161,21 +161,21 @@ export async function PATCH(req: NextRequest) {
     // Update goal by ID
     if (body.id && (body.itemType === 'goal' || body.type === 'goal')) {
       const { id, itemType, type, ...updates } = body
-      const goal = await updateGoal(id, updates)
+      const goal = await updateGoal(id, updates, ownerChatId)
       return NextResponse.json(serialize({ success: true, goal }))
     }
 
     // Update note by ID
     if (body.id && (body.itemType === 'note' || body.type === 'note')) {
       const { id, itemType, type, ...updates } = body
-      const note = await updateNote(id, updates)
+      const note = await updateNote(id, updates, ownerChatId)
       return NextResponse.json(serialize({ success: true, note }))
     }
 
     // Update habit by ID
     if (body.id && (body.itemType === 'habit' || body.type === 'habit')) {
       const { id, itemType, type, ...updates } = body
-      const habit = await updateHabit(id, updates)
+      const habit = await updateHabit(id, updates, ownerChatId)
       return NextResponse.json(serialize({ success: true, habit }))
     }
 
@@ -190,19 +190,22 @@ export async function PATCH(req: NextRequest) {
 
     // Mark reminder sent
     if (body.reminderId) {
-      await markReminderSent(body.reminderId)
+      await markReminderSent(body.reminderId, ownerChatId)
       return NextResponse.json({ success: true })
     }
 
     // Update task by ID
     if (body.id) {
       const { id, ...updates } = body
-      const task = await updateTask(id, updates)
+      const task = await updateTask(id, updates, ownerChatId)
       return NextResponse.json(serialize({ success: true, task }))
     }
 
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes('access denied')) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
@@ -217,10 +220,10 @@ export async function DELETE(req: NextRequest) {
     const type = searchParams.get('type') || 'task'
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-    if (type === 'note') await deleteNote(id)
-    else if (type === 'goal') await deleteGoal(id)
-    else if (type === 'habit') await deleteHabit(id)
-    else await deleteTask(id)
+    if (type === 'note') await deleteNote(id, ownerChatId)
+    else if (type === 'goal') await deleteGoal(id, ownerChatId)
+    else if (type === 'habit') await deleteHabit(id, ownerChatId)
+    else await deleteTask(id, ownerChatId)
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

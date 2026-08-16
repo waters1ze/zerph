@@ -7,7 +7,7 @@ const DEFAULT_CHANNEL = process.env.TELEGRAM_CHANNEL_ID || '@zerph_off'
 const GROQ_API_KEY = process.env.GROQ_API_KEY || ''
 
 import { callGroqChatCompletion } from './groq-pool'
-
+import { isCronAlreadyDoneToday, markCronDoneToday } from './cron-lock'
 import { postToVkWall } from './vk'
 
 async function callTg(method: string, payload: Record<string, any>) {
@@ -53,9 +53,11 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force 
 
   try {
     if (!force) {
+      if (await isCronAlreadyDoneToday('channel_poll', mskDate)) return true
+      await markCronDoneToday('channel_poll', mskDate)
       const existing = await prisma.channelPoll.findFirst({
         where: { date: mskDate, channelId }
-      })
+      }).catch(() => null)
       if (existing) return false
     }
 
@@ -201,8 +203,12 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
 /** 3. Post Morning News Digest (Detailed, Informative, Minimalist B&W with Live Rates & Tech News) */
 export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
   if (!GROQ_API_KEY) return false
+  const { mskDate } = getMskDateTime()
 
   try {
+    if (await isCronAlreadyDoneToday('channel_morning_post', mskDate)) return true
+    await markCronDoneToday('channel_morning_post', mskDate)
+
     const context = await fetchMorningNewsContext()
     const ratesStr = [
       context.rates.usd ? `$ ${context.rates.usd} ₽` : '',
@@ -290,7 +296,12 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
 
 /** 4. Post 21:00 MSK Evening News Digest & Reflection (Detailed, Minimalist B&W) */
 export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
+  const { mskDate } = getMskDateTime()
+
   try {
+    if (await isCronAlreadyDoneToday('channel_evening_post', mskDate)) return true
+    await markCronDoneToday('channel_evening_post', mskDate)
+
     const context = await fetchEveningNewsContext()
     
     const devData = context.devNews && context.devNews.length > 0

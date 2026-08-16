@@ -1,14 +1,29 @@
 /**
  * POST /api/payment/yoomoney — ЮMoney Webhook Notification Endpoint
- * Receives payment confirmations from ЮMoney and activates user Premium subscription
+ * Receives payment confirmations from ЮMoney and activates user Premium subscription.
+ *
+ * Security:
+ * - SHA-1 notification signature is REQUIRED (env YOOMONEY_NOTIFICATION_SECRET).
+ * - Only `payment-confirm` notifications are processed.
+ * - `codepro=true` (protected payments) are rejected.
+ * - label must match `<chatId>_30` or `<chatId>_365`.
+ * - amount must match the expected plan price.
+ * - operation_id is deduplicated to prevent replay.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { prisma } from '@/lib/backend/prisma'
 import { activateUserSubscription } from '@/lib/backend/db'
+import { secretsMatch } from '@/lib/backend/auth'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const YOOMONEY_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || process.env.YOOMONEY_CLIENT_SECRET || 'FBA7EDCDB4EE172D4633DC95EC2E8B34B4FA0C9CECBE35C5CD2B7B1D3AD87F6D65B768B27F4044FD7655887D6C1D20D929C3126C72D84EE1402D1E7B1FD8A47B'
+const YOOMONEY_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || process.env.YOOMONEY_CLIENT_SECRET || ''
+
+const PLAN_PRICES: Record<string, { minAmount: number; days: number; name: string }> = {
+  '30': { minAmount: 95, days: 30, name: '30 дней' },
+  '365': { minAmount: 950, days: 365, name: '1 год (365 дней)' },
+}
 
 async function sendTgNotification(chatId: string | number, text: string) {
   if (!BOT_TOKEN) return
@@ -23,6 +38,20 @@ async function sendTgNotification(chatId: string | number, text: string) {
       }),
     })
   } catch {}
+}
+
+/** Mark an operation as processed; returns false if it was already handled (replay). */
+async function consumeOperation(operationId: string): Promise<boolean> {
+  if (!operationId) return false
+  try {
+    await prisma.config.create({
+      data: { key: `yoomoney_op_${operationId}`, value: new Date().toISOString() },
+    })
+    return true
+  } catch {
+    // Unique key violation -> already processed
+    return false
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -40,41 +69,67 @@ export async function POST(req: NextRequest) {
     const label = params.get('label') || ''
     const sha1_hash = params.get('sha1_hash') || ''
 
+    if (!YOOMONEY_SECRET) {
+      console.error('[YooMoney] YOOMONEY_NOTIFICATION_SECRET is not configured — rejecting notification')
+      return new Response('Not configured', { status: 503 })
+    }
+
+    // Only successful payment confirmations activate subscriptions
+    if (notification_type !== 'payment-confirm') {
+      return new Response('Ignored', { status: 200 })
+    }
+
+    // Protected (codepro) payments can later be cancelled by the sender — reject
+    if (codepro === 'true') {
+      console.warn('[YooMoney] Rejected codepro payment', { operation_id })
+      return new Response('Ignored', { status: 200 })
+    }
+
+    if (!sha1_hash) {
+      return new Response('Forbidden', { status: 403 })
+    }
+
+    // MANDATORY signature verification
+    const checkString = `${notification_type}&${operation_id}&${amount}&${currency}&${datetime}&${sender}&${codepro}&${YOOMONEY_SECRET}&${label}`
+    const calculatedHash = crypto.createHash('sha1').update(checkString).digest('hex')
+    if (!secretsMatch(calculatedHash, sha1_hash)) {
+      console.warn('[YooMoney] Signature mismatch for operation', operation_id || '(no id)')
+      return new Response('Forbidden', { status: 403 })
+    }
+
     if (!label) {
       return new Response('Missing label', { status: 400 })
     }
 
-    // Verify SHA-1 hash if secret is present
-    if (YOOMONEY_SECRET) {
-      const checkString = `${notification_type}&${operation_id}&${amount}&${currency}&${datetime}&${sender}&${codepro}&${YOOMONEY_SECRET}&${label}`
-      const calculatedHash = crypto.createHash('sha1').update(checkString).digest('hex')
-
-      if (sha1_hash && calculatedHash !== sha1_hash) {
-        console.warn('ЮMoney signature hash mismatch:', { calculatedHash, sha1_hash })
-      }
+    // Replay protection
+    if (!(await consumeOperation(operation_id))) {
+      console.warn('[YooMoney] Duplicate operation ignored', operation_id)
+      return new Response('OK', { status: 200 })
     }
 
-    // Determine subscription duration: 365 days for annual, 30 days for monthly
-    let actualChatId = label
-    let days = 30
-    const amtNum = parseFloat(amount || '0')
-
-    if (label.includes('_365') || label.includes('_year') || amtNum >= 900) {
-      days = 365
-      actualChatId = label.replace('_365', '').replace('_year', '')
-    } else if (label.includes('_30') || label.includes('_month')) {
-      days = 30
-      actualChatId = label.replace('_30', '').replace('_month', '')
+    // Strict label format: <chatId>_<planDays>
+    const labelMatch = label.match(/^(\d{3,20})_(30|365)$/)
+    if (!labelMatch) {
+      console.warn('[YooMoney] Unexpected label format', label)
+      return new Response('OK', { status: 200 })
     }
 
-    // Activate subscription in database
-    const success = await activateUserSubscription(actualChatId, days)
+    const actualChatId = labelMatch[1]
+    const plan = PLAN_PRICES[labelMatch[2]]
+    const amtNum = parseFloat(amount)
+
+    if (!plan || isNaN(amtNum) || amtNum < plan.minAmount) {
+      console.warn('[YooMoney] Amount below plan price', { label, amount, planDays: labelMatch[2] })
+      return new Response('OK', { status: 200 })
+    }
+
+    // Activate subscription in database (extends any active subscription)
+    const success = await activateUserSubscription(actualChatId, plan.days)
 
     if (success) {
-      const periodName = days === 365 ? '1 год (365 дней)' : '30 дней'
       await sendTgNotification(
         actualChatId,
-        `🎉 *Подписка Zerf Premium успешно активирована на ${periodName}!* ⭐\n\n` +
+        `🎉 *Подписка Zerf Premium успешно активирована на ${plan.name}!* ⭐\n\n` +
         `✨ Вам открыт полный доступ ко всем возможностям Zerf AI:\n` +
         `• 🎙 Неограниченный голосовой ввод и интеграция с Siri (до 10 мин/день)\n` +
         `• 🧠 Безлимитное ИИ-перепланирование задач (/reschedule)\n` +

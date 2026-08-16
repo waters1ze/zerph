@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { generateOnetimeToken } from '@/lib/backend/auth'
+import { generateOnetimeToken, getAdminSecret, secretsMatch } from '@/lib/backend/auth'
 import crypto from 'crypto'
 
 // POST /api/auth/login-token — generate a one-time web login token for a chatId
@@ -10,12 +10,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { chatId, secret } = body
 
-    const ADMIN_SECRET = process.env.ADMIN_SECRET || 'zerph-admin-2024'
-    if (secret !== ADMIN_SECRET) {
+    const adminSecret = getAdminSecret()
+    if (!adminSecret || !secretsMatch(secret, adminSecret)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (!chatId) {
+    if (!chatId || !/^\d{3,20}$/.test(String(chatId))) {
       return NextResponse.json({ error: 'chatId required' }, { status: 400 })
     }
 
@@ -60,17 +60,37 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ valid: false, error: 'Token not found' }, { status: 404 })
     }
 
+    if (record.used) {
+      // One-time tokens must never be replayed
+      if (shouldRedirect) {
+        return NextResponse.redirect(new URL('/?auth_error=token_used', req.url))
+      }
+      return NextResponse.json({ valid: false, error: 'Token already used' }, { status: 403 })
+    }
+
     if (new Date() > record.expiresAt) {
+      await prisma.loginToken.delete({ where: { token } }).catch(() => {})
       if (shouldRedirect) {
         return NextResponse.redirect(new URL('/?auth_error=token_expired', req.url))
       }
       return NextResponse.json({ valid: false, error: 'Token expired' }, { status: 403 })
     }
 
-    // Mark as used
-    if (!record.used) {
-      await prisma.loginToken.update({ where: { token }, data: { used: true } })
+    // Atomically consume the token: updateMany only succeeds if still unused,
+    // which prevents both replay and concurrent-request race conditions.
+    const consumed = await prisma.loginToken.updateMany({
+      where: { token, used: false },
+      data: { used: true },
+    })
+    if (consumed.count === 0) {
+      if (shouldRedirect) {
+        return NextResponse.redirect(new URL('/?auth_error=token_used', req.url))
+      }
+      return NextResponse.json({ valid: false, error: 'Token already used' }, { status: 403 })
     }
+
+    // Cleanup expired tokens occasionally
+    prisma.loginToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => {})
 
     // Generate a long-lived session token
     const sessionToken = crypto.randomBytes(24).toString('hex')
@@ -117,13 +137,14 @@ export async function GET(req: NextRequest) {
       },
     }).catch(() => {}) // non-blocking
 
+    const isProd = process.env.NODE_ENV === 'production'
     if (shouldRedirect) {
       const redirectUrl = new URL('/', req.url)
       redirectUrl.searchParams.set('chat_id', chatIdStr)
       redirectUrl.searchParams.set('auth_token', sessionToken)
       const res = NextResponse.redirect(redirectUrl)
-      res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax' })
-      res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax' })
+      res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax', secure: isProd })
+      res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax', secure: isProd })
       return res
     }
 
@@ -132,8 +153,8 @@ export async function GET(req: NextRequest) {
       chatId: Number(record.chatId),
       sessionToken,
     })
-    res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax' })
-    res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax' })
+    res.cookies.set('zerf_chat_id', chatIdStr, { path: '/', maxAge: 31536000, sameSite: 'lax', secure: isProd })
+    res.cookies.set('zerf_auth_token', sessionToken, { path: '/', maxAge: 31536000, sameSite: 'lax', secure: isProd })
     return res
   } catch (err) {
     return NextResponse.json({ valid: false, error: String(err) }, { status: 500 })
