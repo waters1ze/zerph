@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
-import { cn, isBirthdayVisible, groupTasksByDate } from '@/lib/utils'
+import { cn, isTaskVisibleInMainList, groupTasksByDate } from '@/lib/utils'
 import type { Priority, TaskStatus } from '@/lib/types'
 import { CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, Activity, Calendar, Users, UserCheck } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
@@ -50,7 +50,9 @@ export function TasksView() {
     return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
   }
 
-  const filtered = state.tasks
+  const visibleTasks = state.tasks.filter(t => isTaskVisibleInMainList(t, 7))
+
+  const filtered = visibleTasks
     .filter(t => {
       if (filterStatus === 'all') return true
       if (filterStatus === 'todo') return t.status === 'todo' || t.status === 'inprogress'
@@ -58,7 +60,6 @@ export function TasksView() {
     })
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
     .filter(matchesTag)
-    .filter(isBirthdayVisible)
     .filter(t => {
       if (!state.searchQuery) return true
       return t.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
@@ -75,20 +76,20 @@ export function TasksView() {
     })
 
   const statusTabs: { id: FilterStatus; label: string; count: number }[] = [
-    { id: 'all', label: 'Все', count: state.tasks.filter(matchesTag).length },
-    { id: 'todo', label: 'К выполнению', count: state.tasks.filter(t => t.status !== 'done').filter(matchesTag).length },
-    { id: 'inprogress', label: 'В процессе', count: state.tasks.filter(t => t.status === 'inprogress').filter(matchesTag).length },
-    { id: 'done', label: 'Готово', count: state.tasks.filter(t => t.status === 'done').filter(matchesTag).length },
-    { id: 'overdue', label: 'Просрочено', count: state.tasks.filter(t => t.status === 'overdue').filter(matchesTag).length },
+    { id: 'all', label: 'Все', count: visibleTasks.filter(matchesTag).length },
+    { id: 'todo', label: 'К выполнению', count: visibleTasks.filter(t => t.status !== 'done').filter(matchesTag).length },
+    { id: 'inprogress', label: 'В процессе', count: visibleTasks.filter(t => t.status === 'inprogress').filter(matchesTag).length },
+    { id: 'done', label: 'Готово', count: visibleTasks.filter(t => t.status === 'done').filter(matchesTag).length },
+    { id: 'overdue', label: 'Просрочено', count: visibleTasks.filter(t => t.status === 'overdue').filter(matchesTag).length },
   ]
 
   const dateGroups = groupTasksByDate(filtered)
 
-  const totalTasks = state.tasks.length
-  const urgentCount = state.tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length
-  const highCount = state.tasks.filter(t => t.priority === 'high' && t.status !== 'done').length
-  const mediumCount = state.tasks.filter(t => t.priority === 'medium' && t.status !== 'done').length
-  const lowCount = state.tasks.filter(t => t.priority === 'low' && t.status !== 'done').length
+  const totalTasks = visibleTasks.length
+  const urgentCount = visibleTasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length
+  const highCount = visibleTasks.filter(t => t.priority === 'high' && t.status !== 'done').length
+  const mediumCount = visibleTasks.filter(t => t.priority === 'medium' && t.status !== 'done').length
+  const lowCount = visibleTasks.filter(t => t.priority === 'low' && t.status !== 'done').length
 
   return (
     <div className="w-full max-w-none grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

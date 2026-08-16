@@ -130,7 +130,7 @@ export function isBirthdayVisible(task: { title?: string; dueDate?: string | nul
   return diffDays >= 0 && diffDays <= maxDays
 }
 
-export function isHolidayVisible(task: { title?: string; dueDate?: string | null; tags?: string[] }, maxDays = 14): boolean {
+export function isHolidayVisible(task: { title?: string; dueDate?: string | null; tags?: string[] }, maxDays = 7): boolean {
   if (!task || !isHolidayTask(task)) return true
   if (!task.dueDate || !task.dueDate.includes('-')) return false
 
@@ -156,6 +156,17 @@ export function isHolidayVisible(task: { title?: string; dueDate?: string | null
   }
 
   return diffDays >= 0 && diffDays <= maxDays
+}
+
+export function isTaskVisibleInMainList(
+  task: { title?: string; dueDate?: string | null; repeat?: string | null; tags?: string[] },
+  maxDays = 7
+): boolean {
+  if (!task) return false
+  if (isYearlyEventTask(task)) {
+    return isBirthdayVisible(task, maxDays)
+  }
+  return true
 }
 
 export interface TaskDateGroupItem<T> {

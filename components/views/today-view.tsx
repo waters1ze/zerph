@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { HabitsWidget } from '@/components/habits-widget'
@@ -99,6 +99,7 @@ export function TodayView() {
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null)
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
+  const [showAllLessons, setShowAllLessons] = useState(false)
   const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -368,31 +369,65 @@ export function TodayView() {
             </button>
           </div>
           {/* School Schedule Card for Today */}
-          {!activeHabit && schoolActiveTasks.length > 0 && (
-            <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-card border border-border/80 shadow-2xs mb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
-                    🏫
+          {!activeHabit && schoolActiveTasks.length > 0 && (() => {
+            const sortedLessons = [...schoolActiveTasks].sort((a, b) =>
+              (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99')
+            )
+            const currentLesson = sortedLessons[0]
+            const remainingLessons = sortedLessons.slice(1)
+
+            return (
+              <div className="flex flex-col gap-2.5 p-3.5 rounded-2xl bg-card border border-border/80 shadow-2xs mb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold mono-emoji">
+                      🏫
+                    </div>
+                    <h3 className="text-[13px] font-bold text-foreground">Школьное расписание</h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      {schoolActiveTasks.length} {schoolActiveTasks.length === 1 ? 'урок' : schoolActiveTasks.length < 5 ? 'урока' : 'уроков'} осталось
+                    </span>
                   </div>
-                  <h3 className="text-[13px] font-bold text-foreground">Школьное расписание на сегодня</h3>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                    {schoolActiveTasks.length} {schoolActiveTasks.length === 1 ? 'урок' : schoolActiveTasks.length < 5 ? 'урока' : 'уроков'}
-                  </span>
+                  {remainingLessons.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllLessons(!showAllLessons)}
+                      className="text-[11px] font-medium text-primary hover:underline"
+                    >
+                      {showAllLessons ? 'Свернуть' : `Все уроки (${sortedLessons.length})`}
+                    </button>
+                  )}
                 </div>
-                <span className="text-[11px] text-muted-foreground hidden sm:inline-block">
-                  {schoolActiveTasks[0].dueTime ? `с ${schoolActiveTasks[0].dueTime.split(/[\s–-]+/)[0]}` : ''}
-                </span>
+
+                {/* Current immediate lesson */}
+                <div className="space-y-1 mt-0.5">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-1">
+                    {remainingLessons.length > 0 ? 'Текущий / Следующий урок:' : 'Урок:'}
+                  </div>
+                  <TaskItem key={currentLesson.id} task={currentLesson} index={0} compact />
+                </div>
+
+                {/* Remaining lessons (shown when showAllLessons is true or auto-revealed as lessons are completed) */}
+                <AnimatePresence>
+                  {showAllLessons && remainingLessons.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-1 pt-1 border-t border-border/50"
+                    >
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80 px-1">
+                        Следующие уроки дня:
+                      </div>
+                      {remainingLessons.map((t, i) => (
+                        <TaskItem key={t.id} task={t} index={i + 1} compact />
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <div className="space-y-1 mt-1">
-                {schoolActiveTasks
-                  .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
-                  .map((t, i) => (
-                    <TaskItem key={t.id} task={t} index={i} compact />
-                  ))}
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {activeTasks.length === 0 ? (
             <motion.div

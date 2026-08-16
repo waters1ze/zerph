@@ -7,24 +7,113 @@ import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Send, Sparkles, Bot, User, Trash2, Loader2 } from 'lucide-react'
+import { Send, Sparkles, Bot, User, Trash2, Loader2, Paperclip, X, Image as ImageIcon } from 'lucide-react'
 import type { ChatMessage } from '@/lib/types'
 
 export function ChatView() {
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [state.chat, isTyping])
+  }, [state.chat, isTyping, imagePreview])
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedImage(file)
+      setImagePreview(URL.createObjectURL(file))
+    }
+  }
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile()
+        if (file) {
+          setSelectedImage(file)
+          setImagePreview(URL.createObjectURL(file))
+          e.preventDefault()
+          break
+        }
+      }
+    }
+  }
+
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const send = async () => {
     const text = input.trim()
-    if (!text || isTyping) return
+    if ((!text && !selectedImage) || isTyping) return
     setInput('')
+
+    if (selectedImage) {
+      const userText = text || '📸 Распознай задачи и расписание на этом изображении'
+      const userMsg: ChatMessage = {
+        id: `m-${Date.now()}`,
+        role: 'user',
+        content: userText,
+        createdAt: new Date().toISOString(),
+      }
+      dispatch({ type: 'ADD_CHAT_MESSAGE', message: userMsg })
+      setIsTyping(true)
+      const curImg = selectedImage
+      removeImage()
+
+      try {
+        const formData = new FormData()
+        formData.append('file', curImg)
+
+        const res = await fetch('/api/vision/tasks', {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) throw new Error(data.error || 'Ошибка распознавания')
+
+        const tasks = data.tasks || []
+        let reply = `📸 **Распознано элементов:** ${tasks.length}\n\n`
+        tasks.forEach((t: any) => {
+          const time = t.dueTime ? ` (${t.dueTime})` : ''
+          const date = t.dueDate ? ` [${t.dueDate}]` : ''
+          reply += `• **${t.title}**${time}${date}\n`
+          dispatch({ type: 'ADD_TASK', task: t })
+        })
+        reply += `\n_Все задачи добавлены в ваш список и календарь!_`
+
+        const botMsg: ChatMessage = {
+          id: `m-${Date.now()}-bot`,
+          role: 'assistant',
+          content: reply,
+          createdAt: new Date().toISOString(),
+        }
+        dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : String(err)
+        const botMsg: ChatMessage = {
+          id: `m-${Date.now()}-err`,
+          role: 'assistant',
+          content: `❌ **Ошибка:** ${msg}`,
+          createdAt: new Date().toISOString(),
+        }
+        dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
+      } finally {
+        setIsTyping(false)
+      }
+      return
+    }
 
     const userMsg: ChatMessage = {
       id: `m-${Date.now()}`,
@@ -202,14 +291,60 @@ export function ChatView() {
       </div>
 
       {/* Input */}
-      <div className="shrink-0 pt-4 mt-2 border-t border-border">
+      <div className="shrink-0 pt-3 mt-2 border-t border-border flex flex-col gap-2">
+        {/* Image Preview if selected */}
+        <AnimatePresence>
+          {imagePreview && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 4 }}
+              className="relative self-start rounded-xl overflow-hidden border border-border/80 bg-muted/60 p-1 shadow-sm flex items-center gap-2 max-w-[220px]"
+            >
+              <img src={imagePreview} alt="Selected" className="w-12 h-12 object-cover rounded-lg" />
+              <div className="flex-1 min-w-0 pr-1">
+                <p className="text-[11px] font-semibold text-foreground truncate">
+                  {selectedImage?.name || 'Скриншот'}
+                </p>
+                <p className="text-[9px] text-muted-foreground">Vision OCR</p>
+              </div>
+              <button
+                type="button"
+                onClick={removeImage}
+                className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors text-[10px]"
+                title="Удалить скриншот"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageChange}
+        />
+
         <div className="flex items-end gap-2 bg-muted/40 rounded-xl border border-border/60 focus-within:border-primary/50 transition-colors px-3 py-2.5">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-muted text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors shrink-0 mb-0.5"
+            title="Прикрепить скриншот или фото расписания"
+          >
+            <Paperclip className="w-3.5 h-3.5" />
+          </motion.button>
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything about your tasks, goals, or notes…"
+            onPaste={handlePaste}
+            placeholder={selectedImage ? "Добавьте комментарий (необязательно)..." : "Спроси о задачах, целях, вставь скриншот (Ctrl+V)..."}
             rows={1}
             className="flex-1 text-[13px] text-foreground bg-transparent outline-none resize-none placeholder:text-muted-foreground/50 leading-relaxed max-h-28"
             style={{ fieldSizing: 'content' } as React.CSSProperties}
@@ -217,14 +352,14 @@ export function ChatView() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={send}
-            disabled={!input.trim() || isTyping}
+            disabled={(!input.trim() && !selectedImage) || isTyping}
             className="w-7 h-7 flex items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shrink-0 mb-0.5"
           >
             {isTyping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </motion.button>
         </div>
-        <p className="text-[11px] text-muted-foreground/50 mt-1.5 px-1">
-          Shift+Enter for newline &nbsp;·&nbsp; Backend integration ready — connect your AI API key in Settings
+        <p className="text-[11px] text-muted-foreground/50 px-1">
+          Enter — отправка · Ctrl+V — вставить скриншот из буфера
         </p>
       </div>
     </div>

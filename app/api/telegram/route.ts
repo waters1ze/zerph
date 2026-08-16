@@ -1565,6 +1565,40 @@ async function processPhoto(chatId: number, photoArray: any[]) {
   const fileId = largest.file_id
 
   try {
+    const { getUserUsageAndLimits } = await import('@/lib/backend/db')
+    const { ROOT_ADMIN_IDS } = await import('@/lib/backend/admin')
+    const limits = await getUserUsageAndLimits(chatId)
+    const isRoot = ROOT_ADMIN_IDS.includes(String(chatId).trim())
+    const isPremium = limits.plan === 'premium' || isRoot
+    const maxPhotos = isRoot ? Infinity : (isPremium ? 30 : 3)
+
+    const todayPhotosCount = await prisma.task.count({
+      where: {
+        ownerChatId: BigInt(chatId),
+        tags: { has: 'фото' },
+        createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+      }
+    })
+
+    if (todayPhotosCount >= maxPhotos) {
+      await send(
+        chatId,
+        `🔒 *Дневной лимит на распознавание фото исчерпан* (${todayPhotosCount}/${maxPhotos} в день)\n\n` +
+        `• *Бесплатный тариф:* 3 фото в день\n` +
+        `• *Premium:* 30 фото в день (99 ₽/мес)\n` +
+        `• *Безлимит:* неограниченно\n\n` +
+        `⭐ Оформите подписку, чтобы распознавать любые расписания и скриншоты без ограничений!`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '⭐ Оформить Premium (99 ₽)', callback_data: 'cmd_subscribe' }]
+            ]
+          }
+        }
+      )
+      return
+    }
+
     await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' })
     await send(chatId, '📷 Распознаю задачи из фото через Vision AI...')
 
@@ -1736,16 +1770,20 @@ async function handleStart(chatId: number, firstName: string) {
     `Привет, *${escMd(firstName)}*! Твой Telegram-аккаунт синхронизирован с персональным ИИ-ассистентом.\n` +
     `🔒 *Все твои задачи строго приватны* и видны только тебе.` +
     nameNotice +
-    `\n\n✨ *Что умеет ИИ (Голосом или Текстом):*\n` +
+    `\n\n✨ *Новые возможности и фичи Zerf AI:*\n` +
+    `📸 *Vision OCR по фото и скриншотам* — отправь фото дневника или расписания, и ИИ создаст все уроки и дела автоматически!\n` +
+    `⏱ *Интервалы времени «от и до»* — пиши «уроки с 8 до 15» или «тренировка с 18:00 до 19:30». По окончании времени задача автоматически отмечается выполненной!\n` +
+    `🏫 *Умные группы и компактный календарь* — уроки аккуратно группируются в «Школу» и не засоряют личные дела.\n` +
+    `🌴 *Выходные дни* — скажи «завтра выходной» или «отмени уроки на среду», и расписание снимется без вреда для праздников и личных задач.\n` +
+    `🔁 *Регулярные секции и плавание* — «каждую пятницу плавание в 18:00» с умной отменой и сохранением истории прошлых недель.\n` +
+    `🎂 *Дни рождения и праздники* — автоматическое напоминание за 7 дней до события.\n\n` +
     `🎙️ *Голосовой ввод* — просто надиктуй боту:\n` +
     `  • _"Напомни позвонить в банк завтра в 12:00"_\n` +
     `  • _"Дай задачу Вове подготовить презентацию"_\n` +
     `  • _"Какой график у Леры на завтра?"_\n` +
-    `  • _"Расписание Артема на неделю"_\n` +
-    `  • _"Запиши идею: концепт нового мобильного приложения"_\n\n` +
+    `  • _"Расписание Артема на неделю"_\n\n` +
     `🚀 *Команды ассистента:*\n` +
     `/schedule — 📅 График и свободные окна участников (\`/schedule Лера завтра\`)\n` +
-    `/invite — 🤝 Пригласить друга или коллегу в команду\n` +
     `/today — 📋 Твои задачи и цели на сегодня\n` +
     `/shared — 👥 Порученные и командные задачи\n` +
     `/matrix — 🎯 Матрица Эйзенхауэра (Фокус дня)\n` +

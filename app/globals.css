@@ -493,3 +493,10 @@ span.text-2xl:not(.color-exempt) {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(16, 185, 129, 0.6);
 }
+
+/* Monochrome / Black and White emoji and icon styling */
+.mono-emoji,
+.emoji-icon,
+[data-emoji] {
+  filter: grayscale(100%) contrast(110%);
+}
