@@ -85,10 +85,18 @@ export async function POST(req: NextRequest) {
       return new Response('Forbidden', { status: 403 })
     }
 
-    // MANDATORY signature verification
-    const checkString = `${notification_type}&${operation_id}&${amount}&${currency}&${datetime}&${sender}&${codepro}&${YOOMONEY_SECRET}&${label}`
-    const calculatedHash = crypto.createHash('sha1').update(checkString).digest('hex')
-    if (!secretsMatch(calculatedHash, sha1_hash)) {
+    // MANDATORY signature verification.
+    // YOOMONEY_NOTIFICATION_SECRET_OLD is accepted temporarily during
+    // secret rotation (set it to the previous value while switching to a
+    // new one, then remove it after a day or two).
+    const candidateSecrets = [YOOMONEY_SECRET, process.env.YOOMONEY_NOTIFICATION_SECRET_OLD]
+      .filter((s): s is string => Boolean(s))
+    const signatureValid = candidateSecrets.some(secret => {
+      const checkString = `${notification_type}&${operation_id}&${amount}&${currency}&${datetime}&${sender}&${codepro}&${secret}&${label}`
+      const calculatedHash = crypto.createHash('sha1').update(checkString).digest('hex')
+      return secretsMatch(calculatedHash, sha1_hash)
+    })
+    if (!signatureValid) {
       console.warn('[YooMoney] Signature mismatch for operation', operation_id || '(no id)')
       return new Response('Forbidden', { status: 403 })
     }
