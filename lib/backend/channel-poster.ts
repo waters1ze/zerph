@@ -25,6 +25,11 @@ async function callTg(method: string, payload: Record<string, any>) {
   }
 }
 
+function sanitizeTgHtml(raw: string): string {
+  if (!raw) return ''
+  return raw.replace(/&(?!amp;|lt;|gt;|quot;|#\d+;)/g, '&amp;')
+}
+
 async function getAdminChatIds(): Promise<number[]> {
   const adminIds = new Set<number>()
   const ownerEnv = process.env.OWNER_CHAT_ID || '6136950061'
@@ -256,9 +261,10 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
     const text = result.content?.trim()
     if (!text) return false
 
+    const sanitized = sanitizeTgHtml(text)
     const tgRes = await callTg('sendMessage', {
       chat_id: channelId,
-      text,
+      text: sanitized,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     })
@@ -318,12 +324,22 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL)
     const text = result.content?.trim()
     if (!text) return false
 
+    const sanitized = sanitizeTgHtml(text)
     const tgRes = await callTg('sendMessage', {
       chat_id: channelId,
-      text,
+      text: sanitized,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     })
+
+    if (!tgRes?.ok) {
+      const cleanText = text.replace(/<[^>]*>/g, '')
+      await callTg('sendMessage', {
+        chat_id: channelId,
+        text: cleanText,
+        disable_web_page_preview: true,
+      })
+    }
 
     // Duplicate to VK Community Wall
     postToVkWall(text).catch(err => console.error('[VK Crosspost Evening Error]:', err))
