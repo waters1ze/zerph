@@ -205,7 +205,11 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
           isRoot: ROOT_ADMIN_IDS.includes(sessionChatId),
         }
       }
-    } catch {}
+    } catch (dbError) {
+      // DB failure is NOT an invalid session — rethrow so routes answer 5xx
+      // instead of 401 (the client must not log the user out on a blip)
+      throw dbError
+    }
   }
 
   // 4. VK Mini App signed launch params

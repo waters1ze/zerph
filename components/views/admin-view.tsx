@@ -139,9 +139,10 @@ export function AdminView() {
         method: notifyAdmins ? 'POST' : 'GET',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: notifyAdmins ? JSON.stringify({ notifyAdmins: true }) : undefined,
+        signal: AbortSignal.timeout(25000),
       })
-      const data = await res.json()
-      if (data.ok && data.report) {
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok && data.report) {
         setFeedbackReport(data.report)
         if (notifyAdmins) {
           showNotice('success', 'Отчет успешно отправлен админам в Telegram!')
@@ -149,7 +150,9 @@ export function AdminView() {
           showNotice('success', 'Свежий ИИ-анализ комментариев сформирован!')
         }
       } else {
-        showNotice('error', data.error || 'Ошибка загрузки отчета')
+        showNotice('error', res.status === 403
+          ? 'Нет доступа: войдите как владелец/админ (сессия могла истечь — перезайдите по ссылке из бота /login)'
+          : data.error || 'Ошибка загрузки отчета')
       }
     } catch {
       showNotice('error', 'Ошибка загрузки отчета по комментариям')
