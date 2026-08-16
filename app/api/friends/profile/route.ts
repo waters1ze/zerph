@@ -45,22 +45,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 })
     }
 
-    // Check friendship and permission
-    let friendship: any = null
+    // Check friendship and permission: Target (targetCid) MUST have enabled allowTasks for Viewer (myCid)
+    let isFriend = isSelf
+    let allowTasks = isSelf
+
     if (!isSelf) {
-      friendship = await prisma.friendship.findFirst({
+      const targetToMe = await prisma.friendship.findUnique({
         where: {
-          OR: [
-            { userChatId: myCid, friendChatId: targetCid },
-            { userChatId: targetCid, friendChatId: myCid },
-          ]
+          userChatId_friendChatId: {
+            userChatId: targetCid,
+            friendChatId: myCid,
+          }
         }
       })
-    }
+      const meToTarget = await prisma.friendship.findUnique({
+        where: {
+          userChatId_friendChatId: {
+            userChatId: myCid,
+            friendChatId: targetCid,
+          }
+        }
+      })
 
-    const isFriend = isSelf || (!!friendship && friendship.status === 'accepted')
-    // User allows tasks from me?
-    const allowTasks = isSelf || (isFriend && friendship?.allowTasks === true)
+      isFriend = (targetToMe?.status === 'accepted') || (meToTarget?.status === 'accepted')
+      allowTasks = isFriend && Boolean(targetToMe && targetToMe.status === 'accepted' && targetToMe.allowTasks === true)
+    }
 
     // Calculate public stats
     const totalCompletedTasks = await prisma.task.count({

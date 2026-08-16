@@ -125,6 +125,7 @@ export interface Friend {
   status: 'online' | 'offline' | 'away'
   addedAt: string
   allowTasks?: boolean
+  friendAllowedMe?: boolean
   birthday?: string | null
 }
 

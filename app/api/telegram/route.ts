@@ -1150,11 +1150,9 @@ async function findFriendMatches(userChatId: number | bigint, recipientName: str
     let isAllowed = false
     let reason = ''
 
-    // SECURITY: ONLY allowTasks=true in friendship allows task sending.
-    // Shared projects or groups do NOT grant task delegation permission.
+    // SECURITY: Target friend (fId) MUST have allowTasks=true for the sender (cid).
     const fs = friendships.find((f: any) =>
-      (f.userChatId === fId && f.friendChatId === cid) ||
-      (f.friendChatId === fId && f.userChatId === cid)
+      f.userChatId === fId && f.friendChatId === cid
     )
     if (fs && fs.status === 'accepted' && fs.allowTasks === true) {
       isAllowed = true

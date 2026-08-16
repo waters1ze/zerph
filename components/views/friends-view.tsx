@@ -120,10 +120,15 @@ function FriendCard({
               </button>
               <button
                 onClick={() => onSchedule(friend)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-semibold transition-all active:scale-95 shadow-sm"
-                title="Посмотреть график и свободные окна"
+                className={cn(
+                  "flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all active:scale-95 shadow-sm",
+                  friend.friendAllowedMe
+                    ? "bg-primary/10 hover:bg-primary/20 text-primary"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+                title={friend.friendAllowedMe ? "Посмотреть график и свободные окна" : "График закрыт пользователем (нажмите для подробностей)"}
               >
-                <Clock className="w-3 h-3" />
+                {friend.friendAllowedMe ? <Clock className="w-3 h-3 text-primary" /> : <Lock className="w-3 h-3 text-muted-foreground" />}
                 <span>График</span>
               </button>
               <button
@@ -137,21 +142,34 @@ function FriendCard({
           </div>
 
           {/* Task permission toggle */}
-          <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/40">
-            <span className="text-[11px] text-muted-foreground">Разрешить задачи от этого человека</span>
-            <button
-              onClick={toggleAllowTasks}
-              disabled={updating}
-              className={cn(
-                'w-8 h-4.5 rounded-full relative transition-colors p-0.5',
-                allowTasks ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+          <div className="flex flex-col gap-1 pt-2 mt-2 border-t border-border/40">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">Разрешить задачи от этого человека</span>
+              <button
+                onClick={toggleAllowTasks}
+                disabled={updating}
+                className={cn(
+                  'w-8 h-4.5 rounded-full relative transition-colors p-0.5',
+                  allowTasks ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                )}
+              >
+                <div className={cn(
+                  'w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                  allowTasks ? 'translate-x-3.5' : 'translate-x-0'
+                )} />
+              </button>
+            </div>
+            <div className="flex items-center gap-1 text-[10px]">
+              {friend.friendAllowedMe ? (
+                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+                  <Check className="w-3 h-3" /> Пользователь открыл вам доступ к графику
+                </span>
+              ) : (
+                <span className="text-muted-foreground/75 flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Пользователь пока не открыл вам доступ к графику
+                </span>
               )}
-            >
-              <div className={cn(
-                'w-3.5 h-3.5 rounded-full bg-white transition-transform',
-                allowTasks ? 'translate-x-3.5' : 'translate-x-0'
-              )} />
-            </button>
+            </div>
           </div>
 
           {/* Birthday Date Input */}

@@ -937,19 +937,35 @@ export async function getFriendSchedule(
 
   const friendName = [friendUser.firstName, friendUser.lastName].filter(Boolean).join(' ') || friendUser.firstName || friendUser.username || 'Друг'
 
-  // 1. Verify friendship and allowTasks permission
-  const friendships = await prisma.friendship.findMany({
-    where: {
-      OR: [
-        { userChatId: vCid, friendChatId: tCid },
-        { userChatId: tCid, friendChatId: vCid },
-      ]
-    }
-  })
+  // 1. Verify friendship and permission
+  // IMPORTANT: To view Target's schedule, TARGET (tCid) MUST HAVE GIVEN PERMISSION TO VIEWER (vCid).
+  const isSelf = vCid === tCid
+  let isFriend = isSelf
+  let allowsTasks = isSelf
 
-  const isFriend = friendships.some(f => f.status === 'accepted') || vCid === tCid
-  // The toggle "Разрешить задачи от этого человека" must be true for task & schedule sharing
-  const allowsTasks = friendships.some(f => f.status === 'accepted' && f.allowTasks === true) || vCid === tCid
+  if (!isSelf) {
+    const friendToViewer = await prisma.friendship.findUnique({
+      where: {
+        userChatId_friendChatId: {
+          userChatId: tCid,
+          friendChatId: vCid,
+        }
+      }
+    })
+
+    const viewerToFriend = await prisma.friendship.findUnique({
+      where: {
+        userChatId_friendChatId: {
+          userChatId: vCid,
+          friendChatId: tCid,
+        }
+      }
+    })
+
+    isFriend = (friendToViewer?.status === 'accepted') || (viewerToFriend?.status === 'accepted')
+    // Target friend MUST have accepted and explicitly enabled allowTasks for the viewer
+    allowsTasks = Boolean(friendToViewer && friendToViewer.status === 'accepted' && friendToViewer.allowTasks === true)
+  }
 
   if (!isFriend) {
     return {
@@ -1662,10 +1678,8 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
     const results = await Promise.all(
       friendIds.map(async fid => {
         const fidStr = String(fid)
-        const friendship = friendships.find(f => 
-          (f.userChatId === cid && f.friendChatId === fid) || 
-          (f.userChatId === fid && f.friendChatId === cid)
-        )
+        const myFriendship = friendships.find(f => f.userChatId === cid && f.friendChatId === fid)
+        const theirFriendship = friendships.find(f => f.userChatId === fid && f.friendChatId === cid)
 
         let chat = chatMap.get(fidStr)
 
@@ -1728,7 +1742,8 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
           status,
           addedAt: new Date().toISOString(),
           birthday: chat?.birthday || null,
-          allowTasks: (friendship as any)?.allowTasks ?? (isBot ? true : false),
+          allowTasks: myFriendship ? myFriendship.allowTasks : (isBot ? true : false),
+          friendAllowedMe: theirFriendship ? theirFriendship.allowTasks : (isBot ? true : false),
         }
       })
     )

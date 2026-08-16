@@ -215,14 +215,20 @@ export async function PATCH(req: NextRequest) {
     const targetCid = BigInt(friendId)
 
     if (allowTasks !== undefined) {
-      await (prisma.friendship as any).updateMany({
+      await prisma.friendship.upsert({
         where: {
-          OR: [
-            { userChatId: chatId, friendChatId: targetCid },
-            { userChatId: targetCid, friendChatId: chatId },
-          ],
+          userChatId_friendChatId: {
+            userChatId: chatId,
+            friendChatId: targetCid,
+          }
         },
-        data: { allowTasks: Boolean(allowTasks) },
+        update: { allowTasks: Boolean(allowTasks) },
+        create: {
+          userChatId: chatId,
+          friendChatId: targetCid,
+          status: 'accepted',
+          allowTasks: Boolean(allowTasks),
+        },
       })
     }
 
