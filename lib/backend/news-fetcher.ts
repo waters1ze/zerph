@@ -27,6 +27,7 @@ export interface NewsDigestContext {
   }
   geoNews?: NewsItem[]
   techNews?: NewsItem[]
+  eduNews?: NewsItem[]
   news: NewsItem[]
   headlines: string[]
   sources: string[]
@@ -57,7 +58,8 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
   const rates: { usd?: string; eur?: string; cny?: string; btc?: string; ton?: string } = {}
   const geoNews: NewsItem[] = []
   const techNews: NewsItem[] = []
-  const sources: string[] = ['Центральный Банк РФ', 'CoinGecko', 'Lenta Мир', 'Хабр AI']
+  const eduNews: NewsItem[] = []
+  const sources: string[] = ['Центральный Банк РФ', 'CoinGecko', 'Lenta Мир', 'Хабр AI', 'Хабр Образование & Наука']
 
   // 1. Fetch Central Bank of Russia rates
   try {
@@ -128,7 +130,7 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
   // 4. Fetch latest AI & Tech News RSS (Habr AI) with rich descriptions & URLs
   try {
     const rssRes = await fetch('https://habr.com/ru/rss/hub/artificial_intelligence/all/?fl=ru', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
       next: { revalidate: 1800 }
     })
     if (rssRes.ok) {
@@ -153,6 +155,35 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     }
   } catch (e) {
     console.error('Habr RSS fetch error:', e)
+  }
+
+  // 5. Fetch Education, Science & EdTech News (Habr Popular Science & Study)
+  try {
+    const eduRes = await fetch('https://habr.com/ru/rss/hub/popular_science/all/?fl=ru', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      next: { revalidate: 1800 }
+    })
+    if (eduRes.ok) {
+      const xml = await eduRes.text()
+      const itemBlocks = xml.split('<item>').slice(1)
+      for (const block of itemBlocks) {
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)
+        const linkMatch = block.match(/<link>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)(?:\]\]>)?<\/link>/i) || block.match(/<guid[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i)
+
+        if (titleMatch) {
+          const title = cleanHtmlText(titleMatch[1])
+          const summary = descMatch ? cleanHtmlText(descMatch[1]).slice(0, 300) : ''
+          const url = linkMatch ? linkMatch[1].trim() : undefined
+          if (title && !title.includes('Хабр') && !title.includes('Habr') && title.length > 15) {
+            eduNews.push({ title, summary, url, source: 'Образование & Наука' })
+            if (eduNews.length >= 3) break
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Edu RSS error:', e)
   }
 
   // Supplementary tech feed if needed
@@ -183,12 +214,13 @@ export async function fetchMorningNewsContext(): Promise<NewsDigestContext> {
     } catch {}
   }
 
-  const combinedNews = [...geoNews, ...techNews]
+  const combinedNews = [...geoNews, ...techNews, ...eduNews]
   return {
     date: dateStr,
     rates,
     geoNews,
     techNews,
+    eduNews,
     news: combinedNews,
     headlines: combinedNews.map(n => n.title),
     sources
