@@ -310,9 +310,9 @@ export function TasksView() {
             <Lightbulb className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[12px] font-bold text-foreground">Голосовые поручения Zerf</p>
+            <p className="text-[12px] font-bold text-foreground">Голосовые и общие задачи</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
-              Скажи Siri: <i>«Дай нам с Лерой задачу приготовить ужин в 19:00»</i> — и Zerf автоматически создаст задачу у обоих и напомнит одновременно.
+              Скажи боту или Siri: <i>«Создай нам общую задачу согласовать проект к 19:00»</i> — и Zerf автоматически создаст задачу у обоих участников и пришлет синхронное напоминание.
             </p>
           </div>
         </div>
