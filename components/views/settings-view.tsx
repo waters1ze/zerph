@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
-import { PLAN_CATALOG, normalizePlan } from '@/lib/plans'
+import { PLAN_CATALOG, normalizePlan, PLANS, UNLIMITED } from '@/lib/plans'
 import { GiftSection } from '@/components/settings/gift-section'
 import { ImportExportSection } from '@/components/settings/import-export-section'
 import { TeamsSection } from '@/components/settings/teams-section'
@@ -2139,172 +2139,171 @@ export function SettingsView() {
                 </div>
 
                 {/* Grid of live limit metrics */}
-                {usage && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1 text-xs">
-                    {/* Voice */}
-                    {(() => {
-                      const isUnl = (val: any) => val === null || val === undefined || !isFinite(Number(val)) || Number(val) >= 99999
-                      const maxSec = usage.voice?.maxSeconds ?? usage.voice?.max
-                      const unl = isUnl(maxSec)
-                      const secUsed = usage.voice?.secondsUsed || 0
-                      const usedMin = (secUsed / 60).toFixed(1).replace('.0', '')
-                      const maxMin = Math.round(Number(maxSec) / 60)
-                      const isExceeded = !unl && secUsed >= Number(maxSec)
-                      const pct = unl ? 100 : Math.min(100, Math.round((secUsed / Number(maxSec)) * 100))
-                      const title = unl ? `${usedMin} мин / ∞` : `${usedMin} / ${maxMin} мин`
-                      return (
-                        <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Голос (сегодня)</span>
-                            <Mic className="w-3.5 h-3.5 text-primary" />
-                          </div>
-                          <p className="font-bold text-foreground text-sm">{title}</p>
-                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-primary")}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })()}
+                {(() => {
+                  const currentPlan = normalizePlan(profileData.plan || usage?.plan || state.settings?.userPlan || 'free')
+                  const planLimits = PLANS[currentPlan]
 
-                    {/* Siri */}
-                    {(() => {
-                      const isUnl = (val: any) => val === null || val === undefined || !isFinite(Number(val)) || Number(val) >= 99999
-                      const maxSiri = usage.siri?.max
-                      const unl = isUnl(maxSiri)
-                      const used = usage.siri?.used || 0
-                      const maxNum = Number(maxSiri)
-                      const isExceeded = !unl && used >= maxNum
-                      const pct = unl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
-                      const title = unl ? `${used} / ∞` : `${used} / ${maxNum}`
-                      return (
-                        <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Siri запросы</span>
-                            <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1 text-xs">
+                      {/* Voice */}
+                      {(() => {
+                        const maxSec = usage?.voice?.maxSeconds ?? usage?.voice?.max ?? planLimits.voiceSecondsPerDay
+                        const isUnl = maxSec === UNLIMITED || Number(maxSec) >= 99999
+                        const secUsed = usage?.voice?.secondsUsed ?? usage?.voice?.used ?? 0
+                        const usedMin = (secUsed / 60).toFixed(1).replace('.0', '')
+                        const maxMin = Math.round(Number(maxSec) / 60)
+                        const isExceeded = !isUnl && secUsed >= Number(maxSec)
+                        const pct = isUnl ? 100 : Math.min(100, Math.round((secUsed / Number(maxSec)) * 100))
+                        const title = isUnl ? `${usedMin} мин / ∞` : `${usedMin} / ${maxMin > 0 ? `${maxMin} мин` : '1.5 мин'}`
+                        return (
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Голос (сегодня)</span>
+                              <Mic className="w-3.5 h-3.5 text-primary" />
+                            </div>
+                            <p className="font-bold text-foreground text-sm">{title}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-primary")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           </div>
-                          <p className="font-bold text-foreground text-sm">{title}</p>
-                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-amber-400")}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })()}
+                        )
+                      })()}
 
-                    {/* Notes */}
-                    {(() => {
-                      const isUnl = (val: any) => val === null || val === undefined || !isFinite(Number(val)) || Number(val) >= 99999
-                      const maxNotes = usage.notes?.max
-                      const unl = isUnl(maxNotes)
-                      const used = usage.notes?.used || 0
-                      const maxNum = Number(maxNotes)
-                      const isExceeded = !unl && used >= maxNum
-                      const pct = unl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
-                      const title = unl ? `${used} / ∞` : `${used} / ${maxNum}`
-                      return (
-                        <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Заметки</span>
-                            <FileText className="w-3.5 h-3.5 text-blue-400" />
+                      {/* Siri */}
+                      {(() => {
+                        const maxSiri = usage?.siri?.max ?? planLimits.siriLifetimeRequests
+                        const isUnl = maxSiri === UNLIMITED || Number(maxSiri) >= 99999
+                        const used = usage?.siri?.used || 0
+                        const maxNum = Number(maxSiri)
+                        const isExceeded = !isUnl && used >= maxNum
+                        const pct = isUnl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
+                        const title = isUnl ? `${used} / ∞` : `${used} / ${maxNum}`
+                        return (
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Siri запросы</span>
+                              <Zap className="w-3.5 h-3.5 text-amber-400" />
+                            </div>
+                            <p className="font-bold text-foreground text-sm">{title}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-amber-400")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           </div>
-                          <p className="font-bold text-foreground text-sm">{title}</p>
-                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-blue-400")}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })()}
+                        )
+                      })()}
 
-                    {/* Reminders */}
-                    {(() => {
-                      const isUnl = (val: any) => val === null || val === undefined || !isFinite(Number(val)) || Number(val) >= 99999
-                      const maxReminders = usage.reminders?.max
-                      const unl = isUnl(maxReminders)
-                      const used = usage.reminders?.used || 0
-                      const maxNum = Number(maxReminders)
-                      const isExceeded = !unl && used >= maxNum
-                      const pct = unl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
-                      const title = unl ? `${used} / ∞` : `${used} / ${maxNum}`
-                      return (
-                        <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Напоминания</span>
-                            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      {/* Notes */}
+                      {(() => {
+                        const maxNotes = usage?.notes?.max ?? planLimits.maxStoredNotes
+                        const isUnl = maxNotes === UNLIMITED || Number(maxNotes) >= 99999
+                        const used = usage?.notes?.used ?? (state.notes?.length || 0)
+                        const maxNum = Number(maxNotes)
+                        const isExceeded = !isUnl && used >= maxNum
+                        const pct = isUnl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
+                        const title = isUnl ? `${used} / ∞` : `${used} / ${maxNum}`
+                        return (
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Заметки</span>
+                              <FileText className="w-3.5 h-3.5 text-blue-400" />
+                            </div>
+                            <p className="font-bold text-foreground text-sm">{title}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-blue-400")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           </div>
-                          <p className="font-bold text-foreground text-sm">{title}</p>
-                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-emerald-400")}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })()}
+                        )
+                      })()}
 
-                    {/* Goals */}
-                    {(() => {
-                      const isUnl = (val: any) => val === null || val === undefined || !isFinite(Number(val)) || Number(val) >= 99999
-                      const maxGoals = usage.goals?.max
-                      const unl = isUnl(maxGoals)
-                      const used = usage.goals?.used || 0
-                      const maxNum = Number(maxGoals)
-                      const isExceeded = !unl && used >= maxNum
-                      const pct = unl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
-                      const title = unl ? `${used} / ∞` : `${used} / ${maxNum}`
-                      return (
-                        <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Цели (день)</span>
-                            <Target className="w-3.5 h-3.5 text-purple-400" />
+                      {/* Reminders */}
+                      {(() => {
+                        const maxReminders = usage?.reminders?.max ?? planLimits.maxActiveReminders
+                        const isUnl = maxReminders === UNLIMITED || Number(maxReminders) >= 99999
+                        const used = usage?.reminders?.used ?? (state.tasks?.filter((t: any) => t.status !== 'done')?.length || 0)
+                        const maxNum = Number(maxReminders)
+                        const isExceeded = !isUnl && used >= maxNum
+                        const pct = isUnl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
+                        const title = isUnl ? `${used} / ∞` : `${used} / ${maxNum}`
+                        return (
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Напоминания</span>
+                              <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                            </div>
+                            <p className="font-bold text-foreground text-sm">{title}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-emerald-400")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           </div>
-                          <p className="font-bold text-foreground text-sm">{title}</p>
-                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-purple-400")}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })()}
+                        )
+                      })()}
 
-                    {/* Photos */}
-                    {(() => {
-                      const isUnl = (val: any) => val === null || val === undefined || !isFinite(Number(val)) || Number(val) >= 99999
-                      const maxPhotos = usage.photos?.max
-                      const unl = isUnl(maxPhotos)
-                      const used = usage.photos?.used || 0
-                      const maxNum = Number(maxPhotos)
-                      const isExceeded = !unl && maxNum > 0 && used >= maxNum
-                      const pct = unl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
-                      const title = unl ? `${used} / ∞` : maxNum === 0 ? '0 / 0 (Plus+)' : `${used} / ${maxNum}`
-                      return (
-                        <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Фото / Распозн.</span>
-                            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                      {/* Goals */}
+                      {(() => {
+                        const maxGoals = usage?.goals?.max ?? planLimits.goalsPerDay
+                        const isUnl = maxGoals === UNLIMITED || Number(maxGoals) >= 99999
+                        const used = usage?.goals?.used ?? (state.goals?.length || 0)
+                        const maxNum = Number(maxGoals)
+                        const isExceeded = !isUnl && used >= maxNum
+                        const pct = isUnl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
+                        const title = isUnl ? `${used} / ∞` : `${used} / ${maxNum}`
+                        return (
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Цели (день)</span>
+                              <Target className="w-3.5 h-3.5 text-purple-400" />
+                            </div>
+                            <p className="font-bold text-foreground text-sm">{title}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-purple-400")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           </div>
-                          <p className="font-bold text-foreground text-sm">{title}</p>
-                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-cyan-400")}
-                              style={{ width: `${pct}%` }}
-                            />
+                        )
+                      })()}
+
+                      {/* Photos */}
+                      {(() => {
+                        const maxPhotos = usage?.photos?.max ?? planLimits.photosPerDay
+                        const isUnl = maxPhotos === UNLIMITED || Number(maxPhotos) >= 99999
+                        const used = usage?.photos?.used || 0
+                        const maxNum = Number(maxPhotos)
+                        const isExceeded = !isUnl && maxNum > 0 && used >= maxNum
+                        const pct = isUnl ? 100 : (maxNum > 0 ? Math.min(100, Math.round((used / maxNum) * 100)) : 0)
+                        const title = isUnl ? `${used} / ∞` : maxNum === 0 ? '0 / 0 (Plus+)' : `${used} / ${maxNum}`
+                        return (
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Фото / Распозн.</span>
+                              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                            </div>
+                            <p className="font-bold text-foreground text-sm">{title}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", isExceeded ? "bg-rose-500" : "bg-cyan-400")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                )}
+                        )
+                      })()}
+                    </div>
+                  )
+                })()}
               </div>
               {/* Billing Cycle Switcher (Monthly / Yearly -15%) */}
               <div className="flex items-center justify-between p-3 rounded-2xl bg-muted/40 border border-border">
