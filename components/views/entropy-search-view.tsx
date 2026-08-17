@@ -305,25 +305,33 @@ export function EntropySearchView() {
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 py-6 space-y-6 pb-24 text-foreground font-sans">
-      {/* ── TOP HERO HEADER WITH VISUAL TIKHONYA MASCOT ── */}
-      <div className="p-5 md:p-6 rounded-3xl bg-card border border-border/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
-        {/* Glow Accent */}
-        <div className="absolute -right-10 -top-10 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="w-full min-h-screen px-3 sm:px-6 md:px-8 py-4 md:py-6 space-y-5 pb-24 text-foreground font-sans max-w-none">
+      {/* ── TOP HERO HEADER (REFINED SLEEK GLASSMORPHIC CAPSULE) ── */}
+      <div className="p-4 md:p-5 rounded-2xl md:rounded-3xl bg-card/90 border border-border/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-md">
+        {/* Subtle Gradient Accent */}
+        <div className="absolute right-0 top-0 w-80 h-full bg-gradient-to-l from-sky-500/10 via-primary/5 to-transparent pointer-events-none" />
 
-        {/* Left: 3D Visual Mascot & Persona */}
-        <TikhonyaMascot
-          mood={tikhonyaMood}
-          statusText={tikhonyaStatus}
-          size="md"
-          onMascotClick={() => {
-            setTikhonyaMood('celebrate')
-            setTikhonyaStatus('Тихоня взмахнул крыльями и рад вам помочь! ✧ ٩(ˊᗜˋ*)و ✧')
-          }}
-        />
+        {/* Left: 3D Visual Mascot & Dynamic Speech */}
+        <div className="flex items-center gap-3.5 flex-1 min-w-0">
+          <TikhonyaMascot
+            mood={tikhonyaMood}
+            statusText={tikhonyaStatus}
+            size="md"
+            onMascotClick={() => {
+              setTikhonyaMood('celebrate')
+              setTikhonyaStatus('Тихоня взмахнул крыльями и рад вам помочь! ✧ ٩(ˊᗜˋ*)و ✧')
+            }}
+          />
+        </div>
 
-        {/* Right: Limits & Controls */}
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+        {/* Right: Status & Limits Controls */}
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
+          {/* Model Engine Tag */}
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/60 border border-border text-[11px] text-muted-foreground font-mono">
+            <Cpu className="w-3.5 h-3.5 text-primary" />
+            <span>Entropy Engine (Groq · Qwen/Llama)</span>
+          </div>
+
           {/* Daily Usage Badge */}
           {usageInfo && (
             <div
@@ -357,7 +365,7 @@ export function EntropySearchView() {
           {result && (
             <button
               onClick={handleResetSearch}
-              className="px-3.5 py-1.5 rounded-xl bg-muted/80 hover:bg-muted text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Новый поиск</span>

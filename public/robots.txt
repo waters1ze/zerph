@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /api/
+Disallow: /cli-auth
+Allow: /
+Allow: /tg
+Allow: /vk
+
+Sitemap: https://zeprh.vercel.app/sitemap.xml

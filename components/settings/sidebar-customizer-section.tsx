@@ -8,7 +8,7 @@ import {
   UserCheck, Building2, Puzzle, Eye, EyeOff, Folder, Plus, Trash2,
   RotateCcw, Check, Sparkles, FolderPlus, ArrowUp, ArrowDown, Move,
   ChevronDown, ChevronRight, Edit2, Save, X, ExternalLink,
-  Share2, Download, Upload, Copy, CheckCheck, Heart, Crown, Search
+  Share2, Download, Upload, Copy, CheckCheck, Heart, Crown, Search, ArrowRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
@@ -94,33 +94,28 @@ export interface LayoutPreset {
   isCustom?: boolean
 }
 
-export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
+export const DEFAULT_OFFICIAL_PRESETS: LayoutPreset[] = [
   {
-    id: 'preset_founder',
-    title: 'Startup Founder & Product Lead',
-    description: 'Оптимизировано для создания продуктов: Проекты, Задачи, Таймер фокуса и Аналитика на первом плане.',
-    icon: '🚀',
+    id: 'preset_default_workspace',
+    title: 'Стандартная рабочая среда Zerf',
+    description: 'Базовая сбалансированная раскладка: задачи, заметки, календарь, граф и таймер фокуса.',
+    icon: '✨',
     author: 'Zerf Official',
     minPlan: 'free',
-    likesCount: 0,
+    likesCount: 18,
     config: {
-      hiddenItems: ['friends', 'teams'],
-      folders: [
-        { id: 'focus', title: '⚡ Быстрый фокус', itemIds: ['today', 'tasks', 'clock'] },
-        { id: 'dev', title: '🚀 Продукт & SaaS', itemIds: ['projects', 'goals', 'notes'] },
-        { id: 'insights', title: '📊 Метрики', itemIds: ['stats', 'graph', 'calendar'] },
-        { id: 'sys', title: '⚙️ Настройки', itemIds: ['settings'] },
-      ],
+      hiddenItems: [],
+      folders: DEFAULT_SIDEBAR_FOLDERS,
     },
   },
   {
-    id: 'preset_ai_researcher',
-    title: 'AI Power User & Entropy Search',
-    description: 'Интеллектуальная раскладка: ИИ-поиск Entropy, Граф связей, Заметки и Планирование.',
+    id: 'preset_entropy_workspace',
+    title: 'Entropy AI Research Hub',
+    description: 'Официальный пресет автора: ИИ-поиск Entropy, Граф связей, Заметки и Планирование.',
     icon: '🔮',
     author: 'waters1ze',
     minPlan: 'plus',
-    likesCount: 0,
+    likesCount: 42,
     recommendedExts: ['ext_entropy_search'],
     config: {
       hiddenItems: ['friends', 'teams'],
@@ -129,41 +124,6 @@ export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
         { id: 'workflow', title: '📋 Поток работы', itemIds: ['today', 'tasks', 'calendar'] },
         { id: 'strategy', title: '🎯 Стратегия', itemIds: ['goals', 'projects', 'stats'] },
         { id: 'system', title: '⚙️ Настройки', itemIds: ['settings'] },
-      ],
-    },
-  },
-  {
-    id: 'preset_minimal_zen',
-    title: 'Minimal Zen Workspace',
-    description: 'Абсолютный минимализм: только самое важное на день, всё лишнее аккуратно скрыто.',
-    icon: '🧘',
-    author: 'Zen Master',
-    minPlan: 'free',
-    likesCount: 0,
-    config: {
-      hiddenItems: ['graph', 'friends', 'teams', 'stats', 'projects', 'goals'],
-      folders: [
-        { id: 'today_focus', title: '✨ Сегодня', itemIds: ['today', 'inbox', 'clock'] },
-        { id: 'thoughts', title: '📝 Мысли', itemIds: ['notes', 'calendar', 'tasks'] },
-        { id: 'settings_min', title: '⚙️ Настройки', itemIds: ['settings'] },
-      ],
-    },
-  },
-  {
-    id: 'preset_team_collab',
-    title: 'Team Collaboration & Agile',
-    description: 'Для командной работы: Команды, Друзья, Проекты и Задачи выведены в топ.',
-    icon: '👥',
-    author: 'Agile Team',
-    minPlan: 'plus',
-    likesCount: 0,
-    config: {
-      hiddenItems: [],
-      folders: [
-        { id: 'collab', title: '👥 Команда & Спринты', itemIds: ['teams', 'tasks', 'projects', 'friends'] },
-        { id: 'schedule', title: '📅 Расписание', itemIds: ['calendar', 'today', 'inbox'] },
-        { id: 'knowledge', title: '📚 База знаний', itemIds: ['notes', 'graph', 'goals'] },
-        { id: 'sys_team', title: '⚙️ Настройки', itemIds: ['stats', 'settings'] },
       ],
     },
   },
@@ -219,6 +179,7 @@ export function SidebarCustomizerSection() {
   // Presets Showcase Filters & Modals
   const [selectedPresetForModal, setSelectedPresetForModal] = useState<LayoutPreset | null>(null)
   const [showCreatePresetModal, setShowCreatePresetModal] = useState(false)
+  const [showAllPresetsModal, setShowAllPresetsModal] = useState(false)
   const [presetSearch, setPresetSearch] = useState('')
   const [presetFilter, setPresetFilter] = useState<'all' | 'free' | 'paid' | 'my'>('all')
 
@@ -466,8 +427,12 @@ export function SidebarCustomizerSection() {
 
   // All presets combined and filtered
   const allPresets = useMemo(() => {
-    return [...customPresets, ...COMMUNITY_LAYOUT_PRESETS]
+    return [...customPresets, ...DEFAULT_OFFICIAL_PRESETS]
   }, [customPresets])
+
+  const topPopularPresets = useMemo(() => {
+    return [...allPresets].sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0)).slice(0, 4)
+  }, [allPresets])
 
   const filteredPresets = useMemo(() => {
     let list = allPresets
@@ -677,10 +642,10 @@ export function SidebarCustomizerSection() {
           <div>
             <h4 className="font-bold text-foreground flex items-center gap-2 text-sm">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span>Витрина пресетов раскладки и расширений</span>
+              <span>🔥 Популярные пресеты раскладки</span>
             </h4>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Готовые шаблоны расположения папок, расширений и создание собственных пресетов
+              Лучшие готовые шаблоны расположения папок и расширений
             </p>
           </div>
 
@@ -709,45 +674,9 @@ export function SidebarCustomizerSection() {
           </div>
         </div>
 
-        {/* Filter Pills & Search in Showcase */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {[
-              { id: 'all', label: `🌟 Все (${allPresets.length})` },
-              { id: 'free', label: '🆓 Бесплатные' },
-              { id: 'paid', label: '💎 Zerf Plus / Pro' },
-              { id: 'my', label: `👤 Мои пресеты (${customPresets.length})` },
-            ].map(f => (
-              <button
-                key={f.id}
-                onClick={() => setPresetFilter(f.id as any)}
-                className={cn(
-                  'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors shrink-0 cursor-pointer',
-                  presetFilter === f.id
-                    ? 'bg-card border-primary text-primary font-bold shadow-xs'
-                    : 'bg-card/60 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={presetSearch}
-              onChange={e => setPresetSearch(e.target.value)}
-              placeholder="Поиск по пресетам..."
-              className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary"
-            />
-          </div>
-        </div>
-
-        {/* Presets Cards Grid */}
+        {/* Top Popular Presets Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {filteredPresets.map(preset => {
+          {topPopularPresets.map(preset => {
             const isLiked = likedPresetIds.has(preset.id)
             const currentLikes = (preset.likesCount || 0) + (isLiked ? 1 : 0)
 
@@ -834,23 +763,22 @@ export function SidebarCustomizerSection() {
                       <Check className="w-3.5 h-3.5" />
                       <span>Применить</span>
                     </button>
-
-                    {/* Delete Custom Preset */}
-                    {preset.isCustom && (
-                      <button
-                        onClick={() => handleDeleteCustomPreset(preset.id)}
-                        className="p-1.5 rounded-xl bg-muted/60 hover:bg-rose-500/15 text-muted-foreground hover:text-rose-400 border border-border transition-colors cursor-pointer"
-                        title="Удалить пользовательский пресет"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
             )
           })}
         </div>
+
+        {/* Big Action: Open All Presets Catalog */}
+        <button
+          onClick={() => setShowAllPresetsModal(true)}
+          className="w-full py-3 px-4 rounded-2xl bg-muted/60 hover:bg-muted border border-border/80 hover:border-primary/40 text-foreground font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs group"
+        >
+          <LayoutGrid className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+          <span>📂 Открыть полный каталог ВСЕХ пресетов ({allPresets.length})</span>
+          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+        </button>
       </div>
 
       {/* Folders Creator Form */}
@@ -1398,6 +1326,201 @@ export function SidebarCustomizerSection() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* ── MODAL 4: FULL PRESETS CATALOG (All hundreds of presets) ── */}
+      <AnimatePresence>
+        {showAllPresetsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-4xl bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                    <LayoutGrid className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm md:text-base font-bold text-foreground">
+                      Каталог всех пресетов раскладки ({allPresets.length})
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      Ищите, примеряйте и применяйте любые раскладки сообщества
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowAllPresetsModal(false)
+                      handleOpenCreatePreset()
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Создать пресет</span>
+                  </button>
+                  <button
+                    onClick={() => setShowAllPresetsModal(false)}
+                    className="w-8 h-8 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs transition-colors cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Pills & Search in Showcase */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {[
+                    { id: 'all', label: `🌟 Все (${allPresets.length})` },
+                    { id: 'free', label: '🆓 Бесплатные' },
+                    { id: 'paid', label: '💎 Zerf Plus / Pro' },
+                    { id: 'my', label: `👤 Мои (${customPresets.length})` },
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setPresetFilter(f.id as any)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors shrink-0 cursor-pointer',
+                        presetFilter === f.id
+                          ? 'bg-card border-primary text-primary font-bold shadow-xs'
+                          : 'bg-card/60 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={presetSearch}
+                    onChange={e => setPresetSearch(e.target.value)}
+                    placeholder="Поиск по названию, автору..."
+                    className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Presets Cards Grid */}
+              <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 gap-3 min-h-[320px]">
+                {filteredPresets.map(preset => {
+                  const isLiked = likedPresetIds.has(preset.id)
+                  const currentLikes = (preset.likesCount || 0) + (isLiked ? 1 : 0)
+
+                  return (
+                    <div
+                      key={preset.id}
+                      className="p-4 rounded-2xl bg-card border border-border hover:border-primary/40 shadow-2xs transition-all flex flex-col justify-between gap-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-foreground text-xs flex items-center gap-1.5 truncate">
+                            <span>{preset.icon}</span>
+                            <span className="truncate">{preset.title}</span>
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {preset.isCustom && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-400 text-[9px] font-bold border border-purple-500/30">
+                                Кастомный
+                              </span>
+                            )}
+                            {preset.minPlan === 'free' ? (
+                              <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-bold border border-emerald-500/30">
+                                FREE
+                              </span>
+                            ) : preset.minPlan === 'plus' ? (
+                              <span className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[9px] font-bold border border-amber-500/30 flex items-center gap-1">
+                                <Crown className="w-2.5 h-2.5" /> Zerf Plus
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-400 text-[9px] font-bold border border-purple-500/30 flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" /> Zerf Pro
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                          {preset.description}
+                        </p>
+
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          {preset.config.folders.map(f => (
+                            <span key={f.id} className="text-[9px] px-2 py-0.5 rounded-md bg-muted/60 border border-border text-foreground/80 font-medium">
+                              📁 {f.title} ({f.itemIds.length})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-2.5 border-t border-border/40 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleLikePreset(preset.id)}
+                            className={cn(
+                              'px-2 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer',
+                              isLiked
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                : 'bg-muted/50 text-muted-foreground hover:text-foreground border-border'
+                            )}
+                            title="Поставить лайк пресету"
+                          >
+                            <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
+                            <span>{currentLikes}</span>
+                          </button>
+                          <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {/* Open Details Button */}
+                          <button
+                            onClick={() => setSelectedPresetForModal(preset)}
+                            className="px-2.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-medium text-xs border border-border flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Открыть детали и структуру пресета"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Открыть</span>
+                          </button>
+
+                          {/* Apply Preset Button */}
+                          <button
+                            onClick={() => {
+                              applyLayoutPreset(preset)
+                              setShowAllPresetsModal(false)
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Применить</span>
+                          </button>
+
+                          {/* Delete Custom Preset */}
+                          {preset.isCustom && (
+                            <button
+                              onClick={() => handleDeleteCustomPreset(preset.id)}
+                              className="p-1.5 rounded-xl bg-muted/60 hover:bg-rose-500/15 text-muted-foreground hover:text-rose-400 border border-border transition-colors cursor-pointer"
+                              title="Удалить пользовательский пресет"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </motion.div>
           </div>
         )}

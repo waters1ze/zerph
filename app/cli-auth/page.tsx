@@ -69,12 +69,21 @@ function CliAuthContent() {
     checkAuth()
   }, [])
 
-  // Auto-listen to Telegram Bot 1-click authorization
+  // Auto-listen to Telegram Bot 1-click authorization with safety timeout
   useEffect(() => {
     const cleanCode = code.trim().toUpperCase()
     if (!cleanCode || status === 'success') return
 
+    let attempts = 0
+    const maxAttempts = 120 // ~3 minutes max
+
     const timer = setInterval(async () => {
+      attempts++
+      if (attempts > maxAttempts) {
+        clearInterval(timer)
+        return
+      }
+
       try {
         const res = await fetch(`/api/cli/auth?code=${encodeURIComponent(cleanCode)}`)
         if (res.ok) {
@@ -88,7 +97,7 @@ function CliAuthContent() {
           }
         }
       } catch {}
-    }, 1500)
+    }, 2000)
 
     return () => clearInterval(timer)
   }, [code, status])
