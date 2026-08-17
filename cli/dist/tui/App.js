@@ -85,6 +85,6 @@ export function App({ initialData }) {
             return _jsx(ExtensionsScreen, { userData: data });
         case 'repl':
         default:
-            return _jsx(Repl, { userData: data, onRefresh: reloadData });
+            return _jsx(Repl, { initialData: data });
     }
 }

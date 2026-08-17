@@ -1,85 +1,73 @@
-import chalk from 'chalk'
-import { GLYPH } from './tui/theme.js'
+const C_LIGHT = '\x1b[38;2;186;230;253m'  // #bae6fd Light wings & highlights
+const C_CYAN  = '\x1b[38;2;125;211;252m'  // #7dd3fc Sky 300
+const C_MAIN  = '\x1b[38;2;56;189;248m'   // #38bdf8 Sky 400
+const C_DARK  = '\x1b[38;2;14;165;233m'   // #0ea5e9 Sky 500
+const C_INDIGO= '\x1b[38;2;99;102;241m'   // #6366f1 Indigo 500
+const C_WHITE = '\x1b[38;2;248;250;252m'  // #f8fafc Platinum White
+const C_SLATE = '\x1b[38;2;148;163;184m'  // #94a3b8 Slate 400
+const C_MUTED = '\x1b[38;2;100;116;139m'  // #64748b Slate 500
+const RESET   = '\x1b[0m'
+const BOLD    = '\x1b[1m'
 
 export type MascotMood = 'idle' | 'thinking' | 'celebrate' | 'focus' | 'alert'
 
-export const MASCOT_GLYPHS = {
-  logo: GLYPH.logo,
-  bullet: GLYPH.bullet,
-  ok: GLYPH.ok,
-  cancel: GLYPH.cancel,
-  arrow: GLYPH.arrow,
-  todo: GLYPH.todo,
-  taskTodo: GLYPH.taskTodo,
-  taskDone: GLYPH.taskDone,
-  thinking: GLYPH.thinking,
-  mascotIdle: GLYPH.mascotIdle,
-  mascotFocus: GLYPH.mascotFocus,
-  mascotAlert: GLYPH.mascotAlert,
-  mascotJoy: GLYPH.mascotJoy,
-  barFilled: GLYPH.barFilled,
-  barEmpty: GLYPH.barEmpty,
-  divider: GLYPH.divider,
-} as const
-
-// Legacy alias for compatibility
 export const GLYPHS = {
-  spirit: GLYPH.logo,
-  wings: GLYPH.arrow,
-  task: GLYPH.logo,
-  taskDone: GLYPH.ok,
-  taskTodo: GLYPH.todo,
+  spirit: '◈',
+  wings: '🪽',
+  task: '❖',
+  taskDone: '✔',
+  taskTodo: '○',
   calendar: '◫',
-  chat: GLYPH.logo,
+  chat: '◈',
   note: '≡',
-  focus: GLYPH.bullet,
-  limits: GLYPH.bullet,
-  streak: GLYPH.arrow,
-  friend: GLYPH.arrow,
-  bullet: GLYPH.bullet,
-  pointer: GLYPH.arrow,
+  focus: '⊘',
+  limits: '⚡',
+  streak: '🔥',
+  friend: '🪽',
+  bullet: '●',
+  pointer: '▶',
 } as const
 
 export function getAllaySpriteLines(mood: MascotMood = 'idle', wingFrame = 0): string[] {
   const isWingUp = wingFrame % 2 === 0
-  const wTopL = isWingUp ? chalk.gray('▄▀') : chalk.gray('  ')
-  const wTopR = isWingUp ? chalk.gray('▀▄') : chalk.gray('  ')
-  const wMidL = isWingUp ? chalk.gray('█ ') : chalk.gray('▄▀')
-  const wMidR = isWingUp ? chalk.gray(' █') : chalk.gray('▀▄')
-  const wBotL = isWingUp ? chalk.gray('▀▄') : chalk.gray('  ')
-  const wBotR = isWingUp ? chalk.gray('▄▀') : chalk.gray('  ')
+  const wTopL = isWingUp ? `${C_LIGHT}▄▀` : `${C_LIGHT}  `
+  const wTopR = isWingUp ? `${C_LIGHT}▀▄` : `${C_LIGHT}  `
+  const wMidL = isWingUp ? `${C_LIGHT}█ ` : `${C_LIGHT}▄▀`
+  const wMidR = isWingUp ? `${C_LIGHT} █` : `${C_LIGHT}▀▄`
+  const wBotL = isWingUp ? `${C_LIGHT}▀▄` : `${C_LIGHT}  `
+  const wBotR = isWingUp ? `${C_LIGHT}▄▀` : `${C_LIGHT}  `
 
-  let eyes = chalk.white('■') + chalk.gray('██') + chalk.white('■')
+  let eyes = `${C_WHITE}■${C_MAIN}██${C_WHITE}■`
   if (mood === 'thinking') {
-    eyes = chalk.gray('⬡') + chalk.white('██') + chalk.gray('⬡')
+    eyes = `${C_CYAN}◫${C_MAIN}██${C_CYAN}◫`
   } else if (mood === 'celebrate') {
-    eyes = chalk.bold.white('✧') + chalk.gray('██') + chalk.bold.white('✧')
+    eyes = `${C_WHITE}◈${C_MAIN}██${C_WHITE}◈`
   } else if (mood === 'focus') {
-    eyes = chalk.gray('˘') + chalk.white('ᴗ') + chalk.gray('˘') + chalk.gray(' ')
+    eyes = `${C_INDIGO}▄${C_MAIN}██${C_INDIGO}▄`
   } else if (mood === 'alert') {
-    eyes = chalk.yellow('⊙') + chalk.gray('██') + chalk.yellow('⊙')
+    eyes = `${C_WHITE}■${C_MAIN}██${C_WHITE}■`
   }
 
   return [
-    ` ${wTopL} ${chalk.gray('▄████▄')} ${wTopR}`,
-    `${wMidL}${chalk.gray('█')}${eyes}${chalk.gray('█')}${wMidR}`,
-    ` ${wBotL} ${chalk.gray('▀████▀')} ${wBotR}`,
-    `    ${chalk.gray('▄██▄')}   `,
-    `     ${chalk.gray('▀▀')}    `,
+    ` ${wTopL} ${C_CYAN}▄████▄${RESET} ${wTopR}`,
+    `${wMidL}${C_MAIN}█${eyes}${C_MAIN}█${RESET}${wMidR}`,
+    ` ${wBotL} ${C_DARK}▀████▀${RESET} ${wBotR}`,
+    `    ${C_INDIGO}▄██▄${RESET}   `,
+    `     ${C_CYAN}▀▀${RESET}    `,
   ]
 }
 
 export function getAllayFace(mood: MascotMood = 'idle'): string {
   switch (mood) {
     case 'idle':
-      return chalk.gray('[ ') + chalk.white(GLYPH.mascotIdle + ' _ ' + GLYPH.mascotIdle) + chalk.gray(' ]')
+      return `${C_CYAN}[ ■ ◡ ■ ]${RESET}`
     case 'thinking':
-      return chalk.gray('[ ') + chalk.white(GLYPH.thinking + ' _ ' + GLYPH.thinking) + chalk.gray(' ]')
+      return `${C_CYAN}[ ◫ ⚬ ◫ ]${RESET}`
     case 'celebrate':
-      return chalk.bold.white('[ ') + chalk.bold.white(GLYPH.mascotJoy) + chalk.bold.white(' ]')
+      return `${C_WHITE}[ ◈ ᗜ ◈ ]${RESET}`
     case 'focus':
-      return chalk.gray('[ ') + chalk.white(GLYPH.mascotFocus) + chalk.gray(' ]')
+      return `${C_INDIGO}[ ─ ‿ ─ ☕ ]${RESET}`
     case 'alert':
-      return chalk.yellow('[ ') + chalk.yellow(GLYPH.mascotAlert) + chalk.yellow(' ]')
+      return `${C_WHITE}[ ⯀ ᗣ ⯀ ! ]${RESET}`
   }
 }

@@ -91,6 +91,6 @@ export function App({ initialData }: { initialData?: any }) {
       return <ExtensionsScreen userData={data} />
     case 'repl':
     default:
-      return <Repl userData={data} onRefresh={reloadData} />
+      return <Repl initialData={data} />
   }
 }
