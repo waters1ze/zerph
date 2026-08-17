@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { GROQ_API_KEY } from '@/lib/config'
+import { GROQ_CHAT_MODEL } from '@/lib/config'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
 
 function getDayOfWeek(date: Date) {
   const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
@@ -78,10 +79,8 @@ export async function GET(req: NextRequest) {
 
     let aiAnalysis = 'Анализ недоступен. Продолжайте в том же духе!'
     
-    const key = GROQ_API_KEY || process.env.GROQ_API_KEY
-    if (key) {
-      try {
-        const prompt = `Ты продуктивный ассистент Zerf. Напиши краткий (3-4 предложения) подбадривающий анализ недели пользователя на основе этих данных. 
+    try {
+      const prompt = `Ты продуктивный ассистент Zerf. Напиши краткий (3-4 предложения) подбадривающий анализ недели пользователя на основе этих данных. 
 Создано задач: ${tasksCreated}
 Завершено задач: ${tasksCompleted}
 Создано заметок: ${notesCreated}
@@ -89,26 +88,17 @@ export async function GET(req: NextRequest) {
 Самый продуктивный день: ${mostProductiveDay}
 Никаких списков, просто текст.`
 
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${key}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.7,
-            max_tokens: 300
-          })
-        })
-        const data = await res.json()
-        if (data?.choices?.[0]?.message?.content) {
-          aiAnalysis = data.choices[0].message.content.trim()
-        }
-      } catch (e) {
-        console.error('Groq weekly report error:', e)
+      const result = await callGroqChatCompletion({
+        model: GROQ_CHAT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 300
+      })
+      if (result.content?.trim()) {
+        aiAnalysis = result.content.trim()
       }
+    } catch (e) {
+      console.error('Groq weekly report error:', e)
     }
 
     return NextResponse.json({ stats, aiAnalysis, generatedAt: new Date().toISOString() })

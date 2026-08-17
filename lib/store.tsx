@@ -39,7 +39,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   borderRadius: 'default',
   roundShapes: true,
   notifications: { desktop: true, web: true, telegram: true, vk: true, email: false, dueReminders: true, teamUpdates: true, reminderIntervalMinutes: 5, reminderRepeatCount: 3 },
-  integrations: { telegram: false, aiApiKey: '', aiModel: 'llama-3.3-70b-versatile', groqApiKey: '', telegramBotToken: '' },
+  integrations: { telegram: false, aiApiKey: '', aiModel: 'openai/gpt-oss-120b', groqApiKey: '', telegramBotToken: '' },
   weekStartsOn: 1,
   focusModeEnabled: false,
   userPlan: 'free',

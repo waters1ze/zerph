@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { GROQ_API_KEY, GROQ_CHAT_MODEL } from '@/lib/config'
-import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
+import { callGroqChatCompletion, groqPool, getHuggingFaceTokens, getModelForUserPlan } from '@/lib/backend/groq-pool'
 
 const SYSTEM_PROMPT = `Ты — Zerf AI, интеллектуальный персональный ассистент продуктивности в приложении Zerf.
 
@@ -46,8 +46,9 @@ export async function POST(req: NextRequest) {
 
     const { messages, apiKey, context: clientContext, mode } = body
     const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY
+    const hasKeys = groqPool.getKeysCount() > 0 || getHuggingFaceTokens().length > 0 || Boolean(groqApiKey)
 
-    if (!groqApiKey) {
+    if (!hasKeys) {
       return NextResponse.json(
         { error: 'Groq API key missing. Please add it in Settings → AI & Integrations.' },
         { status: 400 }
@@ -74,9 +75,11 @@ export async function POST(req: NextRequest) {
       systemContent += `\n\n## User Workspace Context:\n${JSON.stringify(clientContext, null, 2)}`
     }
 
+    const effectiveModel = body.model || getModelForUserPlan(limits.plan)
+
     const result = await callGroqChatCompletion({
       messages: [{ role: 'system', content: systemContent }, ...messages],
-      model: GROQ_CHAT_MODEL,
+      model: effectiveModel,
       temperature: mode === 'enhance' ? 0.8 : 0.7,
       max_tokens: mode === 'enhance' ? 2048 : 1024,
       apiKey: groqApiKey,

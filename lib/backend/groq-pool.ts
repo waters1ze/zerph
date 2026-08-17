@@ -3,15 +3,35 @@
  * 
  * Capabilities:
  * - Automatically parses keys from:
- *   - GROQ_API_KEY (single or comma/space separated list of keys: gsk_1,gsk_2,...)
- *   - GROQ_API_KEYS (comma, newline, or space separated)
- *   - GROQ_API_KEY_1, GROQ_API_KEY_2, ..., GROQ_API_KEY_10
+ *   - GROQ_API_KEY (single or comma/space/semicolon/newline separated list of keys: gsk_1,gsk_2,...)
+ *   - GROQ_API_KEYS (comma, newline, semicolon, or space separated)
+ *   - GROQ_API_KEY_1 .. GROQ_API_KEY_20, GROQ_KEY_1 .. GROQ_KEY_20
+ *   - Dynamic scan of all process.env matching GROQ_
  * - Round-robin request distribution across all healthy keys
  * - 429 Too Many Requests automatic detection with 60s cooldown and instant retry on next key
- * - Model fallback hierarchy for chat completions
+ * - Seamless fallback: Groq Multi-Key/Multi-Model -> Hugging Face Router Serverless Pool -> OpenAI (if set)
+ * - Automatic model sanitization and normalization (maps legacy models like llama-3.3-70b-versatile to current Groq flagship)
  */
 
 import { GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
+import { normalizePlan } from '@/lib/plans'
+
+/**
+ * Model allocation based on subscription tier:
+ * - Free: 8B Lightweight Model (meta-llama/Llama-3.1-8B-Instruct / groq/compound-mini)
+ * - Plus (99 ₽): Qwen 27B (qwen/qwen3.6-27b)
+ * - Pro (299-300 ₽) & Corp: Flagship GPT-OSS 120B (openai/gpt-oss-120b)
+ */
+export function getModelForUserPlan(plan?: string | null): string {
+  const norm = normalizePlan(plan)
+  if (norm === 'pro' || norm === 'corp') {
+    return 'openai/gpt-oss-120b'
+  }
+  if (norm === 'plus') {
+    return 'qwen/qwen3.6-27b'
+  }
+  return 'meta-llama/Llama-3.1-8B-Instruct'
+}
 
 interface KeyStatus {
   key: string
@@ -19,6 +39,57 @@ interface KeyStatus {
   cooldownUntil: number
   failedCount: number
   successCount: number
+}
+
+function cleanTokenString(raw: string): string[] {
+  if (!raw) return []
+  return raw
+    .split(/[\s,;\n\r]+/)
+    .map(k => k.replace(/^['"]+|['"]+$/g, '').trim())
+    .filter(k => k.length > 10)
+}
+
+export function stripThinkingTags(raw: string): string {
+  if (!raw) return ''
+  return raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+}
+
+const KNOWN_GROQ_CHAT_MODELS = new Set([
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b',
+  'groq/compound',
+  'groq/compound-mini',
+  'allam-2-7b',
+  'canopylabs/orpheus-v1-english',
+])
+
+export function normalizeGroqChatModel(model?: string): string {
+  if (!model) return GROQ_CHAT_MODEL
+  const trimmed = model.trim()
+  if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) return trimmed
+  
+  const lower = trimmed.toLowerCase()
+  // If legacy / deprecated model is requested (e.g. llama-3.3-70b-versatile, llama-3.1-8b-instant, etc.)
+  if (
+    lower.includes('llama') ||
+    lower.includes('mixtral') ||
+    lower.includes('gemma') ||
+    lower.includes('gpt-4') ||
+    lower.includes('claude') ||
+    lower.includes('versatile') ||
+    lower.includes('instant')
+  ) {
+    return GROQ_CHAT_MODEL
+  }
+  return trimmed
+}
+
+export function normalizeGroqWhisperModel(model?: string): string {
+  if (!model) return GROQ_WHISPER_MODEL
+  const lower = model.trim().toLowerCase()
+  if (lower === 'whisper-large-v3' || lower === 'whisper-large-v3-turbo') return lower
+  return GROQ_WHISPER_MODEL
 }
 
 class GroqKeyPool {
@@ -34,28 +105,43 @@ class GroqKeyPool {
     const rawKeys: string[] = []
 
     if (explicitKeys && explicitKeys.length > 0) {
-      rawKeys.push(...explicitKeys)
+      for (const ek of explicitKeys) {
+        rawKeys.push(...cleanTokenString(ek))
+      }
     }
 
     if (process.env.GROQ_API_KEYS) {
-      rawKeys.push(...process.env.GROQ_API_KEYS.split(/[\s,;\n]+/))
+      rawKeys.push(...cleanTokenString(process.env.GROQ_API_KEYS))
     }
 
     if (process.env.GROQ_API_KEY) {
-      rawKeys.push(...process.env.GROQ_API_KEY.split(/[\s,;\n]+/))
+      rawKeys.push(...cleanTokenString(process.env.GROQ_API_KEY))
     }
 
-    // Check individual numbered env vars (GROQ_API_KEY_1 .. GROQ_API_KEY_10)
-    for (let i = 1; i <= 10; i++) {
-      const k = process.env[`GROQ_API_KEY_${i}`]
-      if (k) rawKeys.push(k.trim())
+    if (process.env.GROQ_KEYS) {
+      rawKeys.push(...cleanTokenString(process.env.GROQ_KEYS))
+    }
+
+    if (process.env.GROQ_KEY) {
+      rawKeys.push(...cleanTokenString(process.env.GROQ_KEY))
+    }
+
+    // Dynamic scan of any numbered or custom GROQ_ env vars (GROQ_API_KEY_1..20, GROQ_KEY_1..20, etc.)
+    for (const [envKey, envVal] of Object.entries(process.env)) {
+      if (
+        envVal &&
+        /^(GROQ_API_KEY|GROQ_KEY|GROQ_TOKEN)(_\d+)?$/i.test(envKey) &&
+        envKey !== 'GROQ_API_KEY' // already processed above
+      ) {
+        rawKeys.push(...cleanTokenString(envVal))
+      }
     }
 
     const uniqueClean = Array.from(
       new Set(
         rawKeys
           .map(k => k.trim())
-          .filter(k => k.length > 10 && (k.startsWith('gsk_') || k.length > 20))
+          .filter(k => k.length > 10 && (k.startsWith('gsk_') || k.length >= 20))
       )
     )
 
@@ -93,7 +179,7 @@ class GroqKeyPool {
     this.ensureFresh()
 
     if (providedKey) {
-      const parsedProvided = providedKey.split(/[\s,;\n]+/).map(k => k.trim()).filter(Boolean)
+      const parsedProvided = cleanTokenString(providedKey)
       if (parsedProvided.length > 0) {
         this.refreshKeys(parsedProvided)
       }
@@ -104,7 +190,7 @@ class GroqKeyPool {
     const now = Date.now()
     // Sort keys: healthy ones first (rotated from currentIndex), then keys in cooldown by shortest remaining time
     const healthy: string[] = []
-    const cooling: string[] = []
+    const cooling: KeyStatus[] = []
 
     const total = this.keys.length
     for (let i = 0; i < total; i++) {
@@ -113,14 +199,17 @@ class GroqKeyPool {
       if (item.cooldownUntil <= now) {
         healthy.push(item.key)
       } else {
-        cooling.push(item.key)
+        cooling.push(item)
       }
     }
+
+    // Sort cooling keys by nearest expiry
+    cooling.sort((a, b) => a.cooldownUntil - b.cooldownUntil)
 
     // Advance round-robin index for next call
     this.currentIndex = (this.currentIndex + 1) % total
 
-    return [...healthy, ...cooling]
+    return [...healthy, ...cooling.map(c => c.key)]
   }
 
   public markKeySuccess(key: string) {
@@ -167,20 +256,29 @@ export const groqPool = new GroqKeyPool()
 
 export function getHuggingFaceTokens(): string[] {
   const rawHfTokens: string[] = []
-  if (process.env.HF_TOKEN) rawHfTokens.push(...process.env.HF_TOKEN.split(/[\s,;\n]+/))
-  if (process.env.HF_TOKENS) rawHfTokens.push(...process.env.HF_TOKENS.split(/[\s,;\n]+/))
-  if (process.env.HUGGINGFACE_API_KEY) rawHfTokens.push(...process.env.HUGGINGFACE_API_KEY.split(/[\s,;\n]+/))
-  if (process.env.HUGGINGFACE_TOKEN) rawHfTokens.push(...process.env.HUGGINGFACE_TOKEN.split(/[\s,;\n]+/))
-  for (let i = 1; i <= 10; i++) {
-    const t = process.env[`HF_TOKEN_${i}`]
-    if (t) rawHfTokens.push(t.trim())
+  if (process.env.HF_TOKEN) rawHfTokens.push(...cleanTokenString(process.env.HF_TOKEN))
+  if (process.env.HF_TOKENS) rawHfTokens.push(...cleanTokenString(process.env.HF_TOKENS))
+  if (process.env.HUGGINGFACE_API_KEY) rawHfTokens.push(...cleanTokenString(process.env.HUGGINGFACE_API_KEY))
+  if (process.env.HUGGINGFACE_TOKEN) rawHfTokens.push(...cleanTokenString(process.env.HUGGINGFACE_TOKEN))
+  if (process.env.HUGGING_FACE_HUB_TOKEN) rawHfTokens.push(...cleanTokenString(process.env.HUGGING_FACE_HUB_TOKEN))
+  if (process.env.HF_API_KEY) rawHfTokens.push(...cleanTokenString(process.env.HF_API_KEY))
+
+  for (const [envKey, envVal] of Object.entries(process.env)) {
+    if (
+      envVal &&
+      /^(HF|HUGGINGFACE|HUGGING_FACE)_(TOKEN|API_KEY|KEY)(_\d+)?$/i.test(envKey)
+    ) {
+      rawHfTokens.push(...cleanTokenString(envVal))
+    }
   }
-  return Array.from(new Set(rawHfTokens.map(t => t.trim()).filter(t => t.startsWith('hf_') || t.length > 20)))
+
+  return Array.from(new Set(rawHfTokens.map(t => t.trim()).filter(t => t.startsWith('hf_') || t.length >= 20)))
 }
 
 /**
  * Execute Groq Chat Completion with full automatic key rotation and model fallback
- * Secondary fallback: Hugging Face Serverless Chat/LLM API Pool
+ * Secondary fallback: Hugging Face Serverless Router Chat/LLM API Pool
+ * Tertiary fallback: OpenAI (if OPENAI_API_KEY is configured)
  */
 export async function callGroqChatCompletion(options: {
   messages: Array<{ role: string; content: any }>
@@ -193,25 +291,31 @@ export async function callGroqChatCompletion(options: {
 }): Promise<{ content: string; keyUsed: string; modelUsed: string }> {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
 
-  const primaryModel = options.model || GROQ_CHAT_MODEL
-  // NOTE: mixtral-8x7b-32768 / llama3-8b-8192 were decommissioned by Groq —
-  // each retry against them burned a slow round trip before failing.
+  const requestedModel = normalizeGroqChatModel(options.model)
+  const defaultFallbacks = [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'qwen/qwen3.6-27b',
+    'groq/compound',
+    'groq/compound-mini'
+  ]
+
+  const normalizedFallbacks = (options.fallbackModels || defaultFallbacks).map(m => normalizeGroqChatModel(m))
+
   const models = [
-    primaryModel,
-    ...(options.fallbackModels || ['llama-3.1-8b-instant', 'openai/gpt-oss-20b'])
+    requestedModel,
+    ...normalizedFallbacks
   ].filter((v, i, a) => a.indexOf(v) === i)
 
   let lastError: Error | null = null
-  // Hard cap on external attempts so one slow provider can never hang a
-  // request indefinitely (the admin panel used to spin forever on this)
-  let attemptsLeft = 4
+  const tier1Deadline = Date.now() + 110_000
 
   // ── Tier 1: Groq Multi-Account Round-Robin Pool ──
   if (keys.length > 0) {
     for (const m of models) {
+      let modelNotFound = false
       for (const key of keys) {
-        if (attemptsLeft <= 0) break
-        attemptsLeft -= 1
+        if (Date.now() > tier1Deadline || modelNotFound) break
         try {
           const body: Record<string, any> = {
             model: m,
@@ -233,8 +337,16 @@ export async function callGroqChatCompletion(options: {
 
           if (res.status === 429) {
             groqPool.markKeyRateLimited(key, 60)
-            console.warn(`[GroqChat] 429 Rate Limit on key, rotating to next key...`)
+            console.warn(`[GroqChat] 429 Rate Limit on key ${key.slice(0, 7)}..., rotating to next key...`)
             continue
+          }
+
+          if (res.status === 404) {
+            const errText = await res.text()
+            lastError = new Error(`Groq Chat error (404): ${errText}`)
+            console.warn(`[GroqChat] Model ${m} returned 404, skipping to next fallback model...`)
+            modelNotFound = true
+            break // Skip all remaining keys for this 404 model, jump directly to next model
           }
 
           if (!res.ok) {
@@ -243,16 +355,19 @@ export async function callGroqChatCompletion(options: {
               groqPool.markKeyRateLimited(key, 45)
               continue
             }
-            throw new Error(`Groq Chat error (${res.status}): ${errText}`)
+            lastError = new Error(`Groq Chat error (${res.status}): ${errText}`)
+            console.warn(`[GroqChat] Attempt failed on key ${key.slice(0, 7)}... with model ${m}: ${lastError.message}`)
+            continue
           }
 
           const data = await res.json()
-          const content = data.choices?.[0]?.message?.content || ''
+          const rawContent = data.choices?.[0]?.message?.content || ''
+          const content = stripThinkingTags(rawContent)
           groqPool.markKeySuccess(key)
           return { content, keyUsed: key, modelUsed: m }
         } catch (err: unknown) {
           lastError = err instanceof Error ? err : new Error(String(err))
-          console.warn(`[GroqChat] Attempt failed with model ${m}: ${lastError.message}`)
+          console.warn(`[GroqChat] Attempt failed on key ${key.slice(0, 7)}... with model ${m}: ${lastError.message}`)
         }
       }
     }
@@ -260,9 +375,10 @@ export async function callGroqChatCompletion(options: {
 
   // ── Tier 2: Hugging Face Serverless Chat LLM Pool ──
   const hfTokens = getHuggingFaceTokens()
-  if (hfTokens.length > 0 && attemptsLeft > 0) {
+  if (hfTokens.length > 0) {
+    const tier2Deadline = Date.now() + 45_000
     const hfChatModels = [
-      'meta-llama/Llama-3.3-70B-Instruct',
+      'meta-llama/Llama-3.2-3B-Instruct',
       'meta-llama/Llama-3.1-8B-Instruct',
       'Qwen/Qwen2.5-72B-Instruct',
       'mistralai/Mistral-7B-Instruct-v0.3',
@@ -270,11 +386,10 @@ export async function callGroqChatCompletion(options: {
 
     for (const hfModel of hfChatModels) {
       for (const token of hfTokens) {
-        if (attemptsLeft <= 0) break
-        attemptsLeft -= 1
+        if (Date.now() > tier2Deadline) break
         try {
           console.log(`[GroqChat Fallback] Switching to Hugging Face LLM: ${hfModel}...`)
-          const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}/v1/chat/completions`, {
+          const hfRes = await fetch('https://router.huggingface.co/hf-inference/v1/chat/completions', {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${token}`,
@@ -285,7 +400,6 @@ export async function callGroqChatCompletion(options: {
               messages: options.messages,
               temperature: options.temperature ?? 0.3,
               max_tokens: options.max_tokens ?? 1024,
-              ...(options.response_format ? { response_format: options.response_format } : {})
             }),
             signal: AbortSignal.timeout(25000),
           })
@@ -296,6 +410,9 @@ export async function callGroqChatCompletion(options: {
             if (content) {
               return { content, keyUsed: `${token.slice(0, 6)}...`, modelUsed: hfModel }
             }
+          } else {
+            const hfErrText = await hfRes.text()
+            console.warn(`[HF-Chat] Model ${hfModel} HTTP ${hfRes.status}:`, hfErrText)
           }
         } catch (hfErr) {
           console.warn(`[HF-Chat] Model ${hfModel} error:`, hfErr)
@@ -306,7 +423,7 @@ export async function callGroqChatCompletion(options: {
 
   // ── Tier 3: OpenAI Fallback (if configured) ──
   const openAiKey = process.env.OPENAI_API_KEY
-  if (openAiKey && attemptsLeft > 0) {
+  if (openAiKey) {
     try {
       const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -348,66 +465,80 @@ export async function callGroqWhisper(options: {
   fallbackModels?: string[]
 }): Promise<{ text: string; keyUsed: string; modelUsed: string }> {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
-  if (keys.length === 0) {
-    throw new Error('No Groq API keys configured. Please add GROQ_API_KEY to environment variables.')
+  const hfTokens = getHuggingFaceTokens()
+  const openAiKey = process.env.OPENAI_API_KEY
+
+  if (keys.length === 0 && hfTokens.length === 0 && !openAiKey) {
+    throw new Error('No Groq or Hugging Face API keys configured. Please add GROQ_API_KEY to environment variables.')
   }
 
   const ext = options.filename.split('.').pop() || 'webm'
   const mimeType = ext === 'webm' ? 'audio/webm' : ext === 'ogg' ? 'audio/ogg' : 'audio/mpeg'
 
   const models = [
-    GROQ_WHISPER_MODEL,
-    ...(options.fallbackModels || ['whisper-large-v3-turbo', 'distil-whisper-large-v3-en'])
+    normalizeGroqWhisperModel(GROQ_WHISPER_MODEL),
+    ...(options.fallbackModels || ['whisper-large-v3-turbo', 'whisper-large-v3'])
   ].filter((v, i, a) => a.indexOf(v) === i)
 
   let lastError: Error | null = null
 
-  for (const m of models) {
-    for (const key of keys) {
-      try {
-        const formData = new FormData()
-        formData.append('file', new Blob([options.audioBuffer], { type: mimeType }), options.filename)
-        formData.append('model', m)
-        formData.append('response_format', 'json')
+  // ── Tier 1: Groq Whisper Pool ──
+  if (keys.length > 0) {
+    for (const m of models) {
+      let modelNotFound = false
+      for (const key of keys) {
+        if (modelNotFound) break
+        try {
+          const formData = new FormData()
+          formData.append('file', new Blob([options.audioBuffer], { type: mimeType }), options.filename)
+          formData.append('model', m)
+          formData.append('response_format', 'json')
 
-        const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${key}` },
-          body: formData,
-          signal: AbortSignal.timeout(60000),
-        })
+          const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${key}` },
+            body: formData,
+            signal: AbortSignal.timeout(60000),
+          })
 
-        if (res.status === 429) {
-          groqPool.markKeyRateLimited(key, 60)
-          console.warn(`[GroqWhisper] 429 Rate Limit on key, rotating to next key...`)
-          continue
-        }
-
-        if (!res.ok) {
-          const errText = await res.text()
-          if (errText.includes('rate_limit') || res.status === 503) {
-            groqPool.markKeyRateLimited(key, 45)
+          if (res.status === 429) {
+            groqPool.markKeyRateLimited(key, 60)
+            console.warn(`[GroqWhisper] 429 Rate Limit on key, rotating to next key...`)
             continue
           }
-          throw new Error(`Whisper error (${res.status}): ${errText}`)
-        }
 
-        const data = await res.json()
-        const text = data.text || ''
-        groqPool.markKeySuccess(key)
-        return { text, keyUsed: key, modelUsed: m }
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(String(err))
-        console.warn(`[GroqWhisper] Attempt failed with model ${m}: ${lastError.message}`)
+          if (res.status === 404) {
+            const errText = await res.text()
+            lastError = new Error(`Whisper error (404): ${errText}`)
+            console.warn(`[GroqWhisper] Model ${m} returned 404, skipping to next model...`)
+            modelNotFound = true
+            break
+          }
+
+          if (!res.ok) {
+            const errText = await res.text()
+            if (errText.includes('rate_limit') || res.status === 503) {
+              groqPool.markKeyRateLimited(key, 45)
+              continue
+            }
+            lastError = new Error(`Whisper error (${res.status}): ${errText}`)
+            console.warn(`[GroqWhisper] Attempt failed with model ${m}: ${lastError.message}`)
+            continue
+          }
+
+          const data = await res.json()
+          const text = data.text || ''
+          groqPool.markKeySuccess(key)
+          return { text, keyUsed: key, modelUsed: m }
+        } catch (err: unknown) {
+          lastError = err instanceof Error ? err : new Error(String(err))
+          console.warn(`[GroqWhisper] Attempt failed with model ${m}: ${lastError.message}`)
+        }
       }
     }
   }
 
-  // ── Multi-Provider Secondary Fallbacks (Hugging Face / OpenAI / Cloudflare) ──
-
-  // 1. Hugging Face Inference API Pool (Free & Serverless)
-  const hfTokens = getHuggingFaceTokens()
-
+  // ── Tier 2: Hugging Face Router Audio Inference Pool ──
   if (hfTokens.length > 0) {
     const hfModels = [
       'openai/whisper-large-v3-turbo',
@@ -419,7 +550,7 @@ export async function callGroqWhisper(options: {
       for (const token of hfTokens) {
         try {
           console.log(`[Whisper Fallback] Attempting Hugging Face with model ${hfModel}...`)
-          const hfRes = await fetch(`https://api-inference.huggingface.co/models/${hfModel}`, {
+          const hfRes = await fetch(`https://router.huggingface.co/hf-inference/models/${hfModel}`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${token}`,
@@ -443,8 +574,7 @@ export async function callGroqWhisper(options: {
     }
   }
 
-  // 2. OpenAI Whisper API (if OPENAI_API_KEY is configured)
-  const openAiKey = process.env.OPENAI_API_KEY
+  // ── Tier 3: OpenAI Whisper API ──
   if (openAiKey) {
     try {
       console.log(`[Whisper Fallback] Attempting OpenAI Whisper API...`)

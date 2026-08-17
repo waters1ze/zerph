@@ -657,8 +657,8 @@ export async function runChannelAndAiCron() {
       }
     }
 
-    // 2. Daily (Mon-Thu, Sat-Sun) 08:00-14:00 MSK: Morning News Digest
-    if (day !== 'fri' && hour >= 8 && hour < 14) {
+    // 2. Daily (Every day Mon-Sun) 08:00-14:00 MSK: Morning News Digest
+    if (hour >= 8 && hour < 14) {
       const isDone = await isCronAlreadyDoneToday('channel_morning_post', todayStr)
       if (!isDone) {
         await postDailyMorningPostToChannel()

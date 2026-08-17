@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq } from '@/lib/backend/groq'
+import { getModelForUserPlan } from '@/lib/backend/groq-pool'
 import { processParsedItemWithDelegation, getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext, getFriends } from '@/lib/backend/db'
 import { GROQ_API_KEY } from '@/lib/config'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
       (formData.get('apiKey') as string) ||
       req.headers.get('x-groq-api-key') ||
       process.env.GROQ_API_KEY ||
-      GROQ_API_KEY
+      undefined
 
     let transcript = ''
 
@@ -56,7 +57,10 @@ export async function POST(req: NextRequest) {
     const friends = ownerChatId ? await getFriends(ownerChatId) : []
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
 
-    const parsedItems = await parseIntentWithGroq(transcript, apiKey, undefined, context, friendsContext)
+    const userPlan = ownerChatId ? (await getUserUsageAndLimits(ownerChatId)).plan : 'free'
+    const effectiveModel = getModelForUserPlan(userPlan)
+
+    const parsedItems = await parseIntentWithGroq(transcript, apiKey, effectiveModel, context, friendsContext)
     const results = []
 
     for (const item of parsedItems) {

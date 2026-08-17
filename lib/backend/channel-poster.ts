@@ -4,9 +4,9 @@ import { fetchMorningNewsContext, fetchEveningNewsContext } from './news-fetcher
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const DEFAULT_CHANNEL = process.env.TELEGRAM_CHANNEL_ID || '@zerph_off'
-const GROQ_API_KEY = process.env.GROQ_API_KEY || ''
+import { GROQ_CHAT_MODEL } from '@/lib/config'
 
-import { callGroqChatCompletion } from './groq-pool'
+import { callGroqChatCompletion, groqPool, getHuggingFaceTokens } from './groq-pool'
 import { isCronAlreadyDoneToday, markCronDoneToday } from './cron-lock'
 import { postToVkWall } from './vk'
 
@@ -79,7 +79,7 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force 
 
     try {
       const result = await callGroqChatCompletion({
-        model: 'llama-3.3-70b-versatile',
+        model: GROQ_CHAT_MODEL,
         messages: [
           {
             role: 'system',
@@ -207,8 +207,13 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
   }
 }
 
-export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<{ success: boolean; tgRes?: any; error?: string; channelId?: string }> {
-  if (!GROQ_API_KEY) return { success: false, error: 'GROQ_API_KEY missing' }
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<{ success: boolean; tgRes?: any; error?: string; channelId?: string; sentCount?: number }> {
+  const hasKeys = groqPool.getKeysCount() > 0 || getHuggingFaceTokens().length > 0 || Boolean(process.env.GROQ_API_KEY)
+  if (!hasKeys) return { success: false, error: 'AI key pool is empty' }
   const { mskDate } = getMskDateTime()
 
   try {
@@ -226,83 +231,151 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
     ].filter(Boolean).join('  |  ')
 
     const geoData = context.geoNews && context.geoNews.length > 0
-      ? context.geoNews.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://lenta.ru'})`).join('\n\n')
+      ? context.geoNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
       : 'Ключевые геополитические и международные события дня.'
 
     const techData = context.techNews && context.techNews.length > 0
-      ? context.techNews.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://habr.com'})`).join('\n\n')
-      : (context.headlines.slice(0, 3).join('\n') || 'Свежие технологические релизы и разработка.')
+      ? context.techNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
+      : 'Свежие технологические релизы, AI-архитектура и разработка.'
+
+    const econData = context.econNews && context.econNews.length > 0
+      ? context.econNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
+      : 'Ключевые макроэкономические показатели, рынки и инвестиции.'
 
     const eduData = context.eduNews && context.eduNews.length > 0
-      ? context.eduNews.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://habr.com'})`).join('\n\n')
-      : 'Актуальные исследования, EdTech и развитие образования.'
+      ? context.eduNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
+      : 'Научные исследования, развитие когнитивных навыков и EdTech.'
 
-    const prompt =
+    // --- 1. Post #1: Geopolitics & World Digest ---
+    const prompt1 =
       `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
-      `Напиши БОЛЬШУЮ, МАКСИМАЛЬНО ПОДРОБНУЮ, глубокую и качественную утреннюю сводку за сегодня (${context.date}).\n` +
-      `Каждая новость должна содержать БОЛЬШОЙ развернутый абзац (3-5 полноценных предложений с фактами, цифрами, контекстом, деталями и выводами) — точно в строгом стиле премиального Telegram-канала.\n\n` +
-      `ГЕОПОЛИТИЧЕСКИЕ И МИРОВЫЕ СОБЫТИЯ:\n${geoData}\n\n` +
-      `ТЕХНОЛОГИИ, ИИ И СТАРТАПЫ:\n${techData}\n\n` +
-      `ОБРАЗОВАНИЕ, НАУКА И EDTECH:\n${eduData}\n\n` +
-      `Курсы валют и активов: ${ratesStr || '$ 84.5 ₽ | € 97.5 ₽ | ¥ 12.5 ₽ | ₿ $62,900 | 💎 $1.33'}\n\n` +
+      `Напиши БОЛЬШОЙ, МАКСИМАЛЬНО ПОДРОБНЫЙ аналитический выпуск "МИРОВАЯ ПОВЕСТКА & ГЕОПОЛИТИКА" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${geoData}\n\n` +
       `СТРОГИЕ ПРАВИЛА:\n` +
-      `1. Пиши ТОЛЬКО на чистом, грамотном русском литературном языке без каких-либо иностранных слов-паразитов или опечаток.\n` +
-      `2. НЕ ДЕЛАЙ КОРОТКИХ ОПИСАНИЙ! Напиши под каждым заголовком основательный, глубокий и информативный текст (3-5 предложений).\n` +
-      `3. ОБЯЗАТЕЛЬНО: в конце каждого пункта приложи кликабельную ссылку на источник: <a href="URL">[Источник]</a>.\n` +
-      `4. Стиль: строгий минимализм, ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <code>, <a>. Без детских цветных эмодзи.\n\n` +
-      `СТРОГАЯ СТРУКТУРА СООБЩЕНИЯ:\n` +
-      `✦ <b>ГЛАВНОЕ НА СЕГОДНЯ | ${context.date}</b>\n\n` +
-      `◈ <b>Мировая повестка & Геополитика:</b>\n` +
-      `▪ <b>[Точный заголовок первого мирового/военно-политического события]</b> — [Большой, развернутый и глубокий текст: 3-5 предложений с предысторией, цифрами, анализом ситуации и четким выводом: чего ожидать дальше и к чему готовиться] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `▪ <b>[Точный заголовок второго мирового события]</b> — [Большой, развернутый и глубокий текст: 3-5 предложений с фактами, оценками экспертов и последствиями] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `◈ <b>Технологии & Искусственный интеллект:</b>\n` +
-      `▪ <b>[Точный заголовок первой IT/ИИ новости]</b> — [Большой, детальный разбор: 3-5 предложений с описанием архитектуры, возможностей, бенчмарков и реального эффекта для индустрии] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `▪ <b>[Точный заголовок второй IT/ИИ новости]</b> — [Большой, детальный разбор: 3-5 предложений с техническими подробностями и практической пользой] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `◈ <b>Образование, Наука & EdTech:</b>\n` +
-      `▪ <b>[Точный заголовок новости об образовании/науке]</b> — [Большой содержательный текст: 3-5 предложений о сути исследования/методики, пользе для эффективного обучения, прокачки навыков и развития мышления] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `<blockquote><b>Прогноз & Фокус дня:</b> [Развернутый стратегический прогноз на сегодня + глубокий практический совет по концентрации, защите внимания и системной продуктивности в Zerf Note]</blockquote>\n\n` +
-      `▪ <b>Курсы:</b> <code>${ratesStr}</code>\n` +
+      `1. Под каждым заголовком напиши БОЛЬШОЙ развернутый абзац (3-5 полноценных предложений с цифрами, контекстом, оценками и последствиями).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную ссылку: <a href="ТОЧНЫЙ_URL">[Источник]</a> (используй ТОЛЬКО реальные URL из списка выше).\n` +
+      `3. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <b>, <code>, <a>). Без детских цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `✦ <b>ГЛАВНОЕ: МИРОВАЯ ПОВЕСТКА & ГЕОПОЛИТИКА | ${context.date}</b>\n\n` +
+      `▪ <b>Курсы:</b> <code>${ratesStr || '$ 84.5 ₽ | € 97.5 ₽ | ¥ 12.5 ₽ | ₿ $62,900'}</code>\n\n` +
+      `◈ <b>Ключевые мировые события:</b>\n` +
+      `[2-3 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой текст 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `▫️ <i>Выпуск 1 из 4 | Мировая повестка</i>\n` +
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>`
+
+    // --- 2. Post #2: Tech, AI & Engineering ---
+    const prompt2 =
+      `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
+      `Напиши БОЛЬШОЙ, МАКСИМАЛЬНО ПОДРОБНЫЙ технический выпуск "ТЕХНОЛОГИИ, ИИ & РАЗРАБОТКА" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${techData}\n\n` +
+      `СТРОГИЕ ПРАВИЛА:\n` +
+      `1. Под каждым заголовком напиши БОЛЬШОЙ детальный разбор (3-5 полноценных предложений с описанием архитектуры, кода, стека и пользы для разработчиков).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную ссылку: <a href="ТОЧНЫЙ_URL">[Источник]</a>.\n` +
+      `3. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <b>, <code>, <a>). Без цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `◈ <b>ТЕХНОЛОГИИ, ИИ & РАЗРАБОТКА | ${context.date}</b>\n\n` +
+      `[2-3 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой детальный разбор 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `▫️ <i>Выпуск 2 из 4 | Технологии & ИИ</i>\n` +
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>`
+
+    // --- 3. Post #3: Economics, Business & Markets ---
+    const prompt3 =
+      `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
+      `Напиши БОЛЬШОЙ, МАКСИМАЛЬНО ПОДРОБНЫЙ аналитический выпуск "ЭКОНОМИКА, БИЗНЕС & РЫНКИ" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${econData}\n\n` +
+      `СТРОГИЕ ПРАВИЛА:\n` +
+      `1. Под каждым заголовком напиши БОЛЬШОЙ развернутый абзац (3-5 полноценных предложений с цифрами, макропоказателями, анализом рынков и прогнозом).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную ссылку: <a href="ТОЧНЫЙ_URL">[Источник]</a>.\n` +
+      `3. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <b>, <code>, <a>). Без цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `◈ <b>ЭКОНОМИКА, БИЗНЕС & РЫНКИ | ${context.date}</b>\n\n` +
+      `[2-3 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой развернутый текст 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `▫️ <i>Выпуск 3 из 4 | Экономика & Рынки</i>\n` +
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>`
+
+    // --- 4. Post #4: Science, EdTech & Strategic Focus ---
+    const prompt4 =
+      `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
+      `Напиши БОЛЬШОЙ аналитический выпуск "НАУКА, ОБРАЗОВАНИЕ & ФОКУС ДНЯ" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${eduData}\n\n` +
+      `СТРОГИЕ ПРАВИЛА:\n` +
+      `1. Под каждым заголовком напиши БОЛЬШОЙ содержательный текст (3-5 полноценных предложений о сути исследования, пользе для мышления и когнитивных навыков).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную ссылку: <a href="ТОЧНЫЙ_URL">[Источник]</a>.\n` +
+      `3. В конце добавь стратегический фокус дня в блоке <blockquote>.\n` +
+      `4. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <blockquote>, <b>, <code>, <a>). Без цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `◈ <b>НАУКА, ОБРАЗОВАНИЕ & ФОКУС ДНЯ | ${context.date}</b>\n\n` +
+      `[2 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой текст 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `<blockquote><b>Фокус & Прогноз дня:</b> [Стратегический совет по распределению внимания, когнитивной продуктивности и системной работе в Zerf Note]</blockquote>\n\n` +
+      `▫️ <i>Выпуск 4 из 4 | Наука & Фокус</i>\n` +
       `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
-    const result = await callGroqChatCompletion({
-      model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.6,
-      max_tokens: 1800,
-    })
+    const prompts = [
+      { id: 'geo', prompt: prompt1, topic: 'Мировая повестка' },
+      { id: 'tech', prompt: prompt2, topic: 'Технологии & ИИ' },
+      { id: 'econ', prompt: prompt3, topic: 'Экономика & Рынки' },
+      { id: 'edu', prompt: prompt4, topic: 'Наука & Образование' },
+    ]
 
-    let text = result.content?.trim()
-    if (!text) return { success: false, error: 'Groq returned empty text' }
+    let sentCount = 0
+    let lastTgRes = null
 
-    if (text.length > 4000) {
-      text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>'
+    for (let i = 0; i < prompts.length; i++) {
+      const p = prompts[i]
+      try {
+        const result = await callGroqChatCompletion({
+          model: GROQ_CHAT_MODEL,
+          messages: [{ role: 'user', content: p.prompt }],
+          temperature: 0.5,
+          max_tokens: 1200,
+        })
+
+        let text = result.content?.trim()
+        if (!text) continue
+
+        if (text.length > 4000) {
+          text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>'
+        }
+
+        const sanitized = sanitizeTgHtml(text)
+        let tgRes = await callTg('sendMessage', {
+          chat_id: channelId,
+          text: sanitized,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        })
+
+        if (!tgRes?.ok) {
+          const cleanText = text.replace(/<[^>]*>/g, '').slice(0, 4000)
+          tgRes = await callTg('sendMessage', {
+            chat_id: channelId,
+            text: cleanText,
+            disable_web_page_preview: true,
+          })
+        }
+
+        if (tgRes?.ok) {
+          sentCount++
+          lastTgRes = tgRes
+        }
+
+        // Duplicate to VK Community Wall
+        postToVkWall(text).catch(err => console.error(`[VK Crosspost Morning ${p.id} Error]:`, err))
+
+        // Small pause between posts to avoid Telegram flood limits
+        if (i < prompts.length - 1) {
+          await sleep(1500)
+        }
+      } catch (postErr) {
+        console.error(`Error generating/sending morning post ${p.id}:`, postErr)
+      }
     }
 
-    const sanitized = sanitizeTgHtml(text)
-    let tgRes = await callTg('sendMessage', {
-      chat_id: channelId,
-      text: sanitized,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    })
-
-    if (!tgRes?.ok) {
-      const cleanText = text.replace(/<[^>]*>/g, '').slice(0, 4000)
-      tgRes = await callTg('sendMessage', {
-        chat_id: channelId,
-        text: cleanText,
-        disable_web_page_preview: true,
-      })
-    }
-
-    if (tgRes?.ok) {
+    if (sentCount > 0) {
       await markCronDoneToday('channel_morning_post', mskDate)
     }
 
-    // Duplicate to VK Community Wall
-    postToVkWall(text).catch(err => console.error('[VK Crosspost Morning Error]:', err))
-
-    return { success: tgRes?.ok ?? false, tgRes, channelId }
+    return { success: sentCount > 0, tgRes: lastTgRes, channelId, sentCount }
   } catch (err: any) {
     console.error('postDailyMorningPostToChannel error:', err)
     return { success: false, error: err?.message || String(err), channelId }
@@ -358,7 +431,7 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL,
       `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
     const result = await callGroqChatCompletion({
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_CHAT_MODEL,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.6,
       max_tokens: 1800,
@@ -441,7 +514,7 @@ export async function generateAndSendFridayAiProposal(): Promise<boolean> {
       `4. Прогноз удержания (Retention).`
 
     const result = await callGroqChatCompletion({
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_CHAT_MODEL,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
       max_tokens: 900,

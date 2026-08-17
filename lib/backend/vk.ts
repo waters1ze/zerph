@@ -136,34 +136,17 @@ export async function postToVkWall(
   return false
 }
 
+import { transcribeAudioWithGroq } from './groq'
+
 /** Transcribe VK voice message / audio attachment using Groq Whisper */
 export async function transcribeVkVoice(audioUrl: string): Promise<string> {
-  if (!GROQ_API_KEY) return ''
-
   try {
     const audioRes = await fetch(audioUrl)
     if (!audioRes.ok) return ''
     const arrayBuffer = await audioRes.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    const formData = new FormData()
-    const blob = new Blob([buffer], { type: 'audio/ogg' })
-    formData.append('file', blob, 'voice.ogg')
-    formData.append('model', 'whisper-large-v3')
-    formData.append('language', 'ru')
-    formData.append('response_format', 'json')
-
-    const whisperRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: formData,
-    })
-
-    if (!whisperRes.ok) return ''
-    const data = await whisperRes.json()
-    return data?.text?.trim() || ''
+    return await transcribeAudioWithGroq(buffer, 'voice.ogg')
   } catch (err) {
     console.error('[VK Voice] Transcription error:', err)
     return ''

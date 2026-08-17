@@ -4,7 +4,8 @@
  */
 
 import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem } from './groq'
-import { saveParsedItemToDb, getExistingItemsContext } from './db'
+import { saveParsedItemToDb, getExistingItemsContext, getUserUsageAndLimits } from './db'
+import { getModelForUserPlan } from './groq-pool'
 
 export interface TelegramUpdate {
   update_id: number
@@ -115,9 +116,14 @@ export async function handleTelegramUpdate(
       `📝 *Transcript:* "${rawText}"\n\n🧠 *Zerf AI is structuring into your workspace...*`
     )
 
-    // 3. Fetch existing items context for user & parse intent with Groq LLM (Llama-3.3-70b)
-    const existingItemsContext = await getExistingItemsContext(chatId)
-    const parsedItems = await parseIntentWithGroq(rawText, groqApiKey, undefined, existingItemsContext)
+    // 3. Fetch existing items context for user & parse intent with tiered model
+    const [existingItemsContext, limits] = await Promise.all([
+      getExistingItemsContext(chatId),
+      getUserUsageAndLimits(chatId)
+    ])
+    const effectiveModel = getModelForUserPlan(limits.plan)
+
+    const parsedItems = await parseIntentWithGroq(rawText, groqApiKey, effectiveModel, existingItemsContext)
     const savedItems = []
 
     for (const parsedItem of parsedItems) {

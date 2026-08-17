@@ -5,6 +5,7 @@
  */
 
 import { callGroqChatCompletion } from './groq-pool'
+import { GROQ_CHAT_MODEL } from '@/lib/config'
 
 export interface TaskForPlanning {
   id: string
@@ -87,7 +88,7 @@ ${existingScheduleText}`
         { role: 'system', content: systemPrompt },
         { role: 'user',   content: userMessage },
       ],
-      model: 'llama-3.1-8b-instant',
+      model: GROQ_CHAT_MODEL,
       temperature: 0.2,
       max_tokens: 1024,
     })

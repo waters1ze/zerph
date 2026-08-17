@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import { callGroqChatCompletion } from './groq-pool'
+import { GROQ_CHAT_MODEL } from '@/lib/config'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
@@ -167,7 +168,7 @@ export async function generateCommentAnalysisReport(
       `}`
 
     const result = await callGroqChatCompletion({
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_CHAT_MODEL,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.3,

@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
+import { GROQ_CHAT_MODEL } from '@/lib/config'
+import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
 
 const RU_MONTHS = [
   'января','февраля','марта','апреля','мая','июня',
@@ -92,9 +94,6 @@ async function getPersonalizedDailyTip(chatId: string | null, todayISO: string):
     return cached.tip
   }
 
-  const groqKey = process.env.GROQ_API_KEY
-  if (!groqKey) return defaultTip
-
   try {
     const cid = BigInt(chatId)
     const [user, tasks, notes] = await Promise.all([
@@ -129,28 +128,17 @@ async function getPersonalizedDailyTip(chatId: string | null, todayISO: string):
 
     const prompt = `Ты — умный персональный ИИ-наставник по продуктивности Zerf AI. Имя пользователя: ${userName}. Его фокус на сегодня: ${contextText}. Сформулируй ОДИН ультра-точный, вдохновляющий и практичный совет на сегодня под эти дела. Правила: ровно 1 предложение, максимум 12-16 слов, только на русском языке, без кавычек и вводных фраз.`
 
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${groqKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.4,
-        max_tokens: 50,
-      }),
-      signal: AbortSignal.timeout(3000)
+    const result = await callGroqChatCompletion({
+      messages: [{ role: 'user', content: prompt }],
+      model: GROQ_CHAT_MODEL,
+      temperature: 0.4,
+      max_tokens: 60,
     })
 
-    if (groqRes.ok) {
-      const data = await groqRes.json()
-      const generated = data.choices?.[0]?.message?.content?.trim()?.replace(/^["«]|["»]$/g, '')
-      if (generated && generated.length > 10) {
-        userTipCache.set(chatId, { date: todayISO, tip: generated })
-        return generated
-      }
+    const generated = result.content?.trim()?.replace(/^["«]|["»]$/g, '')
+    if (generated && generated.length > 10) {
+      userTipCache.set(chatId, { date: todayISO, tip: generated })
+      return generated
     }
   } catch (e) {
     console.error('Personalized tip error:', e)

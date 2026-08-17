@@ -3,6 +3,9 @@ import { runAllCronTasks, runMorningGreeting, runForceMorningGreeting, runEvenin
 import { postDailyMorningPostToChannel, postDailyPollToChannel, postDailyEveningPostToChannel, closeDailyPollAndNotifyAdmins } from '@/lib/backend/channel-poster'
 import { getAdminSecret, secretsMatch } from '@/lib/backend/auth'
 
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
+
 function isAuthorizedCronCall(req: NextRequest, searchParams: URLSearchParams): boolean {
   const adminSecret = getAdminSecret()
   if (!adminSecret) return false

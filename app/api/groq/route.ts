@@ -5,7 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { parseIntentWithGroq } from '@/lib/backend/groq'
-import { processParsedItemWithDelegation, getExistingItemsContext, getFriends } from '@/lib/backend/db'
+import { groqPool, getHuggingFaceTokens, getModelForUserPlan } from '@/lib/backend/groq-pool'
+import { processParsedItemWithDelegation, getExistingItemsContext, getFriends, getUserUsageAndLimits } from '@/lib/backend/db'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
@@ -14,21 +15,25 @@ export async function POST(req: NextRequest) {
     if (!authUser) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     const ownerChatId = authUser.chatId
 
-    const { text, apiKey } = await req.json()
+    const { text, apiKey, model } = await req.json()
     const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY
+    const hasKeys = groqPool.getKeysCount() > 0 || getHuggingFaceTokens().length > 0 || Boolean(groqApiKey)
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: 'Text string is required' }, { status: 400 })
     }
-    if (!groqApiKey) {
+    if (!hasKeys) {
       return NextResponse.json({ error: 'Groq API Key is missing' }, { status: 400 })
     }
+
+    const limits = ownerChatId ? await getUserUsageAndLimits(ownerChatId) : null
+    const effectiveModel = model || getModelForUserPlan(limits?.plan)
 
     const context = ownerChatId ? await getExistingItemsContext(ownerChatId) : undefined
     const friends = ownerChatId ? await getFriends(ownerChatId) : []
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
 
-    const parsedItems = await parseIntentWithGroq(text, groqApiKey, undefined, context, friendsContext)
+    const parsedItems = await parseIntentWithGroq(text, groqApiKey, effectiveModel, context, friendsContext)
     const results = []
     for (const item of parsedItems) {
       const res = await processParsedItemWithDelegation(item, ownerChatId)

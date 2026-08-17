@@ -523,36 +523,28 @@ export async function generateReminderContext(
   dueTime: string,
   apiKey?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
-
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Ты — дружелюбный AI-ассистент. Напиши 2-3 предложения на РУССКОМ языке:
+    const result = await callGroqChatCompletion({
+      messages: [
+        {
+          role: 'system',
+          content: `Ты — дружелюбный AI-ассистент. Напиши 2-3 предложения на РУССКОМ языке:
 1. Приятное пожелание или напоминание о предстоящем событии
 2. 1 практическую рекомендацию или совет
 Стиль: тёплый, поддерживающий, конкретный. Без шаблонных фраз. Без упоминания «Zerf».
 Ответь ТОЛЬКО этими 2-3 предложениями, без лишнего текста.`,
-          },
-          {
-            role: 'user',
-            content: `Событие/тема: «${noteTitle}»\nВремя: ${dueTime}\nКонтекст: ${noteContent.slice(0, 400)}`,
-          },
-        ],
-        temperature: 0.75,
-        max_tokens: 200,
-      }),
+        },
+        {
+          role: 'user',
+          content: `Событие/тема: «${noteTitle}»\nВремя: ${dueTime}\nКонтекст: ${noteContent.slice(0, 400)}`,
+        },
+      ],
+      model: GROQ_CHAT_MODEL,
+      temperature: 0.75,
+      max_tokens: 200,
+      apiKey,
     })
-    if (!res.ok) return `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
-    const data = await res.json()
-    return data.choices?.[0]?.message?.content?.trim() || `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
+    return result.content?.trim() || `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
   } catch {
     return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
   }
@@ -569,24 +561,11 @@ export async function generateMorningGreeting(
   pendingTasks: string[],
   apiKey?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-
   const now = new Date()
   const dayName = now.toLocaleDateString('ru-RU', {
     timeZone: 'Europe/Moscow',
     weekday: 'long', day: 'numeric', month: 'long',
   })
-
-  if (!key) {
-    return (
-      `☀️ *Доброе утро, ${firstName}!*\n\n` +
-      `Сегодня ${dayName}.\n\n` +
-      (pendingTasks.length
-        ? `📋 У тебя ${pendingTasks.length} задач на сегодня:\n${pendingTasks.slice(0, 3).map(t => `• ${t}`).join('\n')}\n\n`
-        : ``) +
-      `_Продуктивного дня! 🚀_`
-    )
-  }
 
   try {
     const contextLines: string[] = []
@@ -594,15 +573,11 @@ export async function generateMorningGreeting(
     if (recentNoteTitles.length) contextLines.push(`Недавние заметки: ${recentNoteTitles.slice(0, 3).join(', ')}`)
     if (pendingTasks.length) contextLines.push(`Активные задачи сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Ты — персональный AI-ассистент пользователя в Telegram. Каждое утро ты пишешь ему тёплое, персонализированное сообщение.
+    const result = await callGroqChatCompletion({
+      messages: [
+        {
+          role: 'system',
+          content: `Ты — персональный AI-ассистент пользователя в Telegram. Каждое утро ты пишешь ему тёплое, персонализированное сообщение.
 Формат ответа — Markdown для Telegram. Пиши ТОЛЬКО на русском языке.
 Структура (строго):
 1. Приветствие с именем (1 строка)
@@ -612,20 +587,19 @@ export async function generateMorningGreeting(
 5. Мотивирующая фраза
 
 Максимум 200 слов. Без шаблонных «Желаю тебе». Конкретно и по-дружески.`,
-          },
-          {
-            role: 'user',
-            content: `Имя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
-          },
-        ],
-        temperature: 0.8,
-        max_tokens: 350,
-      }),
+        },
+        {
+          role: 'user',
+          content: `Имя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
+        },
+      ],
+      model: GROQ_CHAT_MODEL,
+      temperature: 0.8,
+      max_tokens: 350,
+      apiKey,
     })
 
-    if (!res.ok) throw new Error('Groq error')
-    const data = await res.json()
-    const aiText = data.choices?.[0]?.message?.content?.trim() || ''
+    const aiText = result.content?.trim() || ''
     return aiText || buildFallbackGreeting(firstName, dayName, pendingTasks)
   } catch {
     return buildFallbackGreeting(firstName, dayName, pendingTasks)
@@ -652,19 +626,12 @@ export async function generateEveningReview(
   pendingTasks: string[],
   apiKey?: string
 ): Promise<string> {
-  const key = apiKey || DEFAULT_KEY
-  if (!key) return buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
-
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Ты — личный ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня.
+    const result = await callGroqChatCompletion({
+      messages: [
+        {
+          role: 'system',
+          content: `Ты — личный ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня.
 Пиши ТОЛЬКО на русском языке, в Markdown для Telegram.
 Стиль: минималистичный, эстетичный, поддерживающий.
 Структура:
@@ -672,20 +639,19 @@ export async function generateEveningReview(
 2. Похвала за закрытые задачи (если есть) или ободрение.
 3. Короткий дружеский совет по отдыху/восстановлению сил на завтра.
 Максимум 120 слов.`,
-          },
-          {
-            role: 'user',
-            content: `Имя: ${firstName}\nВыполнено задач сегодня (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'нет'}\nОсталось невыполненных (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'нет'}`,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 300,
-      }),
+        },
+        {
+          role: 'user',
+          content: `Имя: ${firstName}\nВыполнено задач сегодня (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'нет'}\nОсталось невыполненных (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'нет'}`,
+        },
+      ],
+      model: GROQ_CHAT_MODEL,
+      temperature: 0.7,
+      max_tokens: 300,
+      apiKey,
     })
 
-    if (!res.ok) throw new Error('Groq error')
-    const data = await res.json()
-    const aiText = data.choices?.[0]?.message?.content?.trim() || ''
+    const aiText = result.content?.trim() || ''
     return aiText || buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
   } catch {
     return buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
@@ -729,7 +695,6 @@ export async function generateSmartReschedulePlan(
   currentMskTime: string,
   apiKey?: string
 ): Promise<{ plan: ReschedulePlanItem[]; aiAdvice: string }> {
-  const key = apiKey || DEFAULT_KEY
   if (!tasks || tasks.length === 0) {
     return { plan: [], aiAdvice: 'Нет активных задач для перепланирования.' }
   }
@@ -753,13 +718,6 @@ export async function generateSmartReschedulePlan(
       reason: isTomorrow ? 'Перенесено на завтра на утро' : 'Оптимальный интервал на сегодня'
     }
   })
-
-  if (!key) {
-    return {
-      plan: fallbackPlan,
-      aiAdvice: 'Задачи равномерно распределены по свободным интервалам с учетом текущего времени.'
-    }
-  }
 
   try {
     const result = await callGroqChatCompletion({
@@ -791,7 +749,8 @@ export async function generateSmartReschedulePlan(
         }
       ],
       temperature: 0.3,
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      apiKey,
     })
 
     const parsed = JSON.parse(result.content || '{}')
