@@ -33,7 +33,7 @@ export interface ExtensionItem {
   updatedAt: string
 }
 
-// Built-in starter extensions loaded from open-source GitHub specifications
+// Built-in official creator extensions loaded from open-source GitHub specifications
 const STARTER_EXTENSIONS: ExtensionItem[] = [
   {
     id: 'ext_pomodoro_widget',
@@ -44,15 +44,15 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'Виджеты & Фокус',
     icon: '⏱️',
     githubUrl: 'https://github.com/zerf-note/pomodoro-focus-widget',
-    authorChatId: 'system',
-    authorName: 'Zerf Note Team',
+    authorChatId: '6136950061',
+    authorName: 'Создатель',
     authorGithub: 'zerf-note',
     price: 0,
     isOfficial: true,
     rating: 5.0,
-    ratingCount: 184,
-    likesCount: 342,
-    installCount: 1240,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 1,
     content: {
       workDuration: 25,
       breakDuration: 5,
@@ -74,13 +74,14 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     icon: '🚀',
     githubUrl: 'https://github.com/alex-dev/zerf-saas-launch-template',
     authorChatId: '6136950061',
-    authorName: 'Alexander (SaaS Founder)',
-    authorGithub: 'alex-dev',
+    authorName: 'Создатель',
+    authorGithub: 'zerf-note',
     price: 79,
-    rating: 4.9,
-    ratingCount: 42,
-    likesCount: 189,
-    installCount: 110,
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 1,
     content: {
       templateType: 'project',
       tasksCount: 45,
@@ -105,15 +106,15 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'Оформление',
     icon: '🌌',
     githubUrl: 'https://github.com/zerf-design/cyberpunk-theme',
-    authorChatId: 'system',
-    authorName: 'Zerf Design Lab',
+    authorChatId: '6136950061',
+    authorName: 'Создатель',
     authorGithub: 'zerf-design',
     price: 0,
     isOfficial: true,
-    rating: 4.8,
-    ratingCount: 230,
-    likesCount: 512,
-    installCount: 1650,
+    rating: 5.0,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 1,
     content: {
       primaryColor: '#10b981',
       accentColor: '#06b6d4',
@@ -132,15 +133,15 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'Здоровье & Привычки',
     icon: '💧',
     githubUrl: 'https://github.com/open-health/zerf-hydration-widget',
-    authorChatId: 'system',
-    authorName: 'Open Health Community',
+    authorChatId: '6136950061',
+    authorName: 'Создатель',
     authorGithub: 'open-health',
     price: 0,
     isOfficial: true,
-    rating: 4.9,
-    ratingCount: 88,
-    likesCount: 247,
-    installCount: 520,
+    rating: 5.0,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 1,
     content: {
       dailyGoalMl: 2500,
       intervalHours: 2,
@@ -458,7 +459,10 @@ export async function POST(req: NextRequest) {
       }
 
       const extId = id || `ext_gh_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`
-      const authorName = [userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || userRec?.firstName || 'GitHub Автор'
+      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      const authorName = isCreator
+        ? 'Создатель'
+        : ([userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || (userRec?.username ? `@${userRec.username}` : 'Автор расширения'))
 
       const existingRecord = await prisma.config.findUnique({ where: { key: `zerf_ext_${extId}` } })
       const existingData = existingRecord?.value ? JSON.parse(existingRecord.value) : null
@@ -474,6 +478,7 @@ export async function POST(req: NextRequest) {
         githubUrl: githubUrl || '',
         authorChatId: chatId,
         authorName,
+        isOfficial: isCreator,
         price: finalPrice,
         rating: existingData?.rating || 5.0,
         ratingCount: existingData?.ratingCount || 1,

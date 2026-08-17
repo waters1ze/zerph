@@ -38,15 +38,46 @@ const SAMPLE_MANIFEST = `{
   }
 }`
 
+const getInitialExtensionsData = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('zerf_ext_catalog_cache')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        return {
+          catalog: parsed.catalog || [],
+          installedIds: parsed.installedIds || [],
+          likedIds: parsed.likedIds || [],
+          userPlan: parsed.userPlan || 'free',
+          canCreate: Boolean(parsed.canCreate),
+          authorStats: parsed.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 },
+          hasCache: Array.isArray(parsed.catalog) && parsed.catalog.length > 0
+        }
+      }
+    } catch {}
+  }
+  return {
+    catalog: [],
+    installedIds: [],
+    likedIds: [],
+    userPlan: 'free',
+    canCreate: false,
+    authorStats: { balance: 0, totalEarned: 0, salesCount: 0 },
+    hasCache: false
+  }
+}
+
 export function ExtensionsView() {
   const { dispatch, syncData } = useApp()
-  const [catalog, setCatalog] = useState<ExtensionItem[]>([])
-  const [installedIds, setInstalledIds] = useState<string[]>([])
-  const [likedIds, setLikedIds] = useState<string[]>([])
-  const [userPlan, setUserPlan] = useState<string>('free')
-  const [canCreate, setCanCreate] = useState<boolean>(false)
-  const [authorStats, setAuthorStats] = useState({ balance: 0, totalEarned: 0, salesCount: 0 })
-  const [loading, setLoading] = useState<boolean>(true)
+  const initialCache = getInitialExtensionsData()
+
+  const [catalog, setCatalog] = useState<ExtensionItem[]>(initialCache.catalog)
+  const [installedIds, setInstalledIds] = useState<string[]>(initialCache.installedIds)
+  const [likedIds, setLikedIds] = useState<string[]>(initialCache.likedIds)
+  const [userPlan, setUserPlan] = useState<string>(initialCache.userPlan)
+  const [canCreate, setCanCreate] = useState<boolean>(initialCache.canCreate)
+  const [authorStats, setAuthorStats] = useState(initialCache.authorStats)
+  const [loading, setLoading] = useState<boolean>(!initialCache.hasCache)
 
   const [activeTab, setActiveTab] = useState<'store' | 'installed' | 'my' | 'earnings'>('store')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -74,7 +105,7 @@ export function ExtensionsView() {
 
   const fetchExtensions = async () => {
     try {
-      setLoading(true)
+      if (!initialCache.hasCache) setLoading(true)
       const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
@@ -84,6 +115,17 @@ export function ExtensionsView() {
         setUserPlan(data.userPlan || 'free')
         setCanCreate(Boolean(data.canCreateExtensions))
         setAuthorStats(data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 })
+
+        try {
+          localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify({
+            catalog: data.catalog || [],
+            installedIds: data.installedIds || [],
+            likedIds: data.likedIds || [],
+            userPlan: data.userPlan || 'free',
+            canCreate: Boolean(data.canCreateExtensions),
+            authorStats: data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 },
+          }))
+        } catch {}
       }
     } catch (e) {
       console.error('Failed to load extensions:', e)
@@ -589,10 +631,17 @@ export function ExtensionsView() {
                         <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
                         <b className="text-foreground">{ext.rating.toFixed(1)}</b> ({ext.ratingCount})
                       </span>
-                      <span>{ext.installCount} установок</span>
-                      <span className="font-semibold text-foreground truncate max-w-[80px]">
-                        {ext.authorName}
-                      </span>
+                      <span>{ext.installCount} {ext.installCount === 1 ? 'установка' : 'установок'}</span>
+                      {ext.isOfficial || ext.authorChatId === 'system' || ext.authorChatId === '6136950061' || ext.authorName?.toLowerCase().includes('создатель') ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold text-amber-400">
+                          <Crown className="w-2.5 h-2.5" />
+                          Создатель
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-medium text-foreground/90 truncate max-w-[110px]" title={ext.authorName}>
+                          👤 {ext.authorName || 'Автор'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -1204,8 +1253,18 @@ export function ExtensionsView() {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-foreground">{selectedExt.title}</h3>
-                    <p className="text-[10px] text-muted-foreground font-mono">
-                      {selectedExt.category} • Автор: {selectedExt.authorName} {selectedExt.version && `(v${selectedExt.version})`}
+                    <p className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5 flex-wrap">
+                      <span>{selectedExt.category}</span>
+                      <span>•</span>
+                      <span>Автор:</span>
+                      {selectedExt.isOfficial || selectedExt.authorChatId === 'system' || selectedExt.authorChatId === '6136950061' || selectedExt.authorName?.toLowerCase().includes('создатель') ? (
+                        <span className="inline-flex items-center gap-0.5 font-bold text-amber-400">
+                          <Crown className="w-2.5 h-2.5" /> Создатель
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-foreground">{selectedExt.authorName || 'Автор расширения'}</span>
+                      )}
+                      {selectedExt.version && <span>(v{selectedExt.version})</span>}
                     </p>
                   </div>
                 </div>
