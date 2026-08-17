@@ -38,25 +38,25 @@ interface AiModelOption {
 }
 
 const CLOUD_MODELS: AiModelOption[] = [
-  { id: 'openai/gpt-oss-120b', name: '🧠 OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
-  { id: 'openai/gpt-oss-20b', name: '⚡ OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
-  { id: 'groq/compound', name: '✨ Groq Compound Router', desc: 'Авто-роутинг оптимальной модели под контекст', type: 'cloud' },
-  { id: 'meta-llama/Llama-3.1-8B-Instruct', name: '🪽 Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
+  { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
+  { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
+  { id: 'groq/compound', name: 'Groq Compound Router', desc: 'Авто-роутинг оптимальной модели под контекст', type: 'cloud' },
+  { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
 ]
 
 const BASE_MENU_ITEMS: MenuItem[] = [
   { cmd: '/today', label: '/today', desc: 'Список дел и привычек с отсчетом времени', glyph: '❖' },
   { cmd: '/cal', label: '/cal', desc: '7-дневный календарь с расписанием', glyph: '◫' },
-  { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: '💬' },
-  { cmd: '/add ', label: '/add <текст>', desc: 'Добавить задачу с распознаванием даты', glyph: '➕' },
+  { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: '◈' },
+  { cmd: '/add ', label: '/add <текст>', desc: 'Добавить задачу с распознаванием даты', glyph: '▸' },
   { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: '✔' },
   { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить быструю заметку в базу', glyph: '≡' },
   { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Pomodoro', glyph: '⊘' },
-  { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI', glyph: '🧠' },
+  { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI', glyph: '◈' },
   { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и параметры', glyph: '⚙' },
-  { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: '👥' },
-  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: '⚡' },
-  { cmd: '/clear', label: '/clear', desc: 'Очистить историю диалога', glyph: '🧹' },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: '◈' },
+  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: '●' },
+  { cmd: '/clear', label: '/clear', desc: 'Очистить историю диалога', glyph: '─' },
   { cmd: '/help', label: '/help', desc: 'Справка по всем командам', glyph: '?' },
   { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ]
@@ -143,7 +143,7 @@ export function Repl({ initialData }: { initialData?: any }) {
     cmd: `/ext ${ext.id || ext.name}`,
     label: `/ext ${ext.name || ext.id}`,
     desc: `[Расширение] ${ext.description || ext.title || 'Пользовательский модуль'}`,
-    glyph: '🔌',
+    glyph: '◈',
   }))
 
   const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems]
@@ -179,7 +179,7 @@ export function Repl({ initialData }: { initialData?: any }) {
             {
               id: makeUniqueId(),
               type: 'assistant',
-              text: `🤖 Активная нейросеть / CLI агент: ${chosen.name}`,
+              text: `◈ Активная нейросеть / CLI агент: ${chosen.name}`,
               details: [chosen.desc],
             },
           ])
@@ -214,7 +214,7 @@ export function Repl({ initialData }: { initialData?: any }) {
             {
               id: makeUniqueId(),
               type: 'assistant',
-              text: `💬 Выбран собеседник: ${chosen.name} (${targetName})`,
+              text: `◈ Выбран собеседник: ${chosen.name} (${targetName})`,
               details: ['Введите сообщение или задачу для отправки.'],
             },
           ])
@@ -317,7 +317,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           text: '⚙ Настройки Zerf CLI:',
           details: [
             `• Активная модель / CLI: ${currentModelObj?.name} (сменить: /model)`,
-            `• Локальные CLI на ПК:  Обнаружено: ${installedCliCount} (agy, claude, gemini, ollama)`,
+            `• Локальные CLI на ПК:  Обнаружено: ${installedCliCount} (agy, claude, opencode, gh, ollama)`,
             `• Тема оформления:      Strict Cyan (Монохром + Тихоня)`,
             `• Автосинхронизация:    Включена (каждые 30 сек)`,
             `• Telegram Бот:         Подключен (@Zerph_bot)`,
@@ -372,7 +372,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           const check = isDone ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `
           const countdown = getCountdownText(t.dueTime, t.status)
           const timeStr = t.dueTime ? ` [${t.dueTime}]` : ''
-          const prio = t.priority === 'urgent' ? ' [⚡ Срочно]' : t.priority === 'high' ? ' [Высокий]' : ''
+          const prio = t.priority === 'urgent' ? ' [Срочно]' : t.priority === 'high' ? ' [Высокий]' : ''
           return `${check} ${t.title}${timeStr}${prio}  →  ${countdown}`
         })
         setHistory(h => [
@@ -438,7 +438,7 @@ export function Repl({ initialData }: { initialData?: any }) {
               text: '◈ Командный чат & Друзья (0):',
               details: [
                 'У вас пока нет добавленных друзей для диалога.',
-                `🔗 Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
+                `▸ Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
               ],
             },
           ])
@@ -469,7 +469,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           {
             id: makeUniqueId(),
             type: 'assistant',
-            text: `💬 Сообщение / поручение отправлено ${targetFriend?.name || 'другу'}!`,
+            text: `◈ Сообщение / поручение отправлено ${targetFriend?.name || 'другу'}!`,
             details: [`Текст: «${messageText}»`, 'Синхронизировано в командный чат Zerf Note и Telegram.'],
           },
         ])
@@ -488,10 +488,10 @@ export function Repl({ initialData }: { initialData?: any }) {
           {
             id: makeUniqueId(),
             type: 'assistant',
-            text: '🪽 Список друзей (0):',
+            text: '◈ Список друзей (0):',
             details: [
               'У вас пока нет добавленных друзей.',
-              `🔗 Ссылка-приглашение: https://t.me/Zerph_bot?start=invite_${chatId}`,
+              `▸ Ссылка-приглашение: https://t.me/Zerph_bot?start=invite_${chatId}`,
             ],
           },
         ])
@@ -502,8 +502,8 @@ export function Repl({ initialData }: { initialData?: any }) {
           {
             id: makeUniqueId(),
             type: 'assistant',
-            text: `🪽 Список друзей (${friends.length}):`,
-            details: [...friendLines, `🔗 Ссылка: https://t.me/Zerph_bot?start=invite_${chatId}`],
+            text: `◈ Список друзей (${friends.length}):`,
+            details: [...friendLines, `▸ Ссылка: https://t.me/Zerph_bot?start=invite_${chatId}`],
           },
         ])
       }
@@ -520,7 +520,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         {
           id: makeUniqueId(),
           type: 'assistant',
-          text: `⚡ Статус лимитов на сегодня (${planName}):`,
+          text: `● Статус лимитов на сегодня (${planName}):`,
           details: [
             `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} ${cliBar}`,
             `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
@@ -595,7 +595,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         const out = await runLocalCliBridge(currentModel, raw)
         setHistory(h => [
           ...h,
-          { id: makeUniqueId(), type: 'assistant', text: `🤖 Ответ ${currentModel.replace('cli:', '')}:`, details: [out] },
+          { id: makeUniqueId(), type: 'assistant', text: `◈ Ответ ${currentModel.replace('cli:', '')}:`, details: [out] },
         ])
       } else {
         const res = await sendAiQuery(creds, raw, currentModel)
@@ -629,7 +629,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           <Text color="gray">·</Text>
           <Text bold color="cyanBright">{planTag}</Text>
           <Text color="gray">·</Text>
-          <Text color="yellow">стрик 12 🔥</Text>
+          <Text color="white">стрик 12 дн.</Text>
         </Box>
       </Box>
 
@@ -670,7 +670,7 @@ export function Repl({ initialData }: { initialData?: any }) {
             <Text color="white">
               ❖ Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
             </Text>
-            <Text color="yellow">🔥 Стрик: 12 дней</Text>
+            <Text color="white">● Стрик: 12 дней</Text>
           </Box>
         </Box>
       </Box>
@@ -708,7 +708,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       {pickingChatFriend && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
-            <Text bold color="cyanBright">👥 Выберите друга для начала диалога (↑/↓, Enter):</Text>
+            <Text bold color="cyanBright">◈ Выберите друга для начала диалога (↑/↓, Enter):</Text>
             <Text color="gray">ESC отмена</Text>
           </Box>
           {(data?.friends || []).map((f: any, idx: number) => {
@@ -732,7 +732,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       {pickingModel && (
         <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
-            <Text bold color="cyanBright">🤖 Выберите нейросеть или локальный CLI агент (↑/↓, Enter):</Text>
+            <Text bold color="cyanBright">◈ Выберите нейросеть или локальный CLI агент (↑/↓, Enter):</Text>
             <Text color="gray">ESC для закрытия</Text>
           </Box>
           {allAvailableModels.map((m, idx) => {

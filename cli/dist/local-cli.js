@@ -4,11 +4,11 @@ import fs from 'fs';
 import path from 'path';
 export const ALLOWED_CLIS = ['claude', 'agy', 'opencode', 'gh', 'ollama'];
 const SUPPORTED_LOCAL_CLIS = [
-    { command: 'claude', name: '🪽 Claude Code CLI (claude)', desc: 'Anthropic Claude Code терминальный агент', type: 'local_cli' },
-    { command: 'agy', name: '🌌 Antigravity CLI (agy)', desc: 'Antigravity автономный AI агент', type: 'local_cli' },
-    { command: 'opencode', name: '⚡ OpenCode CLI (opencode)', desc: 'OpenCode terminal agent', type: 'local_cli' },
-    { command: 'gh', name: '🐙 GitHub Copilot CLI (gh)', desc: 'GitHub Copilot терминальный помощник', type: 'local_cli' },
-    { command: 'ollama', name: '🦙 Ollama Local (ollama)', desc: 'Локальные LLaMA/Qwen модели на ПК (localhost:11434)', type: 'local_llm' },
+    { command: 'claude', name: 'Claude Code CLI (claude)', desc: 'Anthropic Claude Code терминальный агент', type: 'local_cli' },
+    { command: 'agy', name: 'Antigravity CLI (agy)', desc: 'Google Antigravity автономный AI агент', type: 'local_cli' },
+    { command: 'opencode', name: 'OpenCode CLI (opencode)', desc: 'OpenCode terminal agent', type: 'local_cli' },
+    { command: 'gh', name: 'GitHub Copilot CLI (gh)', desc: 'GitHub Copilot терминальный помощник', type: 'local_cli' },
+    { command: 'ollama', name: 'Ollama Local (ollama)', desc: 'Локальные LLaMA/Qwen модели на ПК (localhost:11434)', type: 'local_llm' },
 ];
 export function checkCliInstalled(cmd) {
     const isWin = os.platform() === 'win32';
