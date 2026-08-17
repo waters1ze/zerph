@@ -219,7 +219,9 @@ export interface UserSettings {
       goals?: string
       reschedule?: string
       analytics?: string
+      siri?: string
     }
+    siriMode?: 'fast' | 'full'
   }
   weekStartsOn: 0 | 1
   focusModeEnabled: boolean

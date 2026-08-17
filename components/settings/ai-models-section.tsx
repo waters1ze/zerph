@@ -328,6 +328,29 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 ))}
               </select>
             </div>
+
+            {/* 6. Siri & Voice Shortcuts */}
+            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-primary/5">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Mic className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold text-foreground">Siri & Action Button (Быстрые команды)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20">
+                    Голос
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Нейросеть для обработки голосовых команд через Siri и виджеты iPhone/Android</p>
+              </div>
+              <select
+                value={taskModels.siri || 'openai/gpt-oss-20b'}
+                onChange={(e) => handleTaskModelChange('siri' as any, e.target.value)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-primary/40 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
+              >
+                {ALL_MODELS.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       ) : (
@@ -343,7 +366,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            В тарифе Pro и Corp вы сможете закрепить отдельную флагманскую модель (GPT-OSS 120B, Qwen 72B, GPT-OSS 20B) за каждым типом задач: чат, парсинг, цели, перепланирование и аналитика.
+            В тарифе Pro и Corp вы сможете закрепить отдельную флагманскую модель (GPT-OSS 120B, Qwen 72B, GPT-OSS 20B) за каждым типом задач: чат, парсинг, Siri, цели, перепланирование и аналитика.
           </p>
           <button
             type="button"
@@ -354,6 +377,90 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
           </button>
         </div>
       )}
+
+      {/* Siri Engine Mode Selector (Fast vs Full Intent) */}
+      <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-500" />
+            <h4 className="text-xs font-bold text-foreground">Режим распознавания Siri и голосовых шорткатов</h4>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+            {settings.integrations?.siriMode === 'full' ? '🧠 Полный контекст' : '⚡ Сверхбыстрый'}
+          </span>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Выберите, как Siri должна обрабатывать ваши задачи: мгновенно за 200 мс (компактный парсер) или с детальным анализом всей базы заметок и генерацией подзадач.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              update({
+                integrations: {
+                  ...settings.integrations,
+                  siriMode: 'fast',
+                }
+              })
+              showSaved()
+            }}
+            className={cn(
+              "p-3 rounded-xl border text-left flex flex-col justify-between space-y-1.5 transition-all cursor-pointer",
+              (settings.integrations?.siriMode !== 'full')
+                ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                : "border-border bg-card hover:bg-accent/40"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                ⚡ Сверхбыстрый (~150–250 мс)
+              </span>
+              {settings.integrations?.siriMode !== 'full' && (
+                <span className="w-3.5 h-3.5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                  <Check className="w-2 h-2" />
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Компактный 100-токеновый промпт, мгновенный отклик, 0 задержек и отсутствие лимитов TPM. Рекомендуется.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              update({
+                integrations: {
+                  ...settings.integrations,
+                  siriMode: 'full',
+                }
+              })
+              showSaved()
+            }}
+            className={cn(
+              "p-3 rounded-xl border text-left flex flex-col justify-between space-y-1.5 transition-all cursor-pointer",
+              settings.integrations?.siriMode === 'full'
+                ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                : "border-border bg-card hover:bg-accent/40"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                🧠 Полный контекстный
+              </span>
+              {settings.integrations?.siriMode === 'full' && (
+                <span className="w-3.5 h-3.5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                  <Check className="w-2 h-2" />
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Загружает всю базу проектов и заметок, генерирует расширенные подзадачи и мотивацию к каждой задаче.
+            </p>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

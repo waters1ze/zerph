@@ -16,7 +16,7 @@
 import { GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
 import { normalizePlan } from '@/lib/plans'
 
-export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice'
+export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri'
 
 export const FREE_ALLOWED_MODELS = [
   'meta-llama/Llama-3.1-8B-Instruct',
@@ -32,8 +32,8 @@ export const PLUS_ALLOWED_MODELS = [
 /**
  * Model allocation based on subscription tier:
  * - Free: 1 of 2 lightweight models (Llama 3.1 8B or Qwen 2.5 7B) for all tasks
- * - Plus (99 ₽): 1 of 3 models (Qwen 3.6 27B, Llama 3.1 8B, Qwen 2.5 7B) for all tasks
- * - Pro (299-300 ₽) & Corp: Full customization, can set ANY model for EACH individual task
+ * - Plus (99 ₽): 1 single chosen model (Qwen 3.6 27B, Llama 3.1 8B, Qwen 2.5 7B) applied to ALL tasks (chat, siri, planner)
+ * - Pro (299-300 ₽) & Corp: Full granular customization, can set ANY model for EACH individual task (including Siri)
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -46,10 +46,11 @@ export function getModelForUserPlan(
   // Pro & Corp: full freedom to use ANY model for each task
   if (norm === 'pro' || norm === 'corp') {
     if (req) return req
+    if (taskKind === 'siri') return 'openai/gpt-oss-20b'
     return 'openai/gpt-oss-120b'
   }
 
-  // Plus: 1 of 3 models for all tasks
+  // Plus: 1 single chosen model for ALL tasks
   if (norm === 'plus') {
     if (req && PLUS_ALLOWED_MODELS.includes(req)) {
       return req

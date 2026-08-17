@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { planAtLeast, incrementDailyCount, incrementLifetimeCount, COUNTERS } from '@/lib/backend/plans'
 import crypto from 'crypto'
 import { parseIntentWithGroq, parseSiriFastIntent, transcribeAudioWithGroq, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
+import { getModelForUserPlan } from '@/lib/backend/groq-pool'
 import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends, findFriendMatches } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { prisma } from '@/lib/backend/prisma'
@@ -368,8 +369,8 @@ export async function POST(req: NextRequest) {
       }, { headers: NO_CACHE_HEADERS })
     }
 
-    // 2. Select ultra-fast optimized neural parser
-    const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
+    // 2. Select ultra-fast optimized neural parser according to user plan and settings
+    const siriModel = getModelForUserPlan(limits.plan, undefined, 'siri')
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
 
     let items: any[]
@@ -559,7 +560,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(spokenResponse, { headers: NO_CACHE_HEADERS })
   }
 
-  const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
+  const siriModel = getModelForUserPlan(limits.plan, undefined, 'siri')
   const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
 
   let items: any[]
