@@ -393,7 +393,7 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
   }
 }
 
-/** 4. Post 21:00 MSK Evening News Digest & Reflection (Detailed, Minimalist B&W) */
+/** 4. Post 21:00 MSK Evening News Digest & Reflection (Multi-Message, Detailed, Minimalist B&W) */
 export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<boolean> {
   const { mskDate } = getMskDateTime()
 
@@ -403,83 +403,130 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL,
     }
 
     const context = await fetchEveningNewsContext()
-    
+
     const devData = context.devNews && context.devNews.length > 0
-      ? context.devNews.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://habr.com'})`).join('\n\n')
+      ? context.devNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
       : 'Ключевые инженерные кейсы и архитектурные решения.'
 
     const secData = context.secNews && context.secNews.length > 0
-      ? context.secNews.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://habr.com'})`).join('\n\n')
+      ? context.secNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
       : 'Разборы инцидентов кибербезопасности и уязвимостей.'
 
     const sciData = context.sciNews && context.sciNews.length > 0
-      ? context.sciNews.map((n, i) => `${i + 1}. "${n.title}": ${n.summary || ''} (Ссылка: ${n.url || 'https://habr.com'})`).join('\n\n')
+      ? context.sciNews.map((n, i) => `${i + 1}. Заголовок: "${n.title}"\n   URL: ${n.url}\n   Суть: ${n.summary || ''}`).join('\n\n')
       : 'Научные открытия, когнитивистика и системное мышление.'
 
-    const prompt =
+    // --- 1. Post #1: Engineering & Architecture ---
+    const prompt1 =
       `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
-      `Напиши БОЛЬШУЮ, МАКСИМАЛЬНО ПОДРОБНУЮ и глубокую ВЕЧЕРНЮЮ аналитическую сводку ключевых инсайтов за сегодня (${context.date}).\n` +
-      `Каждая новость должна содержать БОЛЬШОЙ развернутый абзац (3-5 полноценных предложений с разбором кейса, техническими деталями, цифрами и практическими выводами).\n\n` +
-      `ИНЖЕНЕРИЯ, РАЗРАБОТКА & АРХИТЕКТУРА:\n${devData}\n\n` +
-      `КИБЕРБЕЗОПАСНОСТЬ & ЗАЩИТА ДАННЫХ:\n${secData}\n\n` +
-      `НАУЧНЫЕ ИССЛЕДОВАНИЯ, ПСИХОЛОГИЯ & МЫШЛЕНИЕ:\n${sciData}\n\n` +
+      `Напиши БОЛЬШОЙ, МАКСИМАЛЬНО ПОДРОБНЫЙ технический вечерний выпуск "ИТОГИ ДНЯ: ИНЖЕНЕРИЯ, РАЗРАБОТКА & АРХИТЕКТУРА" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${devData}\n\n` +
       `СТРОГИЕ ПРАВИЛА:\n` +
-      `1. Пиши ТОЛЬКО на чистом, грамотном русском литературном языке без каких-либо иностранных слов-паразитов или опечаток.\n` +
-      `2. НЕ ДЕЛАЙ КОРОТКИХ ОПИСАНИЙ! Напиши под каждым заголовком основательный, глубокий и информативный текст (3-5 предложений).\n` +
-      `3. ОБЯЗАТЕЛЬНО: в конце каждого пункта приложи кликабельную ссылку на источник: <a href="URL">[Источник]</a>.\n` +
-      `4. Стиль: строгий минимализм, ч/б символы: ✦, ◈, ▪, <blockquote>, <b>, <i>, <code>, <a>. Без детских цветных эмодзи.\n\n` +
-      `СТРОГАЯ СТРУКТУРА ВЕЧЕРНЕЙ СВОДКИ:\n` +
-      `✦ <b>ИТОГИ ДНЯ | ВЕЧЕРНЯЯ СВОДКА | ${context.date}</b>\n\n` +
-      `◈ <b>Инженерия, Разработка & IT-Архитектура:</b>\n` +
-      `▪ <b>[Точный заголовок первого инженерного разбора]</b> — [Большой, детальный текст: 3-5 предложений с описанием проблемы, архитектурного решения, кода/технологий и практических выводов для разработчиков] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `▪ <b>[Точный заголовок второго инженерного разбора]</b> — [Большой, детальный текст: 3-5 предложений с анализом кейса и выводами] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `◈ <b>Кибербезопасность & Защита Данных:</b>\n` +
-      `▪ <b>[Точный заголовок расследования/уязвимости]</b> — [Большой текст: 3-5 предложений о механике вектора атаки, масштабе инцидента и главных уроках для защиты систем] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `◈ <b>Наука, Когнитивистика & Мышление:</b>\n` +
-      `▪ <b>[Точный заголовок научного/когнитивного исследования]</b> — [Большой текст: 3-5 предложений о сути эксперимента, работе мозга, внимании и продуктивном мышлении] <a href="[URL_источника]">[Источник]</a>\n\n` +
-      `<b>Рефлексия продуктивности:</b> [2-3 содержательных предложения о важности фиксации сделанного за день, выгрузке незавершенных задач в Zerf Note и очистке ума перед сном для восстановления ресурсов].\n\n` +
-      `<blockquote>❝ [Вдохновляющая мысль или цитата о дисциплине, спокойствии ума, системности и правильном завершении дня]</blockquote>\n\n` +
+      `1. Под каждым заголовком напиши БОЛЬШОЙ детальный разбор (3-5 полноценных предложений с описанием архитектуры, кода, стека, цифр и пользы для разработчиков).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную кликабельную ссылку на источник: <a href="ТОЧНЫЙ_URL">[Источник]</a> (используй ТОЛЬКО реальные URL из списка выше).\n` +
+      `3. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <b>, <code>, <a>). Без цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `✦ <b>ИТОГИ ДНЯ | ИНЖЕНЕРИЯ & IT-АРХИТЕКТУРА | ${context.date}</b>\n\n` +
+      `◈ <b>Ключевые инженерные решения & релизы:</b>\n` +
+      `[2-3 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой детальный разбор 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `▫️ <i>Вечерний выпуск 1 из 3 | Инженерия & Архитектура</i>\n` +
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>`
+
+    // --- 2. Post #2: Cybersecurity & Data Protection ---
+    const prompt2 =
+      `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
+      `Напиши БОЛЬШОЙ аналитический вечерний выпуск "КИБЕРБЕЗОПАСНОСТЬ & ЗАЩИТА ДАННЫХ" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${secData}\n\n` +
+      `СТРОГИЕ ПРАВИЛА:\n` +
+      `1. Под каждым заголовком напиши БОЛЬШОЙ развернутый абзац (3-5 предложений о векторе атаки, уязвимости, рисках для данных и способах защиты систем).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную ссылку: <a href="ТОЧНЫЙ_URL">[Источник]</a>.\n` +
+      `3. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <b>, <code>, <a>). Без цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `◈ <b>КИБЕРБЕЗОПАСНОСТЬ & ЗАЩИТА ДАННЫХ | ${context.date}</b>\n\n` +
+      `[2-3 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой детальный текст 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `▫️ <i>Вечерний выпуск 2 из 3 | Кибербезопасность</i>\n` +
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>`
+
+    // --- 3. Post #3: Science, Cognitive Thinking & Evening Reflection ---
+    const prompt3 =
+      `Ты — главный редактор официального Telegram-канала Zerf Note (@zerph_off).\n` +
+      `Напиши БОЛЬШОЙ вечерний выпуск "НАУКА, МЫШЛЕНИЕ & ВЕЧЕРНЯЯ РЕФЛЕКСИЯ" за ${context.date}.\n\n` +
+      `НОВОСТИ ДЛЯ РАЗБОРА:\n${sciData}\n\n` +
+      `СТРОГИЕ ПРАВИЛА:\n` +
+      `1. Под каждым заголовком напиши содержательный разбор исследования (3-5 предложений о мозге, мышлении и продуктивности).\n` +
+      `2. В конце каждого пункта ОБЯЗАТЕЛЬНО укажи точную ссылку: <a href="ТОЧНЫЙ_URL">[Источник]</a>.\n` +
+      `3. В конце добавь блок рефлексии дня и мысль в <blockquote> о правильном завершении рабочего дня и разгрузке ума перед сном.\n` +
+      `4. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪, <blockquote>, <b>, <code>, <a>). Без цветных эмодзи.\n\n` +
+      `СТРОГАЯ СТРУКТУРА ВЫПУСКА:\n` +
+      `◈ <b>НАУКА, МЫШЛЕНИЕ & РЕФЛЕКСИЯ ДНЯ | ${context.date}</b>\n\n` +
+      `[2 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой текст 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
+      `<b>Вечерняя рефлексия:</b> [2-3 предложения о важности выгрузки мыслей и фиксации задач в Zerf Note перед сном для восстановления ресурсов].\n\n` +
+      `<blockquote>❝ [Вдохновляющая мысль о дисциплине, спокойствии ума и системности]</blockquote>\n\n` +
+      `▫️ <i>Вечерний выпуск 3 из 3 | Наука & Рефлексия</i>\n` +
       `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
-    const result = await callGroqChatCompletion({
-      model: GROQ_CHAT_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.6,
-      max_tokens: 1800,
-    })
+    const prompts = [
+      { id: 'dev', prompt: prompt1, topic: 'Инженерия' },
+      { id: 'sec', prompt: prompt2, topic: 'Кибербезопасность' },
+      { id: 'sci', prompt: prompt3, topic: 'Наука & Рефлексия' },
+    ]
 
-    let text = result.content?.trim()
-    if (!text) return false
+    let sentCount = 0
 
-    if (text.length > 4000) {
-      text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>'
+    for (let i = 0; i < prompts.length; i++) {
+      const p = prompts[i]
+      try {
+        const result = await callGroqChatCompletion({
+          model: GROQ_CHAT_MODEL,
+          messages: [{ role: 'user', content: p.prompt }],
+          temperature: 0.5,
+          max_tokens: 1500,
+        })
+
+        let text = result.content?.trim()
+        if (!text) continue
+
+        if (text.length > 4000) {
+          text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a>'
+        }
+
+        const sanitized = sanitizeTgHtml(text)
+        let tgRes = await callTg('sendMessage', {
+          chat_id: channelId,
+          text: sanitized,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        })
+
+        if (!tgRes?.ok) {
+          const cleanText = text.replace(/<[^>]*>/g, '').slice(0, 4000)
+          tgRes = await callTg('sendMessage', {
+            chat_id: channelId,
+            text: cleanText,
+            disable_web_page_preview: true,
+          })
+        }
+
+        if (tgRes?.ok) {
+          sentCount++
+        }
+
+        // Duplicate to VK Community Wall
+        postToVkWall(text).catch(err => console.error(`[VK Crosspost Evening ${p.id} Error]:`, err))
+
+        if (i < prompts.length - 1) {
+          await sleep(1500)
+        }
+      } catch (err) {
+        console.error(`Error sending evening post ${p.id}:`, err)
+      }
     }
 
-    const sanitized = sanitizeTgHtml(text)
-    let tgRes = await callTg('sendMessage', {
-      chat_id: channelId,
-      text: sanitized,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    })
-
-    if (!tgRes?.ok) {
-      const cleanText = text.replace(/<[^>]*>/g, '').slice(0, 4000)
-      tgRes = await callTg('sendMessage', {
-        chat_id: channelId,
-        text: cleanText,
-        disable_web_page_preview: true,
-      })
-    }
-
-    if (tgRes?.ok) {
+    if (sentCount > 0) {
       await markCronDoneToday('channel_evening_post', mskDate)
     }
 
-    // Duplicate to VK Community Wall
-    postToVkWall(text).catch(err => console.error('[VK Crosspost Evening Error]:', err))
-
-    return tgRes?.ok ?? false
+    return sentCount > 0
   } catch (err) {
     console.error('postDailyEveningPostToChannel error:', err)
     return false

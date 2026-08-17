@@ -115,6 +115,9 @@ export function Repl({ initialData }: { initialData?: any }) {
   const [menuForced, setMenuForced] = useState(false)
   const [pickingModel, setPickingModel] = useState(false)
   const [selectedModelIdx, setSelectedModelIdx] = useState(0)
+  const [pickingChatFriend, setPickingChatFriend] = useState(false)
+  const [selectedFriendIdx, setSelectedFriendIdx] = useState(0)
+  const [activeChatTarget, setActiveChatTarget] = useState<any>(null)
   const [detectedClis, setDetectedClis] = useState<DetectedCli[]>([])
 
   // Scan for local CLIs on mount
@@ -221,6 +224,45 @@ export function Repl({ initialData }: { initialData?: any }) {
       }
       if (key.escape) {
         setPickingModel(false)
+        return
+      }
+    }
+
+    // Friend Picker for /chat navigation (↑/↓, Enter, Escape)
+    if (pickingChatFriend) {
+      const friends = data?.friends || []
+      if (key.upArrow) {
+        setSelectedFriendIdx(prev => (prev > 0 ? prev - 1 : (friends.length > 0 ? friends.length - 1 : 0)))
+        return
+      }
+      if (key.downArrow) {
+        setSelectedFriendIdx(prev => (prev < friends.length - 1 ? prev + 1 : 0))
+        return
+      }
+      if (key.return) {
+        const chosen = friends[selectedFriendIdx]
+        if (chosen) {
+          setActiveChatTarget(chosen)
+          const targetName = chosen.username ? `@${chosen.username}` : chosen.name
+          setInputVal(`/chat ${targetName} `)
+          setHistory(h => [
+            ...h,
+            {
+              id: makeUniqueId(),
+              type: 'assistant',
+              text: `💬 Выбран собеседник: ${chosen.name} (${targetName})`,
+              details: [
+                'Введите текст сообщения или поручения для друга.',
+                `Пример: /chat ${targetName} проверить макет к 18:00`,
+              ]
+            }
+          ])
+        }
+        setPickingChatFriend(false)
+        return
+      }
+      if (key.escape) {
+        setPickingChatFriend(false)
         return
       }
     }
@@ -460,45 +502,82 @@ export function Repl({ initialData }: { initialData?: any }) {
     }
 
     if (raw.startsWith('/chat')) {
-      const msg = raw.replace('/chat', '').trim()
+      const rest = raw.replace(/^\/chat\s*/i, '').trim()
       const friends = data?.friends || []
       const chatId = data?.user?.chatId || ''
 
-      if (friends.length === 0) {
-        setHistory(h => [
-          ...h,
-          {
-            id: makeUniqueId(),
-            type: 'assistant',
-            text: '◈ Командный чат & Друзья:',
-            details: [
-              'У вас пока нет добавленных друзей для личных сообщений.',
-              `🔗 Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
-              'Отправьте ссылку другу или коллеге, чтобы начать совместную работу!'
-            ]
-          }
-        ])
-      } else {
-        if (!msg) {
-          const friendNames = friends.map((f: any) => `• ${f.name} (@${f.username || 'user'})`).join(', ')
+      if (!rest) {
+        if (friends.length > 0) {
+          setPickingChatFriend(true)
+          setSelectedFriendIdx(0)
+          return
+        } else {
           setHistory(h => [
             ...h,
             {
               id: makeUniqueId(),
               type: 'assistant',
-              text: '◈ Командный чат:',
+              text: '◈ Командный чат & Друзья (0):',
               details: [
-                `Доступные друзья: ${friendNames}`,
-                'Отправка сообщения: /chat <текст сообщения>',
+                'У вас пока нет добавленных друзей для диалога.',
+                `🔗 Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
+                'Отправьте ссылку другу или коллеге в Telegram, чтобы начать совместную работу!'
               ]
             }
           ])
-        } else {
-          setHistory(h => [
-            ...h,
-            { id: makeUniqueId(), type: 'assistant', text: `◈ Сообщение отправлено друзьям: «${msg}»` }
-          ])
+          return
         }
+      }
+
+      // If user typed: /chat @friend message or /chat message
+      let targetFriend = activeChatTarget
+      let messageText = rest
+
+      if (rest.startsWith('@')) {
+        const parts = rest.split(' ')
+        const targetUsername = parts[0].replace('@', '').toLowerCase()
+        messageText = parts.slice(1).join(' ')
+        targetFriend = friends.find((f: any) => (f.username || '').toLowerCase() === targetUsername || f.name.toLowerCase() === targetUsername) || { name: `@${targetUsername}`, username: targetUsername }
+      }
+
+      if (!messageText) {
+        setHistory(h => [
+          ...h,
+          {
+            id: makeUniqueId(),
+            type: 'assistant',
+            text: `💬 Напишите сообщение для ${targetFriend?.name || 'друга'}:`,
+            details: [`Пример: /chat ${targetFriend?.username ? `@${targetFriend.username}` : targetFriend?.name} обсудить дедлайн по проекту`]
+          }
+        ])
+        return
+      }
+
+      try {
+        await mutateItem(creds, {
+          action: 'create_task',
+          title: messageText,
+          priority: 'medium',
+          isShared: true,
+          assignees: targetFriend?.chatId ? [String(targetFriend.chatId)] : (targetFriend?.username ? [targetFriend.username] : []),
+        })
+        setHistory(h => [
+          ...h,
+          {
+            id: makeUniqueId(),
+            type: 'assistant',
+            text: `💬 Сообщение / поручение отправлено ${targetFriend?.name || 'другу'}!`,
+            details: [
+              `Текст: «${messageText}»`,
+              'Элемент синхронизирован в командный чат Zerf Note и Telegram.'
+            ]
+          }
+        ])
+      } catch (err: any) {
+        setHistory(h => [
+          ...h,
+          { id: makeUniqueId(), type: 'error', text: `Ошибка отправки сообщения: ${err.message}` }
+        ])
       }
       return
     }
@@ -765,8 +844,8 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       </Box>
 
-      {/* ── Action History Feed ──────────────────────────────────────────── */}
-      {history.map(item => (
+      {/* ── Action History Feed (Keep clean viewport) ───────────────────── */}
+      {history.slice(-5).map(item => (
         <Box key={`hist_${item.id}`} flexDirection="column" marginY={0} marginTop={1}>
           {item.type === 'user' ? (
             <Box gap={1}>
@@ -794,6 +873,30 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       ))}
 
+      {/* ── Interactive Friend Picker Modal (/chat) ─────────────────────── */}
+      {pickingChatFriend && (
+        <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
+          <Box justifyContent="space-between" marginBottom={0}>
+            <Text bold color="cyanBright">👥 Выберите друга для начала диалога (↑/↓, Enter):</Text>
+            <Text color="gray">ESC отмена</Text>
+          </Box>
+          {(data?.friends || []).map((f: any, idx: number) => {
+            const isSel = idx === selectedFriendIdx
+            const usernameTag = f.username ? `@${f.username}` : 'без юзернейма'
+            return (
+              <Box key={`friend_opt_${f.id || idx}_${idx}`} gap={1}>
+                <Text bold color={isSel ? 'cyanBright' : 'gray'}>
+                  {isSel ? '▶ ' : '  '}{f.name.padEnd(20)}
+                </Text>
+                <Text color={isSel ? 'white' : 'gray'}>
+                  — {usernameTag.padEnd(18)} [В сети] Начать диалог
+                </Text>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+
       {/* ── Interactive Model Picker Modal (/model) ─────────────────────── */}
       {pickingModel && (
         <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
@@ -820,7 +923,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       )}
 
       {/* ── Interactive /menu Dropdown (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
-      {isSlash && filteredCommands.length > 0 && !pickingModel && (
+      {isSlash && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">

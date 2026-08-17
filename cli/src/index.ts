@@ -41,8 +41,19 @@ program
         return
       }
 
-      console.clear()
-      render(React.createElement(Repl, { initialData: data }))
+      // Enter alternate screen buffer to ensure clean single-viewport rendering
+      process.stdout.write('\x1b[?1049h\x1b[H')
+      const cleanup = () => {
+        try { process.stdout.write('\x1b[?1049l') } catch {}
+      }
+      process.on('exit', cleanup)
+      process.on('SIGINT', () => { cleanup(); process.exit(0) })
+
+      const app = render(React.createElement(Repl, { initialData: data }), {
+        exitOnCtrlC: true,
+      })
+      await app.waitUntilExit()
+      cleanup()
     } catch (e: any) {
       render(React.createElement(Repl))
     }
