@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       }
 
       if (action === 'morning_post') {
-        const ok = await postDailyMorningPostToChannel()
+        const ok = await postDailyMorningPostToChannel(undefined, true)
         return NextResponse.json({ ok, action: 'morning_post' })
       }
       if (action === 'poll') {
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ ok, action: 'poll' })
       }
       if (action === 'evening_post') {
-        const ok = await postDailyEveningPostToChannel()
+        const ok = await postDailyEveningPostToChannel(undefined, true)
         return NextResponse.json({ ok, action: 'evening_post' })
       }
       if (action === 'poll_close') {

@@ -11,14 +11,21 @@ import { isCronAlreadyDoneToday, markCronDoneToday } from './cron-lock'
 import { postToVkWall } from './vk'
 
 async function callTg(method: string, payload: Record<string, any>) {
-  if (!BOT_TOKEN) return null
+  if (!BOT_TOKEN) {
+    console.error(`Telegram API error: BOT_TOKEN is missing`)
+    return null
+  }
   try {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(payload),
     })
-    return await res.json()
+    const data = await res.json()
+    if (!data?.ok) {
+      console.error(`Telegram API error (${method}):`, data)
+    }
+    return data
   } catch (err) {
     console.error(`Telegram API error (${method}):`, err)
     return null
@@ -262,11 +269,15 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.6,
-      max_tokens: 2200,
+      max_tokens: 1800,
     })
 
-    const text = result.content?.trim()
+    let text = result.content?.trim()
     if (!text) return false
+
+    if (text.length > 4000) {
+      text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>'
+    }
 
     const sanitized = sanitizeTgHtml(text)
     let tgRes = await callTg('sendMessage', {
@@ -277,7 +288,7 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
     })
 
     if (!tgRes?.ok) {
-      const cleanText = text.replace(/<[^>]*>/g, '')
+      const cleanText = text.replace(/<[^>]*>/g, '').slice(0, 4000)
       tgRes = await callTg('sendMessage', {
         chat_id: channelId,
         text: cleanText,
@@ -351,11 +362,15 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL,
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.6,
-      max_tokens: 2200,
+      max_tokens: 1800,
     })
 
-    const text = result.content?.trim()
+    let text = result.content?.trim()
     if (!text) return false
+
+    if (text.length > 4000) {
+      text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>'
+    }
 
     const sanitized = sanitizeTgHtml(text)
     let tgRes = await callTg('sendMessage', {
@@ -366,7 +381,7 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL,
     })
 
     if (!tgRes?.ok) {
-      const cleanText = text.replace(/<[^>]*>/g, '')
+      const cleanText = text.replace(/<[^>]*>/g, '').slice(0, 4000)
       tgRes = await callTg('sendMessage', {
         chat_id: channelId,
         text: cleanText,
