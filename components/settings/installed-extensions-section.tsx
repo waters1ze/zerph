@@ -6,7 +6,7 @@ import {
   Puzzle, Search, ChevronDown, ChevronUp, Trash2,
   Check, Sparkles, Sliders, Play, CheckSquare,
   ExternalLink, Plus, RefreshCw, X, Shield, Crown,
-  Code2, Info, Eye, AlertCircle
+  Code2, Info, Eye, AlertCircle, ArrowRight
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -318,6 +318,21 @@ export function InstalledExtensionsSettingsSection() {
     }
   }
 
+  const [isDeveloperMode, setIsDeveloperMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('zerf_developer_mode') === 'true'
+    }
+    return false
+  })
+
+  const toggleDeveloperMode = (val: boolean) => {
+    setIsDeveloperMode(val)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zerf_developer_mode', String(val))
+      window.dispatchEvent(new CustomEvent('zerf_dev_mode_changed', { detail: { enabled: val } }))
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Header bar: Count & Search */}
@@ -364,6 +379,65 @@ export function InstalledExtensionsSettingsSection() {
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </button>
         </div>
+      </div>
+
+      {/* ── DEVELOPER MODE & SDK DOCS ACCESS ── */}
+      <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
+              <Code2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                <span>Режим разработчика расширений (Developer Mode)</span>
+                <span className="px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-400 text-[9px] font-mono font-bold border border-purple-500/30">SDK</span>
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Создание манифестов, тестирование AI-эндпоинтов и управление выплатами авторам (80/20)
+              </p>
+            </div>
+          </div>
+
+          <button
+            role="switch"
+            aria-checked={isDeveloperMode}
+            onClick={() => toggleDeveloperMode(!isDeveloperMode)}
+            className={cn(
+              'relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer shrink-0',
+              isDeveloperMode ? 'bg-primary' : 'bg-muted border border-border'
+            )}
+          >
+            <motion.span
+              layout
+              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+              className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
+              style={{ left: isDeveloperMode ? 'calc(100% - 18px)' : '2px' }}
+            />
+          </button>
+        </div>
+
+        {isDeveloperMode && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="pt-2.5 border-t border-border/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+          >
+            <div className="text-[11px] text-muted-foreground space-y-0.5">
+              <p className="font-semibold text-foreground">✦ Портал разработчика активирован</p>
+              <p>Манифест-генератор, документация SDK, эмулятор вебхуков и баланс автора.</p>
+            </div>
+
+            <a
+              href="/developer"
+              className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all shrink-0 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Открыть Developer Hub</span>
+              <ArrowRight className="w-3 h-3" />
+            </a>
+          </motion.div>
+        )}
       </div>
 
       {/* Loading Skeleton */}

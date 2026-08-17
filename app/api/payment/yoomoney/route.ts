@@ -111,6 +111,119 @@ export async function POST(req: NextRequest) {
       return new Response('OK', { status: 200 })
     }
 
+    // ── Extension purchase handling: label starts with ext_ ──
+    if (label.startsWith('ext_')) {
+      const pendingRec = await prisma.config.findUnique({
+        where: { key: `ext_pending_${label}` },
+      })
+
+      if (!pendingRec) {
+        console.warn('[YooMoney] Pending extension order not found for label:', label)
+        return new Response('OK', { status: 200 })
+      }
+
+      try {
+        const order = JSON.parse(pendingRec.value)
+        const { extensionId, buyerChatId, authorChatId, price, authorShare, platformShare } = order
+        const amtNum = parseFloat(amount)
+
+        if (isNaN(amtNum) || amtNum < price) {
+          console.warn('[YooMoney] Extension payment amount below required price', { label, amount, price })
+          return new Response('OK', { status: 200 })
+        }
+
+        // 1. Grant extension to buyer
+        let installed: string[] = []
+        try {
+          const instRow = await prisma.config.findUnique({ where: { key: `user_extensions_${buyerChatId}` } })
+          installed = instRow?.value ? JSON.parse(instRow.value) : []
+        } catch {}
+        if (!installed.includes(extensionId)) {
+          installed.push(extensionId)
+          await prisma.config.upsert({
+            where: { key: `user_extensions_${buyerChatId}` },
+            update: { value: JSON.stringify(installed) },
+            create: { key: `user_extensions_${buyerChatId}`, value: JSON.stringify(installed) },
+          })
+        }
+
+        // Enable extension
+        let enabled: string[] = []
+        try {
+          const enRow = await prisma.config.findUnique({ where: { key: `user_enabled_extensions_${buyerChatId}` } })
+          enabled = enRow?.value ? JSON.parse(enRow.value) : []
+        } catch {}
+        if (!enabled.includes(extensionId)) {
+          enabled.push(extensionId)
+          await prisma.config.upsert({
+            where: { key: `user_enabled_extensions_${buyerChatId}` },
+            update: { value: JSON.stringify(enabled) },
+            create: { key: `user_enabled_extensions_${buyerChatId}`, value: JSON.stringify(enabled) },
+          })
+        }
+
+        // 2. Record permanent purchase
+        await prisma.config.create({
+          data: {
+            key: `ext_purchase_${extensionId}_${buyerChatId}`,
+            value: JSON.stringify({
+              extensionId,
+              buyerChatId,
+              authorChatId,
+              price,
+              authorShare,
+              platformShare,
+              operationId: operation_id,
+              purchasedAt: datetime || new Date().toISOString(),
+            }),
+          },
+        }).catch(() => {})
+
+        // 3. Credit author share (80%)
+        if (authorChatId && authorChatId !== 'system') {
+          let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
+          try {
+            const aRow = await prisma.config.findUnique({ where: { key: `author_balance_${authorChatId}` } })
+            if (aRow?.value) authorStats = JSON.parse(aRow.value)
+          } catch {}
+
+          authorStats.balance += authorShare
+          authorStats.totalEarned += authorShare
+          authorStats.salesCount += 1
+
+          await prisma.config.upsert({
+            where: { key: `author_balance_${authorChatId}` },
+            update: { value: JSON.stringify(authorStats) },
+            create: { key: `author_balance_${authorChatId}`, value: JSON.stringify(authorStats) },
+          })
+
+          await sendTgNotification(
+            authorChatId,
+            `🎉 *Покупка вашего расширения!*\n\n` +
+            `Пользователь приобрёл ваше расширение за *${price} ₽* в Zerf Note.\n` +
+            `Вам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰\n` +
+            `• Проверить баланс и запросить вывод: https://zeprh.vercel.app`
+          )
+        }
+
+        // 4. Notify buyer
+        await sendTgNotification(
+          buyerChatId,
+          `🎉 *Расширение успешно оплачено и добавлено!* ✨\n\n` +
+          `Расширение активировано в вашем аккаунте Zerf Note.\n` +
+          `• Открыть: https://zeprh.vercel.app`
+        )
+
+        // 5. Delete pending record
+        await prisma.config.delete({ where: { key: `ext_pending_${label}` } }).catch(() => {})
+
+        return new Response('OK', { status: 200 })
+      } catch (extErr) {
+        console.error('[YooMoney] Error processing extension purchase:', extErr)
+        return new Response('OK', { status: 200 })
+      }
+    }
+
     // Strict label format: <chatId>_<product suffix> (plus30/pro365/…, legacy 30/365)
     const product = findPaymentProduct(label)
     if (!product) {

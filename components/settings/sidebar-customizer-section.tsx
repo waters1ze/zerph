@@ -8,7 +8,8 @@ import {
   UserCheck, Building2, Puzzle, Eye, EyeOff, Folder, Plus, Trash2,
   RotateCcw, Check, Sparkles, FolderPlus, ArrowUp, ArrowDown, Move,
   ChevronDown, ChevronRight, Edit2, Save, X, ExternalLink,
-  Share2, Download, Upload, Copy, CheckCheck, Heart, Crown, Search, ArrowRight
+  Share2, Download, Upload, Copy, CheckCheck, Heart, Crown, Search, ArrowRight,
+  GripVertical
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
@@ -279,6 +280,81 @@ export function SidebarCustomizerSection() {
       setSavedBadge(true)
       setTimeout(() => setSavedBadge(false), 2000)
     } catch {}
+  }
+
+  // Drag-and-drop state for folders & items
+  const [draggedFolderIdx, setDraggedFolderIdx] = useState<number | null>(null)
+  const [draggedItem, setDraggedItem] = useState<{ folderId: string; itemIdx: number; itemId: string } | null>(null)
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
+
+  const handleFolderDragStart = (e: React.DragEvent, idx: number) => {
+    e.dataTransfer.setData('text/plain', `folder_${idx}`)
+    setDraggedFolderIdx(idx)
+  }
+
+  const handleFolderDragOver = (e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault()
+    if (draggedFolderIdx === null || draggedFolderIdx === targetIdx) return
+    const newFolders = [...config.folders]
+    const [moved] = newFolders.splice(draggedFolderIdx, 1)
+    newFolders.splice(targetIdx, 0, moved)
+    setDraggedFolderIdx(targetIdx)
+    saveConfig({ ...config, folders: newFolders })
+  }
+
+  const handleFolderDragEnd = () => {
+    setDraggedFolderIdx(null)
+  }
+
+  const handleItemDragStart = (e: React.DragEvent, folderId: string, itemIdx: number, itemId: string) => {
+    e.stopPropagation()
+    e.dataTransfer.setData('text/plain', `item_${folderId}_${itemId}`)
+    setDraggedItem({ folderId, itemIdx, itemId })
+  }
+
+  const handleItemDragOver = (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!draggedItem) return
+    if (dragOverFolderId !== targetFolderId) {
+      setDragOverFolderId(targetFolderId)
+    }
+  }
+
+  const handleItemDrop = (e: React.DragEvent, targetFolderId: string, targetIdx?: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverFolderId(null)
+    if (!draggedItem) return
+
+    const { folderId: sourceFolderId, itemId } = draggedItem
+    if (sourceFolderId === targetFolderId && typeof targetIdx === 'number') {
+      const nextFolders = config.folders.map(f => {
+        if (f.id !== targetFolderId) return f
+        const items = [...f.itemIds].filter(id => id !== itemId)
+        items.splice(targetIdx, 0, itemId)
+        return { ...f, itemIds: items }
+      })
+      saveConfig({ ...config, folders: nextFolders })
+    } else if (sourceFolderId !== targetFolderId) {
+      const nextFolders = config.folders.map(f => {
+        if (f.id === sourceFolderId) {
+          return { ...f, itemIds: f.itemIds.filter(id => id !== itemId) }
+        }
+        if (f.id === targetFolderId) {
+          const items = [...f.itemIds].filter(id => id !== itemId)
+          if (typeof targetIdx === 'number') {
+            items.splice(targetIdx, 0, itemId)
+          } else {
+            items.push(itemId)
+          }
+          return { ...f, itemIds: items }
+        }
+        return f
+      })
+      saveConfig({ ...config, folders: nextFolders })
+    }
+    setDraggedItem(null)
   }
 
   const applyLayoutPreset = async (preset: LayoutPreset) => {
@@ -675,7 +751,7 @@ export function SidebarCustomizerSection() {
         </div>
 
         {/* Top Popular Presets Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {topPopularPresets.map(preset => {
             const isLiked = likedPresetIds.has(preset.id)
             const currentLikes = (preset.likesCount || 0) + (isLiked ? 1 : 0)
@@ -683,12 +759,39 @@ export function SidebarCustomizerSection() {
             return (
               <div
                 key={preset.id}
-                className="p-4 rounded-2xl bg-card border border-border hover:border-primary/40 shadow-2xs transition-all flex flex-col justify-between gap-3"
+                className="group rounded-3xl bg-card border border-border hover:border-primary/40 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
               >
-                <div className="space-y-2">
+                {/* Visual Folder Preview Bar */}
+                <div className="h-16 bg-gradient-to-br from-muted/80 via-muted/40 to-transparent p-3 flex flex-col justify-center gap-1.5 border-b border-border/40">
+                  <div className="flex items-center gap-1.5 overflow-hidden">
+                    {preset.config.folders.slice(0, 3).map((f, fIdx) => (
+                      <div
+                        key={f.id}
+                        className={cn(
+                          'h-5 px-2 rounded-full text-[9px] font-medium flex items-center gap-1 truncate shrink-0',
+                          fIdx === 0
+                            ? 'bg-primary/15 text-primary border border-primary/20'
+                            : fIdx === 1
+                            ? 'bg-purple-500/15 text-purple-400 border border-purple-500/20'
+                            : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                        )}
+                      >
+                        <span className="truncate max-w-[80px]">{f.title}</span>
+                        <span className="opacity-60 text-[8px]">({f.itemIds.length})</span>
+                      </div>
+                    ))}
+                    {preset.config.folders.length > 3 && (
+                      <span className="text-[9px] text-muted-foreground font-semibold shrink-0">
+                        +{preset.config.folders.length - 3}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-2.5 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-foreground text-xs flex items-center gap-1.5 truncate">
-                      <span>{preset.icon}</span>
+                      <span className="text-base">{preset.icon}</span>
                       <span className="truncate">{preset.title}</span>
                     </span>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -703,11 +806,11 @@ export function SidebarCustomizerSection() {
                         </span>
                       ) : preset.minPlan === 'plus' ? (
                         <span className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[9px] font-bold border border-amber-500/30 flex items-center gap-1">
-                          <Crown className="w-2.5 h-2.5" /> Zerf Plus (99 ₽)
+                          <Crown className="w-2.5 h-2.5" /> Plus
                         </span>
                       ) : (
                         <span className="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-400 text-[9px] font-bold border border-purple-500/30 flex items-center gap-1">
-                          <Sparkles className="w-2.5 h-2.5" /> Zerf Pro (299 ₽)
+                          <Sparkles className="w-2.5 h-2.5" /> Pro
                         </span>
                       )}
                     </div>
@@ -716,17 +819,9 @@ export function SidebarCustomizerSection() {
                   <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
                     {preset.description}
                   </p>
-
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    {preset.config.folders.map(f => (
-                      <span key={f.id} className="text-[9px] px-2 py-0.5 rounded-md bg-muted/60 border border-border text-foreground/80 font-medium">
-                        📁 {f.title} ({f.itemIds.length})
-                      </span>
-                    ))}
-                  </div>
                 </div>
 
-                <div className="pt-2.5 border-t border-border/40 flex items-center justify-between gap-2">
+                <div className="px-4 py-3 bg-muted/20 border-t border-border/40 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleLikePreset(preset.id)}
@@ -741,21 +836,17 @@ export function SidebarCustomizerSection() {
                       <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
                       <span>{currentLikes}</span>
                     </button>
-                    <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[70px]">@{preset.author}</span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {/* Open Details Button */}
                     <button
                       onClick={() => setSelectedPresetForModal(preset)}
-                      className="px-2.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-medium text-xs border border-border flex items-center gap-1 cursor-pointer transition-colors"
-                      title="Открыть детали и структуру пресета"
+                      className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground border border-border flex items-center justify-center cursor-pointer transition-colors"
+                      title="Открыть детали"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Открыть</span>
                     </button>
-
-                    {/* Apply Preset Button */}
                     <button
                       onClick={() => applyLayoutPreset(preset)}
                       className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
@@ -811,12 +902,19 @@ export function SidebarCustomizerSection() {
         {config.folders.map((folder, folderIdx) => {
           const isEditing = editingFolderId === folder.id
           const isFolderHidden = folder.hidden === true
+          const isDragOverThisFolder = dragOverFolderId === folder.id
 
           return (
             <div
               key={folder.id}
+              onDragOver={(e) => {
+                handleFolderDragOver(e, folderIdx)
+                handleItemDragOver(e, folder.id)
+              }}
+              onDrop={(e) => handleItemDrop(e, folder.id)}
               className={cn(
                 'p-4 rounded-2xl border transition-all space-y-3',
+                isDragOverThisFolder ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : '',
                 isFolderHidden
                   ? 'bg-muted/15 border-border/40 opacity-70'
                   : 'bg-card border-border shadow-xs'
@@ -825,6 +923,17 @@ export function SidebarCustomizerSection() {
               {/* Folder Header Row */}
               <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2.5">
                 <div className="flex items-center gap-2 min-w-0">
+                  {/* Folder Drag Handle */}
+                  <div
+                    draggable
+                    onDragStart={(e) => handleFolderDragStart(e, folderIdx)}
+                    onDragEnd={handleFolderDragEnd}
+                    className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing transition-colors shrink-0"
+                    title="Перетащите для изменения порядка папок"
+                  >
+                    <GripVertical className="w-4 h-4" />
+                  </div>
+
                   <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
                     <Folder className="w-4 h-4" />
                   </div>
@@ -922,8 +1031,12 @@ export function SidebarCustomizerSection() {
 
               {/* Items List Inside This Folder */}
               {folder.itemIds.length === 0 ? (
-                <div className="p-3 rounded-xl bg-muted/20 border border-dashed border-border text-center text-muted-foreground text-[11px]">
-                  Папка пуста. Перенесите сюда пункты меню из других разделов ниже.
+                <div
+                  onDragOver={(e) => handleItemDragOver(e, folder.id)}
+                  onDrop={(e) => handleItemDrop(e, folder.id)}
+                  className="p-4 rounded-xl bg-muted/20 border border-dashed border-border text-center text-muted-foreground text-[11px]"
+                >
+                  Папка пуста. Перетащите сюда пункты меню.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -935,14 +1048,19 @@ export function SidebarCustomizerSection() {
                     return (
                       <div
                         key={itemId}
+                        draggable
+                        onDragStart={(e) => handleItemDragStart(e, folder.id, itemIdx, itemId)}
+                        onDragOver={(e) => handleItemDragOver(e, folder.id)}
+                        onDrop={(e) => handleItemDrop(e, folder.id, itemIdx)}
                         className={cn(
-                          'p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all',
+                          'p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all cursor-grab active:cursor-grabbing',
                           isHidden
                             ? 'bg-muted/30 border-border/40 opacity-60'
                             : 'bg-muted/20 border-border/80 hover:border-primary/40'
                         )}
                       >
                         <div className="flex items-center gap-2 min-w-0">
+                          <GripVertical className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
                           <div className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center text-sm shrink-0 overflow-hidden">
                             {IconComp ? <IconComp className="w-3.5 h-3.5 text-primary" /> : <ExtensionIcon icon={meta.icon} className="w-full h-full text-xs" />}
                           </div>

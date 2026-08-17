@@ -834,11 +834,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }, 10 * 60 * 1000)
 
-    // Check reminders periodically (every 10 minutes)
+    // Check reminders periodically (every 10 minutes when tab is visible)
     const reminderInterval = setInterval(() => {
-      fetch('/api/reminders/check').catch(() => {})
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetch('/api/reminders/check').catch(() => {})
+      }
     }, 10 * 60 * 1000)
-    fetch('/api/reminders/check').catch(() => {})
 
     // Hydrate currentView safely on client mount
     try {

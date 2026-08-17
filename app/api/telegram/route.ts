@@ -28,7 +28,7 @@ import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { recordChannelComment } from '@/lib/backend/comment-analyzer'
 import { getSiriUserKey } from '@/app/api/shortcuts/route'
-import { getUserExtensionsAIContext } from '@/app/api/extensions/route'
+import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 import { NAME_TO_CLUSTER_MAP, tokenMatchesCandidateName, namesAreRelated } from '@/lib/backend/name-aliases'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)

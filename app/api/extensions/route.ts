@@ -7,89 +7,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { planAtLeast, normalizePlan } from '@/lib/backend/plans'
+import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
+import {
+  ExtensionItem,
+  STARTER_EXTENSIONS,
+  getUserExtensionsAIContext,
+  getUserInstalledExtensions,
+  getUserEnabledExtensions,
+  loadExtensionsCatalog,
+  getExtensionById,
+  getCustomExtensions,
+  getDeletedExtensionIds,
+} from '@/lib/backend/extensions'
 import crypto from 'crypto'
 
-export interface ExtensionItem {
-  id: string
-  title: string
-  version?: string
-  description: string
-  type: 'widget' | 'template' | 'theme' | 'integration' | 'prompt'
-  category: string
-  icon: string
-  githubUrl: string
-  authorChatId: string
-  authorName: string
-  authorGithub?: string
-  price: number // 0 = free, > 0 = price in RUB
-  minPlan?: 'free' | 'plus' | 'pro' | 'corp'
-  isOfficial?: boolean
-  isPublished?: boolean // false = Draft/Unpublished, true = Live in Store Catalog
-  isRunnable?: boolean // true if extension has an interactive app/runner window (e.g. Entropy Search)
-  changelog?: string // Release notes / changelog
-  rating: number
-  ratingCount: number
-  likesCount: number
-  installCount: number
-  manifestUrl?: string
-  aiInstructions?: string
-  triggers?: string[]
-  aiSkills?: Array<{
-    name: string
-    description: string
-    action?: string
-  }>
-  content: Record<string, any>
-  createdAt: string
-  updatedAt: string
+export type { ExtensionItem }
+export {
+  STARTER_EXTENSIONS,
+  getUserExtensionsAIContext,
+  getUserInstalledExtensions,
+  getUserEnabledExtensions,
+  loadExtensionsCatalog,
+  getExtensionById,
 }
-
-// Built-in official creator extensions loaded from open-source GitHub specifications
-const STARTER_EXTENSIONS: ExtensionItem[] = [
-  {
-    id: 'ext_entropy_search',
-    title: 'Entropy AI Search & Deep Research',
-    version: '1.0.0',
-    description: 'Интеллектуальный поисково-аналитический движок инсайтов в стиле Perplexity: глубокий синтез фактов, цитаты со ссылками на проверенные источники [1][2] и авто-экспорт в заметки.',
-    type: 'widget',
-    category: 'ИИ & Промпты',
-    icon: '🔮',
-    githubUrl: 'https://github.com/waters1ze/Entropy',
-    authorChatId: '6136950061',
-    authorName: 'waters1ze',
-    authorGithub: 'waters1ze',
-    price: 0,
-    minPlan: 'free',
-    isOfficial: true,
-    isPublished: true,
-    isRunnable: true,
-    changelog: 'Релиз v1.0.0: Глубокий поиск, поддержка ссылок на источники, экспорт в заметки и CLI команды /search и /entropy.',
-    rating: 5.0,
-    ratingCount: 0,
-    likesCount: 0,
-    installCount: 0,
-    aiInstructions: 'Когда пользователь запрашивает глубокий поиск, поиск инсайтов, фактов или использует команды /search, /entropy — синтезируй ответ с обязательными числовыми цитатами первоисточников [1][2], структурируй вывод по ключевым пунктам и предлагай авто-экспорт в базу заметок Zerf.',
-    triggers: ['/search', '/entropy', 'глубокий поиск', 'исследуй', 'entropy', 'найди инсайты', 'синтез источников'],
-    aiSkills: [
-      {
-        name: 'Entropy Deep Research',
-        description: 'Синтез фактов из верифицированных источников с цитированием [1][2]',
-        action: 'entropy_deep_search',
-      },
-    ],
-    content: {
-      engine: 'entropy_deep_search',
-      commands: [
-        { cmd: '/search', description: 'Entropy AI — Глубокий поиск и синтез источников' },
-        { cmd: '/entropy', description: 'Entropy AI — Запуск поисковой аналитики инсайтов' },
-      ],
-      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
-      maxSources: 5,
-    },
-    createdAt: '2026-08-17T20:00:00Z',
-    updatedAt: '2026-08-17T22:00:00Z',
-  },
-]
 
 /**
  * Normalizes any GitHub URL to raw manifest URLs (zerf-extension.json or manifest.json)
@@ -138,118 +78,6 @@ export async function fetchManifestFromGithub(githubUrl: string): Promise<{ mani
     } catch {}
   }
   return null
-}
-
-async function getCustomExtensions(): Promise<ExtensionItem[]> {
-  try {
-    const records = await prisma.config.findMany({
-      where: { key: { startsWith: 'zerf_ext_' } },
-    })
-    const items: ExtensionItem[] = []
-    for (const r of records) {
-      try {
-        const parsed = JSON.parse(r.value)
-        if (parsed && parsed.id) items.push(parsed)
-      } catch {}
-    }
-    return items
-  } catch {
-    return []
-  }
-}
-
-async function getDeletedExtensionIds(): Promise<string[]> {
-  try {
-    const row = await prisma.config.findUnique({
-      where: { key: 'deleted_extensions_list' },
-    })
-    return row?.value ? JSON.parse(row.value) : []
-  } catch {
-    return []
-  }
-}
-
-export async function getUserInstalledExtensions(chatId: string | number): Promise<string[]> {
-  try {
-    const row = await prisma.config.findUnique({
-      where: { key: `user_extensions_${String(chatId)}` },
-    })
-    return row?.value ? JSON.parse(row.value) : []
-  } catch {
-    return []
-  }
-}
-
-export async function getUserEnabledExtensions(chatId: string | number): Promise<string[]> {
-  try {
-    const cid = String(chatId)
-    const row = await prisma.config.findUnique({
-      where: { key: `user_enabled_extensions_${cid}` },
-    })
-    if (row?.value) {
-      return JSON.parse(row.value)
-    }
-    // Default fallback: all installed extensions are active
-    return await getUserInstalledExtensions(cid)
-  } catch {
-    return []
-  }
-}
-
-export async function loadExtensionsCatalog(): Promise<ExtensionItem[]> {
-  try {
-    const deletedIds = await getDeletedExtensionIds()
-    const customItems = await getCustomExtensions()
-    const allMap = new Map<string, ExtensionItem>()
-
-    STARTER_EXTENSIONS.forEach(e => {
-      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
-    })
-    customItems.forEach(e => {
-      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
-    })
-    return Array.from(allMap.values())
-  } catch {
-    return STARTER_EXTENSIONS
-  }
-}
-
-/**
- * Compiles AI instructions, custom prompts, and triggers from all ENABLED extensions
- * installed by a specific user (for Telegram bot, Siri shortcuts, Web AI chat, Voice, etc.)
- */
-export async function getUserExtensionsAIContext(chatId: string | number): Promise<string> {
-  try {
-    const cid = String(chatId)
-    const enabledIds = await getUserEnabledExtensions(cid)
-    if (!enabledIds || enabledIds.length === 0) return ''
-
-    const catalog = await loadExtensionsCatalog()
-    const activeExts = catalog.filter(e => enabledIds.includes(e.id))
-    if (activeExts.length === 0) return ''
-
-    const instructions: string[] = []
-    for (const ext of activeExts) {
-      const rawAi = ext.aiInstructions || ext.content?.aiInstructions || ext.content?.systemPrompt
-      const triggers = ext.triggers || ext.content?.triggers || (ext.content?.commands?.map((c: any) => c.cmd) || [])
-      
-      if (rawAi || (triggers && triggers.length > 0)) {
-        let block = `• [Расширение «${ext.title}» (${ext.category || 'Утилита'})]`
-        if (triggers && triggers.length > 0) {
-          block += `\n  Ключевые слова / Триггеры: ${triggers.join(', ')}`
-        }
-        if (rawAi) {
-          block += `\n  Инструкция для ИИ от автора: ${rawAi}`
-        }
-        instructions.push(block)
-      }
-    }
-
-    return instructions.join('\n\n')
-  } catch (err) {
-    console.error('Error generating user extensions AI context:', err)
-    return ''
-  }
 }
 
 async function getUserLikedExtensions(chatId: string): Promise<string[]> {
@@ -342,6 +170,10 @@ export async function GET(req: NextRequest) {
         authorPercent: 80,
         platformPercent: 20,
       },
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=180, stale-while-revalidate=360',
+      }
     })
   } catch (err: unknown) {
     console.error('Extensions GET error:', err)
@@ -448,55 +280,57 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Укажите корректную ссылку на GitHub репозиторий (например: https://github.com/user/repo)' }, { status: 400 })
       }
 
-      const result = await fetchManifestFromGithub(githubUrl)
-      if (!result) {
+      const ghData = await fetchManifestFromGithub(githubUrl)
+      if (!ghData) {
         return NextResponse.json({
-          error: 'Не найден файл zerf-extension.json или manifest.json в ветке main/master репозитория. Создайте файл по спецификации в корне репозитория!',
+          error: 'Не удалось найти zerf-extension.json или manifest.json в корне репозитория (ветки main или master). Проверьте структуру репозитория.',
         }, { status: 404 })
       }
 
-      const m = result.manifest
       return NextResponse.json({
         success: true,
-        rawUrl: result.rawUrl,
-        manifest: {
-          id: m.id || `ext_gh_${Date.now()}`,
-          title: m.name || m.title || 'Безымянное расширение',
-          version: m.version || '1.0.0',
-          description: m.description || '',
-          type: m.type || 'widget',
-          category: m.category || 'Виджеты & Плагины',
-          icon: m.icon || '📦',
-          price: Math.max(0, Number(m.price) || 0),
-          author: m.author || 'GitHub Developer',
-          content: m.content || m.config || {},
-        }
+        manifest: ghData.manifest,
+        manifestUrl: ghData.rawUrl,
       })
     }
 
-    // ── ACTION: PUBLISH EXTENSION FROM GITHUB REPO ──
+    // ── ACTION: PUBLISH / UPDATE EXTENSION (Requires Zerf Plus) ──
     if (action === 'publish_github' || action === 'publish') {
-      const userRec = await prisma.telegramChat.findUnique({
-        where: { chatId: BigInt(chatId) },
-      })
-      const userPlan = normalizePlan(userRec?.plan)
+      if (!checkInMemoryRateLimit(`publish:${chatId}`, 10, 60 * 60 * 1000)) {
+        return NextResponse.json({ error: 'Слишком много попыток публикации. Попробуйте позже.' }, { status: 429 })
+      }
+
+      const userPlan = normalizePlan((userRec as any)?.plan || 'free')
       if (!planAtLeast(userPlan, 'plus')) {
         return NextResponse.json({
-          error: 'Публикация расширений доступна на тарифе Zerf Plus, Pro и Corp. Оформите подписку в Настройках!',
+          error: '🔒 Публикация расширений доступна с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
+          requiresPlus: true,
         }, { status: 403 })
       }
 
-      const { githubUrl, title, description, type, category, icon, price, minPlan, version, content, id } = body
+      const {
+        id,
+        title,
+        description,
+        type = 'widget',
+        category = 'Другое',
+        icon = '🧩',
+        githubUrl = '',
+        price = 0,
+        minPlan = 'free',
+        content = {},
+        version = '1.0.0',
+      } = body
 
-      let manifestContent = content || {}
       let finalTitle = title
       let finalDesc = description
-      let finalIcon = icon || '🧩'
-      let finalType = type || 'widget'
-      let finalCategory = category || 'Виджеты & Плагины'
-      let finalVersion = version || '1.0.0'
+      let finalIcon = icon
+      let finalType = type
+      let finalCategory = category
+      let finalMinPlan = minPlan
       let finalPrice = Math.max(0, Math.min(5000, Number(price) || 0))
-      let finalMinPlan: 'free' | 'plus' | 'pro' | 'corp' = (minPlan && ['free', 'plus', 'pro', 'corp'].includes(minPlan)) ? minPlan : 'free'
+      let finalVersion = version
+      let manifestContent = content
 
       if (githubUrl && githubUrl.includes('github.com')) {
         const ghData = await fetchManifestFromGithub(githubUrl)
@@ -516,6 +350,38 @@ export async function POST(req: NextRequest) {
 
       if (!finalTitle || !finalDesc) {
         return NextResponse.json({ error: 'Заполните название и описание расширения' }, { status: 400 })
+      }
+
+      // Security validations against prompt injection & forbidden triggers
+      const rawAiInstructions = body.aiInstructions !== undefined
+        ? String(body.aiInstructions)
+        : (manifestContent?.aiInstructions || '')
+
+      const FORBIDDEN_AI_PATTERNS = [
+        /ignore\s+previous/i,
+        /system\s*:/i,
+        /jailbreak/i,
+        /bypass\s+safety/i,
+        /forget\s+all\s+instructions/i,
+      ]
+
+      for (const pattern of FORBIDDEN_AI_PATTERNS) {
+        if (pattern.test(rawAiInstructions)) {
+          return NextResponse.json({ error: 'Инструкции для ИИ содержат недопустимые паттерны безопасности.' }, { status: 400 })
+        }
+      }
+
+      const rawTriggers: string[] = Array.isArray(body.triggers)
+        ? body.triggers
+        : (typeof body.triggers === 'string'
+            ? body.triggers.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : (manifestContent?.triggers || []))
+
+      const FORBIDDEN_COMMAND_TRIGGERS = ['/pay', '/admin', '/login', '/logout', '/delete', '/sudo', '/root', '/eval']
+      for (const trig of rawTriggers) {
+        if (FORBIDDEN_COMMAND_TRIGGERS.includes(trig.toLowerCase())) {
+          return NextResponse.json({ error: `Триггер ${trig} зарезервирован системой и не может быть использован в расширениях.` }, { status: 400 })
+        }
       }
 
       const extId = id || `ext_gh_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`
@@ -556,14 +422,8 @@ export async function POST(req: NextRequest) {
         ratingCount: existingData?.ratingCount || 1,
         likesCount: existingData?.likesCount || 0,
         installCount: existingData?.installCount || 0,
-        aiInstructions: body.aiInstructions !== undefined
-          ? String(body.aiInstructions)
-          : (manifestContent?.aiInstructions || existingData?.aiInstructions || ''),
-        triggers: Array.isArray(body.triggers)
-          ? body.triggers
-          : (typeof body.triggers === 'string'
-              ? body.triggers.split(',').map((s: string) => s.trim()).filter(Boolean)
-              : (manifestContent?.triggers || existingData?.triggers || [])),
+        aiInstructions: rawAiInstructions,
+        triggers: rawTriggers,
         aiSkills: Array.isArray(body.aiSkills)
           ? body.aiSkills
           : (manifestContent?.aiSkills || existingData?.aiSkills || []),
@@ -602,57 +462,77 @@ export async function POST(req: NextRequest) {
         where: { key: `zerf_ext_${extensionId}` },
         data: { value: JSON.stringify(current) },
       })
-      return NextResponse.json({ success: true, extension: current, isPublished: current.isPublished })
+
+      return NextResponse.json({ success: true, isPublished: current.isPublished })
     }
 
-    // ── ACTION: DELETE EXTENSION (Author or Admin) ──
-    if (action === 'delete_custom' || action === 'delete') {
+    // ── ACTION: DELETE CUSTOM EXTENSION ──
+    if (action === 'delete_custom') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
       const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
-      if (extRec) {
-        await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
+      if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      const current: ExtensionItem = JSON.parse(extRec.value)
+      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      if (current.authorChatId !== chatId && !isCreator) {
+        return NextResponse.json({ error: 'У вас нет прав на удаление этого расширения' }, { status: 403 })
       }
 
-      // Record in deleted list to permanently hide any deleted extension
-      const deletedList = await getDeletedExtensionIds()
-      if (!deletedList.includes(extensionId)) {
-        deletedList.push(extensionId)
+      await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
+
+      // Track deleted ID so it won't reappear
+      const deleted = await getDeletedExtensionIds()
+      if (!deleted.includes(extensionId)) {
+        deleted.push(extensionId)
         await prisma.config.upsert({
           where: { key: 'deleted_extensions_list' },
-          update: { value: JSON.stringify(deletedList) },
-          create: { key: 'deleted_extensions_list', value: JSON.stringify(deletedList) },
+          update: { value: JSON.stringify(deleted) },
+          create: { key: 'deleted_extensions_list', value: JSON.stringify(deleted) },
         })
       }
 
       return NextResponse.json({ success: true, deletedId: extensionId })
     }
 
-    // ── ACTION: SYNC / PULL LATEST FROM GITHUB (0 AI Tokens) ──
+    // ── ACTION: SYNC GITHUB MANIFEST ──
     if (action === 'sync_github') {
       const { extensionId } = body
+      if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
       const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
       if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
       const current: ExtensionItem = JSON.parse(extRec.value)
+      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      if (current.authorChatId !== chatId && !isCreator) {
+        return NextResponse.json({ error: 'У вас нет прав на синхронизацию этого расширения' }, { status: 403 })
+      }
+
       if (!current.githubUrl) {
-        return NextResponse.json({ error: 'У этого расширения не привязан репозиторий GitHub' }, { status: 400 })
+        return NextResponse.json({ error: 'У расширения не указан GitHub URL' }, { status: 400 })
       }
 
       const ghData = await fetchManifestFromGithub(current.githubUrl)
       if (!ghData) {
-        return NextResponse.json({ error: 'Не удалось загрузить манифест из GitHub репозитория' }, { status: 404 })
+        return NextResponse.json({ error: 'Не удалось загрузить манифест с GitHub' }, { status: 404 })
       }
 
       const m = ghData.manifest
-      current.title = m.name || m.title || current.title
-      current.description = m.description || current.description
-      current.version = m.version || current.version
-      current.icon = m.icon || current.icon
-      current.content = m.content || m.config || current.content
+      if (m.name || m.title) current.title = (m.name || m.title).slice(0, 100)
+      if (m.description) current.description = m.description.slice(0, 500)
+      if (m.icon) current.icon = m.icon
+      if (m.type) current.type = m.type
+      if (m.category) current.category = m.category.slice(0, 40)
+      if (m.version) current.version = m.version
       if (m.minPlan && ['free', 'plus', 'pro', 'corp'].includes(m.minPlan)) current.minPlan = m.minPlan
       if (m.price !== undefined) current.price = Math.max(0, Math.min(5000, Number(m.price) || 0))
+      if (m.aiInstructions) current.aiInstructions = String(m.aiInstructions)
+      if (m.triggers) current.triggers = Array.isArray(m.triggers) ? m.triggers : []
+      if (m.aiSkills) current.aiSkills = Array.isArray(m.aiSkills) ? m.aiSkills : []
+      current.content = m.content || m.config || current.content
+      current.manifestUrl = ghData.rawUrl
       current.updatedAt = new Date().toISOString()
 
       await prisma.config.update({
@@ -663,48 +543,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: current })
     }
 
-    // ── ACTION: INSTALL EXTENSION (Requires at least Zerf Plus) ──
+    // ── ACTION: INSTALL EXTENSION (Requires Zerf Plus) ──
     if (action === 'install') {
+      if (!checkInMemoryRateLimit(`install:${chatId}`, 20, 60 * 1000)) {
+        return NextResponse.json({ error: 'Слишком много запросов. Пожалуйста, подождите.' }, { status: 429 })
+      }
+
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
       const userPlan = normalizePlan((userRec as any)?.plan || 'free')
       if (!planAtLeast(userPlan, 'plus')) {
         return NextResponse.json({
-          error: '🔒 Использование и установка расширений доступны с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
+          error: '🔒 Установка расширений доступна с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
           requiresPlan: 'plus',
         }, { status: 403 })
       }
 
-      // Check minPlan requirement if extension specifies higher plan (e.g. Pro or Corp)
-      const allExts = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
-      const targetExt = allExts.find(e => e.id === extensionId)
-      if (targetExt && targetExt.minPlan && targetExt.minPlan !== 'free') {
-        if (!planAtLeast(userPlan, targetExt.minPlan)) {
-          const reqName = targetExt.minPlan === 'plus' ? 'Zerf Plus (99 ₽)' : targetExt.minPlan === 'pro' ? 'Zerf Pro (299 ₽)' : 'Zerf Corp'
+      const allItems = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
+      const ext = allItems.find(e => e.id === extensionId)
+      if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      // Check minPlan requirement of extension
+      if (ext.minPlan && ext.minPlan !== 'free' && !planAtLeast(userPlan, ext.minPlan)) {
+        return NextResponse.json({
+          error: `🔒 Для этого расширения требуется тариф Zerf ${ext.minPlan.toUpperCase()} или выше.`,
+          requiresPlan: ext.minPlan,
+        }, { status: 403 })
+      }
+
+      // Check if extension is paid and not yet purchased
+      if (ext.price > 0 && ext.authorChatId !== chatId) {
+        const purchaseRec = await prisma.config.findUnique({
+          where: { key: `ext_purchase_${extensionId}_${chatId}` }
+        })
+        if (!purchaseRec) {
           return NextResponse.json({
-            error: `🔒 Автор ограничил доступ: для установки «${targetExt.title}» требуется тариф ${reqName} или выше. Обновите тариф в Настройках!`,
-            requiredPlan: targetExt.minPlan,
-          }, { status: 403 })
+            error: `Это платное расширение (${ext.price} ₽). Сначала приобретите его.`,
+            requiresPurchase: true,
+            price: ext.price,
+          }, { status: 402 })
         }
       }
 
       let installed = await getUserInstalledExtensions(chatId)
-      let enabled = await getUserEnabledExtensions(chatId)
       if (!installed.includes(extensionId)) {
         installed.push(extensionId)
-        if (!enabled.includes(extensionId)) enabled.push(extensionId)
         await prisma.config.upsert({
           where: { key: `user_extensions_${chatId}` },
           update: { value: JSON.stringify(installed) },
           create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
         })
-        await prisma.config.upsert({
-          where: { key: `user_enabled_extensions_${chatId}` },
-          update: { value: JSON.stringify(enabled) },
-          create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(enabled) },
-        })
 
+        // Increment install counter
         try {
           const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
           if (extRec?.value) {
@@ -718,31 +609,38 @@ export async function POST(req: NextRequest) {
         } catch {}
       }
 
+      // Auto-enable on install
+      let enabled = await getUserEnabledExtensions(chatId)
+      if (!enabled.includes(extensionId)) {
+        enabled.push(extensionId)
+        await prisma.config.upsert({
+          where: { key: `user_enabled_extensions_${chatId}` },
+          update: { value: JSON.stringify(enabled) },
+          create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(enabled) },
+        })
+      }
+
       return NextResponse.json({ success: true, installedIds: installed, enabledIds: enabled })
     }
 
-    // ── ACTION: TOGGLE ENABLE / DISABLE EXTENSION ON ACCOUNT ──
+    // ── ACTION: TOGGLE ENABLE EXTENSION ──
     if (action === 'toggle_enable') {
-      const { extensionId, enabled } = body
+      const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
-      let enabledList = await getUserEnabledExtensions(chatId)
-      const isCurrentlyEnabled = enabledList.includes(extensionId)
-      const nextState = typeof enabled === 'boolean' ? enabled : !isCurrentlyEnabled
-
-      if (nextState) {
-        if (!enabledList.includes(extensionId)) enabledList.push(extensionId)
-      } else {
-        enabledList = enabledList.filter(id => id !== extensionId)
-      }
+      let enabled = await getUserEnabledExtensions(chatId)
+      const isEnabled = enabled.includes(extensionId)
+      const nextEnabled = isEnabled
+        ? enabled.filter(id => id !== extensionId)
+        : [...enabled, extensionId]
 
       await prisma.config.upsert({
         where: { key: `user_enabled_extensions_${chatId}` },
-        update: { value: JSON.stringify(enabledList) },
-        create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(enabledList) },
+        update: { value: JSON.stringify(nextEnabled) },
+        create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(nextEnabled) },
       })
 
-      return NextResponse.json({ success: true, enabledIds: enabledList, isEnabled: nextState })
+      return NextResponse.json({ success: true, enabledIds: nextEnabled })
     }
 
     // ── ACTION: UNINSTALL EXTENSION ──
@@ -751,15 +649,15 @@ export async function POST(req: NextRequest) {
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
       let installed = await getUserInstalledExtensions(chatId)
-      let enabled = await getUserEnabledExtensions(chatId)
       installed = installed.filter(id => id !== extensionId)
-      enabled = enabled.filter(id => id !== extensionId)
-
       await prisma.config.upsert({
         where: { key: `user_extensions_${chatId}` },
         update: { value: JSON.stringify(installed) },
         create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
       })
+
+      let enabled = await getUserEnabledExtensions(chatId)
+      enabled = enabled.filter(id => id !== extensionId)
       await prisma.config.upsert({
         where: { key: `user_enabled_extensions_${chatId}` },
         update: { value: JSON.stringify(enabled) },
@@ -770,7 +668,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ── ACTION: BUY PAID GITHUB EXTENSION (Requires Zerf Plus, 80% Author / 20% Platform) ──
+    // Zero-exploit model: Creates verified YooMoney checkout. Author revenue credited strictly on webhook.
     if (action === 'buy') {
+      if (!checkInMemoryRateLimit(`buy:${chatId}`, 10, 60 * 1000)) {
+        return NextResponse.json({ error: 'Слишком много попыток покупки. Подождите.' }, { status: 429 })
+      }
+
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
@@ -786,63 +689,63 @@ export async function POST(req: NextRequest) {
       const ext = allItems.find(e => e.id === extensionId)
       if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
+      // Free extensions can be installed directly
+      if (ext.price <= 0) {
+        let installed = await getUserInstalledExtensions(chatId)
+        if (!installed.includes(extensionId)) {
+          installed.push(extensionId)
+          await prisma.config.upsert({
+            where: { key: `user_extensions_${chatId}` },
+            update: { value: JSON.stringify(installed) },
+            create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
+          })
+        }
+        return NextResponse.json({ success: true, isFree: true, installedIds: installed })
+      }
+
       const authorShare = Math.round(ext.price * 0.8)
       const platformShare = ext.price - authorShare
 
+      // Unique tracking label for YooMoney: ext_<id>_<chatId>_<timestamp>
+      const label = `ext_${ext.id}_${chatId}_${Date.now()}`
+      const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+      const successUrl = `${appUrl}/?ext_purchased=${ext.id}`
+
+      // Create YooMoney QuickPay checkout URL
+      const params = new URLSearchParams({
+        receiver: receiver,
+        'quickpay-form': 'shop',
+        targets: `Покупка расширения Zerf Note: «${ext.title}»`,
+        paymentType: 'AC',
+        sum: String(ext.price),
+        label: label,
+        successURL: successUrl,
+      })
+
+      const paymentUrl = `https://yoomoney.ru/quickpay/confirm?${params.toString()}`
+
+      // Store pending purchase record in DB
       await prisma.config.create({
         data: {
-          key: `ext_purchase_${extensionId}_${chatId}`,
+          key: `ext_pending_${label}`,
           value: JSON.stringify({
-            extensionId,
+            extensionId: ext.id,
             buyerChatId: chatId,
             authorChatId: ext.authorChatId,
             price: ext.price,
             authorShare,
             platformShare,
-            purchasedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
           }),
         },
-      }).catch(() => {})
-
-      if (ext.authorChatId && ext.authorChatId !== 'system') {
-        const authorStats = await getAuthorBalance(ext.authorChatId)
-        authorStats.balance += authorShare
-        authorStats.totalEarned += authorShare
-        authorStats.salesCount += 1
-
-        await prisma.config.upsert({
-          where: { key: `author_balance_${ext.authorChatId}` },
-          update: { value: JSON.stringify(authorStats) },
-          create: { key: `author_balance_${ext.authorChatId}`, value: JSON.stringify(authorStats) },
-        })
-
-        const botToken = process.env.TELEGRAM_BOT_TOKEN
-        if (botToken) {
-          fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: ext.authorChatId,
-              text: `🎉 *Покупка вашего расширения с GitHub!*\n\nПользователь приобрёл *«${ext.title}»* (${ext.githubUrl || ''}) за ${ext.price} ₽ в Zerf Note.\nВам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰`,
-              parse_mode: 'Markdown',
-            }),
-          }).catch(() => {})
-        }
-      }
-
-      let installed = await getUserInstalledExtensions(chatId)
-      if (!installed.includes(extensionId)) {
-        installed.push(extensionId)
-        await prisma.config.upsert({
-          where: { key: `user_extensions_${chatId}` },
-          update: { value: JSON.stringify(installed) },
-          create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
-        })
-      }
+      })
 
       return NextResponse.json({
         success: true,
-        installedIds: installed,
+        paymentUrl,
+        label,
+        amount: ext.price,
         authorShare,
         platformShare,
       })
@@ -896,6 +799,10 @@ export async function POST(req: NextRequest) {
 
     // ── ACTION: REQUEST SECURE PAYOUT (Fee is deducted from author payout, owner 20% untouched) ──
     if (action === 'request_payout') {
+      if (!checkInMemoryRateLimit(`payout:${chatId}`, 3, 60 * 60 * 1000)) {
+        return NextResponse.json({ error: 'Слишком много запросов на вывод. Попробуйте через час.' }, { status: 429 })
+      }
+
       const authorStats = await getAuthorBalance(chatId)
       const requestedAmount = Number(body.amount) || authorStats.balance
       const minPayout = 100
@@ -914,7 +821,6 @@ export async function POST(req: NextRequest) {
       }
 
       // Calculation of net amount after banking payout gateway fee (3.5%)
-      // This protects the platform owner completely so payout transfer fees are never paid out-of-pocket!
       const gatewayFeePercent = 3.5
       const gatewayFeeRub = Math.round(requestedAmount * (gatewayFeePercent / 100))
       const netPayoutRub = requestedAmount - gatewayFeeRub

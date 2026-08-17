@@ -25,7 +25,7 @@ const SYSTEM_PROMPT = `Ты — Zerf AI, интеллектуальный пер
 
 import { getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext } from '@/lib/backend/db'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
-import { getUserExtensionsAIContext } from '@/app/api/extensions/route'
+import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 
 export async function POST(req: NextRequest) {
   try {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Sparkles, Globe, BookOpen, Zap, Code, ArrowRight,
@@ -105,6 +105,57 @@ export function EntropySearchView() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const followUpInputRef = useRef<HTMLInputElement>(null)
+
+  // Dynamic personalized suggestions based on plan, workspace items & history
+  const isPlusOrHigher = usageInfo?.plan === 'plus' || usageInfo?.plan === 'pro' || usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator'
+
+  const personalizedSuggestions = useMemo(() => {
+    if (!isPlusOrHigher) {
+      return [
+        'Архитектура MoE vs Dense модели в LLM 2026',
+        'Методология Zettelkasten для базы знаний',
+        'Сравнение Rust и Go для микросервисов',
+        'Unit-экономика B2B SaaS продуктов',
+      ]
+    }
+
+    const suggestions: string[] = []
+
+    // 1. From recent search history
+    if (history.length > 0) {
+      const lastQuery = history[0].query
+      suggestions.push(`Углубленный анализ: ${lastQuery}`)
+    }
+
+    // 2. From user notes
+    if (state.notes && state.notes.length > 0) {
+      const recentNote = state.notes[0]
+      if (recentNote.title && recentNote.title.length > 3) {
+        suggestions.push(`Факты и первоисточники: ${recentNote.title.slice(0, 35)}`)
+      }
+    }
+
+    // 3. From pending tasks
+    const pendingTasks = state.tasks?.filter(t => t.status !== 'done') || []
+    if (pendingTasks.length > 0) {
+      const topTask = pendingTasks[0]
+      if (topTask.title && topTask.title.length > 3) {
+        suggestions.push(`Как эффективно решить: ${topTask.title.slice(0, 35)}`)
+      }
+    }
+
+    // 4. Time of day
+    const hour = new Date().getHours()
+    if (hour >= 5 && hour < 12) {
+      suggestions.push('🌅 Утренний дайджест: главные мировые tech-новости')
+    } else if (hour >= 12 && hour < 18) {
+      suggestions.push('⚡ Синтез трендов в разработке и AI на сегодня')
+    } else {
+      suggestions.push('🌙 Вечерний обзор исследований и аналитики')
+    }
+
+    return suggestions.slice(0, 4)
+  }, [isPlusOrHigher, history, state.notes, state.tasks])
 
   // Fetch initial usage limits on mount
   useEffect(() => {
@@ -477,6 +528,26 @@ export function EntropySearchView() {
             </button>
           </div>
         </div>
+
+        {/* Personalized Suggestions Pills (Plus/Pro/Corp dynamic, Free static) */}
+        {!result && !isLoading && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-primary" />
+              {isPlusOrHigher ? '💡 Для вас:' : '💡 Примеры:'}
+            </span>
+            {personalizedSuggestions.map((sug: string, sIdx: number) => (
+              <button
+                key={sIdx}
+                onClick={() => handleSearch(sug)}
+                className="px-2.5 py-1 rounded-xl bg-card border border-border/80 hover:border-primary/50 text-[11px] text-foreground/80 hover:text-foreground font-medium transition-all shrink-0 cursor-pointer shadow-2xs hover:shadow-xs flex items-center gap-1"
+              >
+                <span>{sug}</span>
+                <ArrowRight className="w-2.5 h-2.5 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Shortcuts bar */}
         <div className="flex items-center justify-between text-[11px] text-muted-foreground px-2">

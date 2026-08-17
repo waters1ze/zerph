@@ -418,6 +418,18 @@ export function ExtensionsView() {
 
   useEffect(() => {
     fetchExtensions()
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const purchasedExtId = urlParams.get('ext_purchased')
+      if (purchasedExtId) {
+        const cleanUrl = window.location.pathname
+        window.history.replaceState({}, '', cleanUrl)
+        setTimeout(() => {
+          fetchExtensions()
+          alert('🎉 Оплата прошла успешно! Расширение активировано и установлено в ваш аккаунт.')
+        }, 800)
+      }
+    }
   }, [])
 
   const isPlusOrHigher = userPlan === 'plus' || userPlan === 'pro' || userPlan === 'corp'
@@ -1059,8 +1071,8 @@ export function ExtensionsView() {
     }
     const ok = await confirmDialog({
       title: `Приобрести «${ext.title}»?`,
-      description: `Стоимость расширения: ${ext.price} ₽.\n80% (${Math.round(ext.price * 0.8)} ₽) поступит автору на баланс, 20% — комиссия платформы Zerf.`,
-      confirmText: `Купить за ${ext.price} ₽`,
+      description: `Стоимость расширения: ${ext.price} ₽.\n80% (${Math.round(ext.price * 0.8)} ₽) поступит автору на баланс, 20% — комиссия платформы Zerf. Оплата происходит через защищённый шлюз ЮMoney.`,
+      confirmText: `Перейти к оплате (${ext.price} ₽)`,
       cancelText: 'Отмена',
       variant: 'primary',
     })
@@ -1075,8 +1087,12 @@ export function ExtensionsView() {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds)
-        alert(`🎉 Расширение «${ext.title}» успешно приобретено и установлено!`)
+        if (data.paymentUrl) {
+          window.location.href = data.paymentUrl
+        } else if (data.installedIds) {
+          setInstalledIds(data.installedIds)
+          alert(`🎉 Расширение «${ext.title}» успешно установлено!`)
+        }
       } else {
         if (data.requiresPlan === 'plus') {
           promptUpgradeToPlus('покупки расширений')
