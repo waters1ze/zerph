@@ -79,7 +79,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
 type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'data'
 
 export function SettingsView() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, syncData } = useApp()
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage()
   const confirm = useConfirmDialog()
@@ -124,6 +124,7 @@ export function SettingsView() {
 
   const cachedBirthday = typeof window !== 'undefined' ? localStorage.getItem('zerf_birthday') || '' : ''
   const [userBirthday, setUserBirthday] = useState(cachedBirthday)
+  const [birthdaySavedStatus, setBirthdaySavedStatus] = useState<boolean>(false)
   const cachedTimezone = typeof window !== 'undefined' ? localStorage.getItem('zerf_timezone') || 'Europe/Moscow' : 'Europe/Moscow'
   const [userTimezone, setUserTimezone] = useState(cachedTimezone)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
@@ -237,7 +238,10 @@ export function SettingsView() {
   const handleUserBirthdayChange = async (val: string) => {
     setUserBirthday(val)
     try { localStorage.setItem('zerf_birthday', val) } catch {}
-    syncPreferenceToServer({ birthday: val })
+    await syncPreferenceToServer({ birthday: val })
+    setBirthdaySavedStatus(true)
+    setTimeout(() => setBirthdaySavedStatus(false), 2500)
+    syncData()
   }
 
   const handleTimezoneChange = async (tz: string) => {
@@ -600,13 +604,21 @@ export function SettingsView() {
               </div>
             </Row>
 
-            <Row label={<span className="flex items-center gap-1.5"><span className="mono-emoji">🎂</span> День рождения</span>} description="Друзья в Zerf Note автоматически увидят напоминание в календаре">
-              <input
-                type="date"
-                value={userBirthday}
-                onChange={e => handleUserBirthdayChange(e.target.value)}
-                className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-44 cursor-pointer"
-              />
+            <Row label={<span className="flex items-center gap-1.5"><span className="mono-emoji">🎂</span> День рождения</span>} description="Отобразится в вашем календаре и у ваших взаимных друзей в Zerf">
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={userBirthday}
+                  onChange={e => handleUserBirthdayChange(e.target.value)}
+                  className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-44 cursor-pointer"
+                />
+                {birthdaySavedStatus && (
+                  <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 shrink-0 animate-in fade-in">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Сохранено</span>
+                  </span>
+                )}
+              </div>
             </Row>
 
             <Row label={<span className="flex items-center gap-1.5"><span className="mono-emoji">⏱</span> Часовой пояс</span>} description="Время отправки утренних сводок, вечерних отчетов и напоминаний">

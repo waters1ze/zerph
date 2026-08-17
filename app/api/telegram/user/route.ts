@@ -189,8 +189,12 @@ export async function POST(req: NextRequest) {
         update: updateData,
         create: { chatId: userCid, ...updateData },
       })
-      if (updateData.birthday) {
-        await broadcastMyBirthdayToFriends(userCid)
+      if (updateData.birthday !== undefined) {
+        const { syncMyOwnBirthday } = await import('@/lib/backend/db')
+        await syncMyOwnBirthday(userCid).catch(() => {})
+        if (updateData.birthday) {
+          await broadcastMyBirthdayToFriends(userCid).catch(() => {})
+        }
       }
     }
 

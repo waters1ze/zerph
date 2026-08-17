@@ -2286,11 +2286,96 @@ export function parseBirthday(input: string | null | undefined): { month: number
   return null
 }
 
+export async function syncMyOwnBirthday(ownerChatId: number | bigint | string): Promise<void> {
+  try {
+    const cid = BigInt(ownerChatId)
+    const userChat = await prisma.telegramChat.findUnique({
+      where: { chatId: cid },
+      select: { birthday: true, firstName: true }
+    })
+
+    const ownBdayTasks = await prisma.task.findMany({
+      where: {
+        ownerChatId: cid,
+        OR: [
+          { tags: { has: 'мой день рождения' } },
+          { title: { startsWith: '🎂 Мой день рождения' } },
+          { title: { startsWith: '🎂 День рождения (Я)' } },
+        ]
+      }
+    })
+
+    if (!userChat?.birthday) {
+      for (const t of ownBdayTasks) {
+        await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+      }
+      return
+    }
+
+    const parsed = parseBirthday(userChat.birthday)
+    if (!parsed) return
+
+    const currentYear = new Date().getFullYear()
+    const monthStr = String(parsed.month).padStart(2, '0')
+    const dayStr = String(parsed.day).padStart(2, '0')
+    const taskTitle = '🎂 Мой день рождения'
+
+    const thisYearDate = new Date(`${currentYear}-${monthStr}-${dayStr}T00:00:00`)
+    const targetYear = thisYearDate.getTime() < Date.now() ? currentYear + 1 : currentYear
+    const targetDueDate = `${targetYear}-${monthStr}-${dayStr}`
+
+    if (ownBdayTasks.length > 0) {
+      const primary = ownBdayTasks[0]
+      await prisma.task.update({
+        where: { id: primary.id },
+        data: {
+          title: taskTitle,
+          description: '🎉 Твой День рождения! Желаем отличного дня и продуктивного года!',
+          dueDate: targetDueDate,
+          dueTime: '00:00',
+          repeat: 'yearly',
+          priority: 'urgent',
+          tags: ['день рождения', 'мой день рождения', 'праздник'],
+          isShared: false,
+          status: 'todo',
+        }
+      })
+      for (let i = 1; i < ownBdayTasks.length; i++) {
+        await prisma.task.delete({ where: { id: ownBdayTasks[i].id } }).catch(() => {})
+      }
+    } else {
+      await prisma.task.create({
+        data: {
+          title: taskTitle,
+          description: '🎉 Твой День рождения! Желаем отличного дня и продуктивного года!',
+          priority: 'urgent',
+          status: 'todo',
+          dueDate: targetDueDate,
+          dueTime: '00:00',
+          repeat: 'yearly',
+          tags: ['день рождения', 'мой день рождения', 'праздник'],
+          isShared: false,
+          assignees: [String(cid)],
+          ownerChatId: cid,
+        }
+      })
+    }
+  } catch (err) {
+    console.error('Failed to sync own birthday:', err)
+  }
+}
+
 export async function broadcastMyBirthdayToFriends(myChatId: number | bigint | string): Promise<void> {
   try {
     const cid = BigInt(myChatId)
+    // Only broadcast to MUTUAL ACCEPTED friends
     const friendships = await prisma.friendship.findMany({
-      where: { OR: [{ userChatId: cid }, { friendChatId: cid }] },
+      where: {
+        OR: [
+          { userChatId: cid, status: 'accepted' },
+          { friendChatId: cid, status: 'accepted' },
+        ],
+      },
     })
     const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
     for (const friendId of friendChatIds) {
@@ -2305,9 +2390,17 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
   try {
     const cid = BigInt(ownerChatId)
 
-    // 1. Get all friends of this user
+    // 0. Always ensure user's own birthday is synced to their tasks & calendar
+    await syncMyOwnBirthday(cid).catch(() => {})
+
+    // 1. Get ONLY ACCEPTED friends of this user
     const friendships = await prisma.friendship.findMany({
-      where: { OR: [{ userChatId: cid }, { friendChatId: cid }] },
+      where: {
+        OR: [
+          { userChatId: cid, status: 'accepted' },
+          { friendChatId: cid, status: 'accepted' },
+        ],
+      },
     })
 
     const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
@@ -2322,9 +2415,9 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
     const currentYear = new Date().getFullYear()
     let createdCount = 0
 
-    // 3. Upsert birthday tasks for each friend — one task per friend chatId
+    // 3. Upsert birthday tasks for each accepted friend — one task per friend chatId
     for (const friend of friendChats) {
-      if (friend.chatId === cid) continue // Do not create a reminder task to congratulate yourself
+      if (friend.chatId === cid) continue // handled by syncMyOwnBirthday
       if (!friend.birthday) continue
       const parsed = parseBirthday(friend.birthday)
       if (!parsed) continue
@@ -2419,7 +2512,9 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
     const seenFriendId = new Set<string>()
     for (const t of allBdayTasks) {
-      // Find the friend chatId stored in assignees (not the owner)
+      const isOwnBday = (t.tags || []).includes('мой день рождения') || t.title.startsWith('🎂 Мой день рождения')
+      if (isOwnBday) continue
+
       const friendId = (t.assignees || []).find((a: string) => a !== String(cid))
       if (friendId) {
         if (seenFriendId.has(friendId)) {
@@ -2431,12 +2526,26 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
       }
     }
 
-    // 5. Delete birthday tasks for friends who no longer exist or have no birthday
+    // 5. Delete birthday tasks for people who are NOT currently accepted friends (or requests cancelled/pending)
     const validFriendIds = new Set(friendChats.map(f => String(f.chatId)))
     for (const t of allBdayTasks) {
+      const isOwnBday = (t.tags || []).includes('мой день рождения') || t.title.startsWith('🎂 Мой день рождения')
+      if (isOwnBday) continue
+
       const friendId = (t.assignees || []).find((a: string) => a !== String(cid))
-      if (friendId && !validFriendIds.has(friendId)) {
-        await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+      if (friendId) {
+        if (!validFriendIds.has(friendId)) {
+          await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+        }
+      } else {
+        // Old task without assignee chatId: check if title matches any valid accepted friend
+        const matchesValidFriend = friendChats.some(fc => {
+          const fn = fc.firstName || fc.username || ''
+          return fn && t.title.toLowerCase().includes(fn.toLowerCase())
+        })
+        if (!matchesValidFriend) {
+          await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+        }
       }
     }
 
