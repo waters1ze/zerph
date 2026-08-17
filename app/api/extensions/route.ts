@@ -1,5 +1,6 @@
 /**
- * GET & POST /api/extensions — Extensions Store, Plugin Creation, Installation & Monetization (80/20 split)
+ * GET & POST /api/extensions — Extensions Store, GitHub Manifest Parser & Sync, Installation & Monetization (80/20 split)
+ * ZERO AI tokens spent — Pure GitHub raw repository and manifest parser.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,155 +12,183 @@ import crypto from 'crypto'
 export interface ExtensionItem {
   id: string
   title: string
+  version?: string
   description: string
-  type: 'prompt' | 'template' | 'theme' | 'widget'
+  type: 'widget' | 'template' | 'theme' | 'integration' | 'prompt'
   category: string
   icon: string
+  githubUrl: string
   authorChatId: string
   authorName: string
+  authorGithub?: string
   price: number // 0 = free, > 0 = price in RUB
   isOfficial?: boolean
   rating: number
   ratingCount: number
   installCount: number
+  manifestUrl?: string
   content: Record<string, any>
   createdAt: string
   updatedAt: string
 }
 
-// Built-in starter extensions
+// Built-in starter extensions loaded from open-source GitHub specifications
 const STARTER_EXTENSIONS: ExtensionItem[] = [
   {
-    id: 'ext_code_reviewer',
-    title: 'Senior Code Reviewer & Refactor AI',
-    description: 'Продвинутый промпт для глубокого аудита кода, поиска уязвимостей и оптимизации архитектуры.',
-    type: 'prompt',
-    category: 'Разработка & AI',
-    icon: '💻',
+    id: 'ext_pomodoro_widget',
+    title: 'Smart Pomodoro & Interval Focus Widget',
+    version: '1.2.0',
+    description: 'Интерактивный Pomodoro таймер с гибкой настройкой рабочих спринтов, звуковыми уведомлениями и трекингом глубокой концентрации.',
+    type: 'widget',
+    category: 'Виджеты & Фокус',
+    icon: '⏱️',
+    githubUrl: 'https://github.com/zerf-ai/pomodoro-focus-widget',
     authorChatId: 'system',
     authorName: 'Zerf Core Team',
+    authorGithub: 'zerf-ai',
     price: 0,
     isOfficial: true,
     rating: 5.0,
-    ratingCount: 142,
-    installCount: 890,
+    ratingCount: 184,
+    installCount: 1240,
     content: {
-      systemPrompt: 'Ты — ведущий Senior Software Architect. Проводишь строгий аудит присланного кода по стандартам Clean Code, SOLID и OWASP. Указывай конкретные строки, баги и предлагай оптимизированный вариант с пояснениями.',
-      sampleInput: 'Проверь мой компонент React на утечки памяти и производительность...',
+      workDuration: 25,
+      breakDuration: 5,
+      longBreakDuration: 15,
+      cyclesBeforeLongBreak: 4,
+      soundTheme: 'gentle_bell',
+      autoStartBreak: true,
     },
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-01T10:00:00Z',
   },
   {
-    id: 'ext_okr_template',
-    title: 'Квартальный OKR & KPI Трекер',
-    description: 'Готовая структура для декомпозиции глобальных целей на 3 ключевых результата (Key Results) и спринты.',
+    id: 'ext_startup_checklist',
+    title: 'SaaS Launch Checklist: 45 Шагов к $1k MRR',
+    version: '2.0.1',
+    description: 'Открытый репозиторий с пошаговым чек-листом запуска цифровых продуктов: валидация, MVP, юридические требования и первые продажи.',
     type: 'template',
-    category: 'Продуктивность',
-    icon: '🎯',
-    authorChatId: 'system',
-    authorName: 'Zerf Core Team',
-    price: 0,
-    isOfficial: true,
+    category: 'Бизнес & Стартапы',
+    icon: '🚀',
+    githubUrl: 'https://github.com/alex-dev/zerf-saas-launch-template',
+    authorChatId: '6136950061',
+    authorName: 'Alexander (SaaS Founder)',
+    authorGithub: 'alex-dev',
+    price: 79,
     rating: 4.9,
-    ratingCount: 98,
-    installCount: 620,
+    ratingCount: 42,
+    installCount: 110,
     content: {
-      templateType: 'goal',
-      milestones: [
-        { title: 'Определить 3 ключевые метрики (KR)', weight: 30 },
-        { title: 'Запустить MVP и собрать первый фидбек', weight: 40 },
-        { title: 'Достичь целевого значения KPI', weight: 30 },
-      ],
+      templateType: 'project',
+      tasksCount: 45,
+      sections: ['CustDev & Валидация', 'MVP за 10 дней', 'Маркетинг & Каналы', 'Первые продажи'],
     },
     createdAt: '2026-08-05T12:00:00Z',
     updatedAt: '2026-08-05T12:00:00Z',
   },
   {
-    id: 'ext_cyberpunk_theme',
-    title: 'Cyberpunk Neon Glass Theme',
-    description: 'Эффектная темная тема с неоновыми изумрудными акцентами, матовым стеклом и улучшенным контрастом.',
+    id: 'ext_cyberpunk_neon_theme',
+    title: 'Cyberpunk Neon Glass CSS Theme',
+    version: '1.1.0',
+    description: 'Кастомная стилизация интерфейса: неоновые изумрудные акценты, эффект матового стекла (backdrop-blur) и повышенная контрастность.',
     type: 'theme',
     category: 'Оформление',
     icon: '🌌',
+    githubUrl: 'https://github.com/zerf-design/cyberpunk-theme',
     authorChatId: 'system',
     authorName: 'Zerf Design Lab',
+    authorGithub: 'zerf-design',
     price: 0,
     isOfficial: true,
     rating: 4.8,
-    ratingCount: 215,
-    installCount: 1450,
+    ratingCount: 230,
+    installCount: 1650,
     content: {
       primaryColor: '#10b981',
       accentColor: '#06b6d4',
       bgStyle: 'neon_glass',
+      borderRadius: '16px',
     },
     createdAt: '2026-08-10T14:00:00Z',
     updatedAt: '2026-08-10T14:00:00Z',
   },
   {
-    id: 'ext_water_tracker',
-    title: 'Smart Hydration & Energy Widget',
-    description: 'Интерактивный виджет водного баланса и энергии с напоминаниями выпить стакан воды каждые 2 часа.',
+    id: 'ext_water_energy_widget',
+    title: 'Hydration & Health Balance Tracker',
+    version: '1.0.4',
+    description: 'Виджет баланса гидратации с умными напоминаниями пить воду каждые 2 часа и графиком суточной нормы.',
     type: 'widget',
-    category: 'Здоровье & Фокус',
+    category: 'Здоровье & Привычки',
     icon: '💧',
+    githubUrl: 'https://github.com/open-health/zerf-hydration-widget',
     authorChatId: 'system',
-    authorName: 'Health & Productivity Co.',
+    authorName: 'Open Health Community',
+    authorGithub: 'open-health',
     price: 0,
     isOfficial: true,
     rating: 4.9,
-    ratingCount: 76,
-    installCount: 410,
+    ratingCount: 88,
+    installCount: 520,
     content: {
-      widgetType: 'hydration',
       dailyGoalMl: 2500,
       intervalHours: 2,
+      cupSizeMl: 250,
     },
     createdAt: '2026-08-12T16:00:00Z',
     updatedAt: '2026-08-12T16:00:00Z',
   },
-  {
-    id: 'ext_startup_launch',
-    title: 'SaaS Launch Checklist: От идеи до первых $1k MRR',
-    description: 'Премиальный пошаговый план запуска цифрового продукта: 45 проверенных чекпоинтов, шаблоны CustDev и юридические чек-листы.',
-    type: 'template',
-    category: 'Бизнес & Стартапы',
-    icon: '🚀',
-    authorChatId: '6136950061',
-    authorName: 'Alexander (SaaS Founder)',
-    price: 79,
-    rating: 5.0,
-    ratingCount: 34,
-    installCount: 88,
-    content: {
-      templateType: 'project',
-      tasksCount: 45,
-      stages: ['CustDev & Валидация', 'MVP за 10 дней', 'Маркетинг & Каналы', 'Первые продажи'],
-    },
-    createdAt: '2026-08-14T11:00:00Z',
-    updatedAt: '2026-08-14T11:00:00Z',
-  },
-  {
-    id: 'ext_deepwork_master',
-    title: 'Deep Work AI Master Coach',
-    description: 'Специализированная нейросетевая модель-наставник по технике Cal Newport: блокировка прокрастинации, аудит отвлечений и спринты.',
-    type: 'prompt',
-    category: 'Развитие & AI',
-    icon: '🧠',
-    authorChatId: '5078516086',
-    authorName: 'Daria Pro',
-    price: 49,
-    rating: 4.9,
-    ratingCount: 29,
-    installCount: 65,
-    content: {
-      systemPrompt: 'Ты — строгий коуч по глубокой работе (Deep Work). Анализируй рабочий день, отсекай псевдо-занятость и структурируй 90-минутные интервалы непрерывной фокусировки.',
-    },
-    createdAt: '2026-08-15T09:00:00Z',
-    updatedAt: '2026-08-15T09:00:00Z',
-  },
 ]
+
+/**
+ * Normalizes any GitHub URL to raw manifest URLs (zerf-extension.json or manifest.json)
+ */
+export function getGithubRawUrls(repoUrl: string): string[] {
+  let clean = repoUrl.trim().replace(/\/$/, '')
+  
+  // Handle raw link passed directly
+  if (clean.includes('raw.githubusercontent.com')) {
+    return [clean]
+  }
+
+  // Handle github.com/owner/repo
+  const match = clean.match(/github\.com\/([^\/]+)\/([^\/]+)/i)
+  if (!match) return []
+
+  const owner = match[1]
+  const repo = match[2].replace(/\.git$/, '')
+
+  return [
+    `https://raw.githubusercontent.com/${owner}/${repo}/main/zerf-extension.json`,
+    `https://raw.githubusercontent.com/${owner}/${repo}/master/zerf-extension.json`,
+    `https://raw.githubusercontent.com/${owner}/${repo}/main/manifest.json`,
+    `https://raw.githubusercontent.com/${owner}/${repo}/master/manifest.json`,
+  ]
+}
+
+/**
+ * Fetches and parses manifest from GitHub with 0 AI tokens
+ */
+export async function fetchManifestFromGithub(githubUrl: string): Promise<{ manifest: any; rawUrl: string } | null> {
+  const candidateUrls = getGithubRawUrls(githubUrl)
+  if (candidateUrls.length === 0) return null
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Zerf-Extension-Parser/1.0' },
+        cache: 'no-store',
+      })
+      if (res.ok) {
+        const text = await res.text()
+        const parsed = JSON.parse(text)
+        if (parsed && (parsed.name || parsed.title)) {
+          return { manifest: parsed, rawUrl: url }
+        }
+      }
+    } catch {}
+  }
+  return null
+}
 
 async function getCustomExtensions(): Promise<ExtensionItem[]> {
   try {
@@ -207,7 +236,6 @@ export async function GET(req: NextRequest) {
     const chatId = authUser?.chatId || null
 
     const customItems = await getCustomExtensions()
-    // Merge starter and custom items (custom items override starters if same ID)
     const allMap = new Map<string, ExtensionItem>()
     STARTER_EXTENSIONS.forEach(e => allMap.set(e.id, e))
     customItems.forEach(e => allMap.set(e.id, e))
@@ -258,45 +286,104 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { action } = body
 
-    // ── ACTION: PUBLISH / CREATE EXTENSION ──
-    if (action === 'publish') {
+    // ── ACTION 1: PARSE GITHUB MANIFEST IN REAL-TIME (0 AI Tokens) ──
+    if (action === 'parse_github') {
+      const { githubUrl } = body
+      if (!githubUrl || !githubUrl.includes('github.com')) {
+        return NextResponse.json({ error: 'Укажите корректную ссылку на GitHub репозиторий (например: https://github.com/user/repo)' }, { status: 400 })
+      }
+
+      const result = await fetchManifestFromGithub(githubUrl)
+      if (!result) {
+        return NextResponse.json({
+          error: 'Не найден файл zerf-extension.json или manifest.json в ветке main/master репозитория. Создайте файл по спецификации в корне репозитория!',
+        }, { status: 404 })
+      }
+
+      const m = result.manifest
+      return NextResponse.json({
+        success: true,
+        rawUrl: result.rawUrl,
+        manifest: {
+          id: m.id || `ext_gh_${Date.now()}`,
+          title: m.name || m.title || 'Безымянное расширение',
+          version: m.version || '1.0.0',
+          description: m.description || '',
+          type: m.type || 'widget',
+          category: m.category || 'Виджеты & Плагины',
+          icon: m.icon || '📦',
+          price: Math.max(0, Number(m.price) || 0),
+          author: m.author || 'GitHub Developer',
+          content: m.content || m.config || {},
+        }
+      })
+    }
+
+    // ── ACTION 2: PUBLISH EXTENSION FROM GITHUB REPO ──
+    if (action === 'publish_github' || action === 'publish') {
       const userRec = await prisma.telegramChat.findUnique({
         where: { chatId: BigInt(chatId) },
       })
       const userPlan = normalizePlan(userRec?.plan)
       if (!planAtLeast(userPlan, 'plus')) {
         return NextResponse.json({
-          error: 'Создание и публикация расширений доступна на тарифе Zerf Plus, Pro и Corp. Оформите подписку в Настройках!',
+          error: 'Публикация расширений доступна на тарифе Zerf Plus, Pro и Corp. Оформите подписку в Настройках!',
         }, { status: 403 })
       }
 
-      const { title, description, type, category, icon, price, content, id } = body
-      if (!title || !description || !type) {
-        return NextResponse.json({ error: 'Заполните название, описание и тип расширения' }, { status: 400 })
+      const { githubUrl, title, description, type, category, icon, price, version, content, id } = body
+
+      let manifestContent = content || {}
+      let finalTitle = title
+      let finalDesc = description
+      let finalIcon = icon || '🧩'
+      let finalType = type || 'widget'
+      let finalCategory = category || 'Виджеты & Плагины'
+      let finalVersion = version || '1.0.0'
+      let finalPrice = Math.max(0, Math.min(5000, Number(price) || 0))
+
+      // If GitHub URL provided, parse directly
+      if (githubUrl && githubUrl.includes('github.com')) {
+        const ghData = await fetchManifestFromGithub(githubUrl)
+        if (ghData) {
+          const m = ghData.manifest
+          if (m.name || m.title) finalTitle = m.name || m.title
+          if (m.description) finalDesc = m.description
+          if (m.icon) finalIcon = m.icon
+          if (m.type) finalType = m.type
+          if (m.category) finalCategory = m.category
+          if (m.version) finalVersion = m.version
+          if (m.price !== undefined) finalPrice = Math.max(0, Math.min(5000, Number(m.price) || 0))
+          manifestContent = m.content || m.config || manifestContent
+        }
       }
 
-      const numPrice = Math.max(0, Math.min(5000, Number(price) || 0))
-      const extId = id || `ext_usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`
+      if (!finalTitle || !finalDesc) {
+        return NextResponse.json({ error: 'Заполните название и описание расширения' }, { status: 400 })
+      }
 
-      const authorName = [userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || userRec?.firstName || 'Автор Zerf'
+      const extId = id || `ext_gh_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`
+      const authorName = [userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || userRec?.firstName || 'GitHub Автор'
 
       const existingRecord = await prisma.config.findUnique({ where: { key: `zerf_ext_${extId}` } })
       const existingData = existingRecord?.value ? JSON.parse(existingRecord.value) : null
 
       const extItem: ExtensionItem = {
         id: extId,
-        title: title.trim().slice(0, 100),
-        description: description.trim().slice(0, 500),
-        type: type as any,
-        category: (category || 'Кастомные').trim().slice(0, 40),
-        icon: icon || '🧩',
+        title: finalTitle.trim().slice(0, 100),
+        version: finalVersion,
+        description: finalDesc.trim().slice(0, 500),
+        type: finalType as any,
+        category: finalCategory.trim().slice(0, 40),
+        icon: finalIcon,
+        githubUrl: githubUrl || '',
         authorChatId: chatId,
         authorName,
-        price: numPrice,
+        price: finalPrice,
         rating: existingData?.rating || 5.0,
         ratingCount: existingData?.ratingCount || 1,
         installCount: existingData?.installCount || 0,
-        content: content || {},
+        content: manifestContent,
         createdAt: existingData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -310,7 +397,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: extItem })
     }
 
-    // ── ACTION: INSTALL EXTENSION ──
+    // ── ACTION 3: SYNC / PULL LATEST FROM GITHUB (0 AI Tokens) ──
+    if (action === 'sync_github') {
+      const { extensionId } = body
+      const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+      if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      const current: ExtensionItem = JSON.parse(extRec.value)
+      if (!current.githubUrl) {
+        return NextResponse.json({ error: 'У этого расширения не привязан репозиторий GitHub' }, { status: 400 })
+      }
+
+      const ghData = await fetchManifestFromGithub(current.githubUrl)
+      if (!ghData) {
+        return NextResponse.json({ error: 'Не удалось загрузить манифест из GitHub репозитория' }, { status: 404 })
+      }
+
+      const m = ghData.manifest
+      current.title = m.name || m.title || current.title
+      current.description = m.description || current.description
+      current.version = m.version || current.version
+      current.icon = m.icon || current.icon
+      current.content = m.content || m.config || current.content
+      if (m.price !== undefined) current.price = Math.max(0, Math.min(5000, Number(m.price) || 0))
+      current.updatedAt = new Date().toISOString()
+
+      await prisma.config.update({
+        where: { key: `zerf_ext_${extensionId}` },
+        data: { value: JSON.stringify(current) },
+      })
+
+      return NextResponse.json({ success: true, extension: current })
+    }
+
+    // ── ACTION 4: INSTALL EXTENSION ──
     if (action === 'install') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
@@ -324,7 +444,7 @@ export async function POST(req: NextRequest) {
           create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
         })
 
-        // Increment install count on custom extension if exists
+        // Increment install count
         try {
           const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
           if (extRec?.value) {
@@ -341,7 +461,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, installedIds: installed })
     }
 
-    // ── ACTION: UNINSTALL EXTENSION ──
+    // ── ACTION 5: UNINSTALL EXTENSION ──
     if (action === 'uninstall') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
@@ -357,7 +477,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, installedIds: installed })
     }
 
-    // ── ACTION: BUY PAID EXTENSION (80% Author / 20% Platform) ──
+    // ── ACTION 6: BUY PAID GITHUB EXTENSION (80% Author / 20% Platform) ──
     if (action === 'buy') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
@@ -366,10 +486,9 @@ export async function POST(req: NextRequest) {
       const ext = allItems.find(e => e.id === extensionId)
       if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
-      const authorShare = Math.round(ext.price * 0.8) // 80% to creator
-      const platformShare = ext.price - authorShare // 20% platform commission
+      const authorShare = Math.round(ext.price * 0.8)
+      const platformShare = ext.price - authorShare
 
-      // Record purchase in DB
       await prisma.config.create({
         data: {
           key: `ext_purchase_${extensionId}_${chatId}`,
@@ -385,7 +504,6 @@ export async function POST(req: NextRequest) {
         },
       }).catch(() => {})
 
-      // Credit author balance
       if (ext.authorChatId && ext.authorChatId !== 'system') {
         const authorStats = await getAuthorBalance(ext.authorChatId)
         authorStats.balance += authorShare
@@ -398,7 +516,6 @@ export async function POST(req: NextRequest) {
           create: { key: `author_balance_${ext.authorChatId}`, value: JSON.stringify(authorStats) },
         })
 
-        // Notify author via Telegram
         const botToken = process.env.TELEGRAM_BOT_TOKEN
         if (botToken) {
           fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -406,14 +523,13 @@ export async function POST(req: NextRequest) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chat_id: ext.authorChatId,
-              text: `🎉 *Покупка вашего расширения!*\n\nПользователь приобрел ваше расширение *«${ext.title}»* за ${ext.price} ₽.\nВам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰\n\nПроверить баланс: откройте раздел «Расширения» на сайте.`,
+              text: `🎉 *Покупка вашего расширения с GitHub!*\n\nПользователь приобрёл *«${ext.title}»* (${ext.githubUrl || ''}) за ${ext.price} ₽.\nВам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰`,
               parse_mode: 'Markdown',
             }),
           }).catch(() => {})
         }
       }
 
-      // Auto-install extension for buyer
       let installed = await getUserInstalledExtensions(chatId)
       if (!installed.includes(extensionId)) {
         installed.push(extensionId)
@@ -432,7 +548,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── ACTION: DELETE MY EXTENSION ──
+    // ── ACTION 7: DELETE EXTENSION ──
     if (action === 'delete') {
       const { extensionId } = body
       const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
