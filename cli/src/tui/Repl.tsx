@@ -15,6 +15,7 @@ import { detectInstalledClis, runLocalCliBridge, type DetectedCli } from '../loc
 import { getAllaySpriteLines, GLYPHS } from '../mascot.js'
 import { makeUniqueId, getInputHistory, pushInputHistory } from './utils.js'
 import { scaffoldExtension, installExtensionPackage, getInstalledExtensions } from '../extensions/registry.js'
+import { updateReplState } from './state.js'
 
 interface LogEntry {
   id: string
@@ -707,10 +708,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
     if (raw.startsWith('/focus')) {
       const mins = parseInt(raw.split(' ')[1] || '25', 10)
-      setHistory(h => [
-        ...h,
-        { id: makeUniqueId(), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` },
-      ])
+      updateReplState({ screen: 'focus', focusMinutes: mins })
       return
     }
 

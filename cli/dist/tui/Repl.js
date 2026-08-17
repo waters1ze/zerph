@@ -7,6 +7,7 @@ import { detectInstalledClis, runLocalCliBridge } from '../local-cli.js';
 import { getAllaySpriteLines, GLYPHS } from '../mascot.js';
 import { makeUniqueId } from './utils.js';
 import { scaffoldExtension, installExtensionPackage, getInstalledExtensions } from '../extensions/registry.js';
+import { updateReplState } from './state.js';
 const CLOUD_MODELS = [
     { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
     { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
@@ -644,10 +645,7 @@ export function Repl({ initialData }) {
         }
         if (raw.startsWith('/focus')) {
             const mins = parseInt(raw.split(' ')[1] || '25', 10);
-            setHistory(h => [
-                ...h,
-                { id: makeUniqueId(), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` },
-            ]);
+            updateReplState({ screen: 'focus', focusMinutes: mins });
             return;
         }
         if (raw.startsWith('/done')) {
