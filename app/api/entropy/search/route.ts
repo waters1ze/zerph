@@ -295,6 +295,25 @@ JSON Схема:
       llmResult = generateFallbackResearch(cleanQuery, mode, isPro)
     }
 
+    const cleanStr = (s: any) => (typeof s === 'string' ? s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').trim() : '')
+
+    const cleanSources: EntropySource[] = (llmResult.sources || []).map((s: any, idx: number) => ({
+      id: typeof s.id === 'number' ? s.id : idx + 1,
+      title: cleanStr(s.title || `Источник ${idx + 1}`),
+      url: s.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
+      domain: s.domain || (s.url ? new URL(s.url).hostname : 'web'),
+      snippet: cleanStr(s.snippet || ''),
+    }))
+
+    const cleanAnswer = cleanStr(llmResult.answer)
+    const cleanTakeaways = Array.isArray(llmResult.takeaways)
+      ? llmResult.takeaways.map(cleanStr).filter(Boolean)
+      : []
+    const cleanFollowUps = Array.isArray(llmResult.followUpQuestions)
+      ? llmResult.followUpQuestions.map(cleanStr).filter(Boolean)
+      : []
+    const cleanTikhonya = cleanStr(llmResult.tikhonyaComment) || 'Тихоня завершил глубокий синтез источников [ ˘ ᴗ ˘ ]'
+
     // Increment user's daily usage
     if (isPro) {
       dailyEntropyProUsage.set(todayKey, proUsed + 1)
@@ -309,11 +328,11 @@ JSON Схема:
       query: cleanQuery,
       mode,
       isPro,
-      sources: llmResult.sources || [],
-      answer: llmResult.answer || '',
-      takeaways: llmResult.takeaways || [],
-      followUpQuestions: llmResult.followUpQuestions || [],
-      tikhonyaComment: llmResult.tikhonyaComment || 'Тихоня завершил глубокий синтез источников [ ˘ ᴗ ˘ ]',
+      sources: cleanSources,
+      answer: cleanAnswer,
+      takeaways: cleanTakeaways,
+      followUpQuestions: cleanFollowUps,
+      tikhonyaComment: cleanTikhonya,
       createdAt: new Date().toISOString(),
       usage: {
         used: newRegUsed,

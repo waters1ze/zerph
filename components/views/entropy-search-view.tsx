@@ -15,6 +15,8 @@ import { useApp, getAuthHeaders } from '@/lib/store'
 import type { Note, Task } from '@/lib/types'
 import type { EntropySearchResult, EntropySource } from '@/app/api/entropy/search/route'
 import { TikhonyaMascot, type TikhonyaMood } from '@/components/views/tikhonya-mascot'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const STARTER_TOPICS = [
   {
@@ -210,10 +212,18 @@ export function EntropySearchView() {
     }
   }
 
+  const cleanText = (s: string) =>
+    (s || '')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '')
+      .replace(/\\t/g, '  ')
+      .replace(/\\"/g, '"')
+      .trim()
+
   const handleCopyMarkdown = () => {
     if (!result) return
     let text = `# 🔮 ${result.query}\n\n`
-    text += `${result.answer}\n\n`
+    text += `${cleanText(result.answer)}\n\n`
     if (result.sources.length > 0) {
       text += `### 📚 Источники:\n`
       result.sources.forEach(s => {
@@ -228,7 +238,7 @@ export function EntropySearchView() {
   const handleSaveToZerfNotes = () => {
     if (!result) return
 
-    let noteContent = `${result.answer}\n\n---\n### 📚 Синтезированные первоисточники:\n`
+    let noteContent = `${cleanText(result.answer)}\n\n---\n### 📚 Синтезированные первоисточники:\n`
     result.sources.forEach(s => {
       noteContent += `- **[${s.id}]** [${s.title}](${s.url}) — *${s.domain}*\n  > ${s.snippet}\n`
     })
@@ -620,9 +630,90 @@ export function EntropySearchView() {
               </div>
             </div>
 
-            {/* Answer Text Body with Highlighted Citations */}
-            <div className="prose prose-invert max-w-none text-xs md:text-sm text-foreground/90 leading-relaxed space-y-3 whitespace-pre-line">
-              {result.answer}
+            {/* Answer Text Body with Highlighted Citations & Rich Markdown */}
+            <div className="prose prose-invert max-w-none text-xs md:text-sm text-foreground/90 leading-relaxed space-y-3 font-sans">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h1: ({ children }) => <h3 className="text-base md:text-lg font-bold text-foreground mt-4 mb-2 pb-1 border-b border-border/60">{children}</h3>,
+                  h2: ({ children }) => <h4 className="text-sm md:text-base font-bold text-foreground mt-3 mb-1.5 text-primary/95">{children}</h4>,
+                  h3: ({ children }) => <h5 className="text-xs md:text-sm font-bold text-foreground mt-3 mb-1 flex items-center gap-1.5"><span className="text-primary font-bold">◈</span>{children}</h5>,
+                  h4: ({ children }) => <h6 className="text-xs font-bold text-foreground mt-2 mb-1">{children}</h6>,
+                  p: ({ children }) => <p className="text-xs md:text-sm text-foreground/90 leading-relaxed mb-3">{children}</p>,
+                  ul: ({ children }) => <ul className="space-y-1.5 mb-3 pl-2 list-none">{children}</ul>,
+                  ol: ({ children }) => <ol className="space-y-1.5 mb-3 pl-4 list-decimal text-xs md:text-sm text-foreground/90 space-y-1">{children}</ol>,
+                  li: ({ children }) => (
+                    <li className="flex items-start gap-2 text-xs md:text-sm text-foreground/90 leading-relaxed">
+                      <span className="text-primary font-bold mt-1 text-[10px] shrink-0">▪</span>
+                      <div className="flex-1">{children}</div>
+                    </li>
+                  ),
+                  strong: ({ children }) => <strong className="font-bold text-foreground font-sans">{children}</strong>,
+                  em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="pl-3 py-1 my-2 border-l-2 border-primary/60 bg-primary/5 rounded-r-lg text-xs italic text-muted-foreground">
+                      {children}
+                    </blockquote>
+                  ),
+                  code: ({ node, inline, className, children, ...props }: any) => {
+                    return (
+                      <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[11px] text-primary border border-border" {...props}>
+                        {children}
+                      </code>
+                    )
+                  },
+                  a: ({ href, title, children }) => {
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={title}
+                        className="text-primary hover:underline underline-offset-2 font-medium"
+                      >
+                        {children}
+                      </a>
+                    )
+                  },
+                  text: ({ children }) => {
+                    if (typeof children === 'string' && /\[\d+\]/.test(children)) {
+                      const parts = children.split(/(\[\d+\])/g)
+                      return (
+                        <>
+                          {parts.map((part, pIdx) => {
+                            const match = part.match(/^\[(\d+)\]$/)
+                            if (match) {
+                              const sId = parseInt(match[1], 10)
+                              const source = result.sources?.find(s => s.id === sId)
+                              return (
+                                <a
+                                  key={pIdx}
+                                  href={source?.url || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={source ? `${source.title} (${source.domain})` : `Источник #${sId}`}
+                                  className="inline-flex items-center justify-center px-1.5 py-0.2 mx-0.5 rounded-md bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-mono text-[10px] font-bold border border-primary/30 shadow-2xs transition-all cursor-pointer select-none align-baseline no-underline transform hover:scale-105"
+                                >
+                                  [{sId}]
+                                </a>
+                              )
+                            }
+                            return part
+                          })}
+                        </>
+                      )
+                    }
+                    return <>{children}</>
+                  }
+                }}
+              >
+                {result.answer
+                  .replace(/\\n/g, '\n')
+                  .replace(/\\r/g, '')
+                  .replace(/\\t/g, '  ')
+                  .replace(/\\"/g, '"')
+                  .replace(/([^\s\[])(\[\d+\])/g, '$1 $2')}
+              </ReactMarkdown>
             </div>
 
             {/* 3. KEY TAKEAWAYS (Инсайты) */}
