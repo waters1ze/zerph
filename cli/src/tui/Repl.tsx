@@ -91,11 +91,11 @@ function getCountdownText(dueTime?: string | null, status?: string): string {
   }
 }
 
-function renderProgressBar(ratio: number, length = 10): string {
-  const clamped = Math.max(0, Math.min(1, ratio))
+function renderProgressBar(ratio: number, length = 12): string {
+  const clamped = Math.max(0, Math.min(1, isNaN(ratio) ? 0 : ratio))
   const filled = Math.round(clamped * length)
   const empty = length - filled
-  return `[${'■'.repeat(filled)}${'□'.repeat(empty)}]`
+  return `[${'▓'.repeat(filled)}${'░'.repeat(empty)}]`
 }
 
 export function Repl({ initialData }: { initialData?: any }) {
@@ -115,6 +115,7 @@ export function Repl({ initialData }: { initialData?: any }) {
   const [activeChatTarget, setActiveChatTarget] = useState<any>(null)
   const [detectedClis, setDetectedClis] = useState<DetectedCli[]>([])
   const [wingFrame, setWingFrame] = useState(0)
+  const [actionProgress, setActionProgress] = useState<{ label: string; ratio: number } | null>(null)
 
   useEffect(() => {
     try {
@@ -172,8 +173,13 @@ export function Repl({ initialData }: { initialData?: any }) {
       if (key.return) {
         const chosen = allAvailableModels[selectedModelIdx]
         if (chosen) {
+          setActionProgress({ label: `Применение модели ${chosen.name}...`, ratio: 0.8 })
           const updated = saveConfig({ model: chosen.id })
           setConfig(updated)
+          setTimeout(() => {
+            setActionProgress({ label: `Активна модель: ${chosen.name}`, ratio: 1.0 })
+            setTimeout(() => setActionProgress(null), 1200)
+          }, 200)
           setHistory(h => [
             ...h,
             {
@@ -456,6 +462,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         targetFriend = friends.find((f: any) => (f.username || '').toLowerCase() === targetUsername || f.name.toLowerCase() === targetUsername) || { name: `@${targetUsername}`, username: targetUsername }
       }
 
+      setActionProgress({ label: `Отправка сообщения ${targetFriend?.name || 'собеседнику'}...`, ratio: 0.6 })
       try {
         await mutateItem(creds, {
           action: 'create_task',
@@ -464,6 +471,8 @@ export function Repl({ initialData }: { initialData?: any }) {
           isShared: true,
           assignees: targetFriend?.chatId ? [String(targetFriend.chatId)] : (targetFriend?.username ? [targetFriend.username] : []),
         })
+        setActionProgress({ label: 'Сообщение доставлено', ratio: 1.0 })
+        setTimeout(() => setActionProgress(null), 1000)
         setHistory(h => [
           ...h,
           {
@@ -474,6 +483,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           },
         ])
       } catch (err: any) {
+        setActionProgress(null)
         setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${err.message}` }])
       }
       return
@@ -546,8 +556,11 @@ export function Repl({ initialData }: { initialData?: any }) {
       const tasks = data?.tasks || []
       const match = tasks.find((t: any) => t.status !== 'done' && t.title.toLowerCase().includes(query))
       if (match) {
+        setActionProgress({ label: `Завершение «${match.title}»...`, ratio: 0.6 })
         await mutateItem(creds, { action: 'toggle_task', id: match.id })
         match.status = 'done'
+        setActionProgress({ label: `Задача «${match.title}» закрыта`, ratio: 1.0 })
+        setTimeout(() => setActionProgress(null), 1000)
         setHistory(h => [
           ...h,
           { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${match.title}» успешно завершена!` },
@@ -560,6 +573,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
     if (raw.startsWith('/add')) {
       const text = raw.replace('/add', '').trim()
+      setActionProgress({ label: `Сохранение задачи «${text}»...`, ratio: 0.6 })
       await mutateItem(creds, {
         action: 'create_task',
         title: text,
@@ -567,6 +581,8 @@ export function Repl({ initialData }: { initialData?: any }) {
         priority: 'medium',
         rawText: text,
       })
+      setActionProgress({ label: `Задача сохранена в расписание`, ratio: 1.0 })
+      setTimeout(() => setActionProgress(null), 1000)
       setHistory(h => [
         ...h,
         { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${text}» добавлена на сегодня!` },
@@ -576,11 +592,14 @@ export function Repl({ initialData }: { initialData?: any }) {
 
     if (raw.startsWith('/note')) {
       const text = raw.replace('/note', '').trim()
+      setActionProgress({ label: `Синхронизация заметки...`, ratio: 0.6 })
       await mutateItem(creds, {
         action: 'create_note',
         title: text.length > 40 ? text.slice(0, 37) + '…' : text,
         body: text,
       })
+      setActionProgress({ label: `Заметка сохранена в базу`, ratio: 1.0 })
+      setTimeout(() => setActionProgress(null), 1000)
       setHistory(h => [
         ...h,
         { id: makeUniqueId(), type: 'assistant', text: `✔ Заметка «${text}» сохранена в базу.` },
@@ -591,20 +610,32 @@ export function Repl({ initialData }: { initialData?: any }) {
     // AI Query / Free text
     try {
       const currentModel = config.model || 'openai/gpt-oss-120b'
+      setActionProgress({ label: `Генерация ответа через ${currentModel}...`, ratio: 0.45 })
+      const progTimer = setTimeout(() => {
+        setActionProgress({ label: `Генерация ответа через ${currentModel}...`, ratio: 0.8 })
+      }, 500)
+
       if (currentModel.startsWith('cli:')) {
         const out = await runLocalCliBridge(currentModel, raw)
+        clearTimeout(progTimer)
+        setActionProgress({ label: 'Ответ CLI получен', ratio: 1.0 })
+        setTimeout(() => setActionProgress(null), 800)
         setHistory(h => [
           ...h,
           { id: makeUniqueId(), type: 'assistant', text: `◈ Ответ ${currentModel.replace('cli:', '')}:`, details: [out] },
         ])
       } else {
         const res = await sendAiQuery(creds, raw, currentModel)
+        clearTimeout(progTimer)
+        setActionProgress({ label: 'Ответ сформирован', ratio: 1.0 })
+        setTimeout(() => setActionProgress(null), 800)
         setHistory(h => [
           ...h,
           { id: makeUniqueId(), type: 'assistant', text: res.message, details: res.details },
         ])
       }
     } catch (e: any) {
+      setActionProgress(null)
       setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }])
     }
   }
@@ -775,6 +806,15 @@ export function Repl({ initialData }: { initialData?: any }) {
               </Box>
             )
           })}
+        </Box>
+      )}
+
+      {/* ── Live Action Progress Bar ──────────────────────────────────────── */}
+      {actionProgress && (
+        <Box gap={1} marginY={0} marginTop={1} marginLeft={1}>
+          <Text bold color="cyanBright">{renderProgressBar(actionProgress.ratio, 14)}</Text>
+          <Text bold color="white">{Math.round(actionProgress.ratio * 100)}%</Text>
+          <Text color="gray">— {actionProgress.label}</Text>
         </Box>
       )}
 

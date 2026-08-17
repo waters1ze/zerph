@@ -15,6 +15,13 @@ import {
 } from './api.js'
 import { GLYPH } from './tui/theme.js'
 
+function renderStartupBar(ratio: number, width = 18): string {
+  const clamped = Math.max(0, Math.min(1, ratio))
+  const filled = Math.round(clamped * width)
+  const empty = width - filled
+  return `[${'▓'.repeat(filled)}${'░'.repeat(empty)}]`
+}
+
 const program = new Command()
 
 program
@@ -22,7 +29,7 @@ program
   .description('Zerf — второй мозг в терминале (Claude Code style CLI)')
   .version('2.0.0')
 
-// Default action — Launch interactive REPL TUI
+// Default action — Launch interactive REPL TUI with animated progress
 program.action(async () => {
   const creds = loadCredentials()
   if (!creds.token) {
@@ -32,12 +39,31 @@ program.action(async () => {
   }
 
   try {
+    // ── Animated Startup Progress Bar ──
+    const showProgress = (ratio: number, label: string) => {
+      const pct = Math.round(ratio * 100)
+      const bar = chalk.cyanBright(renderStartupBar(ratio, 16))
+      process.stdout.write(`\r \x1b[36m◈\x1b[0m \x1b[1mZerf CLI\x1b[0m  ${bar} \x1b[1m${pct}%\x1b[0m  \x1b[90m${label.padEnd(45)}\x1b[0m`)
+    }
+
+    showProgress(0.2, 'Чтение локальной конфигурации и сессии...')
+    await new Promise(r => setTimeout(r, 60))
+
+    showProgress(0.5, 'Синхронизация профиля с сервером Zerf...')
     const data = await fetchUserData(creds)
+
+    showProgress(0.85, 'Инициализация контекста и внешних CLI...')
+    await new Promise(r => setTimeout(r, 60))
+
     if (data.allowed === false) {
+      process.stdout.write('\n')
       console.log(`\n ${GLYPH.cancel} ${chalk.bold.yellow('Требуется подписка Plus, Pro или Corp')}`)
       console.log(`   ${data.message}\n`)
       return
     }
+
+    showProgress(1.0, 'Готово! Запуск интерфейса...')
+    await new Promise(r => setTimeout(r, 80))
 
     // Enter alternate screen buffer for 100% clean single-frame rendering
     process.stdout.write('\x1b[?1049h\x1b[H')
@@ -58,6 +84,7 @@ program.action(async () => {
     await appInstance.waitUntilExit()
     cleanup()
   } catch (err: any) {
+    process.stdout.write('\n')
     console.error(`\n ${GLYPH.cancel} Ошибка загрузки: ${err.message}`)
   }
 })

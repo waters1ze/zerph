@@ -59,11 +59,11 @@ function getCountdownText(dueTime, status) {
         return `просрочено на ${h > 0 ? `${h} ч ` : ''}${m} мин`;
     }
 }
-function renderProgressBar(ratio, length = 10) {
-    const clamped = Math.max(0, Math.min(1, ratio));
+function renderProgressBar(ratio, length = 12) {
+    const clamped = Math.max(0, Math.min(1, isNaN(ratio) ? 0 : ratio));
     const filled = Math.round(clamped * length);
     const empty = length - filled;
-    return `[${'■'.repeat(filled)}${'□'.repeat(empty)}]`;
+    return `[${'▓'.repeat(filled)}${'░'.repeat(empty)}]`;
 }
 export function Repl({ initialData }) {
     const { exit } = useApp();
@@ -82,6 +82,7 @@ export function Repl({ initialData }) {
     const [activeChatTarget, setActiveChatTarget] = useState(null);
     const [detectedClis, setDetectedClis] = useState([]);
     const [wingFrame, setWingFrame] = useState(0);
+    const [actionProgress, setActionProgress] = useState(null);
     useEffect(() => {
         try {
             const found = detectInstalledClis();
@@ -132,8 +133,13 @@ export function Repl({ initialData }) {
             if (key.return) {
                 const chosen = allAvailableModels[selectedModelIdx];
                 if (chosen) {
+                    setActionProgress({ label: `Применение модели ${chosen.name}...`, ratio: 0.8 });
                     const updated = saveConfig({ model: chosen.id });
                     setConfig(updated);
+                    setTimeout(() => {
+                        setActionProgress({ label: `Активна модель: ${chosen.name}`, ratio: 1.0 });
+                        setTimeout(() => setActionProgress(null), 1200);
+                    }, 200);
                     setHistory(h => [
                         ...h,
                         {
@@ -398,6 +404,7 @@ export function Repl({ initialData }) {
                 messageText = parts.slice(1).join(' ');
                 targetFriend = friends.find((f) => (f.username || '').toLowerCase() === targetUsername || f.name.toLowerCase() === targetUsername) || { name: `@${targetUsername}`, username: targetUsername };
             }
+            setActionProgress({ label: `Отправка сообщения ${targetFriend?.name || 'собеседнику'}...`, ratio: 0.6 });
             try {
                 await mutateItem(creds, {
                     action: 'create_task',
@@ -406,6 +413,8 @@ export function Repl({ initialData }) {
                     isShared: true,
                     assignees: targetFriend?.chatId ? [String(targetFriend.chatId)] : (targetFriend?.username ? [targetFriend.username] : []),
                 });
+                setActionProgress({ label: 'Сообщение доставлено', ratio: 1.0 });
+                setTimeout(() => setActionProgress(null), 1000);
                 setHistory(h => [
                     ...h,
                     {
@@ -417,6 +426,7 @@ export function Repl({ initialData }) {
                 ]);
             }
             catch (err) {
+                setActionProgress(null);
                 setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${err.message}` }]);
             }
             return;
@@ -486,8 +496,11 @@ export function Repl({ initialData }) {
             const tasks = data?.tasks || [];
             const match = tasks.find((t) => t.status !== 'done' && t.title.toLowerCase().includes(query));
             if (match) {
+                setActionProgress({ label: `Завершение «${match.title}»...`, ratio: 0.6 });
                 await mutateItem(creds, { action: 'toggle_task', id: match.id });
                 match.status = 'done';
+                setActionProgress({ label: `Задача «${match.title}» закрыта`, ratio: 1.0 });
+                setTimeout(() => setActionProgress(null), 1000);
                 setHistory(h => [
                     ...h,
                     { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${match.title}» успешно завершена!` },
@@ -500,6 +513,7 @@ export function Repl({ initialData }) {
         }
         if (raw.startsWith('/add')) {
             const text = raw.replace('/add', '').trim();
+            setActionProgress({ label: `Сохранение задачи «${text}»...`, ratio: 0.6 });
             await mutateItem(creds, {
                 action: 'create_task',
                 title: text,
@@ -507,6 +521,8 @@ export function Repl({ initialData }) {
                 priority: 'medium',
                 rawText: text,
             });
+            setActionProgress({ label: `Задача сохранена в расписание`, ratio: 1.0 });
+            setTimeout(() => setActionProgress(null), 1000);
             setHistory(h => [
                 ...h,
                 { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${text}» добавлена на сегодня!` },
@@ -515,11 +531,14 @@ export function Repl({ initialData }) {
         }
         if (raw.startsWith('/note')) {
             const text = raw.replace('/note', '').trim();
+            setActionProgress({ label: `Синхронизация заметки...`, ratio: 0.6 });
             await mutateItem(creds, {
                 action: 'create_note',
                 title: text.length > 40 ? text.slice(0, 37) + '…' : text,
                 body: text,
             });
+            setActionProgress({ label: `Заметка сохранена в базу`, ratio: 1.0 });
+            setTimeout(() => setActionProgress(null), 1000);
             setHistory(h => [
                 ...h,
                 { id: makeUniqueId(), type: 'assistant', text: `✔ Заметка «${text}» сохранена в базу.` },
@@ -529,8 +548,15 @@ export function Repl({ initialData }) {
         // AI Query / Free text
         try {
             const currentModel = config.model || 'openai/gpt-oss-120b';
+            setActionProgress({ label: `Генерация ответа через ${currentModel}...`, ratio: 0.45 });
+            const progTimer = setTimeout(() => {
+                setActionProgress({ label: `Генерация ответа через ${currentModel}...`, ratio: 0.8 });
+            }, 500);
             if (currentModel.startsWith('cli:')) {
                 const out = await runLocalCliBridge(currentModel, raw);
+                clearTimeout(progTimer);
+                setActionProgress({ label: 'Ответ CLI получен', ratio: 1.0 });
+                setTimeout(() => setActionProgress(null), 800);
                 setHistory(h => [
                     ...h,
                     { id: makeUniqueId(), type: 'assistant', text: `◈ Ответ ${currentModel.replace('cli:', '')}:`, details: [out] },
@@ -538,6 +564,9 @@ export function Repl({ initialData }) {
             }
             else {
                 const res = await sendAiQuery(creds, raw, currentModel);
+                clearTimeout(progTimer);
+                setActionProgress({ label: 'Ответ сформирован', ratio: 1.0 });
+                setTimeout(() => setActionProgress(null), 800);
                 setHistory(h => [
                     ...h,
                     { id: makeUniqueId(), type: 'assistant', text: res.message, details: res.details },
@@ -545,6 +574,7 @@ export function Repl({ initialData }) {
             }
         }
         catch (e) {
+            setActionProgress(null);
             setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }]);
         }
     };
@@ -566,7 +596,7 @@ export function Repl({ initialData }) {
                     })] })), isSlash && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
                         const isSel = idx === selectedIdx;
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', item.label.padEnd(18)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, `cmd_opt_${item.cmd}_${idx}`));
-                    })] })), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
+                    })] })), actionProgress && (_jsxs(Box, { gap: 1, marginY: 0, marginTop: 1, marginLeft: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: renderProgressBar(actionProgress.ratio, 14) }), _jsxs(Text, { bold: true, color: "white", children: [Math.round(actionProgress.ratio * 100), "%"] }), _jsxs(Text, { color: "gray", children: ["\u2014 ", actionProgress.label] })] })), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
                                     setInputVal(val);
                                     if (!val)
                                         setMenuForced(false);
