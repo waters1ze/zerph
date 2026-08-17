@@ -9,7 +9,7 @@ import {
   BookOpen, HelpCircle, Lightbulb, Code2, ArrowRight,
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
   Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus,
-  Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History
+  Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -105,20 +105,126 @@ export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: 
 }
 
 const SAMPLE_MANIFEST = `{
-  "name": "Pomodoro Focus Master",
+  "name": "Entropy AI Search",
   "version": "1.0.0",
-  "description": "Интерактивный таймер фокуса с настраиваемыми звуками и интервалами для Zerf Note",
+  "description": "Интеллектуальный поисково-аналитический движок инсайтов в стиле Perplexity для Zerf Note",
   "type": "widget",
-  "category": "Виджеты & Фокус",
-  "icon": "⏱️",
+  "category": "ИИ & Промпты",
+  "icon": "🔮",
   "price": 0,
   "author": "ваш_github_логин",
   "config": {
-    "workMinutes": 25,
-    "breakMinutes": 5,
-    "soundAlert": true
+    "engine": "entropy_deep_search",
+    "commands": [
+      { "cmd": "/search", "description": "Поиск и синтез источников" },
+      { "cmd": "/entropy", "description": "Аналитика инсайтов" }
+    ],
+    "features": ["web_synthesis", "citations", "auto_note_export"]
   }
 }`
+
+export const EXTENSION_CATEGORIES = [
+  { id: 'Виджеты & Фокус', icon: '⏱️', label: 'Виджеты & Фокус', desc: 'Таймеры, интервалы, трекеры и виджеты' },
+  { id: 'ИИ & Промпты', icon: '🔮', label: 'ИИ & Промпты', desc: 'Поисковые движки, AI синтез, Perplexity, CLI' },
+  { id: 'Бизнес & Стартапы', icon: '🚀', label: 'Бизнес & Стартапы', desc: 'Запуск проектов, шаблоны задач, аналитика' },
+  { id: 'Привычки & Здоровье', icon: '💪', label: 'Привычки & Здоровье', desc: 'Спорт, гидратация, режим сна и баланс' },
+  { id: 'Утилиты & Экспорт', icon: '🔌', label: 'Утилиты & Экспорт', desc: 'Вебхуки, интеграции, экспорт заметок и CLI' },
+  { id: 'Темы & Стили', icon: '🌌', label: 'Темы & Стили', desc: 'Кастомные CSS стили, цвета и стеклянные темы' },
+]
+
+export const EXTENSION_TYPES: {
+  id: 'widget' | 'prompt' | 'template' | 'theme' | 'integration'
+  icon: string
+  label: string
+  desc: string
+  badge: string
+  defaultJson: any
+}[] = [
+  {
+    id: 'prompt',
+    icon: '🔮',
+    label: 'Поисковый ИИ движок (Perplexity / Search)',
+    desc: 'AI поиск, глубокий синтез источников, CLI команды /search и /entropy',
+    badge: 'AI Search',
+    defaultJson: {
+      engine: 'entropy_deep_search',
+      commands: [
+        { cmd: '/search', description: 'Entropy AI — Глубокий поиск и синтез источников' },
+        { cmd: '/entropy', description: 'Entropy AI — Запуск поисковой аналитики инсайтов' },
+      ],
+      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
+      maxSources: 5,
+    },
+  },
+  {
+    id: 'widget',
+    icon: '⏱️',
+    label: 'Интерактивный виджет',
+    desc: 'Интервальные таймеры, трекеры и интерактивный запуск ▶ в приложении',
+    badge: 'Widget',
+    defaultJson: {
+      widgetType: 'interval_focus',
+      workMinutes: 25,
+      breakMinutes: 5,
+      autoStartBreaks: true,
+      soundNotification: true,
+      sessionsBeforeLongBreak: 4,
+    },
+  },
+  {
+    id: 'template',
+    icon: '🎯',
+    label: 'Шаблон задач и чек-лист',
+    desc: 'Готовые наборы задач с быстрым добавлением в списки дел Zerf Note',
+    badge: 'Template',
+    defaultJson: {
+      templateType: 'project',
+      tasksCount: 6,
+      tasks: [
+        '1. CustDev интервью с 10 клиентами',
+        '2. Формирование ценностного предложения (Lean Canvas)',
+        '3. Создание кликабельного прототипа в Figma',
+        '4. Разработка MVP функционала за 14 дней',
+        '5. Подключение платежного шлюза и оферты',
+        '6. Запуск первых 3 рекламных каналов',
+      ],
+    },
+  },
+  {
+    id: 'theme',
+    icon: '🌌',
+    label: 'Тема оформления',
+    desc: 'Кастомные CSS палитры, неоновые акценты и стеклянные градиенты',
+    badge: 'Theme',
+    defaultJson: {
+      themeName: 'Cyberpunk Neon Glass',
+      colors: {
+        primary: '#8b5cf6',
+        accent: '#06b6d4',
+        background: '#09090b',
+        card: '#13131a',
+      },
+      borderRadius: '16px',
+      glassBlur: '12px',
+    },
+  },
+  {
+    id: 'integration',
+    icon: '🔌',
+    label: 'Интеграция & Вебхуки',
+    desc: 'Синхронизация данных, внешние REST API и вебхуки событий',
+    badge: 'Integration',
+    defaultJson: {
+      integrationType: 'webhook_sync',
+      endpoint: 'https://api.example.com/v1/zerf/events',
+      events: ['task_created', 'task_completed', 'note_saved'],
+      headers: {
+        Authorization: 'Bearer YOUR_TOKEN',
+      },
+      autoSyncIntervalMinutes: 15,
+    },
+  },
+]
 
 export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
   {
@@ -221,15 +327,17 @@ export function ExtensionsView() {
   const [formTitle, setFormTitle] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formIcon, setFormIcon] = useState('🧩')
-  const [formCategory, setFormCategory] = useState('Виджеты & Фокус')
-  const [formType, setFormType] = useState<'widget' | 'template' | 'theme' | 'integration' | 'prompt'>('widget')
+  const [formCategory, setFormCategory] = useState('ИИ & Промпты')
+  const [formType, setFormType] = useState<'widget' | 'template' | 'theme' | 'integration' | 'prompt'>('prompt')
+  const [isCategoryOpen, setIsCategoryOpen] = useState<boolean>(false)
+  const [isTypeOpen, setIsTypeOpen] = useState<boolean>(false)
   const [formMinPlan, setFormMinPlan] = useState<'free' | 'plus' | 'pro' | 'corp'>('free')
   const [formPrice, setFormPrice] = useState<number>(0)
   const [formVersion, setFormVersion] = useState('1.0.0')
   const [formIsPublished, setFormIsPublished] = useState<boolean>(false)
   const [formChangelog, setFormChangelog] = useState<string>('')
   const [formGithubUrl, setFormGithubUrl] = useState<string>('')
-  const [formCode, setFormCode] = useState('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
+  const [formCode, setFormCode] = useState(JSON.stringify(EXTENSION_TYPES[0].defaultJson, null, 2))
   const [isCompressingImage, setIsCompressingImage] = useState<boolean>(false)
   const formFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -481,21 +589,73 @@ export function ExtensionsView() {
     }
   }
 
+  const handleSelectType = (typeId: 'widget' | 'template' | 'theme' | 'integration' | 'prompt') => {
+    setFormType(typeId)
+    const matchingType = EXTENSION_TYPES.find(t => t.id === typeId)
+    if (matchingType) {
+      setFormCode(JSON.stringify(matchingType.defaultJson, null, 2))
+      if (!editingExt) {
+        if (typeId === 'prompt') {
+          setFormCategory('ИИ & Промпты')
+          setFormIcon('🔮')
+        } else if (typeId === 'widget') {
+          setFormCategory('Виджеты & Фокус')
+          setFormIcon('⏱️')
+        } else if (typeId === 'template') {
+          setFormCategory('Бизнес & Стартапы')
+          setFormIcon('🚀')
+        } else if (typeId === 'theme') {
+          setFormCategory('Темы & Стили')
+          setFormIcon('🌌')
+        } else if (typeId === 'integration') {
+          setFormCategory('Утилиты & Экспорт')
+          setFormIcon('🔌')
+        }
+      }
+    }
+    setIsTypeOpen(false)
+  }
+
+  const handleSelectCategory = (catId: string) => {
+    setFormCategory(catId)
+    setIsCategoryOpen(false)
+  }
+
+  const handleFormatFormJson = () => {
+    try {
+      const parsed = JSON.parse(formCode)
+      setFormCode(JSON.stringify(parsed, null, 2))
+      alert('✓ JSON успешно отформатирован и проверен!')
+    } catch (e: any) {
+      alert(`Ошибка в JSON: ${e.message || 'неверный синтаксис'}`)
+    }
+  }
+
+  const handleApplyPresetJson = (typeId: 'widget' | 'template' | 'theme' | 'integration' | 'prompt') => {
+    const matchingType = EXTENSION_TYPES.find(t => t.id === typeId)
+    if (matchingType) {
+      setFormCode(JSON.stringify(matchingType.defaultJson, null, 2))
+    }
+  }
+
   const handleOpenCreate = () => {
     setEditingExt(null)
     setFormTitle('')
     setFormDescription('')
-    setFormIcon('🧩')
-    setFormCategory('Виджеты & Фокус')
-    setFormType('widget')
+    setFormIcon('🔮')
+    setFormCategory('ИИ & Промпты')
+    setFormType('prompt')
     setFormMinPlan('free')
     setFormPrice(0)
     setFormVersion('1.0.0')
     setFormIsPublished(false) // Default to unpublished draft
     setFormChangelog('')
     setFormGithubUrl('')
-    setFormCode('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
+    const defaultTemplate = EXTENSION_TYPES.find(t => t.id === 'prompt')?.defaultJson || {}
+    setFormCode(JSON.stringify(defaultTemplate, null, 2))
     setEditorActiveTab('general')
+    setIsCategoryOpen(false)
+    setIsTypeOpen(false)
     setShowEditorModal(true)
   }
 
@@ -504,7 +664,7 @@ export function ExtensionsView() {
     setFormTitle(ext.title || '')
     setFormDescription(ext.description || '')
     setFormIcon(ext.icon || '🧩')
-    setFormCategory(ext.category || 'Виджеты & Фокус')
+    setFormCategory(ext.category || 'ИИ & Промпты')
     setFormType(ext.type || 'widget')
     setFormMinPlan(ext.minPlan || 'free')
     setFormPrice(ext.price || 0)
@@ -514,6 +674,8 @@ export function ExtensionsView() {
     setFormGithubUrl(ext.githubUrl || '')
     setFormCode(JSON.stringify(ext.content || {}, null, 2))
     setEditorActiveTab('general')
+    setIsCategoryOpen(false)
+    setIsTypeOpen(false)
     setShowEditorModal(true)
   }
 
@@ -2074,36 +2236,125 @@ export function ExtensionsView() {
                     />
                   </div>
 
-                  {/* Category & Type */}
+                  {/* Category & Type Custom Dropdowns */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                    {/* 1. Custom Category Dropdown */}
+                    <div className="relative space-y-1">
                       <label className="font-semibold text-foreground text-[11px] block">Категория:</label>
-                      <select
-                        value={formCategory}
-                        onChange={e => setFormCategory(e.target.value)}
-                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCategoryOpen(!isCategoryOpen)
+                          setIsTypeOpen(false)
+                        }}
+                        className="w-full h-10 px-3 rounded-xl bg-muted/40 hover:bg-muted/60 border border-border text-foreground flex items-center justify-between text-xs transition-colors cursor-pointer"
                       >
-                        <option value="Виджеты & Фокус">⏱️ Виджеты & Фокус</option>
-                        <option value="Бизнес & Стартапы">🚀 Бизнес & Стартапы</option>
-                        <option value="Привычки & Здоровье">💪 Привычки & Здоровье</option>
-                        <option value="ИИ & Промпты">🤖 ИИ & Промпты</option>
-                        <option value="Утилиты & Экспорт">🔌 Утилиты & Экспорт</option>
-                      </select>
+                        <div className="flex items-center gap-2 font-medium truncate">
+                          <span>{EXTENSION_CATEGORIES.find(c => c.id === formCategory)?.icon || '📁'}</span>
+                          <span className="truncate">{formCategory}</span>
+                        </div>
+                        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 shrink-0", isCategoryOpen && "rotate-180")} />
+                      </button>
+
+                      <AnimatePresence>
+                        {isCategoryOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setIsCategoryOpen(false)} />
+                            <motion.div
+                              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute top-full left-0 right-0 mt-1.5 p-1.5 rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-2xl z-50 space-y-1 max-h-60 overflow-y-auto"
+                            >
+                              {EXTENSION_CATEGORIES.map(cat => (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  onClick={() => handleSelectCategory(cat.id)}
+                                  className={cn(
+                                    "w-full p-2 rounded-xl text-left flex items-center justify-between transition-colors cursor-pointer",
+                                    formCategory === cat.id
+                                      ? "bg-primary/15 text-primary border border-primary/25"
+                                      : "hover:bg-muted/80 text-foreground"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="text-base shrink-0">{cat.icon}</span>
+                                    <div className="truncate">
+                                      <div className="font-semibold text-xs leading-tight truncate">{cat.label}</div>
+                                      <div className="text-[10px] text-muted-foreground truncate">{cat.desc}</div>
+                                    </div>
+                                  </div>
+                                  {formCategory === cat.id && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                                </button>
+                              ))}
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
                     </div>
 
-                    <div className="space-y-1">
+                    {/* 2. Custom Module Type Dropdown */}
+                    <div className="relative space-y-1">
                       <label className="font-semibold text-foreground text-[11px] block">Тип модуля:</label>
-                      <select
-                        value={formType}
-                        onChange={e => setFormType(e.target.value as any)}
-                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTypeOpen(!isTypeOpen)
+                          setIsCategoryOpen(false)
+                        }}
+                        className="w-full h-10 px-3 rounded-xl bg-muted/40 hover:bg-muted/60 border border-border text-foreground flex items-center justify-between text-xs transition-colors cursor-pointer"
                       >
-                        <option value="widget">Интерактивный виджет</option>
-                        <option value="template">Шаблон задач</option>
-                        <option value="theme">Тема оформления</option>
-                        <option value="integration">Интеграция</option>
-                        <option value="prompt">AI Промпт</option>
-                      </select>
+                        <div className="flex items-center gap-2 font-medium truncate">
+                          <span>{EXTENSION_TYPES.find(t => t.id === formType)?.icon || '🧩'}</span>
+                          <span className="truncate">{EXTENSION_TYPES.find(t => t.id === formType)?.label || formType}</span>
+                        </div>
+                        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 shrink-0", isTypeOpen && "rotate-180")} />
+                      </button>
+
+                      <AnimatePresence>
+                        {isTypeOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setIsTypeOpen(false)} />
+                            <motion.div
+                              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute top-full left-0 right-0 mt-1.5 p-1.5 rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-2xl z-50 space-y-1 max-h-72 overflow-y-auto"
+                            >
+                              {EXTENSION_TYPES.map(t => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => handleSelectType(t.id)}
+                                  className={cn(
+                                    "w-full p-2.5 rounded-xl text-left flex items-start justify-between transition-colors cursor-pointer",
+                                    formType === t.id
+                                      ? "bg-primary/15 text-primary border border-primary/25"
+                                      : "hover:bg-muted/80 text-foreground"
+                                  )}
+                                >
+                                  <div className="flex items-start gap-2.5 min-w-0">
+                                    <span className="text-base shrink-0 mt-0.5">{t.icon}</span>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-semibold text-xs leading-tight">{t.label}</span>
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground font-mono">
+                                          {t.badge}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{t.desc}</div>
+                                    </div>
+                                  </div>
+                                  {formType === t.id && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2 mt-1" />}
+                                </button>
+                              ))}
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
                 </div>
@@ -2291,23 +2542,53 @@ export function ExtensionsView() {
 
               {/* TAB 4: JSON CODE & MANIFEST */}
               {editorActiveTab === 'code' && (
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between">
-                    <label className="font-semibold text-foreground text-[11px] flex items-center gap-1.5">
-                      <FileCode className="w-3.5 h-3.5 text-primary" />
-                      <span>Параметры конфигурации / content JSON:</span>
-                    </label>
-                    <span className="text-[10px] text-muted-foreground font-mono">JSON format</span>
+                <div className="space-y-3 pt-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="font-semibold text-foreground text-[11px] flex items-center gap-1.5">
+                        <FileCode className="w-3.5 h-3.5 text-primary" />
+                        <span>Параметры конфигурации / content JSON:</span>
+                      </label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Настройте параметры, CLI команды (/search, /entropy), интервалы и правила
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleFormatFormJson}
+                      className="px-3 py-1.5 rounded-xl bg-card hover:bg-muted border border-border text-foreground font-semibold text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs self-start sm:self-auto"
+                    >
+                      <Sparkles className="w-3 h-3 text-primary" />
+                      <span>Форматировать JSON</span>
+                    </button>
                   </div>
+
+                  {/* Quick Presets for Templates */}
+                  <div className="p-2.5 rounded-2xl bg-muted/30 border border-border space-y-1.5">
+                    <span className="text-[10px] font-bold text-muted-foreground block">
+                      Быстро вставить готовый шаблон схемы:
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {EXTENSION_TYPES.map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleApplyPresetJson(preset.id)}
+                          className="px-2.5 py-1 rounded-xl bg-card hover:bg-muted border border-border text-foreground text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <span>{preset.icon}</span>
+                          <span>{preset.badge}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <textarea
                     value={formCode}
                     onChange={e => setFormCode(e.target.value)}
-                    rows={10}
-                    className="w-full p-3 rounded-2xl bg-muted/40 border border-border font-mono text-[11px] text-foreground outline-none focus:border-primary resize-none"
+                    rows={11}
+                    className="w-full p-3 rounded-2xl bg-muted/40 border border-border font-mono text-[11px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"
                   />
-                  <p className="text-[10px] text-muted-foreground">
-                    Здесь хранятся команды (<code>commands</code>), параметры виджета, интервалы и правила интеграции.
-                  </p>
                 </div>
               )}
 
