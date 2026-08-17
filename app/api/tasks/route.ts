@@ -12,7 +12,7 @@ import {
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
   createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage, syncFriendBirthdays,
-  touchUserLastActive, createHabit, updateHabit, deleteHabit,
+  touchUserLastActive, createHabit, updateHabit, deleteHabit, isBirthdayOrHolidayTask,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
@@ -111,7 +111,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.itemType === 'note' || body.type === 'note') {
-      // Notes are unlimited on every plan
+      if (ownerChatId) {
+        const limits = await getUserUsageAndLimits(ownerChatId)
+        if (!limits.canCreateNote) {
+          return NextResponse.json({
+            error: `❌ Лимит заметок для бесплатного тарифа исчерпан (${limits.notes.max} заметок). Удалите старые заметки или оформите Zerf Plus для безлимита!`,
+            limitReached: true,
+          }, { status: 403 })
+        }
+      }
+
       const note = await createNote({
         title: body.title || 'Новая заметка',
         content: body.content || '',
@@ -139,6 +148,19 @@ export async function POST(req: NextRequest) {
         ownerChatId: ownerChatId,
       })
       return NextResponse.json(serialize({ success: true, habit }))
+    }
+
+    if (ownerChatId && (body.dueTime || body.dueDate)) {
+      const isHoliday = isBirthdayOrHolidayTask(body)
+      if (!isHoliday) {
+        const limits = await getUserUsageAndLimits(ownerChatId)
+        if (!limits.canCreateReminder) {
+          return NextResponse.json({
+            error: `❌ Достигнут лимит активных напоминаний (${limits.reminders.max} одновременно на бесплатном тарифе). Выполните или удалите старые напоминания либо оформите Zerf Plus!`,
+            limitReached: true,
+          }, { status: 403 })
+        }
+      }
     }
 
     const task = await createTask({

@@ -44,6 +44,41 @@ export async function incrementDailyCount(
   }
 }
 
+// ── Lifetime usage counters (Config-backed, total across all time) ──────
+
+function lifetimeCounterKey(kind: string, chatId: string | number | bigint): string {
+  return `cnt_lifetime_${kind}_${chatId}`
+}
+
+export async function getLifetimeCount(kind: string, chatId: string | number | bigint): Promise<number> {
+  try {
+    const row = await prisma.config.findUnique({ where: { key: lifetimeCounterKey(kind, chatId) } })
+    return row ? parseInt(row.value, 10) || 0 : 0
+  } catch {
+    return 0
+  }
+}
+
+export async function incrementLifetimeCount(
+  kind: string,
+  chatId: string | number | bigint,
+  by = 1
+): Promise<number> {
+  const key = lifetimeCounterKey(kind, chatId)
+  try {
+    const existing = await prisma.config.findUnique({ where: { key } })
+    const nextVal = (parseInt(existing?.value || '0', 10) || 0) + by
+    const row = await prisma.config.upsert({
+      where: { key },
+      update: { value: String(nextVal) },
+      create: { key, value: String(by) },
+    })
+    return parseInt(row.value, 10) || 0
+  } catch {
+    return 0
+  }
+}
+
 // Counter kinds used across the app
 export const COUNTERS = {
   siri: 'siri',

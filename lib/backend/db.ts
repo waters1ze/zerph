@@ -8,7 +8,7 @@ import { ParsedItem, stringSimilarity, generateReminderContext, extractCleanReci
 import { ROOT_ADMIN_IDS } from './admin'
 import { tokenMatchesCandidateName } from './name-aliases'
 import { createServerSession } from './auth'
-import { PLANS, normalizePlan, planAtLeast, getDailyCount, COUNTERS } from './plans'
+import { PLANS, normalizePlan, planAtLeast, getDailyCount, getLifetimeCount, COUNTERS } from './plans'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
@@ -2523,6 +2523,55 @@ export async function markReminderSent(id: string, actorChatId?: number | bigint
 
 // ── Subscriptions & Daily Usage Limits ─────────────────────────────────────────
 
+export function isBirthdayOrHolidayTask(task: { title?: string | null; folder?: string | null; tags?: string[] | null }): boolean {
+  const titleLower = (task.title || '').toLowerCase()
+  const folderLower = (task.folder || '').toLowerCase()
+  const tagsStr = (task.tags || []).join(' ').toLowerCase()
+  const fullText = `${titleLower} ${folderLower} ${tagsStr}`
+
+  // Standalone 'др', 'д.р.' or 'др.' check with unicode boundary (avoids false matches like 'друг')
+  if (/(?:^|[^а-яёa-z0-9])(?:др|д\.р\.|др\.)(?:$|[^а-яёa-z0-9])/i.test(fullText)) {
+    return true
+  }
+
+  const keywords = [
+    'день рождения', 'день рождение', 'дня рождения', 'дню рождения', 'днем рождения',
+    'birthday', 'bday', 'праздник', 'праздники', 'праздником', 'holiday',
+    'новый год', '8 марта', '23 февраля', 'пасха', 'рождество', 'юбилей', 'годовщина'
+  ]
+  return keywords.some(kw => fullText.includes(kw))
+}
+
+export async function getActiveRemindersCount(ownerChatId: number | bigint | string): Promise<number> {
+  try {
+    const cid = BigInt(ownerChatId)
+    const tasks = await prisma.task.findMany({
+      where: {
+        ownerChatId: cid,
+        status: { notIn: ['done', 'draft'] },
+        OR: [
+          { dueTime: { not: null } },
+          { dueDate: { not: null } }
+        ]
+      },
+      select: { title: true, tags: true }
+    })
+
+    return tasks.filter(t => !isBirthdayOrHolidayTask(t)).length
+  } catch {
+    return 0
+  }
+}
+
+export async function getStoredNotesCount(ownerChatId: number | bigint | string): Promise<number> {
+  try {
+    const cid = BigInt(ownerChatId)
+    return await prisma.note.count({ where: { ownerChatId: cid } })
+  } catch {
+    return 0
+  }
+}
+
 export interface UserUsageLimits {
   /** Normalized plan id (legacy premium -> plus, unlimited -> corp) */
   plan: 'free' | 'plus' | 'pro' | 'corp'
@@ -2539,6 +2588,10 @@ export interface UserUsageLimits {
     used: number
     max: number
   }
+  reminders: {
+    used: number
+    max: number
+  }
   chat: {
     used: number
     max: number
@@ -2548,6 +2601,7 @@ export interface UserUsageLimits {
   goals: { used: number; max: number }
   canSendVoice: boolean
   canCreateNote: boolean
+  canCreateReminder: boolean
   canSendChatMessage: boolean
   canUseSiri: boolean
   canUsePhoto: boolean
@@ -2560,13 +2614,15 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
     isPaid: false,
     subscriptionExpiry: null,
     voice: { used: 0, max: PLANS.free.voiceSecondsPerDay, secondsUsed: 0, maxSeconds: PLANS.free.voiceSecondsPerDay },
-    notes: { used: 0, max: PLANS.free.notesPerDay },
+    notes: { used: 0, max: PLANS.free.maxStoredNotes },
+    reminders: { used: 0, max: PLANS.free.maxActiveReminders },
     chat: { used: 0, max: PLANS.free.chatMessagesPerDay },
-    siri: { used: 0, max: PLANS.free.siriRequestsPerDay },
+    siri: { used: 0, max: PLANS.free.siriLifetimeRequests },
     photos: { used: 0, max: PLANS.free.photosPerDay },
     goals: { used: 0, max: PLANS.free.goalsPerDay },
     canSendVoice: true,
     canCreateNote: true,
+    canCreateReminder: true,
     canSendChatMessage: true,
     canUseSiri: true,
     canUsePhoto: false,
@@ -2620,14 +2676,18 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
 
     const limits = PLANS[planId]
 
-    const [siriUsed, photoUsed, goalUsed] = await Promise.all([
-      getDailyCount(COUNTERS.siri, chatIdStr),
+    const [siriLifetimeUsed, photoUsed, goalUsed, activeRemindersCount, storedNotesCount] = await Promise.all([
+      getLifetimeCount(COUNTERS.siri, chatIdStr),
       getDailyCount(COUNTERS.photo, chatIdStr),
       getDailyCount(COUNTERS.goal, chatIdStr),
+      getActiveRemindersCount(cid),
+      getStoredNotesCount(cid),
     ])
 
     const canSendVoice = chat.voiceSecondsToday < limits.voiceSecondsPerDay
-    const canUseSiri = siriUsed < limits.siriRequestsPerDay
+    const canUseSiri = planId === 'free' ? siriLifetimeUsed < limits.siriLifetimeRequests : true
+    const canCreateNote = storedNotesCount < limits.maxStoredNotes
+    const canCreateReminder = activeRemindersCount < limits.maxActiveReminders
     const canUsePhoto = limits.photosPerDay > 0 && photoUsed < limits.photosPerDay
     const canCreateGoal = goalUsed < limits.goalsPerDay
 
@@ -2641,13 +2701,15 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
         secondsUsed: chat.voiceSecondsToday,
         maxSeconds: limits.voiceSecondsPerDay,
       },
-      notes: { used: chat.notesCountToday, max: limits.notesPerDay },
+      notes: { used: storedNotesCount, max: limits.maxStoredNotes },
+      reminders: { used: activeRemindersCount, max: limits.maxActiveReminders },
       chat: { used: chat.chatMessagesToday, max: limits.chatMessagesPerDay },
-      siri: { used: siriUsed, max: limits.siriRequestsPerDay },
+      siri: { used: siriLifetimeUsed, max: limits.siriLifetimeRequests },
       photos: { used: photoUsed, max: limits.photosPerDay },
       goals: { used: goalUsed, max: limits.goalsPerDay },
       canSendVoice,
-      canCreateNote: chat.notesCountToday < limits.notesPerDay,
+      canCreateNote,
+      canCreateReminder,
       canSendChatMessage: chat.chatMessagesToday < limits.chatMessagesPerDay,
       canUseSiri,
       canUsePhoto,

@@ -106,9 +106,9 @@ export async function runReminderCheck() {
       if (!q) {
         try {
           const limits = await getUserUsageAndLimits(chatId)
-          q = { used: await getDailyCount(COUNTERS.reminder, key), max: PLANS[limits.plan].remindersPerDay }
+          q = { used: await getDailyCount(COUNTERS.reminder, key), max: PLANS[limits.plan].maxActiveReminders }
         } catch {
-          q = { used: 0, max: PLANS.free.remindersPerDay }
+          q = { used: 0, max: PLANS.free.maxActiveReminders }
         }
         reminderQuota.set(key, q)
       }

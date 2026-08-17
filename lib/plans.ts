@@ -38,12 +38,12 @@ export const PLAN_NAMES_RU: Record<PlanId, string> = {
 export const UNLIMITED = Number.POSITIVE_INFINITY
 
 export interface PlanLimits {
-  /** Notes creation per day */
-  notesPerDay: number
-  /** Reminder notifications pushed per day */
-  remindersPerDay: number
-  /** Siri / Apple Shortcuts requests per day */
-  siriRequestsPerDay: number
+  /** Maximum active stored notes in user account */
+  maxStoredNotes: number
+  /** Maximum active non-holiday/non-birthday reminders simultaneously */
+  maxActiveReminders: number
+  /** Lifetime Siri / Apple Shortcuts requests */
+  siriLifetimeRequests: number
   /** Total voice recognition seconds per day */
   voiceSecondsPerDay: number
   /** Photo (OCR) recognitions per day — 0 = feature locked */
@@ -60,10 +60,10 @@ export interface PlanLimits {
 
 export const PLANS: Record<PlanId, PlanLimits> = {
   free: {
-    notesPerDay: UNLIMITED,
-    remindersPerDay: 5,
-    siriRequestsPerDay: 10,
-    voiceSecondsPerDay: 60,
+    maxStoredNotes: 20,
+    maxActiveReminders: 10,
+    siriLifetimeRequests: 10,
+    voiceSecondsPerDay: 90, // 1 мин 30 сек в день
     photosPerDay: 0,
     goalsPerDay: 5,
     chatMessagesPerDay: 10,
@@ -71,20 +71,20 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     canDisableNews: false,
   },
   plus: {
-    notesPerDay: UNLIMITED,
-    remindersPerDay: UNLIMITED,
-    siriRequestsPerDay: UNLIMITED,
-    voiceSecondsPerDay: 300,
-    photosPerDay: 10,
+    maxStoredNotes: UNLIMITED,
+    maxActiveReminders: UNLIMITED,
+    siriLifetimeRequests: UNLIMITED,
+    voiceSecondsPerDay: 900, // 15 минут в день
+    photosPerDay: 15,
     goalsPerDay: UNLIMITED,
     chatMessagesPerDay: UNLIMITED,
     sharedRequiresPlan: null,
     canDisableNews: true,
   },
   pro: {
-    notesPerDay: UNLIMITED,
-    remindersPerDay: UNLIMITED,
-    siriRequestsPerDay: UNLIMITED,
+    maxStoredNotes: UNLIMITED,
+    maxActiveReminders: UNLIMITED,
+    siriLifetimeRequests: UNLIMITED,
     voiceSecondsPerDay: UNLIMITED,
     photosPerDay: UNLIMITED,
     goalsPerDay: UNLIMITED,
@@ -93,9 +93,9 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     canDisableNews: true,
   },
   corp: {
-    notesPerDay: UNLIMITED,
-    remindersPerDay: UNLIMITED,
-    siriRequestsPerDay: UNLIMITED,
+    maxStoredNotes: UNLIMITED,
+    maxActiveReminders: UNLIMITED,
+    siriLifetimeRequests: UNLIMITED,
     voiceSecondsPerDay: UNLIMITED,
     photosPerDay: UNLIMITED,
     goalsPerDay: UNLIMITED,
@@ -125,10 +125,10 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     tagline: 'Начните пользоваться прямо сейчас',
     features: [
       '🤖 ИИ: Llama 3.1 8B / Qwen 7B',
-      '∞ заметок',
-      '5 напоминаний в день',
-      '10 запросов Siri в день',
-      'Голосовое распознавание: 1 мин в день',
+      'До 20 заметок в аккаунте',
+      'До 10 активных напоминаний (кроме праздников и ДР)',
+      '10 запросов Siri за всё время',
+      'Голосовое распознавание: 1:30 мин в день',
       '5 целей в день',
       'Общие задачи: нужен Plus у одного из участников',
     ],
@@ -142,11 +142,11 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     tagline: 'Для ежедневной продуктивности',
     features: [
       '🤖 ИИ: Qwen 3.6 27B (продвинутая логика)',
-      '∞ заметок',
-      '∞ напоминаний',
+      '∞ заметок без ограничений',
+      '∞ напоминаний без ограничений',
       '∞ запросов Siri',
-      'Голос: до 5 минут в день',
-      'Распознавание по фото: 10 в день',
+      'Голос: до 15 минут в день',
+      'Распознавание по фото: 15 в день',
       '∞ целей в день',
       'Отключение новостных сводок',
     ],
@@ -157,12 +157,16 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     aiModel: 'GPT-OSS 120B Flagship',
     priceMonthly: 299,
     priceYearly: 3049,
-    tagline: 'Полная свобода без лимитов ввода',
+    tagline: 'Максимальный интеллект и глубокая автоматизация',
     features: [
       '🧠 Флагманский ИИ: GPT-OSS 120B',
       'Всё из Plus',
       '∞ голосовых распознаваний',
-      '∞ распознаваний по фото',
+      '∞ распознаваний по фото и конспектам',
+      '🚀 AI-декомпозиция проектов и сложных целей в 1 клик',
+      '⚡ Smart Reschedule: авто-перепланирование дня при сдвигах',
+      '📊 Еженедельная персональная AI-аналитика продуктивности',
+      '🎙 Выделенный приоритетный поток обработки запросов',
     ],
   },
   {
@@ -171,11 +175,16 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     aiModel: 'GPT-OSS 120B Flagship',
     priceMonthly: null,
     priceYearly: null,
-    tagline: 'Для команд — всё безлимитно',
+    tagline: 'Для команд и организаций — всё без ограничений',
     features: [
-      '🧠 Флагманский ИИ: GPT-OSS 120B',
-      'Все возможности без ограничений',
-      'Тариф по запросу',
+      '🧠 Флагманский ИИ: GPT-OSS 120B + кастомные промпты',
+      'Все возможности тарифа Pro без ограничений',
+      '🏢 Неограниченные командные пространства (Workspaces)',
+      '👥 Роли участников (Admin, Member, Viewer) и контроль доступов',
+      '📁 Командные Kanban-доски, проекты и вехи (Milestones)',
+      '📊 Командный трекинг эффективности и выполнения KPI',
+      '🔐 Корпоративный аудит-лог сессий и безопасность данных',
+      '📞 Персональный менеджер и интеграции (API / Webhooks / Группы TG)',
     ],
   },
 ]

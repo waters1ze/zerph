@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
       if (!limits.canSendVoice) {
         return NextResponse.json({
           error: planAtLeast(limits.plan, 'plus')
-            ? `❌ Достигнут лимит голосового ввода на сегодня (${Math.round(limits.voice.maxSeconds / 60)} мин). Наступит сброс завтра!`
-            : '❌ Достигнут дневной лимит (1 минута голоса в день). Оформите Zerf Plus (5 мин/день) или Pro (безлимит) в Настройках!',
+            ? `❌ Достигнут дневной лимит голосового ввода (${Math.round(limits.voice.maxSeconds / 60)} мин). Оформите Zerf Pro для безлимита!`
+            : '❌ Достигнут дневной лимит голосового ввода (1:30 мин в день на бесплатном тарифе). Оформите Zerf Plus (15 мин/день) или Pro (безлимит) в Настройках!',
           limitReached: true,
         }, { status: 403 })
       }
