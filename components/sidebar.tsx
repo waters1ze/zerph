@@ -242,7 +242,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
             <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-xs shadow-xs">
               Z
             </div>
-            <span className="font-bold text-sm text-foreground tracking-tight">Zerf AI</span>
+            <span className="font-bold text-sm text-foreground tracking-tight">Zerf Note</span>
           </div>
         )}
 

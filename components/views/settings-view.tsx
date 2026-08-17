@@ -10,7 +10,7 @@ import {
   User, Users, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
-  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid
+  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -77,7 +77,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
   { value: 3,  label: 'A' },
 ]
 
-type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'sidebar' | 'pwa' | 'data'
+type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
 
 export function SettingsView() {
   const { state, dispatch, syncData } = useApp()
@@ -545,6 +545,7 @@ export function SettingsView() {
       items: [
         { id: 'appearance' as SettingsTab, label: 'Оформление & Цвета', icon: Palette, desc: 'Светлая/тёмная тема, палитра акцентов' },
         { id: 'sidebar' as SettingsTab, label: 'Меню & Панели', icon: LayoutGrid, desc: 'Скрытие разделов, папки, кастомизация боковой панели' },
+        { id: 'extensions' as SettingsTab, label: 'Расширения & GitHub', icon: Puzzle, desc: 'Управление открытыми плагинами и репозиториями' },
         { id: 'pwa' as SettingsTab, label: 'PWA Приложение', icon: Smartphone, desc: 'Установка на экран телефона и рабочий стол ПК' },
       ],
     },
@@ -2186,6 +2187,46 @@ export function SettingsView() {
       {/* ── TAB 10: Sidebar & Menu Customizer ─────────────────────────────────── */}
       {activeTab === 'sidebar' && (
         <SidebarCustomizerSection />
+      )}
+
+      {/* ── TAB 11: Extensions & GitHub Store Jump ───────────────────────────── */}
+      {activeTab === 'extensions' && (
+        <div className="space-y-4 text-xs">
+          <Section title="Расширения и открытые плагины">
+            <div className="p-6 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl">
+                  🧩
+                </div>
+                <div>
+                  <h4 className="font-bold text-foreground text-sm">Магазин расширений Zerf Note</h4>
+                  <p className="text-[11px] text-muted-foreground">Подключение виджетов, кастомных тем и шаблонов из GitHub</p>
+                </div>
+              </div>
+              <p className="text-muted-foreground leading-relaxed text-[11px]">
+                Zerf Note поддерживает открытые расширения из репозиториев GitHub. Создавайте свои виджеты и манифесты, публикуйте их для сообщества и получайте 80% с каждой продажи.
+              </p>
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Puzzle className="w-3.5 h-3.5" />
+                  <span>Открыть магазин расширений</span>
+                </button>
+                <a
+                  href="https://github.com/new"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Создать репозиторий на GitHub</span>
+                </a>
+              </div>
+            </div>
+          </Section>
+        </div>
       )}
 
         </div>

@@ -7,7 +7,8 @@ import {
   DollarSign, Sparkles, Layout, Palette, Zap, Eye,
   Search, Shield, Crown, TrendingUp, AlertCircle, ArrowUpRight,
   BookOpen, HelpCircle, Lightbulb, Code2, ArrowRight,
-  RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch
+  RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
+  Flame, CheckSquare, Play, Clock
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -24,7 +25,7 @@ function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
 const SAMPLE_MANIFEST = `{
   "name": "Pomodoro Focus Master",
   "version": "1.0.0",
-  "description": "Интерактивный таймер фокуса с настраиваемыми звуками и интервалами",
+  "description": "Интерактивный таймер фокуса с настраиваемыми звуками и интервалами для Zerf Note",
   "type": "widget",
   "category": "Виджеты & Фокус",
   "icon": "⏱️",
@@ -38,9 +39,10 @@ const SAMPLE_MANIFEST = `{
 }`
 
 export function ExtensionsView() {
-  const { dispatch } = useApp()
+  const { dispatch, syncData } = useApp()
   const [catalog, setCatalog] = useState<ExtensionItem[]>([])
   const [installedIds, setInstalledIds] = useState<string[]>([])
+  const [likedIds, setLikedIds] = useState<string[]>([])
   const [userPlan, setUserPlan] = useState<string>('free')
   const [canCreate, setCanCreate] = useState<boolean>(false)
   const [authorStats, setAuthorStats] = useState({ balance: 0, totalEarned: 0, salesCount: 0 })
@@ -48,10 +50,12 @@ export function ExtensionsView() {
 
   const [activeTab, setActiveTab] = useState<'store' | 'installed' | 'my' | 'earnings'>('store')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<'top_likes' | 'popular' | 'newest'>('top_likes')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
-  // Modals
+  // Modals & Interactive preview
   const [selectedExt, setSelectedExt] = useState<ExtensionItem | null>(null)
+  const [activeWidgetExt, setActiveWidgetExt] = useState<ExtensionItem | null>(null)
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false)
   const [showSpecModal, setShowSpecModal] = useState<boolean>(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -76,6 +80,7 @@ export function ExtensionsView() {
       if (data.success) {
         setCatalog(data.catalog || [])
         setInstalledIds(data.installedIds || [])
+        setLikedIds(data.likedIds || [])
         setUserPlan(data.userPlan || 'free')
         setCanCreate(Boolean(data.canCreateExtensions))
         setAuthorStats(data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 })
@@ -90,6 +95,53 @@ export function ExtensionsView() {
   useEffect(() => {
     fetchExtensions()
   }, [])
+
+  const handleToggleLike = async (ext: ExtensionItem) => {
+    const isLiked = likedIds.includes(ext.id)
+    const nextLiked = isLiked ? likedIds.filter(id => id !== ext.id) : [...likedIds, ext.id]
+    setLikedIds(nextLiked)
+
+    // Optimistic UI update
+    setCatalog(prev => prev.map(item => {
+      if (item.id === ext.id) {
+        return {
+          ...item,
+          likesCount: Math.max(0, (item.likesCount || 0) + (isLiked ? -1 : 1))
+        }
+      }
+      return item
+    }))
+
+    try {
+      await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'like', extensionId: ext.id }),
+      })
+    } catch {}
+  }
+
+  const handleApplyTemplate = async (ext: ExtensionItem) => {
+    try {
+      setActionLoading(`apply_${ext.id}`)
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'apply_template', extensionId: ext.id }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await syncData()
+        alert(`🎉 Шаблон «${ext.title}» успешно применён! В ваш список задач добавлено +${data.createdCount} пунктов.`)
+      } else {
+        alert(data.error || 'Ошибка применения шаблона')
+      }
+    } catch {
+      alert('Ошибка применения шаблона')
+    } finally {
+      setActionLoading(null)
+    }
+  }
 
   const handleParseGithub = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -108,7 +160,7 @@ export function ExtensionsView() {
       if (data.success) {
         setParsedManifest(data.manifest)
       } else {
-        setParseError(data.error || 'Не удалось найти zerf-extension.json в репозитории')
+        setParseError(data.error || 'Не найден файл zerf-extension.json в ветке main/master репозитория')
       }
     } catch {
       setParseError('Ошибка проверки репозитория на GitHub')
@@ -143,7 +195,7 @@ export function ExtensionsView() {
         setGithubUrl('')
         setParsedManifest(null)
         fetchExtensions()
-        alert(`🎉 Расширение «${parsedManifest.title}» успешно загружено из GitHub и опубликовано в каталоге!`)
+        alert(`🎉 Расширение «${parsedManifest.title}» успешно загружено из GitHub и опубликовано в каталоге Zerf Note!`)
       } else {
         alert(data.error || 'Ошибка публикации')
       }
@@ -254,9 +306,9 @@ export function ExtensionsView() {
     } catch {}
   }
 
-  // Filtered lists
+  // Filtered and Sorted catalog
   const filteredCatalog = useMemo(() => {
-    return catalog.filter(ext => {
+    const list = catalog.filter(ext => {
       const matchesSearch = ext.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -265,7 +317,18 @@ export function ExtensionsView() {
       if (selectedCategory === 'all') return matchesSearch
       return matchesSearch && ext.type === selectedCategory
     })
-  }, [catalog, selectedCategory, searchQuery])
+
+    if (sortBy === 'top_likes') {
+      return list.sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0))
+    }
+    if (sortBy === 'popular') {
+      return list.sort((a, b) => (b.installCount || 0) - (a.installCount || 0))
+    }
+    if (sortBy === 'newest') {
+      return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+    return list
+  }, [catalog, selectedCategory, searchQuery, sortBy])
 
   const installedExtensions = useMemo(() => {
     return catalog.filter(ext => installedIds.includes(ext.id))
@@ -286,11 +349,11 @@ export function ExtensionsView() {
               🧩
             </div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground">
-              Магазин расширений & GitHub Plugins
+              Магазин расширений & GitHub Plugins · Zerf Note
             </h1>
           </div>
           <p className="text-xs md:text-sm text-muted-foreground max-w-2xl leading-relaxed">
-            Платформа открытых расширений: создавайте репозитории на GitHub с манифестом <b>`zerf-extension.json`</b>, подключайте их к Zerf без расхода ИИ-токенов и получайте <b>80%</b> с каждой продажи!
+            Создавайте свои репозитории на GitHub с манифестом <b>`zerf-extension.json`</b>, подключайте интерактивные виджеты и темы в Zerf Note без расхода токенов и получайте <b>80%</b> авторских выплат!
           </p>
         </div>
 
@@ -367,7 +430,7 @@ export function ExtensionsView() {
       {/* ── TAB 1: STORE / CATALOG ── */}
       {activeTab === 'store' && (
         <div className="space-y-5">
-          {/* Filters and Search Bar */}
+          {/* Filters, Top sorting and Search Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
               {[
@@ -392,15 +455,50 @@ export function ExtensionsView() {
               ))}
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по названию или GitHub..."
-                className="w-full h-8 pl-8 pr-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
-              />
+            <div className="flex items-center gap-2">
+              {/* Sorting Pills */}
+              <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border shrink-0 text-xs">
+                <button
+                  onClick={() => setSortBy('top_likes')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer font-medium',
+                    sortBy === 'top_likes' ? 'bg-card text-foreground font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  title="Топ по лайкам и сердечкам"
+                >
+                  <Flame className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Топ ❤️</span>
+                </button>
+                <button
+                  onClick={() => setSortBy('popular')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg transition-all cursor-pointer font-medium',
+                    sortBy === 'popular' ? 'bg-card text-foreground font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Популярные
+                </button>
+                <button
+                  onClick={() => setSortBy('newest')}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg transition-all cursor-pointer font-medium',
+                    sortBy === 'newest' ? 'bg-card text-foreground font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Новинки
+                </button>
+              </div>
+
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Поиск плагинов..."
+                  className="w-full h-8 pl-8 pr-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
             </div>
           </div>
 
@@ -408,25 +506,27 @@ export function ExtensionsView() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCatalog.map(ext => {
               const isInstalled = installedIds.includes(ext.id)
+              const isLiked = likedIds.includes(ext.id)
               const isFree = ext.price === 0
+
               return (
                 <div
                   key={ext.id}
-                  className="p-5 rounded-2xl bg-card border border-border shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between gap-4"
+                  className="p-5 rounded-2xl bg-card border border-border shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between gap-4 relative group"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-10 h-10 rounded-2xl bg-muted/60 border border-border flex items-center justify-center text-xl shrink-0">
                           {ext.icon}
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <h3 className="text-xs font-bold text-foreground leading-tight line-clamp-1">
+                            <h3 className="text-xs font-bold text-foreground leading-tight truncate">
                               {ext.title}
                             </h3>
                             {ext.version && (
-                              <span className="px-1.5 py-0.2 rounded-md bg-muted text-[9px] font-mono text-muted-foreground">
+                              <span className="px-1.5 py-0.2 rounded-md bg-muted text-[9px] font-mono text-muted-foreground shrink-0">
                                 v{ext.version}
                               </span>
                             )}
@@ -437,15 +537,32 @@ export function ExtensionsView() {
                         </div>
                       </div>
 
-                      {/* Price Badge */}
-                      <span className={cn(
-                        'px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 border',
-                        isFree
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                      )}>
-                        {isFree ? 'FREE' : `${ext.price} ₽`}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Heart / Like Button */}
+                        <button
+                          onClick={() => handleToggleLike(ext)}
+                          className={cn(
+                            'p-1.5 rounded-xl border transition-all flex items-center gap-1 cursor-pointer',
+                            isLiked
+                              ? 'bg-rose-500/15 border-rose-500/30 text-rose-500 font-bold scale-105'
+                              : 'bg-muted/40 border-border text-muted-foreground hover:text-rose-400'
+                          )}
+                          title={isLiked ? 'Убрать лайк' : 'Поставить лайк ❤️'}
+                        >
+                          <Heart className={cn('w-3.5 h-3.5', isLiked && 'fill-rose-500')} />
+                          <span className="text-[10px]">{ext.likesCount || 0}</span>
+                        </button>
+
+                        {/* Price Badge */}
+                        <span className={cn(
+                          'px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                          isFree
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                        )}>
+                          {isFree ? 'FREE' : `${ext.price} ₽`}
+                        </span>
+                      </div>
                     </div>
 
                     <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-3">
@@ -487,16 +604,41 @@ export function ExtensionsView() {
                         <Eye className="w-3.5 h-3.5" />
                       </button>
 
+                      {/* Template Quick Apply button */}
+                      {ext.type === 'template' && (
+                        <button
+                          onClick={() => handleApplyTemplate(ext)}
+                          disabled={actionLoading === `apply_${ext.id}`}
+                          className="px-2.5 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs border border-primary/20 transition-all flex items-center gap-1 cursor-pointer"
+                          title="Создать задачи по этому шаблону в Zerf Note"
+                        >
+                          <CheckSquare className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">В список</span>
+                        </button>
+                      )}
+
+                      {/* Widget interactive play */}
+                      {ext.type === 'widget' && (
+                        <button
+                          onClick={() => setActiveWidgetExt(ext)}
+                          className="px-2.5 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-all flex items-center gap-1 cursor-pointer"
+                          title="Интерактивный запуск виджета"
+                        >
+                          <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
+                          <span className="hidden sm:inline">Запуск</span>
+                        </button>
+                      )}
+
                       {isInstalled ? (
                         <button
                           onClick={() => handleUninstall(ext.id)}
                           disabled={actionLoading === ext.id}
-                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-400 hover:text-rose-400 font-semibold text-xs transition-all border border-emerald-500/30 hover:border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer group"
+                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-400 hover:text-rose-400 font-semibold text-xs transition-all border border-emerald-500/30 hover:border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer group/btn"
                         >
-                          <Check className="w-3.5 h-3.5 group-hover:hidden" />
-                          <Trash2 className="w-3.5 h-3.5 hidden group-hover:block" />
-                          <span className="group-hover:hidden">Установлено</span>
-                          <span className="hidden group-hover:inline">Удалить</span>
+                          <Check className="w-3.5 h-3.5 group-hover/btn:hidden" />
+                          <Trash2 className="w-3.5 h-3.5 hidden group-hover/btn:block" />
+                          <span className="group-hover/btn:hidden">Установлено</span>
+                          <span className="hidden group-hover/btn:inline">Удалить</span>
                         </button>
                       ) : isFree ? (
                         <button
@@ -554,6 +696,15 @@ export function ExtensionsView() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {ext.type === 'template' && (
+                      <button
+                        onClick={() => handleApplyTemplate(ext)}
+                        className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs transition-colors cursor-pointer"
+                        title="Создать задачи в Zerf Note"
+                      >
+                        Применить
+                      </button>
+                    )}
                     {ext.githubUrl && (
                       <button
                         onClick={() => handleSyncGithub(ext.id)}
@@ -622,15 +773,26 @@ export function ExtensionsView() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-foreground">Ваши опубликованные GitHub репозитории</h3>
-                  <p className="text-[11px] text-muted-foreground">Парсинг в реальном времени без расхода токенов ИИ</p>
+                  <p className="text-[11px] text-muted-foreground">Парсинг в реальном времени без расхода токенов</p>
                 </div>
-                <button
-                  onClick={() => setShowGithubModal(true)}
-                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Загрузить репозиторий</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="https://github.com/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer border border-border"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Открыть GitHub</span>
+                  </a>
+                  <button
+                    onClick={() => setShowGithubModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Загрузить репозиторий</span>
+                  </button>
+                </div>
               </div>
 
               {myExtensions.length === 0 ? (
@@ -642,13 +804,21 @@ export function ExtensionsView() {
                   <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
                     Создайте репозиторий с файлом `zerf-extension.json` и вставьте ссылку сюда.
                   </p>
-                  <button
-                    onClick={() => setShowGithubModal(true)}
-                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Подключить GitHub репозиторий</span>
-                  </button>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      onClick={() => setShowSpecModal(true)}
+                      className="px-4 py-2 rounded-xl bg-muted text-foreground text-xs font-semibold cursor-pointer"
+                    >
+                      Инструкция и манифест
+                    </button>
+                    <button
+                      onClick={() => setShowGithubModal(true)}
+                      className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Подключить GitHub репозиторий</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -664,7 +834,7 @@ export function ExtensionsView() {
                         <div className="min-w-0">
                           <h4 className="text-xs font-bold text-foreground truncate">{ext.title}</h4>
                           <p className="text-[10px] text-muted-foreground">
-                            {ext.price === 0 ? 'Бесплатный' : `${ext.price} ₽`} • {ext.installCount} установок • v{ext.version || '1.0.0'}
+                            {ext.price === 0 ? 'Бесплатный' : `${ext.price} ₽`} • {ext.installCount} установок • ❤️ {ext.likesCount || 0} • v{ext.version || '1.0.0'}
                           </p>
                         </div>
                       </div>
@@ -736,11 +906,10 @@ export function ExtensionsView() {
             </div>
           </div>
 
-          {/* Revenue split explanation */}
           <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-3">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Shield className="w-4 h-4 text-primary" />
-              <span>Прозрачные условия монетизации GitHub расширений</span>
+              <span>Прозрачные условия монетизации GitHub расширений в Zerf Note</span>
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Вы получаете <b>80%</b> от стоимости каждой продажи вашего плагина или шаблона. <b>20%</b> составляет комиссия платформы за эквайринг, серверные мощности и поддержание шлюзов.
@@ -858,7 +1027,7 @@ export function ExtensionsView() {
                       className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Опубликовать в каталоге Zerf AI</span>
+                      <span>Опубликовать в каталоге Zerf Note</span>
                     </button>
                   </div>
                 </div>
@@ -881,7 +1050,7 @@ export function ExtensionsView() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                   <GithubIcon className="w-4 h-4" />
-                  <span>Спецификация `zerf-extension.json` для разработчиков</span>
+                  <span>Спецификация `zerf-extension.json` для Zerf Note</span>
                 </h3>
                 <button
                   onClick={() => setShowSpecModal(false)}
@@ -893,11 +1062,22 @@ export function ExtensionsView() {
 
               <div className="space-y-3 leading-relaxed text-muted-foreground">
                 <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-1.5">
-                  <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs">
-                    <span>1.</span> Создайте репозиторий на GitHub
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                      <span>1.</span> Создайте репозиторий на GitHub
+                    </h4>
+                    <a
+                      href="https://github.com/new"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1"
+                    >
+                      <span>Открыть github.com/new</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                   <p className="text-[11px]">
-                    Создайте открытый репозиторий (например, `github.com/username/zerf-pomodoro-timer`). Никаких токенов ИИ на сервере не тратится — Zerf AI читает манифест напрямую через Raw GitHub API.
+                    Создайте открытый репозиторий. Сервер Zerf Note напрямую считывает манифест без расхода токенов.
                   </p>
                 </div>
 
@@ -929,7 +1109,7 @@ export function ExtensionsView() {
                     <span>3.</span> Монетизация 80/20 и авто-обновления
                   </h4>
                   <p className="text-[11px] text-muted-foreground">
-                    Укажите <b>`"price": 99`</b> в манифесте для платного расширения (80% с каждой продажи поступит на ваш баланс). При каждом `git push` в репозиторий, пользователи могут нажать кнопку «Синхронизировать» и получить свежую версию!
+                    Укажите <b>`"price": 99`</b> в манифесте для платного расширения (80% с каждой покупки поступит на ваш баланс). При каждом `git push` в репозиторий, пользователи могут нажать кнопку «Синхронизировать» и получить свежую версию!
                   </p>
                 </div>
               </div>
@@ -944,6 +1124,63 @@ export function ExtensionsView() {
                 >
                   <span>{canCreate ? 'Перейти к импорту репозитория' : 'Закрыть'}</span>
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: INTERACTIVE WIDGET RUNNER */}
+      <AnimatePresence>
+        {activeWidgetExt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-xl space-y-4 text-xs"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{activeWidgetExt.icon}</span>
+                  <div>
+                    <h3 className="font-bold text-foreground text-sm">{activeWidgetExt.title}</h3>
+                    <p className="text-[10px] text-muted-foreground font-mono">Виджет активен в Zerf Note</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveWidgetExt(null)}
+                  className="text-muted-foreground hover:text-foreground text-xs p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Dynamic widget interface demo */}
+              <div className="p-6 rounded-2xl bg-muted/30 border border-border text-center space-y-4">
+                <div className="w-20 h-20 rounded-full border-4 border-primary/40 border-t-primary flex items-center justify-center mx-auto animate-spin">
+                  <Clock className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-foreground">
+                    {activeWidgetExt.content?.workDuration || activeWidgetExt.content?.workMinutes || 25}:00
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Режим глубокой фокусировки</p>
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => alert('Интервальный таймер запущен!')}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold cursor-pointer"
+                  >
+                    Старт интервала
+                  </button>
+                  <button
+                    onClick={() => setActiveWidgetExt(null)}
+                    className="px-4 py-2 rounded-xl bg-muted text-foreground font-semibold cursor-pointer"
+                  >
+                    Свернуть
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

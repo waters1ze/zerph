@@ -1,6 +1,6 @@
 /**
- * GET & POST /api/extensions — Extensions Store, GitHub Manifest Parser & Sync, Installation & Monetization (80/20 split)
- * ZERO AI tokens spent — Pure GitHub raw repository and manifest parser.
+ * GET & POST /api/extensions — Extensions Store, GitHub Manifest Parser & Sync, Likes/Hearts & Monetization (80/20 split)
+ * Brand: Zerf Note. ZERO AI tokens spent — Pure GitHub raw repository and manifest parser.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,6 +25,7 @@ export interface ExtensionItem {
   isOfficial?: boolean
   rating: number
   ratingCount: number
+  likesCount: number
   installCount: number
   manifestUrl?: string
   content: Record<string, any>
@@ -42,14 +43,15 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     type: 'widget',
     category: 'Виджеты & Фокус',
     icon: '⏱️',
-    githubUrl: 'https://github.com/zerf-ai/pomodoro-focus-widget',
+    githubUrl: 'https://github.com/zerf-note/pomodoro-focus-widget',
     authorChatId: 'system',
-    authorName: 'Zerf Core Team',
-    authorGithub: 'zerf-ai',
+    authorName: 'Zerf Note Team',
+    authorGithub: 'zerf-note',
     price: 0,
     isOfficial: true,
     rating: 5.0,
     ratingCount: 184,
+    likesCount: 342,
     installCount: 1240,
     content: {
       workDuration: 25,
@@ -77,11 +79,19 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     price: 79,
     rating: 4.9,
     ratingCount: 42,
+    likesCount: 189,
     installCount: 110,
     content: {
       templateType: 'project',
       tasksCount: 45,
-      sections: ['CustDev & Валидация', 'MVP за 10 дней', 'Маркетинг & Каналы', 'Первые продажи'],
+      tasks: [
+        'Интервью с 10 потенциальными клиентами (CustDev)',
+        'Формирование ценностного предложения (Lean Canvas)',
+        'Создание кликабельного прототипа в Figma',
+        'Разработка MVP функционала за 14 дней',
+        'Подключение платежного шлюза и оферты',
+        'Запуск первых 3 рекламных каналов',
+      ],
     },
     createdAt: '2026-08-05T12:00:00Z',
     updatedAt: '2026-08-05T12:00:00Z',
@@ -102,6 +112,7 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     isOfficial: true,
     rating: 4.8,
     ratingCount: 230,
+    likesCount: 512,
     installCount: 1650,
     content: {
       primaryColor: '#10b981',
@@ -128,6 +139,7 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     isOfficial: true,
     rating: 4.9,
     ratingCount: 88,
+    likesCount: 247,
     installCount: 520,
     content: {
       dailyGoalMl: 2500,
@@ -145,12 +157,10 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
 export function getGithubRawUrls(repoUrl: string): string[] {
   let clean = repoUrl.trim().replace(/\/$/, '')
   
-  // Handle raw link passed directly
   if (clean.includes('raw.githubusercontent.com')) {
     return [clean]
   }
 
-  // Handle github.com/owner/repo
   const match = clean.match(/github\.com\/([^\/]+)\/([^\/]+)/i)
   if (!match) return []
 
@@ -175,7 +185,7 @@ export async function fetchManifestFromGithub(githubUrl: string): Promise<{ mani
   for (const url of candidateUrls) {
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': 'Zerf-Extension-Parser/1.0' },
+        headers: { 'User-Agent': 'Zerf-Note-Parser/1.0' },
         cache: 'no-store',
       })
       if (res.ok) {
@@ -219,6 +229,17 @@ async function getUserInstalledExtensions(chatId: string): Promise<string[]> {
   }
 }
 
+async function getUserLikedExtensions(chatId: string): Promise<string[]> {
+  try {
+    const row = await prisma.config.findUnique({
+      where: { key: `user_ext_likes_${chatId}` },
+    })
+    return row?.value ? JSON.parse(row.value) : []
+  } catch {
+    return []
+  }
+}
+
 async function getAuthorBalance(chatId: string): Promise<{ balance: number; totalEarned: number; salesCount: number }> {
   try {
     const row = await prisma.config.findUnique({
@@ -242,11 +263,13 @@ export async function GET(req: NextRequest) {
     const catalog = Array.from(allMap.values())
 
     let installedIds: string[] = []
+    let likedIds: string[] = []
     let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
     let userPlan = 'free'
 
     if (chatId) {
       installedIds = await getUserInstalledExtensions(chatId)
+      likedIds = await getUserLikedExtensions(chatId)
       authorStats = await getAuthorBalance(chatId)
       try {
         const userRec = await prisma.telegramChat.findUnique({
@@ -261,6 +284,7 @@ export async function GET(req: NextRequest) {
       success: true,
       catalog,
       installedIds,
+      likedIds,
       userPlan,
       canCreateExtensions: planAtLeast(userPlan, 'plus'),
       authorStats,
@@ -286,7 +310,79 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { action } = body
 
-    // ── ACTION 1: PARSE GITHUB MANIFEST IN REAL-TIME (0 AI Tokens) ──
+    // ── ACTION: LIKE / UNLIKE EXTENSION (HEART) ──
+    if (action === 'like') {
+      const { extensionId } = body
+      if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
+      let liked = await getUserLikedExtensions(chatId)
+      const isCurrentlyLiked = liked.includes(extensionId)
+      const nextLiked = isCurrentlyLiked
+        ? liked.filter(id => id !== extensionId)
+        : [...liked, extensionId]
+
+      await prisma.config.upsert({
+        where: { key: `user_ext_likes_${chatId}` },
+        update: { value: JSON.stringify(nextLiked) },
+        create: { key: `user_ext_likes_${chatId}`, value: JSON.stringify(nextLiked) },
+      })
+
+      // Update likes count on custom extension if stored in DB
+      let updatedLikesCount = 0
+      try {
+        const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+        if (extRec?.value) {
+          const parsed = JSON.parse(extRec.value)
+          parsed.likesCount = Math.max(0, (parsed.likesCount || 0) + (isCurrentlyLiked ? -1 : 1))
+          updatedLikesCount = parsed.likesCount
+          await prisma.config.update({
+            where: { key: `zerf_ext_${extensionId}` },
+            data: { value: JSON.stringify(parsed) },
+          })
+        }
+      } catch {}
+
+      return NextResponse.json({
+        success: true,
+        likedIds: nextLiked,
+        isLiked: !isCurrentlyLiked,
+        likesCount: updatedLikesCount,
+      })
+    }
+
+    // ── ACTION: APPLY TEMPLATE EXTENSION (Creates Real Tasks/Projects in Zerf Note) ──
+    if (action === 'apply_template') {
+      const { extensionId } = body
+      const allItems = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
+      const ext = allItems.find(e => e.id === extensionId)
+      if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      const tasks = ext.content?.tasks || ext.content?.sections || []
+      const todayStr = new Date().toISOString().slice(0, 10)
+      let createdCount = 0
+
+      for (const t of tasks) {
+        const title = typeof t === 'string' ? t : (t.title || t.name)
+        if (title) {
+          await prisma.task.create({
+            data: {
+              title: String(title),
+              description: `Импортировано из шаблона Zerf Note: «${ext.title}»`,
+              priority: 'medium',
+              status: 'todo',
+              dueDate: todayStr,
+              ownerChatId: BigInt(chatId),
+              tags: ['шаблон', ext.category.toLowerCase()],
+            } as any
+          })
+          createdCount++
+        }
+      }
+
+      return NextResponse.json({ success: true, createdCount })
+    }
+
+    // ── ACTION: PARSE GITHUB MANIFEST IN REAL-TIME (0 AI Tokens) ──
     if (action === 'parse_github') {
       const { githubUrl } = body
       if (!githubUrl || !githubUrl.includes('github.com')) {
@@ -319,7 +415,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── ACTION 2: PUBLISH EXTENSION FROM GITHUB REPO ──
+    // ── ACTION: PUBLISH EXTENSION FROM GITHUB REPO ──
     if (action === 'publish_github' || action === 'publish') {
       const userRec = await prisma.telegramChat.findUnique({
         where: { chatId: BigInt(chatId) },
@@ -342,7 +438,6 @@ export async function POST(req: NextRequest) {
       let finalVersion = version || '1.0.0'
       let finalPrice = Math.max(0, Math.min(5000, Number(price) || 0))
 
-      // If GitHub URL provided, parse directly
       if (githubUrl && githubUrl.includes('github.com')) {
         const ghData = await fetchManifestFromGithub(githubUrl)
         if (ghData) {
@@ -382,6 +477,7 @@ export async function POST(req: NextRequest) {
         price: finalPrice,
         rating: existingData?.rating || 5.0,
         ratingCount: existingData?.ratingCount || 1,
+        likesCount: existingData?.likesCount || 0,
         installCount: existingData?.installCount || 0,
         content: manifestContent,
         createdAt: existingData?.createdAt || new Date().toISOString(),
@@ -397,7 +493,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: extItem })
     }
 
-    // ── ACTION 3: SYNC / PULL LATEST FROM GITHUB (0 AI Tokens) ──
+    // ── ACTION: SYNC / PULL LATEST FROM GITHUB (0 AI Tokens) ──
     if (action === 'sync_github') {
       const { extensionId } = body
       const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
@@ -430,7 +526,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: current })
     }
 
-    // ── ACTION 4: INSTALL EXTENSION ──
+    // ── ACTION: INSTALL EXTENSION ──
     if (action === 'install') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
@@ -444,7 +540,6 @@ export async function POST(req: NextRequest) {
           create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
         })
 
-        // Increment install count
         try {
           const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
           if (extRec?.value) {
@@ -461,7 +556,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, installedIds: installed })
     }
 
-    // ── ACTION 5: UNINSTALL EXTENSION ──
+    // ── ACTION: UNINSTALL EXTENSION ──
     if (action === 'uninstall') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
@@ -477,7 +572,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, installedIds: installed })
     }
 
-    // ── ACTION 6: BUY PAID GITHUB EXTENSION (80% Author / 20% Platform) ──
+    // ── ACTION: BUY PAID GITHUB EXTENSION (80% Author / 20% Platform) ──
     if (action === 'buy') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
@@ -523,7 +618,7 @@ export async function POST(req: NextRequest) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chat_id: ext.authorChatId,
-              text: `🎉 *Покупка вашего расширения с GitHub!*\n\nПользователь приобрёл *«${ext.title}»* (${ext.githubUrl || ''}) за ${ext.price} ₽.\nВам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰`,
+              text: `🎉 *Покупка вашего расширения с GitHub!*\n\nПользователь приобрёл *«${ext.title}»* (${ext.githubUrl || ''}) за ${ext.price} ₽ в Zerf Note.\nВам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰`,
               parse_mode: 'Markdown',
             }),
           }).catch(() => {})
@@ -548,7 +643,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── ACTION 7: DELETE EXTENSION ──
+    // ── ACTION: DELETE EXTENSION ──
     if (action === 'delete') {
       const { extensionId } = body
       const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
