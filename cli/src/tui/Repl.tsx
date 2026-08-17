@@ -528,29 +528,29 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    // ── Nexus Search AI (Perplexity style Deep Web Search) ──
-    if (raw.startsWith('/search') || raw.startsWith('/серч') || raw.startsWith('/поиск')) {
-      const query = raw.replace(/^(\/search|\/серч|\/поиск)/, '').trim()
+    // ── Entropy / Nexus Search AI (Perplexity style Deep Web Search) ──
+    if (raw.startsWith('/search') || raw.startsWith('/entropy') || raw.startsWith('/энтропия') || raw.startsWith('/серч') || raw.startsWith('/поиск')) {
+      const query = raw.replace(/^(\/search|\/entropy|\/энтропия|\/серч|\/поиск)/, '').trim()
       if (!query) {
         setHistory(h => [
           ...h,
           {
             id: makeUniqueId(),
             type: 'assistant',
-            text: '🔮 Nexus AI Search (Perplexity Style)',
+            text: '🔮 Entropy AI Search (Perplexity Style)',
             details: [
-              'Использование: /search <ваш поисковый запрос или вопрос>',
+              'Использование: /search <запрос> или /entropy <запрос>',
               'Пример: /search последние тренды в веб-разработке 2026',
-              'Nexus выполнит глубокий анализ фактов, синтез данных и предоставит структурированный ответ со ссылками на источники [1][2].',
+              'Entropy выполнит глубокий анализ фактов, синтез данных и предоставит структурированный ответ со ссылками на источники [1][2].',
             ],
           },
         ])
         return
       }
 
-      setActionProgress({ label: `Nexus AI: Поиск и синтез источников по «${query}»...`, ratio: 0.4 })
+      setActionProgress({ label: `Entropy AI: Поиск и синтез источников по «${query}»...`, ratio: 0.4 })
       const progTimer = setTimeout(() => {
-        setActionProgress({ label: 'Nexus AI: Анализ цитат и структурирование ответа...', ratio: 0.8 })
+        setActionProgress({ label: 'Entropy AI: Анализ цитат и структурирование ответа...', ratio: 0.8 })
       }, 500)
 
       try {
@@ -569,7 +569,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
         const res = await sendAiQuery(creds, searchPrompt, 'openai/gpt-oss-120b')
         clearTimeout(progTimer)
-        setActionProgress({ label: 'Nexus AI: Ответ готов', ratio: 1.0 })
+        setActionProgress({ label: 'Entropy AI: Ответ готов', ratio: 1.0 })
         setTimeout(() => setActionProgress(null), 800)
 
         setHistory(h => [
@@ -577,7 +577,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           {
             id: makeUniqueId(),
             type: 'assistant',
-            text: `🔮 Nexus AI Search: «${query}»`,
+            text: `🔮 Entropy AI Search: «${query}»`,
             details: res.message ? res.message.split('\n') : (res.details || []),
           },
         ])
