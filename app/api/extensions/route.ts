@@ -244,6 +244,7 @@ export async function GET(req: NextRequest) {
       installedIds,
       likedIds,
       userPlan,
+      canUseExtensions: planAtLeast(userPlan, 'plus'),
       canCreateExtensions: planAtLeast(userPlan, 'plus'),
       authorStats,
       boundCard,
@@ -318,6 +319,14 @@ export async function POST(req: NextRequest) {
 
     // ── ACTION: APPLY TEMPLATE EXTENSION (Creates Real Tasks/Projects in Zerf Note) ──
     if (action === 'apply_template') {
+      const userPlan = normalizePlan((userRec as any)?.plan || 'free')
+      if (!planAtLeast(userPlan, 'plus')) {
+        return NextResponse.json({
+          error: '🔒 Импорт шаблонов из каталога расширений доступен с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
+          requiresPlus: true,
+        }, { status: 403 })
+      }
+
       const { extensionId } = body
       const allItems = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
       const ext = allItems.find(e => e.id === extensionId)
@@ -556,16 +565,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: current })
     }
 
-    // ── ACTION: INSTALL EXTENSION (Enforce minPlan) ──
+    // ── ACTION: INSTALL EXTENSION (Requires at least Zerf Plus) ──
     if (action === 'install') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
-      // Check minPlan requirement
+      const userPlan = normalizePlan((userRec as any)?.plan || 'free')
+      if (!planAtLeast(userPlan, 'plus')) {
+        return NextResponse.json({
+          error: '🔒 Использование и установка расширений доступны с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
+          requiresPlan: 'plus',
+        }, { status: 403 })
+      }
+
+      // Check minPlan requirement if extension specifies higher plan (e.g. Pro or Corp)
       const allExts = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
       const targetExt = allExts.find(e => e.id === extensionId)
       if (targetExt && targetExt.minPlan && targetExt.minPlan !== 'free') {
-        const userPlan = normalizePlan((userRec as any)?.plan || 'free')
         if (!planAtLeast(userPlan, targetExt.minPlan)) {
           const reqName = targetExt.minPlan === 'plus' ? 'Zerf Plus (99 ₽)' : targetExt.minPlan === 'pro' ? 'Zerf Pro (299 ₽)' : 'Zerf Corp'
           return NextResponse.json({
@@ -616,10 +632,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, installedIds: installed })
     }
 
-    // ── ACTION: BUY PAID GITHUB EXTENSION (80% Author / 20% Platform) ──
+    // ── ACTION: BUY PAID GITHUB EXTENSION (Requires Zerf Plus, 80% Author / 20% Platform) ──
     if (action === 'buy') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
+      const userPlan = normalizePlan((userRec as any)?.plan || 'free')
+      if (!planAtLeast(userPlan, 'plus')) {
+        return NextResponse.json({
+          error: '🔒 Покупка и установка расширений доступны с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
+          requiresPlan: 'plus',
+        }, { status: 403 })
+      }
 
       const allItems = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
       const ext = allItems.find(e => e.id === extensionId)

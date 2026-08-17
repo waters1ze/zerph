@@ -414,6 +414,21 @@ export function ExtensionsView() {
     fetchExtensions()
   }, [])
 
+  const isPlusOrHigher = userPlan === 'plus' || userPlan === 'pro' || userPlan === 'corp'
+
+  const promptUpgradeToPlus = async (actionLabel = 'использования расширений') => {
+    const ok = await confirmDialog({
+      title: '💎 Требуется подписка Zerf Plus',
+      description: `Установка и запуск расширений, AI-виджетов и шаблонов доступны на тарифе Zerf Plus (от 99 ₽/мес). Хотите перейти к оформлению подписки?`,
+      confirmText: 'Оформить Zerf Plus (99 ₽)',
+      cancelText: 'Позже',
+      variant: 'primary',
+    })
+    if (ok) {
+      dispatch({ type: 'SET_VIEW', view: 'settings' })
+    }
+  }
+
   const handleToggleLike = async (ext: ExtensionItem) => {
     const isLiked = likedIds.includes(ext.id)
     const nextLiked = isLiked ? likedIds.filter(id => id !== ext.id) : [...likedIds, ext.id]
@@ -440,6 +455,10 @@ export function ExtensionsView() {
   }
 
   const handleApplyTemplate = async (ext: ExtensionItem) => {
+    if (!isPlusOrHigher) {
+      promptUpgradeToPlus('импорта шаблонов')
+      return
+    }
     try {
       setActionLoading(`apply_${ext.id}`)
       const res = await fetch('/api/extensions', {
@@ -452,7 +471,11 @@ export function ExtensionsView() {
         await syncData()
         alert(`🎉 Шаблон «${ext.title}» успешно применён! В ваш список задач добавлено +${data.createdCount} пунктов.`)
       } else {
-        alert(data.error || 'Ошибка применения шаблона')
+        if (data.requiresPlus) {
+          promptUpgradeToPlus('импорта шаблонов')
+        } else {
+          alert(data.error || 'Ошибка применения шаблона')
+        }
       }
     } catch {
       alert('Ошибка применения шаблона')
@@ -665,6 +688,14 @@ export function ExtensionsView() {
     if (matchingType) {
       setFormCode(JSON.stringify(matchingType.defaultJson, null, 2))
     }
+  }
+
+  const handlePlayWidget = (ext: ExtensionItem) => {
+    if (!isPlusOrHigher) {
+      promptUpgradeToPlus('запуска интерактивных виджетов')
+      return
+    }
+    setActiveWidgetExt(ext)
   }
 
   const handleOpenCardModal = () => {
@@ -891,6 +922,10 @@ export function ExtensionsView() {
   }
 
   const handleInstall = async (extensionId: string) => {
+    if (!isPlusOrHigher) {
+      promptUpgradeToPlus('установки расширений')
+      return
+    }
     try {
       setActionLoading(extensionId)
       const res = await fetch('/api/extensions', {
@@ -902,7 +937,11 @@ export function ExtensionsView() {
       if (data.success) {
         setInstalledIds(data.installedIds)
       } else {
-        alert(data.error || 'Ошибка при установке расширения')
+        if (data.requiresPlan === 'plus') {
+          promptUpgradeToPlus('установки расширений')
+        } else {
+          alert(data.error || 'Ошибка при установке расширения')
+        }
       }
     } catch {
       alert('Ошибка при установке')
@@ -922,6 +961,8 @@ export function ExtensionsView() {
       const data = await res.json()
       if (data.success) {
         setInstalledIds(data.installedIds)
+      } else {
+        alert(data.error || 'Ошибка при удалении')
       }
     } catch {
       alert('Ошибка при удалении')
@@ -931,6 +972,10 @@ export function ExtensionsView() {
   }
 
   const handleBuy = async (ext: ExtensionItem) => {
+    if (!isPlusOrHigher) {
+      promptUpgradeToPlus('покупки и установки расширений')
+      return
+    }
     const ok = await confirmDialog({
       title: `Приобрести «${ext.title}»?`,
       description: `Стоимость расширения: ${ext.price} ₽.\n80% (${Math.round(ext.price * 0.8)} ₽) поступит автору на баланс, 20% — комиссия платформы Zerf.`,
@@ -952,7 +997,11 @@ export function ExtensionsView() {
         setInstalledIds(data.installedIds)
         alert(`🎉 Расширение «${ext.title}» успешно приобретено и установлено!`)
       } else {
-        alert(data.error || 'Ошибка при покупке')
+        if (data.requiresPlan === 'plus') {
+          promptUpgradeToPlus('покупки расширений')
+        } else {
+          alert(data.error || 'Ошибка при покупке')
+        }
       }
     } catch {
       alert('Ошибка покупки')
@@ -1213,6 +1262,36 @@ export function ExtensionsView() {
             </div>
           </div>
 
+          {/* Plus Promo / Requirements Banner for Free tier */}
+          {!isPlusOrHigher && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-card border border-primary/25 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-foreground">Экосистема расширений Zerf Note</h4>
+                    <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-bold border border-primary/25">
+                      Доступно с Zerf Plus
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                    Подключите тариф Zerf Plus (99 ₽), чтобы устанавливать плагины, ИИ-поиск Entropy, интерактивные виджеты, шаблоны проектов и темы.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+              >
+                <span>Оформить Zerf Plus (99 ₽)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Catalog Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCatalog.map(ext => {
@@ -1369,7 +1448,7 @@ export function ExtensionsView() {
                       {/* Widget interactive play */}
                       {ext.type === 'widget' && (
                         <button
-                          onClick={() => setActiveWidgetExt(ext)}
+                          onClick={() => handlePlayWidget(ext)}
                           className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs border border-border transition-all flex items-center justify-center cursor-pointer shrink-0"
                           title="Интерактивный запуск виджета"
                         >
@@ -1419,11 +1498,42 @@ export function ExtensionsView() {
       {/* ── TAB 2: INSTALLED EXTENSIONS ── */}
       {activeTab === 'installed' && (
         <div className="space-y-4">
+          {!isPlusOrHigher && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-card border border-primary/25 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-foreground">Установка расширений доступна с Zerf Plus</h4>
+                    <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-bold border border-primary/25">
+                      от 99 ₽
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                    Подключите тариф Zerf Plus, чтобы устанавливать любые виджеты, AI-поиск, интеграции и шаблоны без ограничений.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+              >
+                <span>Оформить Zerf Plus (99 ₽)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {installedExtensions.length === 0 ? (
             <div className="p-8 rounded-2xl bg-card border border-border text-center space-y-2">
               <p className="text-sm font-bold text-foreground">Нет установленных расширений</p>
               <p className="text-xs text-muted-foreground">
-                Перейдите во вкладку «Каталог» и подключите любые виджеты или плагины с GitHub.
+                {!isPlusOrHigher
+                  ? 'Оформите Zerf Plus для подключения и запуска расширений в вашей рабочей среде.'
+                  : 'Перейдите во вкладку «Каталог» и подключите любые виджеты или плагины с GitHub.'}
               </p>
             </div>
           ) : (
