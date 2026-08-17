@@ -22,6 +22,7 @@ export interface ExtensionItem {
   authorName: string
   authorGithub?: string
   price: number // 0 = free, > 0 = price in RUB
+  minPlan?: 'free' | 'plus' | 'pro' | 'corp'
   isOfficial?: boolean
   rating: number
   ratingCount: number
@@ -307,6 +308,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Требуется авторизация' }, { status: 401 })
     }
     const chatId = authUser.chatId
+    const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } }).catch(() => null)
 
     const body = await req.json()
     const { action } = body
@@ -428,7 +430,7 @@ export async function POST(req: NextRequest) {
         }, { status: 403 })
       }
 
-      const { githubUrl, title, description, type, category, icon, price, version, content, id } = body
+      const { githubUrl, title, description, type, category, icon, price, minPlan, version, content, id } = body
 
       let manifestContent = content || {}
       let finalTitle = title
@@ -438,6 +440,7 @@ export async function POST(req: NextRequest) {
       let finalCategory = category || 'Виджеты & Плагины'
       let finalVersion = version || '1.0.0'
       let finalPrice = Math.max(0, Math.min(5000, Number(price) || 0))
+      let finalMinPlan: 'free' | 'plus' | 'pro' | 'corp' = (minPlan && ['free', 'plus', 'pro', 'corp'].includes(minPlan)) ? minPlan : 'free'
 
       if (githubUrl && githubUrl.includes('github.com')) {
         const ghData = await fetchManifestFromGithub(githubUrl)
@@ -449,6 +452,7 @@ export async function POST(req: NextRequest) {
           if (m.type) finalType = m.type
           if (m.category) finalCategory = m.category
           if (m.version) finalVersion = m.version
+          if (m.minPlan && ['free', 'plus', 'pro', 'corp'].includes(m.minPlan)) finalMinPlan = m.minPlan
           if (m.price !== undefined) finalPrice = Math.max(0, Math.min(5000, Number(m.price) || 0))
           manifestContent = m.content || m.config || manifestContent
         }
@@ -467,6 +471,10 @@ export async function POST(req: NextRequest) {
       const existingRecord = await prisma.config.findUnique({ where: { key: `zerf_ext_${extId}` } })
       const existingData = existingRecord?.value ? JSON.parse(existingRecord.value) : null
 
+      if (existingData && existingData.authorChatId !== chatId && !isCreator) {
+        return NextResponse.json({ error: 'У вас нет прав на редактирование этого расширения' }, { status: 403 })
+      }
+
       const extItem: ExtensionItem = {
         id: extId,
         title: finalTitle.trim().slice(0, 100),
@@ -476,10 +484,11 @@ export async function POST(req: NextRequest) {
         category: finalCategory.trim().slice(0, 40),
         icon: finalIcon,
         githubUrl: githubUrl || '',
-        authorChatId: chatId,
-        authorName,
-        isOfficial: isCreator,
+        authorChatId: existingData?.authorChatId || chatId,
+        authorName: existingData?.authorName || authorName,
+        isOfficial: existingData ? existingData.isOfficial : isCreator,
         price: finalPrice,
+        minPlan: finalMinPlan,
         rating: existingData?.rating || 5.0,
         ratingCount: existingData?.ratingCount || 1,
         likesCount: existingData?.likesCount || 0,
@@ -496,6 +505,24 @@ export async function POST(req: NextRequest) {
       })
 
       return NextResponse.json({ success: true, extension: extItem })
+    }
+
+    // ── ACTION: DELETE CUSTOM EXTENSION (Author or Admin only) ──
+    if (action === 'delete_custom' || action === 'delete') {
+      const { extensionId } = body
+      if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
+      const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+      if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      const current: ExtensionItem = JSON.parse(extRec.value)
+      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      if (current.authorChatId !== chatId && !isCreator) {
+        return NextResponse.json({ error: 'Вы можете удалять только созданные вами расширения' }, { status: 403 })
+      }
+
+      await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
+      return NextResponse.json({ success: true, deletedId: extensionId })
     }
 
     // ── ACTION: SYNC / PULL LATEST FROM GITHUB (0 AI Tokens) ──
@@ -520,6 +547,7 @@ export async function POST(req: NextRequest) {
       current.version = m.version || current.version
       current.icon = m.icon || current.icon
       current.content = m.content || m.config || current.content
+      if (m.minPlan && ['free', 'plus', 'pro', 'corp'].includes(m.minPlan)) current.minPlan = m.minPlan
       if (m.price !== undefined) current.price = Math.max(0, Math.min(5000, Number(m.price) || 0))
       current.updatedAt = new Date().toISOString()
 
@@ -531,10 +559,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: current })
     }
 
-    // ── ACTION: INSTALL EXTENSION ──
+    // ── ACTION: INSTALL EXTENSION (Enforce minPlan) ──
     if (action === 'install') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
+      // Check minPlan requirement
+      const allExts = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
+      const targetExt = allExts.find(e => e.id === extensionId)
+      if (targetExt && targetExt.minPlan && targetExt.minPlan !== 'free') {
+        const userPlan = normalizePlan((userRec as any)?.plan || 'free')
+        if (!planAtLeast(userPlan, targetExt.minPlan)) {
+          const reqName = targetExt.minPlan === 'plus' ? 'Zerf Plus (99 ₽)' : targetExt.minPlan === 'pro' ? 'Zerf Pro (299 ₽)' : 'Zerf Corp'
+          return NextResponse.json({
+            error: `🔒 Автор ограничил доступ: для установки «${targetExt.title}» требуется тариф ${reqName} или выше. Обновите тариф в Настройках!`,
+            requiredPlan: targetExt.minPlan,
+          }, { status: 403 })
+        }
+      }
 
       let installed = await getUserInstalledExtensions(chatId)
       if (!installed.includes(extensionId)) {

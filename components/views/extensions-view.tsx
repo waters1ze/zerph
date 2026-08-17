@@ -116,6 +116,19 @@ export function ExtensionsView() {
   const [payoutSuccess, setPayoutSuccess] = useState<boolean>(false)
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false)
 
+  // Custom Extension Editor / Studio Modal
+  const [showEditorModal, setShowEditorModal] = useState<boolean>(false)
+  const [editingExt, setEditingExt] = useState<ExtensionItem | null>(null)
+  const [formTitle, setFormTitle] = useState('')
+  const [formDescription, setFormDescription] = useState('')
+  const [formIcon, setFormIcon] = useState('🧩')
+  const [formCategory, setFormCategory] = useState('Виджеты & Фокус')
+  const [formType, setFormType] = useState<'widget' | 'template' | 'theme' | 'integration' | 'prompt'>('widget')
+  const [formMinPlan, setFormMinPlan] = useState<'free' | 'plus' | 'pro' | 'corp'>('free')
+  const [formPrice, setFormPrice] = useState<number>(0)
+  const [formVersion, setFormVersion] = useState('1.0.0')
+  const [formCode, setFormCode] = useState('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
+
   // GitHub Import state
   const [githubUrl, setGithubUrl] = useState('')
   const [parsedManifest, setParsedManifest] = useState<any | null>(null)
@@ -291,6 +304,85 @@ export function ExtensionsView() {
     }
   }
 
+  const handleOpenCreate = () => {
+    setEditingExt(null)
+    setFormTitle('')
+    setFormDescription('')
+    setFormIcon('🧩')
+    setFormCategory('Виджеты & Фокус')
+    setFormType('widget')
+    setFormMinPlan('free')
+    setFormPrice(0)
+    setFormVersion('1.0.0')
+    setFormCode('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
+    setShowEditorModal(true)
+  }
+
+  const handleOpenEdit = (ext: ExtensionItem) => {
+    setEditingExt(ext)
+    setFormTitle(ext.title || '')
+    setFormDescription(ext.description || '')
+    setFormIcon(ext.icon || '🧩')
+    setFormCategory(ext.category || 'Виджеты & Фокус')
+    setFormType(ext.type || 'widget')
+    setFormMinPlan(ext.minPlan || 'free')
+    setFormPrice(ext.price || 0)
+    setFormVersion(ext.version || '1.0.0')
+    setFormCode(JSON.stringify(ext.content || {}, null, 2))
+    setShowEditorModal(true)
+  }
+
+  const handleSaveCustomExtension = async () => {
+    if (!formTitle.trim() || !formDescription.trim()) {
+      alert('Заполните название и описание расширения')
+      return
+    }
+
+    let parsedContent = {}
+    if (formCode.trim()) {
+      try {
+        parsedContent = JSON.parse(formCode)
+      } catch {
+        alert('Ошибка синтаксиса JSON в поле конфигурации/кода')
+        return
+      }
+    }
+
+    try {
+      setActionLoading('save_ext')
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'publish_github',
+          id: editingExt?.id,
+          title: formTitle.trim(),
+          description: formDescription.trim(),
+          type: formType,
+          category: formCategory,
+          icon: formIcon.trim() || '🧩',
+          version: formVersion.trim() || '1.0.0',
+          price: Number(formPrice) || 0,
+          minPlan: formMinPlan,
+          content: parsedContent,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setShowEditorModal(false)
+        setEditingExt(null)
+        fetchExtensions()
+        alert(editingExt ? `✓ Расширение «${formTitle}» успешно обновлено!` : `🎉 Расширение «${formTitle}» успешно создано и опубликовано!`)
+      } else {
+        alert(data.error || 'Ошибка сохранения')
+      }
+    } catch {
+      alert('Ошибка при сохранении')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleInstall = async (extensionId: string) => {
     try {
       setActionLoading(extensionId)
@@ -302,6 +394,8 @@ export function ExtensionsView() {
       const data = await res.json()
       if (data.success) {
         setInstalledIds(data.installedIds)
+      } else {
+        alert(data.error || 'Ошибка при установке расширения')
       }
     } catch {
       alert('Ошибка при установке')
@@ -430,13 +524,22 @@ export function ExtensionsView() {
           </button>
 
           {canCreate ? (
-            <button
-              onClick={() => setShowGithubModal(true)}
-              className="px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Загрузить из GitHub</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenCreate}
+                className="px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Создать расширение</span>
+              </button>
+              <button
+                onClick={() => setShowGithubModal(true)}
+                className="px-3.5 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-all cursor-pointer"
+              >
+                <GithubIcon className="w-3.5 h-3.5" />
+                <span>Из GitHub</span>
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => setShowSpecModal(true)}
@@ -601,6 +704,18 @@ export function ExtensionsView() {
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Min Plan Badge */}
+                        {ext.minPlan && ext.minPlan !== 'free' && (
+                          <span className={cn(
+                            'px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                            ext.minPlan === 'corp' && 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+                            ext.minPlan === 'pro' && 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                            ext.minPlan === 'plus' && 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                          )}>
+                            {ext.minPlan === 'corp' ? '✦ Corp' : ext.minPlan === 'pro' ? '★ Pro' : '◈ Plus'}
+                          </span>
+                        )}
+
                         {/* Heart / Like Button */}
                         <button
                           onClick={() => handleToggleLike(ext)}
@@ -673,6 +788,26 @@ export function ExtensionsView() {
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
+
+                      {/* Author or Admin Edit & Delete buttons */}
+                      {(ext.authorChatId === currentChatId || currentChatId === '6136950061' || currentChatId === '5078516086') && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEdit(ext)}
+                            className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs transition-colors cursor-pointer"
+                            title="Редактировать параметры и код"
+                          >
+                            <Code2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMyExt(ext.id)}
+                            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs transition-colors cursor-pointer"
+                            title="Удалить из магазина"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
 
                       {/* Template Quick Apply button */}
                       {ext.type === 'template' && (
@@ -1443,6 +1578,215 @@ export function ExtensionsView() {
                   </button>
                 </form>
               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* MODAL: CUSTOM EXTENSION CREATOR / EDITOR STUDIO */}
+      <AnimatePresence>
+        {showEditorModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-xl bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs"
+            >
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-lg font-bold">
+                    <Code2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      {editingExt ? `Редактирование: ${editingExt.title}` : 'Создание нового расширения'}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      Настройте параметры, права доступа и выберите тариф подписки
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowEditorModal(false)}
+                  className="text-muted-foreground hover:text-foreground text-xs p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3.5">
+                {/* 1. Title & Icon */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="sm:col-span-3 space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Название расширения:</label>
+                    <input
+                      type="text"
+                      value={formTitle}
+                      onChange={e => setFormTitle(e.target.value)}
+                      placeholder="Например: Focus Timer Pro"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Иконка:</label>
+                    <input
+                      type="text"
+                      value={formIcon}
+                      onChange={e => setFormIcon(e.target.value)}
+                      placeholder="⏱️"
+                      className="w-full h-9 px-2 text-center rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Description */}
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground text-[11px] block">Описание функционала:</label>
+                  <textarea
+                    value={formDescription}
+                    onChange={e => setFormDescription(e.target.value)}
+                    placeholder="Кратко опишите, что делает расширение и как оно помогает..."
+                    rows={2}
+                    className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs resize-none"
+                  />
+                </div>
+
+                {/* 3. Category & Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Категория:</label>
+                    <select
+                      value={formCategory}
+                      onChange={e => setFormCategory(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                    >
+                      <option value="Виджеты & Фокус">⏱️ Виджеты & Фокус</option>
+                      <option value="Бизнес & Стартапы">🚀 Бизнес & Стартапы</option>
+                      <option value="Привычки & Здоровье">💪 Привычки & Здоровье</option>
+                      <option value="ИИ & Промпты">🤖 ИИ & Промпты</option>
+                      <option value="Утилиты & Экспорт">🔌 Утилиты & Экспорт</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Тип модуля:</label>
+                    <select
+                      value={formType}
+                      onChange={e => setFormType(e.target.value as any)}
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                    >
+                      <option value="widget">Интерактивный виджет</option>
+                      <option value="template">Шаблон задач</option>
+                      <option value="theme">Тема оформления</option>
+                      <option value="integration">Интеграция</option>
+                      <option value="prompt">AI Промпт</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 4. Subscription Limit / Min Plan Selector */}
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-2">
+                  <label className="font-bold text-foreground text-[11px] flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-primary" />
+                      <span>Минимальный тариф для установки:</span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Кто сможет использовать</span>
+                  </label>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: 'free', label: 'Доступно всем', sub: 'Free / Base', badge: 'bg-muted text-foreground' },
+                      { id: 'plus', label: 'Zerf Plus+', sub: 'от 99 ₽/мес', badge: 'bg-sky-500/15 text-sky-400 border border-sky-500/30' },
+                      { id: 'pro', label: 'Zerf Pro', sub: 'от 299 ₽/мес', badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+                      { id: 'corp', label: 'Zerf Corp', sub: 'Команды', badge: 'bg-purple-500/15 text-purple-400 border border-purple-500/30' },
+                    ].map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setFormMinPlan(p.id as any)}
+                        className={cn(
+                          'p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between',
+                          formMinPlan === p.id
+                            ? 'bg-card border-primary ring-1 ring-primary shadow-xs'
+                            : 'bg-card/50 border-border text-muted-foreground hover:bg-card'
+                        )}
+                      >
+                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-md w-fit mb-1', p.badge)}>
+                          {p.label}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground">{p.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Price & Version */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">
+                      Цена в рублях (0 = Бесплатно):
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5000}
+                      value={formPrice}
+                      onChange={e => setFormPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                      placeholder="0"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Версия:</label>
+                    <input
+                      type="text"
+                      value={formVersion}
+                      onChange={e => setFormVersion(e.target.value)}
+                      placeholder="1.0.0"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Configuration / JSON Code */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-foreground text-[11px]">Конфигурация / JSON данные:</label>
+                    <span className="text-[10px] text-muted-foreground font-mono">JSON format</span>
+                  </div>
+                  <textarea
+                    value={formCode}
+                    onChange={e => setFormCode(e.target.value)}
+                    rows={5}
+                    className="w-full p-2.5 rounded-xl bg-muted/40 border border-border font-mono text-[11px] text-foreground outline-none focus:border-primary resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setShowEditorModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCustomExtension}
+                  disabled={actionLoading === 'save_ext'}
+                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer"
+                >
+                  {actionLoading === 'save_ext' ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span>{editingExt ? 'Сохранить изменения' : 'Опубликовать расширение'}</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
