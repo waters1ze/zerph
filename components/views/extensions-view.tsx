@@ -8,7 +8,8 @@ import {
   Search, Shield, Crown, TrendingUp, AlertCircle, ArrowUpRight,
   BookOpen, HelpCircle, Lightbulb, Code2, ArrowRight,
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
-  Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus
+  Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus,
+  Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -216,6 +217,7 @@ export function ExtensionsView() {
   // Custom Extension Editor / Studio Modal
   const [showEditorModal, setShowEditorModal] = useState<boolean>(false)
   const [editingExt, setEditingExt] = useState<ExtensionItem | null>(null)
+  const [editorActiveTab, setEditorActiveTab] = useState<'general' | 'version' | 'access' | 'code' | 'github'>('general')
   const [formTitle, setFormTitle] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formIcon, setFormIcon] = useState('🧩')
@@ -224,6 +226,9 @@ export function ExtensionsView() {
   const [formMinPlan, setFormMinPlan] = useState<'free' | 'plus' | 'pro' | 'corp'>('free')
   const [formPrice, setFormPrice] = useState<number>(0)
   const [formVersion, setFormVersion] = useState('1.0.0')
+  const [formIsPublished, setFormIsPublished] = useState<boolean>(false)
+  const [formChangelog, setFormChangelog] = useState<string>('')
+  const [formGithubUrl, setFormGithubUrl] = useState<string>('')
   const [formCode, setFormCode] = useState('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
   const [isCompressingImage, setIsCompressingImage] = useState<boolean>(false)
   const formFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -360,8 +365,10 @@ export function ExtensionsView() {
           type: parsedManifest.type,
           category: parsedManifest.category,
           icon: parsedManifest.icon,
-          version: parsedManifest.version,
-          price: parsedManifest.price,
+          version: parsedManifest.version || '1.0.0',
+          price: parsedManifest.price || 0,
+          isPublished: false, // Default to Draft / Unpublished
+          changelog: parsedManifest.changelog || 'Первичный импорт манифеста из GitHub',
           content: parsedManifest.content,
         }),
       })
@@ -371,12 +378,13 @@ export function ExtensionsView() {
         setGithubUrl('')
         setParsedManifest(null)
         fetchExtensions()
-        alert(`🎉 Расширение «${parsedManifest.title}» успешно загружено из GitHub и опубликовано в каталоге Zerf Note!`)
+        setActiveTab('my')
+        alert(`✓ Репозиторий «${parsedManifest.title}» успешно добавлен в ваши плагины как черновик! Откройте настройки расширения для управления версиями и публикации в Store.`)
       } else {
-        alert(data.error || 'Ошибка публикации')
+        alert(data.error || 'Ошибка загрузки репозитория')
       }
     } catch {
-      alert('Ошибка при публикации')
+      alert('Ошибка при импорте из GitHub')
     } finally {
       setActionLoading(null)
     }
@@ -402,6 +410,45 @@ export function ExtensionsView() {
     } finally {
       setActionLoading(null)
     }
+  }
+
+  const handleTogglePublish = async (ext: ExtensionItem) => {
+    const nextState = !(ext.isPublished !== false)
+    try {
+      setActionLoading(`pub_${ext.id}`)
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_publish', extensionId: ext.id, isPublished: nextState }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setCatalog(prev => prev.map(e => e.id === ext.id ? { ...e, isPublished: nextState } : e))
+        fetchExtensions()
+      } else {
+        alert(data.error || 'Ошибка изменения статуса публикации')
+      }
+    } catch {
+      alert('Ошибка изменения статуса')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const bumpVersion = (type: 'patch' | 'minor' | 'major') => {
+    const parts = (formVersion.trim() || '1.0.0').split('.').map(n => parseInt(n) || 0)
+    while (parts.length < 3) parts.push(0)
+    if (type === 'major') {
+      parts[0] += 1
+      parts[1] = 0
+      parts[2] = 0
+    } else if (type === 'minor') {
+      parts[1] += 1
+      parts[2] = 0
+    } else {
+      parts[2] += 1
+    }
+    setFormVersion(parts.join('.'))
   }
 
   const handleFormImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -444,7 +491,11 @@ export function ExtensionsView() {
     setFormMinPlan('free')
     setFormPrice(0)
     setFormVersion('1.0.0')
+    setFormIsPublished(false) // Default to unpublished draft
+    setFormChangelog('')
+    setFormGithubUrl('')
     setFormCode('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
+    setEditorActiveTab('general')
     setShowEditorModal(true)
   }
 
@@ -458,7 +509,11 @@ export function ExtensionsView() {
     setFormMinPlan(ext.minPlan || 'free')
     setFormPrice(ext.price || 0)
     setFormVersion(ext.version || '1.0.0')
+    setFormIsPublished(ext.isPublished !== false)
+    setFormChangelog(ext.changelog || '')
+    setFormGithubUrl(ext.githubUrl || '')
     setFormCode(JSON.stringify(ext.content || {}, null, 2))
+    setEditorActiveTab('general')
     setShowEditorModal(true)
   }
 
@@ -491,7 +546,10 @@ export function ExtensionsView() {
           type: formType,
           category: formCategory,
           icon: formIcon.trim() || '🧩',
+          githubUrl: formGithubUrl.trim(),
           version: formVersion.trim() || '1.0.0',
+          isPublished: formIsPublished,
+          changelog: formChangelog.trim(),
           price: Number(formPrice) || 0,
           minPlan: formMinPlan,
           content: parsedContent,
@@ -502,7 +560,7 @@ export function ExtensionsView() {
         setShowEditorModal(false)
         setEditingExt(null)
         fetchExtensions()
-        alert(editingExt ? `✓ Расширение «${formTitle}» успешно обновлено!` : `🎉 Расширение «${formTitle}» успешно создано и опубликовано!`)
+        alert(editingExt ? `✓ Настройки и версия расширения «${formTitle}» успешно сохранены!` : `✓ Расширение «${formTitle}» успешно сохранено!`)
       } else {
         alert(data.error || 'Ошибка сохранения')
       }
@@ -630,6 +688,9 @@ export function ExtensionsView() {
   // Filtered and Sorted catalog
   const filteredCatalog = useMemo(() => {
     const list = catalog.filter(ext => {
+      // Hide unpublished drafts from public store
+      if (ext.isPublished === false) return false
+
       const matchesSearch = ext.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -657,7 +718,8 @@ export function ExtensionsView() {
 
   const myExtensions = useMemo(() => {
     if (!currentChatId) return []
-    return catalog.filter(ext => ext.authorChatId === currentChatId)
+    const isCreator = currentChatId === '6136950061' || currentChatId === '5078516086'
+    return catalog.filter(ext => ext.authorChatId === currentChatId || (isCreator && ext.isOfficial))
   }, [catalog, currentChatId])
 
   return (
@@ -1137,12 +1199,14 @@ export function ExtensionsView() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border border-border">
                 <div>
-                  <h3 className="text-sm font-bold text-foreground">Ваши опубликованные GitHub репозитории</h3>
-                  <p className="text-[11px] text-muted-foreground">Парсинг в реальном времени без расхода токенов</p>
+                  <h3 className="text-sm font-bold text-foreground">Ваши GitHub репозитории и расширения</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Новые расширения создаются как <b>черновики</b>. Настройте версию, описание и опубликуйте их в Store!
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <a
                     href="https://github.com/new"
                     target="_blank"
@@ -1150,14 +1214,21 @@ export function ExtensionsView() {
                     className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer border border-border"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Открыть GitHub</span>
+                    <span>Создать на GitHub</span>
                   </a>
                   <button
                     onClick={() => setShowGithubModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-muted hover:bg-muted/80 border border-border text-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <GithubIcon className="w-3.5 h-3.5" />
+                    <span>+ Импорт репозитория</span>
+                  </button>
+                  <button
+                    onClick={handleOpenCreate}
                     className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>+ Загрузить репозиторий</span>
+                    <span>+ Создать расширение</span>
                   </button>
                 </div>
               </div>
@@ -1167,11 +1238,11 @@ export function ExtensionsView() {
                   <div className="w-10 h-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mx-auto text-xl">
                     <GithubIcon className="w-6 h-6" />
                   </div>
-                  <p className="text-xs font-bold text-foreground">Вы пока не подключили ни одного репозитория GitHub</p>
+                  <p className="text-xs font-bold text-foreground">Вы пока не создали и не подключили ни одного расширения</p>
                   <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
-                    Создайте репозиторий с файлом `zerf-extension.json` и вставьте ссылку сюда.
+                    Создайте репозиторий с файлом `zerf-extension.json` или сконфигурируйте расширение во встроенной Студии.
                   </p>
-                  <div className="flex items-center justify-center gap-2 pt-1">
+                  <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
                     <button
                       onClick={() => setShowSpecModal(true)}
                       className="px-4 py-2 rounded-xl bg-muted text-foreground text-xs font-semibold cursor-pointer"
@@ -1180,60 +1251,140 @@ export function ExtensionsView() {
                     </button>
                     <button
                       onClick={() => setShowGithubModal(true)}
+                      className="px-4 py-2 rounded-xl bg-muted border border-border text-foreground text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <GithubIcon className="w-3.5 h-3.5" />
+                      <span>Импорт с GitHub</span>
+                    </button>
+                    <button
+                      onClick={handleOpenCreate}
                       className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Подключить GitHub репозиторий</span>
+                      <span>Создать в Студии</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {myExtensions.map(ext => (
-                    <div
-                      key={ext.id}
-                      className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3 shadow-xs"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shrink-0 overflow-hidden">
-                          <ExtensionIcon icon={ext.icon} className="w-full h-full text-xl" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-foreground truncate">{ext.title}</h4>
-                          <p className="text-[10px] text-muted-foreground">
-                            {ext.price === 0 ? 'Бесплатный' : `${ext.price} ₽`} • {ext.installCount} установок • ❤️ {ext.likesCount || 0} • v{ext.version || '1.0.0'}
-                          </p>
-                        </div>
-                      </div>
+                  {myExtensions.map(ext => {
+                    const isLive = ext.isPublished !== false
+                    return (
+                      <div
+                        key={ext.id}
+                        className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-xs hover:border-primary/30 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-2xl shrink-0 overflow-hidden">
+                              <ExtensionIcon icon={ext.icon} className="w-full h-full text-2xl" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="text-xs font-bold text-foreground truncate">{ext.title}</h4>
+                                <span className="px-1.5 py-0.2 rounded-md bg-muted text-[9px] font-mono text-muted-foreground shrink-0">
+                                  v{ext.version || '1.0.0'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {ext.category} • {ext.price === 0 ? 'FREE' : `${ext.price} ₽`} • {ext.installCount} уст. • ❤️ {ext.likesCount || 0}
+                              </p>
+                            </div>
+                          </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {ext.githubUrl && (
-                          <button
-                            onClick={() => handleSyncGithub(ext.id)}
-                            disabled={actionLoading === ext.id}
-                            className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
-                            title="Синхронизировать с GitHub (Pull latest commit)"
-                          >
-                            <RefreshCw className={cn("w-3.5 h-3.5", actionLoading === ext.id && "animate-spin text-primary")} />
-                          </button>
+                          {/* Live Publication Status Badge */}
+                          <div className="shrink-0">
+                            {isLive ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                🟢 Опубликован
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                🟡 Черновик
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {ext.description && (
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                            {ext.description}
+                          </p>
                         )}
-                        <button
-                          onClick={() => setSelectedExt(ext)}
-                          className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs transition-colors cursor-pointer"
-                          title="Просмотр"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMyExt(ext.id)}
-                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                          title="Удалить из магазина"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+
+                        {ext.changelog && (
+                          <div className="p-2 rounded-xl bg-muted/40 border border-border/60 text-[10px] text-muted-foreground flex items-center gap-1.5">
+                            <History className="w-3 h-3 text-primary shrink-0" />
+                            <span className="truncate"><b>Релиз:</b> {ext.changelog}</span>
+                          </div>
+                        )}
+
+                        {/* Action buttons row */}
+                        <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-border/60">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {/* Settings & Version Control Button */}
+                            <button
+                              onClick={() => handleOpenEdit(ext)}
+                              className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                              title="Настройки, контроль версий и редактирование"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                              <span>Настройки</span>
+                            </button>
+
+                            {/* Direct Publish / Unpublish Toggle */}
+                            <button
+                              onClick={() => handleTogglePublish(ext)}
+                              disabled={actionLoading === `pub_${ext.id}`}
+                              className={cn(
+                                'px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors cursor-pointer flex items-center gap-1 shrink-0',
+                                isLive
+                                  ? 'bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground'
+                                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30'
+                              )}
+                              title={isLive ? 'Снять расширение с публикации в каталоге' : 'Опубликовать в общем каталоге Store'}
+                            >
+                              {actionLoading === `pub_${ext.id}` ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : isLive ? (
+                                <ToggleRight className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <ToggleLeft className="w-3.5 h-3.5 text-amber-400" />
+                              )}
+                              <span>{isLive ? 'В Store (Вкл)' : 'Опубликовать'}</span>
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {ext.githubUrl && (
+                              <button
+                                onClick={() => handleSyncGithub(ext.id)}
+                                disabled={actionLoading === ext.id}
+                                className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
+                                title="Синхронизировать с GitHub (Pull latest commit)"
+                              >
+                                <RefreshCw className={cn("w-3.5 h-3.5", actionLoading === ext.id && "animate-spin text-primary")} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setSelectedExt(ext)}
+                              className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs transition-colors cursor-pointer"
+                              title="Просмотр манифеста"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMyExt(ext.id)}
+                              className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                              title="Удалить из каталога и базы"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1742,7 +1893,7 @@ export function ExtensionsView() {
           </div>
         )}
       </AnimatePresence>
-      {/* MODAL: CUSTOM EXTENSION CREATOR / EDITOR STUDIO */}
+      {/* MODAL: ADVANCED EXTENSION STUDIO & VERSION CONTROL */}
       <AnimatePresence>
         {showEditorModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
@@ -1750,277 +1901,484 @@ export function ExtensionsView() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-xl bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs"
+              className="w-full max-w-2xl bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs"
             >
+              {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-lg font-bold">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-lg font-bold">
                     <Code2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-foreground">
-                      {editingExt ? `Редактирование: ${editingExt.title}` : 'Создание нового расширения'}
-                    </h3>
-                    <p className="text-[10px] text-muted-foreground">
-                      Настройте параметры, права доступа и выберите тариф подписки
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-foreground">
+                        {editingExt ? `Студия: ${formTitle || editingExt.title}` : 'Создание нового расширения'}
+                      </h3>
+                      <span className={cn(
+                        'px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                        formIsPublished
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      )}>
+                        {formIsPublished ? '🟢 Опубликовано в Store' : '🟡 Черновик (Не опубликован)'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Управление манифестом, семантическими версиями, описанием и монетизацией
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowEditorModal(false)}
-                  className="text-muted-foreground hover:text-foreground text-xs p-1"
+                  className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="space-y-3.5">
-                {/* 1. Title */}
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground text-[11px] block">Название расширения:</label>
-                  <input
-                    type="text"
-                    value={formTitle}
-                    onChange={e => setFormTitle(e.target.value)}
-                    placeholder="Например: Focus Timer Pro"
-                    className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                  />
-                </div>
+              {/* Sub Tabs Navigation */}
+              <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-2xl border border-border overflow-x-auto">
+                {[
+                  { id: 'general', label: '📝 Основное' },
+                  { id: 'version', label: `🏷️ Версии (v${formVersion || '1.0.0'})` },
+                  { id: 'access', label: '💎 Статус и Монетизация' },
+                  { id: 'code', label: '💻 JSON Код и Команды' },
+                  { id: 'github', label: '🐙 GitHub Sync' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setEditorActiveTab(tab.id as any)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-xl font-semibold text-xs transition-all shrink-0 cursor-pointer',
+                      editorActiveTab === tab.id
+                        ? 'bg-card text-foreground font-bold shadow-xs border border-border'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-card/50'
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
-                {/* 2. Image / Icon Uploader (Auto-compressed to 80x80 WebP < 3KB) */}
-                <div className="p-3 rounded-2xl bg-muted/30 border border-border space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-foreground text-[11px] flex items-center gap-1.5">
-                      <ImageIcon className="w-3.5 h-3.5 text-primary" />
-                      <span>Обложка / Картинка расширения:</span>
-                    </label>
-                    <span className="text-[10px] text-muted-foreground">
-                      Сжатие до 80x80 WebP (&lt; 3 KB)
-                    </span>
+              {/* TAB 1: GENERAL INFO */}
+              {editorActiveTab === 'general' && (
+                <div className="space-y-4 pt-1">
+                  {/* Title */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Название расширения:</label>
+                    <input
+                      type="text"
+                      value={formTitle}
+                      onChange={e => setFormTitle(e.target.value)}
+                      placeholder="Например: Entropy AI Deep Search"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-medium"
+                    />
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    {/* Live Preview Avatar */}
-                    <div className="w-12 h-12 rounded-2xl bg-card border border-border flex items-center justify-center text-2xl shrink-0 overflow-hidden shadow-2xs">
-                      <ExtensionIcon icon={formIcon} className="w-full h-full text-2xl" />
+                  {/* Image / Icon Uploader (Auto-compressed to 80x80 WebP < 3KB) */}
+                  <div className="p-3.5 rounded-2xl bg-muted/30 border border-border space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-foreground text-[11px] flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-primary" />
+                        <span>Иконка или Картинка модуля:</span>
+                      </label>
+                      <span className="text-[10px] text-muted-foreground">
+                        Авто-сжатие до 80x80 WebP (&lt; 3 KB)
+                      </span>
                     </div>
 
-                    {/* Controls & Preset Pills */}
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Hidden file input */}
-                        <input
-                          ref={formFileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleFormImageUpload}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => formFileInputRef.current?.click()}
-                          disabled={isCompressingImage}
-                          className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
-                        >
-                          {isCompressingImage ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <ImagePlus className="w-3.5 h-3.5" />
-                          )}
-                          <span>{isCompressingImage ? 'Сжатие...' : 'Загрузить картинку / фото'}</span>
-                        </button>
-
-                        {(formIcon.startsWith('data:') || formIcon.startsWith('http')) ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              ✓ {formIcon.startsWith('data:') ? `${(formIcon.length * 0.75 / 1024).toFixed(1)} KB` : 'URL'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setFormIcon('🧩')}
-                              className="text-[10px] text-rose-400 hover:underline cursor-pointer"
-                            >
-                              Сбросить
-                            </button>
-                          </div>
-                        ) : null}
+                    <div className="flex items-center gap-3">
+                      {/* Live Preview Avatar */}
+                      <div className="w-12 h-12 rounded-2xl bg-card border border-border flex items-center justify-center text-2xl shrink-0 overflow-hidden shadow-2xs">
+                        <ExtensionIcon icon={formIcon} className="w-full h-full text-2xl" />
                       </div>
 
-                      {/* URL or Emoji fallback */}
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={formIcon}
-                          onChange={e => setFormIcon(e.target.value)}
-                          placeholder="Или вставьте URL картинки / эмодзи"
-                          className="flex-1 h-7 px-2 rounded-lg bg-card border border-border text-[11px] outline-none focus:border-primary font-mono text-muted-foreground focus:text-foreground"
-                        />
-                        <div className="flex items-center gap-1 shrink-0">
-                          {['🔮', '⏱️', '🚀', '🤖', '📊', '⚡', '🎨', '🛡️'].map(emoji => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => setFormIcon(emoji)}
-                              className="w-6 h-6 rounded-md hover:bg-muted/80 flex items-center justify-center text-xs cursor-pointer transition-all"
-                              title={`Выбрать ${emoji}`}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
+                      {/* Controls & Upload Button */}
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <input
+                            ref={formFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleFormImageUpload}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => formFileInputRef.current?.click()}
+                            disabled={isCompressingImage}
+                            className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+                          >
+                            {isCompressingImage ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <ImagePlus className="w-3.5 h-3.5" />
+                            )}
+                            <span>{isCompressingImage ? 'Сжатие...' : 'Загрузить картинку / фото'}</span>
+                          </button>
+
+                          {(formIcon.startsWith('data:') || formIcon.startsWith('http')) && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                ✓ {formIcon.startsWith('data:') ? `${(formIcon.length * 0.75 / 1024).toFixed(1)} KB` : 'URL'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFormIcon('🧩')}
+                                className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                              >
+                                Сбросить к эмодзи
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* URL or Emoji fallback */}
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={formIcon}
+                            onChange={e => setFormIcon(e.target.value)}
+                            placeholder="Или вставьте URL картинки / эмодзи"
+                            className="flex-1 h-7 px-2 rounded-lg bg-card border border-border text-[11px] outline-none focus:border-primary font-mono text-muted-foreground focus:text-foreground"
+                          />
+                          <div className="flex items-center gap-1 shrink-0">
+                            {['🔮', '⏱️', '🚀', '🤖', '📊', '⚡', '🎨', '🛡️'].map(emoji => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => setFormIcon(emoji)}
+                                className="w-6 h-6 rounded-md hover:bg-muted/80 flex items-center justify-center text-xs cursor-pointer transition-all"
+                                title={`Выбрать ${emoji}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 2. Description */}
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground text-[11px] block">Описание функционала:</label>
-                  <textarea
-                    value={formDescription}
-                    onChange={e => setFormDescription(e.target.value)}
-                    placeholder="Кратко опишите, что делает расширение и как оно помогает..."
-                    rows={2}
-                    className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs resize-none"
-                  />
-                </div>
-
-                {/* 3. Category & Type */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Description */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">Категория:</label>
-                    <select
-                      value={formCategory}
-                      onChange={e => setFormCategory(e.target.value)}
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                    >
-                      <option value="Виджеты & Фокус">⏱️ Виджеты & Фокус</option>
-                      <option value="Бизнес & Стартапы">🚀 Бизнес & Стартапы</option>
-                      <option value="Привычки & Здоровье">💪 Привычки & Здоровье</option>
-                      <option value="ИИ & Промпты">🤖 ИИ & Промпты</option>
-                      <option value="Утилиты & Экспорт">🔌 Утилиты & Экспорт</option>
-                    </select>
+                    <label className="font-semibold text-foreground text-[11px] block">Описание функционала:</label>
+                    <textarea
+                      value={formDescription}
+                      onChange={e => setFormDescription(e.target.value)}
+                      placeholder="Кратко опишите, что делает расширение, какие команды поддерживает и как помогает..."
+                      rows={3}
+                      className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs resize-none leading-relaxed"
+                    />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">Тип модуля:</label>
-                    <select
-                      value={formType}
-                      onChange={e => setFormType(e.target.value as any)}
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                    >
-                      <option value="widget">Интерактивный виджет</option>
-                      <option value="template">Шаблон задач</option>
-                      <option value="theme">Тема оформления</option>
-                      <option value="integration">Интеграция</option>
-                      <option value="prompt">AI Промпт</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* 4. Subscription Limit / Min Plan Selector */}
-                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-2">
-                  <label className="font-bold text-foreground text-[11px] flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5 text-primary" />
-                      <span>Минимальный тариф для установки:</span>
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">Кто сможет использовать</span>
-                  </label>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { id: 'free', label: 'Доступно всем', sub: 'Free / Base', badge: 'bg-muted text-foreground' },
-                      { id: 'plus', label: 'Zerf Plus+', sub: 'от 99 ₽/мес', badge: 'bg-sky-500/15 text-sky-400 border border-sky-500/30' },
-                      { id: 'pro', label: 'Zerf Pro', sub: 'от 299 ₽/мес', badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
-                      { id: 'corp', label: 'Zerf Corp', sub: 'Команды', badge: 'bg-purple-500/15 text-purple-400 border border-purple-500/30' },
-                    ].map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setFormMinPlan(p.id as any)}
-                        className={cn(
-                          'p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between',
-                          formMinPlan === p.id
-                            ? 'bg-card border-primary ring-1 ring-primary shadow-xs'
-                            : 'bg-card/50 border-border text-muted-foreground hover:bg-card'
-                        )}
+                  {/* Category & Type */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground text-[11px] block">Категория:</label>
+                      <select
+                        value={formCategory}
+                        onChange={e => setFormCategory(e.target.value)}
+                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
                       >
-                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-md w-fit mb-1', p.badge)}>
-                          {p.label}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground">{p.sub}</span>
-                      </button>
-                    ))}
+                        <option value="Виджеты & Фокус">⏱️ Виджеты & Фокус</option>
+                        <option value="Бизнес & Стартапы">🚀 Бизнес & Стартапы</option>
+                        <option value="Привычки & Здоровье">💪 Привычки & Здоровье</option>
+                        <option value="ИИ & Промпты">🤖 ИИ & Промпты</option>
+                        <option value="Утилиты & Экспорт">🔌 Утилиты & Экспорт</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground text-[11px] block">Тип модуля:</label>
+                      <select
+                        value={formType}
+                        onChange={e => setFormType(e.target.value as any)}
+                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                      >
+                        <option value="widget">Интерактивный виджет</option>
+                        <option value="template">Шаблон задач</option>
+                        <option value="theme">Тема оформления</option>
+                        <option value="integration">Интеграция</option>
+                        <option value="prompt">AI Промпт</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* 5. Price & Version */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* TAB 2: VERSION CONTROL & CHANGELOG */}
+              {editorActiveTab === 'version' && (
+                <div className="space-y-4 pt-1">
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <label className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-primary" />
+                          <span>Семантическая версия (SemVer):</span>
+                        </label>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Формат: <code>MAJOR.MINOR.PATCH</code> (например <code>1.0.0</code>)
+                        </p>
+                      </div>
+                      <input
+                        type="text"
+                        value={formVersion}
+                        onChange={e => setFormVersion(e.target.value)}
+                        placeholder="1.0.0"
+                        className="w-32 h-9 px-3 rounded-xl bg-card border border-border text-foreground outline-none focus:border-primary text-xs font-mono font-bold text-center"
+                      />
+                    </div>
+
+                    {/* Quick Bump Buttons */}
+                    <div className="pt-2 border-t border-border/60">
+                      <p className="text-[10px] text-muted-foreground mb-1.5 font-semibold">Быстрое повышение версии:</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => bumpVersion('patch')}
+                          className="p-2 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer"
+                        >
+                          <div className="font-bold text-foreground text-[11px]">+ Patch (Фикс)</div>
+                          <div className="text-[9px] text-muted-foreground mt-0.5">Мелкие баги и правки</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => bumpVersion('minor')}
+                          className="p-2 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer"
+                        >
+                          <div className="font-bold text-primary text-[11px]">+ Minor (Фича)</div>
+                          <div className="text-[9px] text-muted-foreground mt-0.5">Новые функции</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => bumpVersion('major')}
+                          className="p-2 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer"
+                        >
+                          <div className="font-bold text-amber-400 text-[11px]">+ Major (Релиз)</div>
+                          <div className="text-[9px] text-muted-foreground mt-0.5">Крупное обновление</div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Release Notes / Changelog */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">
-                      Цена в рублях (0 = Бесплатно):
+                    <label className="font-semibold text-foreground text-[11px] flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <History className="w-3.5 h-3.5 text-primary" />
+                        <span>История изменений / Changelog этого релиза:</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">Будет видно пользователям в магазине</span>
                     </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={5000}
-                      value={formPrice}
-                      onChange={e => setFormPrice(Math.max(0, parseInt(e.target.value) || 0))}
-                      placeholder="0"
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">Версия:</label>
-                    <input
-                      type="text"
-                      value={formVersion}
-                      onChange={e => setFormVersion(e.target.value)}
-                      placeholder="1.0.0"
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-mono"
+                    <textarea
+                      value={formChangelog}
+                      onChange={e => setFormChangelog(e.target.value)}
+                      placeholder="Например: Добавлена поддержка CLI команд /search, ускорен парсинг сайтов, обновлены стили карточек..."
+                      rows={3}
+                      className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs resize-none leading-relaxed"
                     />
                   </div>
                 </div>
+              )}
 
-                {/* 6. Configuration / JSON Code */}
-                <div className="space-y-1">
+              {/* TAB 3: PUBLICATION STATUS & MONETIZATION */}
+              {editorActiveTab === 'access' && (
+                <div className="space-y-4 pt-1">
+                  {/* Publication Switch */}
+                  <div className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3 shadow-2xs">
+                    <div>
+                      <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-primary" />
+                        <span>Публикация в общем каталоге (Store)</span>
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {formIsPublished
+                          ? 'Расширение доступно для всех пользователей в витрине Zerf Note.'
+                          : 'Расширение находится в режиме черновика и видно только вам.'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormIsPublished(!formIsPublished)}
+                      className={cn(
+                        'px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all border shrink-0',
+                        formIsPublished
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-xs'
+                          : 'bg-muted text-muted-foreground hover:text-foreground border-border'
+                      )}
+                    >
+                      {formIsPublished ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-amber-400" />}
+                      <span>{formIsPublished ? 'Опубликовано' : 'Черновик'}</span>
+                    </button>
+                  </div>
+
+                  {/* Pricing and Revenue calculation */}
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <label className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                          <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Стоимость расширения (0 = Бесплатно):</span>
+                        </label>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          80% с каждой покупки зачисляется прямо на ваш баланс
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={5000}
+                          value={formPrice}
+                          onChange={e => setFormPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                          placeholder="0"
+                          className="w-28 h-9 px-3 rounded-xl bg-card border border-border text-foreground outline-none focus:border-primary text-xs font-mono font-bold text-right"
+                        />
+                        <span className="font-bold text-foreground text-xs">₽</span>
+                      </div>
+                    </div>
+
+                    {formPrice > 0 && (
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-between text-xs font-medium">
+                        <span>Ваш доход за 1 продажу (80%):</span>
+                        <b className="text-sm font-bold">{Math.round(formPrice * 0.8)} ₽</b>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Subscription Limit / Min Plan Selector */}
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border space-y-2.5">
+                    <label className="font-bold text-foreground text-xs flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-primary" />
+                        <span>Минимальный тариф для установки:</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">Требование подписки</span>
+                    </label>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: 'free', label: 'Доступно всем', sub: 'Free / Base', badge: 'bg-muted text-foreground' },
+                        { id: 'plus', label: 'Zerf Plus+', sub: 'от 99 ₽/мес', badge: 'bg-sky-500/15 text-sky-400 border border-sky-500/30' },
+                        { id: 'pro', label: 'Zerf Pro', sub: 'от 299 ₽/мес', badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+                        { id: 'corp', label: 'Zerf Corp', sub: 'Команды', badge: 'bg-purple-500/15 text-purple-400 border border-purple-500/30' },
+                      ].map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setFormMinPlan(p.id as any)}
+                          className={cn(
+                            'p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between',
+                            formMinPlan === p.id
+                              ? 'bg-card border-primary ring-1 ring-primary shadow-xs'
+                              : 'bg-card/50 border-border text-muted-foreground hover:bg-card'
+                          )}
+                        >
+                          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-md w-fit mb-1', p.badge)}>
+                            {p.label}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground">{p.sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: JSON CODE & MANIFEST */}
+              {editorActiveTab === 'code' && (
+                <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between">
-                    <label className="font-semibold text-foreground text-[11px]">Конфигурация / JSON данные:</label>
+                    <label className="font-semibold text-foreground text-[11px] flex items-center gap-1.5">
+                      <FileCode className="w-3.5 h-3.5 text-primary" />
+                      <span>Параметры конфигурации / content JSON:</span>
+                    </label>
                     <span className="text-[10px] text-muted-foreground font-mono">JSON format</span>
                   </div>
                   <textarea
                     value={formCode}
                     onChange={e => setFormCode(e.target.value)}
-                    rows={5}
-                    className="w-full p-2.5 rounded-xl bg-muted/40 border border-border font-mono text-[11px] text-foreground outline-none focus:border-primary resize-none"
+                    rows={10}
+                    className="w-full p-3 rounded-2xl bg-muted/40 border border-border font-mono text-[11px] text-foreground outline-none focus:border-primary resize-none"
                   />
+                  <p className="text-[10px] text-muted-foreground">
+                    Здесь хранятся команды (<code>commands</code>), параметры виджета, интервалы и правила интеграции.
+                  </p>
                 </div>
-              </div>
+              )}
 
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/60">
-                <button
-                  type="button"
-                  onClick={() => setShowEditorModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveCustomExtension}
-                  disabled={actionLoading === 'save_ext'}
-                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer"
-                >
-                  {actionLoading === 'save_ext' ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5" />
-                  )}
-                  <span>{editingExt ? 'Сохранить изменения' : 'Опубликовать расширение'}</span>
-                </button>
+              {/* TAB 5: GITHUB SYNC */}
+              {editorActiveTab === 'github' && (
+                <div className="space-y-4 pt-1">
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border space-y-3">
+                    <label className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                      <GithubIcon className="w-4 h-4 text-primary" />
+                      <span>Привязанный GitHub репозиторий:</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formGithubUrl}
+                      onChange={e => setFormGithubUrl(e.target.value)}
+                      placeholder="https://github.com/username/repo-name"
+                      className="w-full h-9 px-3 rounded-xl bg-card border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                    />
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      При указании ссылки, платформа Zerf Note считывает файл <code>zerf-extension.json</code> прямо из корня ветки <code>main</code> без расхода токенов.
+                    </p>
+
+                    {formGithubUrl && (
+                      <div className="pt-2 flex items-center gap-2">
+                        <a
+                          href={formGithubUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold flex items-center gap-1 border border-border"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Открыть репозиторий</span>
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Footer Save & Cancel Actions */}
+              <div className="pt-3 flex items-center justify-between gap-2 border-t border-border/60">
+                <div className="text-[11px] text-muted-foreground">
+                  Статус: <b>{formIsPublished ? '🟢 Публичный' : '🟡 Черновик'}</b>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditorModal(false)}
+                    className="px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCustomExtension}
+                    disabled={actionLoading === 'save_ext'}
+                    className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    {actionLoading === 'save_ext' ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {formIsPublished
+                        ? (editingExt ? 'Сохранить и обновить в Store' : 'Опубликовать в Store')
+                        : 'Сохранить черновик'}
+                    </span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

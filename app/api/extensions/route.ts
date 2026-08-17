@@ -24,6 +24,8 @@ export interface ExtensionItem {
   price: number // 0 = free, > 0 = price in RUB
   minPlan?: 'free' | 'plus' | 'pro' | 'corp'
   isOfficial?: boolean
+  isPublished?: boolean // false = Draft/Unpublished, true = Live in Store Catalog
+  changelog?: string // Release notes / changelog
   rating: number
   ratingCount: number
   likesCount: number
@@ -51,6 +53,8 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     price: 0,
     minPlan: 'free',
     isOfficial: true,
+    isPublished: true,
+    changelog: 'Релиз v1.0.0: Глубокий поиск, поддержка ссылок на источники, экспорт в заметки и CLI команды /search и /entropy.',
     rating: 5.0,
     ratingCount: 12,
     likesCount: 28,
@@ -195,7 +199,13 @@ export async function GET(req: NextRequest) {
     customItems.forEach(e => {
       if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
     })
-    const catalog = Array.from(allMap.values())
+    const isCreator = chatId === '6136950061' || chatId === '5078516086'
+    const catalog = Array.from(allMap.values()).filter(ext => {
+      if (ext.isPublished === false) {
+        return chatId && (ext.authorChatId === chatId || isCreator)
+      }
+      return true
+    })
 
     let installedIds: string[] = []
     let likedIds: string[] = []
@@ -420,6 +430,10 @@ export async function POST(req: NextRequest) {
         authorChatId: existingData?.authorChatId || chatId,
         authorName: existingData?.authorName || authorName,
         isOfficial: existingData ? existingData.isOfficial : isCreator,
+        isPublished: body.isPublished !== undefined
+          ? Boolean(body.isPublished)
+          : (existingData?.isPublished !== undefined ? existingData.isPublished : false),
+        changelog: body.changelog !== undefined ? body.changelog : (existingData?.changelog || ''),
         price: finalPrice,
         minPlan: finalMinPlan,
         rating: existingData?.rating || 5.0,
@@ -438,6 +452,30 @@ export async function POST(req: NextRequest) {
       })
 
       return NextResponse.json({ success: true, extension: extItem })
+    }
+
+    // ── ACTION: TOGGLE PUBLICATION STATUS ──
+    if (action === 'toggle_publish') {
+      const { extensionId, isPublished } = body
+      if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
+      const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+      if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      const current: ExtensionItem = JSON.parse(extRec.value)
+      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      if (current.authorChatId !== chatId && !isCreator) {
+        return NextResponse.json({ error: 'У вас нет прав на изменение статуса публикации' }, { status: 403 })
+      }
+
+      current.isPublished = typeof isPublished === 'boolean' ? isPublished : !current.isPublished
+      current.updatedAt = new Date().toISOString()
+
+      await prisma.config.update({
+        where: { key: `zerf_ext_${extensionId}` },
+        data: { value: JSON.stringify(current) },
+      })
+      return NextResponse.json({ success: true, extension: current, isPublished: current.isPublished })
     }
 
     // ── ACTION: DELETE EXTENSION (Author or Admin) ──
