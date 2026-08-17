@@ -18,14 +18,17 @@ interface LogEntry {
 }
 
 const MENU_ITEMS = [
-  { cmd: '/today', label: '📋 Задачи на сегодня', desc: 'Список дел, статусы и привычки' },
-  { cmd: '/cal', label: '📅 Календарь недели', desc: 'Недельное расписание' },
-  { cmd: '/chat', label: '💬 Чат с коллегой', desc: 'Командные сообщения и заметки' },
-  { cmd: '/focus 25', label: '☕ Таймер фокуса', desc: 'Pomodoro 25 мин со сферой' },
-  { cmd: '/note ', label: '📝 Сохранить заметку', desc: 'Добавить в базу знаний' },
-  { cmd: '/limits', label: '⚡ Лимиты & Квоты', desc: 'Использование суточных лимитов' },
-  { cmd: '/clear', label: '🧹 Очистить экран', desc: 'Сбросить историю диалога' },
-  { cmd: '/exit', label: '🚪 Выйти', desc: 'Закрыть терминал' },
+  { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня' },
+  { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты' },
+  { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени' },
+  { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание' },
+  { cmd: '/chat ', label: '/chat <текст>', desc: 'Чат с коллегой / заметка другу' },
+  { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний' },
+  { cmd: '/focus 25', label: '/focus [мин]', desc: 'Pomodoro таймер со сферой' },
+  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов' },
+  { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала' },
+  { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши' },
+  { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI' },
 ]
 
 export function Repl() {
@@ -38,8 +41,7 @@ export function Repl() {
   const [mood, setMood] = useState<MascotMood>('idle')
   const [history, setHistory] = useState<LogEntry[]>([])
   const [cliCount, setCliCount] = useState<number>(0)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [selectedMenuIdx, setSelectedMenuIdx] = useState(0)
+  const [selectedIdx, setSelectedIdx] = useState(0)
 
   // Load user data once on mount
   const loadData = async () => {
@@ -63,48 +65,67 @@ export function Repl() {
     loadData()
   }, [creds])
 
-  // Keyboard navigation
+  // Compute matching slash commands
+  const isSlash = inputVal.startsWith('/')
+  const filteredCommands = isSlash
+    ? MENU_ITEMS.filter(m => m.cmd.toLowerCase().startsWith(inputVal.toLowerCase().trim()))
+    : []
+
+  // Keep selectedIdx within bounds
+  useEffect(() => {
+    if (selectedIdx >= filteredCommands.length) {
+      setSelectedIdx(0)
+    }
+  }, [filteredCommands.length, selectedIdx])
+
+  // Keyboard navigation for menu and suggestions
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       exit()
       return
     }
 
-    if (menuOpen) {
+    if (isSlash && filteredCommands.length > 0) {
       if (key.upArrow) {
-        setSelectedMenuIdx(prev => (prev > 0 ? prev - 1 : MENU_ITEMS.length - 1))
+        setSelectedIdx(prev => (prev > 0 ? prev - 1 : filteredCommands.length - 1))
         return
       }
       if (key.downArrow) {
-        setSelectedMenuIdx(prev => (prev < MENU_ITEMS.length - 1 ? prev + 1 : 0))
+        setSelectedIdx(prev => (prev < filteredCommands.length - 1 ? prev + 1 : 0))
         return
       }
-      if (key.return) {
-        const item = MENU_ITEMS[selectedMenuIdx]
-        setMenuOpen(false)
+      if (key.tab) {
+        const item = filteredCommands[selectedIdx]
         if (item) {
-          executeCommand(item.cmd)
+          setInputVal(item.cmd.trim() + ' ')
         }
         return
       }
       if (key.escape) {
-        setMenuOpen(false)
+        setInputVal('')
         return
       }
-    }
-
-    // Toggle menu with /menu or ?
-    if (input === '?' && !inputVal) {
-      setMenuOpen(prev => !prev)
-      return
     }
   })
 
   const executeCommand = async (val: string) => {
-    const raw = val.trim()
+    let raw = val.trim()
     if (!raw) return
+
+    // If user is selecting from slash menu with enter on exact slash prefix
+    if (isSlash && filteredCommands.length > 0 && (!raw.includes(' ') || raw === '/')) {
+      const selectedItem = filteredCommands[selectedIdx]
+      if (selectedItem && (raw === '/' || !raw.includes(' '))) {
+        // If command requires argument (like /add, /done, /chat, /note), autocomplete it into prompt
+        if (selectedItem.cmd.endsWith(' ') && !raw.trim().includes(' ')) {
+          setInputVal(selectedItem.cmd)
+          return
+        }
+        raw = selectedItem.cmd.trim()
+      }
+    }
+
     setInputVal('')
-    setMenuOpen(false)
 
     // Add user command to history
     setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }])
@@ -120,11 +141,6 @@ export function Repl() {
       return
     }
 
-    if (raw === '/menu') {
-      setMenuOpen(true)
-      return
-    }
-
     if (raw === '/help' || raw === '?') {
       setHistory(h => [
         ...h,
@@ -133,10 +149,10 @@ export function Repl() {
           type: 'assistant',
           text: '📖 Быстрые команды Zerf CLI:',
           details: [
-            '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
             '/today          — Список задач и привычек на сегодня',
             '/cal            — Недельный календарь',
             '/chat <текст>   — Чат с коллегой / заметка другу',
+            '/add <текст>    — Добавить задачу с распознаванием даты',
             '/done <имя>     — Завершить задачу',
             '/focus [минуты] — Запустить Pomodoro таймер',
             '/note <текст>   — Сохранить заметку в базу',
@@ -295,6 +311,41 @@ export function Repl() {
       return
     }
 
+    if (raw.startsWith('/add')) {
+      const taskText = raw.replace('/add', '').trim()
+      if (!taskText) {
+        setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст задачи: /add <название>' }])
+        return
+      }
+      setMood('thinking')
+      try {
+        await mutateItem(creds, {
+          action: 'create',
+          item: {
+            title: taskText,
+            type: 'task',
+            priority: 'medium',
+            rawText: taskText,
+          }
+        })
+        setMood('celebrate')
+        setHistory(h => [
+          ...h,
+          { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
+        ])
+        await loadData()
+        setTimeout(() => setMood('idle'), 2500)
+      } catch (e: any) {
+        setMood('alert')
+        setHistory(h => [
+          ...h,
+          { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
+        ])
+        setTimeout(() => setMood('idle'), 2500)
+      }
+      return
+    }
+
     // Natural language query / AI dispatch
     setMood('thinking')
     try {
@@ -388,7 +439,7 @@ export function Repl() {
         <Box flexDirection="column" width={42} paddingX={1}>
           <Text bold color="yellow">Советы & Шорткаты</Text>
           <Box flexDirection="column" marginTop={1} gap={0}>
-            <Text color="gray">• <Text color="cyanBright">/menu</Text> — интерактивное меню (Gemini CLI)</Text>
+            <Text color="gray">• <Text color="cyanBright">/</Text> — автокомплит и меню (стрелки ↑/↓)</Text>
             <Text color="gray">• <Text color="cyanBright">/today</Text> — список задач на сегодня</Text>
             <Text color="gray">• <Text color="cyanBright">/cal</Text> — открыть календарь</Text>
             <Text color="gray">• <Text color="cyanBright">/chat</Text> — командный чат</Text>
@@ -439,22 +490,21 @@ export function Repl() {
         ))}
       </Box>
 
-      {/* ── Interactive /menu Dropdown Selector (Gemini CLI style) ────────── */}
-      {menuOpen && (
-        <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
-          <Box justifyContent="space-between" marginBottom={1}>
-            <Text bold color="yellow">❖ Меню команд Zerf CLI (выберите стрелками ↑/↓ и нажмите Enter):</Text>
-            <Text color="gray">ESC для закрытия</Text>
+      {/* ── Floating Slash Autocomplete / Menu (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
+      {isSlash && filteredCommands.length > 0 && (
+        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginY={0}>
+          <Box justifyContent="space-between" marginBottom={0}>
+            <Text bold color="yellow">Команды Zerf CLI (навигация ↑/↓, Tab для выбора):</Text>
           </Box>
-          {MENU_ITEMS.map((item, idx) => {
-            const isSel = idx === selectedMenuIdx
+          {filteredCommands.map((item, idx) => {
+            const isSel = idx === selectedIdx
             return (
-              <Box key={item.cmd} gap={1} paddingX={1}>
-                <Text bold color={isSel ? 'cyanBright' : 'gray'} inverse={isSel}>
-                  {isSel ? '▶ ' : '  '}{item.label.padEnd(26)}
+              <Box key={item.cmd} gap={1}>
+                <Text bold color={isSel ? 'yellow' : 'cyanBright'}>
+                  {isSel ? '▶ ' : '  '}{item.label.padEnd(16)}
                 </Text>
                 <Text color={isSel ? 'white' : 'gray'}>
-                  {item.desc}
+                  — {item.desc}
                 </Text>
               </Box>
             )
@@ -471,14 +521,14 @@ export function Repl() {
             value={inputVal}
             onChange={setInputVal}
             onSubmit={executeCommand}
-            placeholder="Напишите задачу, /menu, /today, /cal, /chat, ? для справки..."
+            placeholder="Напишите задачу, /today, /cal, /chat, ? для справки..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
         {/* Footer info & limits bar (Claude Code bottom style) */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>/menu для выбора · ? справка</Text>
+          <Text color="gray" dimColor>Стрелки ↑/↓ навигация по / · Tab выбор · ? справка</Text>
           <Text color="gray" dimColor>
             [{planTag}: {cliCount}/{limits?.maxCli || '∞'} CLI | {Math.floor((limits?.voiceUsedSeconds || 0) / 60)}/{limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)}м голос]
           </Text>

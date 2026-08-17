@@ -6,14 +6,17 @@ import TextInput from 'ink-text-input';
 import { fetchUserData, loadCredentials, mutateItem } from '../api.js';
 import { getAllaySpriteLines } from '../mascot.js';
 const MENU_ITEMS = [
-    { cmd: '/today', label: '📋 Задачи на сегодня', desc: 'Список дел, статусы и привычки' },
-    { cmd: '/cal', label: '📅 Календарь недели', desc: 'Недельное расписание' },
-    { cmd: '/chat', label: '💬 Чат с коллегой', desc: 'Командные сообщения и заметки' },
-    { cmd: '/focus 25', label: '☕ Таймер фокуса', desc: 'Pomodoro 25 мин со сферой' },
-    { cmd: '/note ', label: '📝 Сохранить заметку', desc: 'Добавить в базу знаний' },
-    { cmd: '/limits', label: '⚡ Лимиты & Квоты', desc: 'Использование суточных лимитов' },
-    { cmd: '/clear', label: '🧹 Очистить экран', desc: 'Сбросить историю диалога' },
-    { cmd: '/exit', label: '🚪 Выйти', desc: 'Закрыть терминал' },
+    { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня' },
+    { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты' },
+    { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени' },
+    { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание' },
+    { cmd: '/chat ', label: '/chat <текст>', desc: 'Чат с коллегой / заметка другу' },
+    { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний' },
+    { cmd: '/focus 25', label: '/focus [мин]', desc: 'Pomodoro таймер со сферой' },
+    { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов' },
+    { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала' },
+    { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши' },
+    { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI' },
 ];
 export function Repl() {
     const { exit } = useApp();
@@ -25,8 +28,7 @@ export function Repl() {
     const [mood, setMood] = useState('idle');
     const [history, setHistory] = useState([]);
     const [cliCount, setCliCount] = useState(0);
-    const [menuOpen, setMenuOpen] = useState(false);
-    const [selectedMenuIdx, setSelectedMenuIdx] = useState(0);
+    const [selectedIdx, setSelectedIdx] = useState(0);
     // Load user data once on mount
     const loadData = async () => {
         try {
@@ -50,46 +52,62 @@ export function Repl() {
     useEffect(() => {
         loadData();
     }, [creds]);
-    // Keyboard navigation
+    // Compute matching slash commands
+    const isSlash = inputVal.startsWith('/');
+    const filteredCommands = isSlash
+        ? MENU_ITEMS.filter(m => m.cmd.toLowerCase().startsWith(inputVal.toLowerCase().trim()))
+        : [];
+    // Keep selectedIdx within bounds
+    useEffect(() => {
+        if (selectedIdx >= filteredCommands.length) {
+            setSelectedIdx(0);
+        }
+    }, [filteredCommands.length, selectedIdx]);
+    // Keyboard navigation for menu and suggestions
     useInput((input, key) => {
         if (key.ctrl && input === 'c') {
             exit();
             return;
         }
-        if (menuOpen) {
+        if (isSlash && filteredCommands.length > 0) {
             if (key.upArrow) {
-                setSelectedMenuIdx(prev => (prev > 0 ? prev - 1 : MENU_ITEMS.length - 1));
+                setSelectedIdx(prev => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
                 return;
             }
             if (key.downArrow) {
-                setSelectedMenuIdx(prev => (prev < MENU_ITEMS.length - 1 ? prev + 1 : 0));
+                setSelectedIdx(prev => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
                 return;
             }
-            if (key.return) {
-                const item = MENU_ITEMS[selectedMenuIdx];
-                setMenuOpen(false);
+            if (key.tab) {
+                const item = filteredCommands[selectedIdx];
                 if (item) {
-                    executeCommand(item.cmd);
+                    setInputVal(item.cmd.trim() + ' ');
                 }
                 return;
             }
             if (key.escape) {
-                setMenuOpen(false);
+                setInputVal('');
                 return;
             }
         }
-        // Toggle menu with /menu or ?
-        if (input === '?' && !inputVal) {
-            setMenuOpen(prev => !prev);
-            return;
-        }
     });
     const executeCommand = async (val) => {
-        const raw = val.trim();
+        let raw = val.trim();
         if (!raw)
             return;
+        // If user is selecting from slash menu with enter on exact slash prefix
+        if (isSlash && filteredCommands.length > 0 && (!raw.includes(' ') || raw === '/')) {
+            const selectedItem = filteredCommands[selectedIdx];
+            if (selectedItem && (raw === '/' || !raw.includes(' '))) {
+                // If command requires argument (like /add, /done, /chat, /note), autocomplete it into prompt
+                if (selectedItem.cmd.endsWith(' ') && !raw.trim().includes(' ')) {
+                    setInputVal(selectedItem.cmd);
+                    return;
+                }
+                raw = selectedItem.cmd.trim();
+            }
+        }
         setInputVal('');
-        setMenuOpen(false);
         // Add user command to history
         setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }]);
         setCliCount(c => c + 1);
@@ -101,10 +119,6 @@ export function Repl() {
             setHistory([]);
             return;
         }
-        if (raw === '/menu') {
-            setMenuOpen(true);
-            return;
-        }
         if (raw === '/help' || raw === '?') {
             setHistory(h => [
                 ...h,
@@ -113,10 +127,10 @@ export function Repl() {
                     type: 'assistant',
                     text: '📖 Быстрые команды Zerf CLI:',
                     details: [
-                        '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
                         '/today          — Список задач и привычек на сегодня',
                         '/cal            — Недельный календарь',
                         '/chat <текст>   — Чат с коллегой / заметка другу',
+                        '/add <текст>    — Добавить задачу с распознаванием даты',
                         '/done <имя>     — Завершить задачу',
                         '/focus [минуты] — Запустить Pomodoro таймер',
                         '/note <текст>   — Сохранить заметку в базу',
@@ -269,6 +283,41 @@ export function Repl() {
             setTimeout(() => setMood('idle'), 2500);
             return;
         }
+        if (raw.startsWith('/add')) {
+            const taskText = raw.replace('/add', '').trim();
+            if (!taskText) {
+                setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст задачи: /add <название>' }]);
+                return;
+            }
+            setMood('thinking');
+            try {
+                await mutateItem(creds, {
+                    action: 'create',
+                    item: {
+                        title: taskText,
+                        type: 'task',
+                        priority: 'medium',
+                        rawText: taskText,
+                    }
+                });
+                setMood('celebrate');
+                setHistory(h => [
+                    ...h,
+                    { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
+                ]);
+                await loadData();
+                setTimeout(() => setMood('idle'), 2500);
+            }
+            catch (e) {
+                setMood('alert');
+                setHistory(h => [
+                    ...h,
+                    { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
+                ]);
+                setTimeout(() => setMood('idle'), 2500);
+            }
+            return;
+        }
         // Natural language query / AI dispatch
         setMood('thinking');
         try {
@@ -311,8 +360,8 @@ export function Repl() {
     const spriteLines = getAllaySpriteLines(mood, 0);
     const limits = data?.limits;
     const planTag = (data?.user?.plan || 'corp').toUpperCase();
-    return (_jsxs(Box, { flexDirection: "column", padding: 1, width: 88, children: [_jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsx(Box, { justifyContent: "center", marginBottom: 1, children: _jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", data?.user?.name || 'Кирилл', "!"] }) }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, idx))) }), _jsxs(Box, { flexDirection: "column", alignItems: "center", marginTop: 1, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), data?.user?.username && _jsxs(Text, { color: "gray", children: ["\u00B7 @", data.user.username] })] }), _jsxs(Text, { color: "gray", dimColor: true, children: ["~/ZerfNotes/", todayStr] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, gap: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/menu" }), " \u2014 \u0438\u043D\u0442\u0435\u0440\u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0435 \u043C\u0435\u043D\u044E (Gemini CLI)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0441\u043F\u0438\u0441\u043E\u043A \u0437\u0430\u0434\u0430\u0447 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/chat" }), " \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u043D\u044B\u0439 \u0447\u0430\u0442"] })] }), _jsx(Box, { marginY: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "yellow", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsxs(Text, { color: "white", children: ["\uD83D\uDCCB \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "yellow", children: "\uD83D\uDD25 \u0421\u0442\u0440\u0438\u043A \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438: 12 \u0434\u043D\u0435\u0439" })] })] })] }), _jsx(Box, { flexDirection: "column", marginY: 1, children: history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "greenBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))) }), menuOpen && (_jsxs(Box, { flexDirection: "column", borderStyle: "double", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\u2756 \u041C\u0435\u043D\u044E \u043A\u043E\u043C\u0430\u043D\u0434 Zerf CLI (\u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0442\u0440\u0435\u043B\u043A\u0430\u043C\u0438 \u2191/\u2193 \u0438 \u043D\u0430\u0436\u043C\u0438\u0442\u0435 Enter):" }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), MENU_ITEMS.map((item, idx) => {
-                        const isSel = idx === selectedMenuIdx;
-                        return (_jsxs(Box, { gap: 1, paddingX: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', inverse: isSel, children: [isSel ? '▶ ' : '  ', item.label.padEnd(26)] }), _jsx(Text, { color: isSel ? 'white' : 'gray', children: item.desc })] }, item.cmd));
-                    })] })), _jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: setInputVal, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, /menu, /today, /cal, /chat, ? \u0434\u043B\u044F \u0441\u043F\u0440\u0430\u0432\u043A\u0438..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "/menu \u0434\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430 \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
+    return (_jsxs(Box, { flexDirection: "column", padding: 1, width: 88, children: [_jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsx(Box, { justifyContent: "center", marginBottom: 1, children: _jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", data?.user?.name || 'Кирилл', "!"] }) }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, idx))) }), _jsxs(Box, { flexDirection: "column", alignItems: "center", marginTop: 1, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), data?.user?.username && _jsxs(Text, { color: "gray", children: ["\u00B7 @", data.user.username] })] }), _jsxs(Text, { color: "gray", dimColor: true, children: ["~/ZerfNotes/", todayStr] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, gap: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/" }), " \u2014 \u0430\u0432\u0442\u043E\u043A\u043E\u043C\u043F\u043B\u0438\u0442 \u0438 \u043C\u0435\u043D\u044E (\u0441\u0442\u0440\u0435\u043B\u043A\u0438 \u2191/\u2193)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0441\u043F\u0438\u0441\u043E\u043A \u0437\u0430\u0434\u0430\u0447 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/chat" }), " \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u043D\u044B\u0439 \u0447\u0430\u0442"] })] }), _jsx(Box, { marginY: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "yellow", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsxs(Text, { color: "white", children: ["\uD83D\uDCCB \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "yellow", children: "\uD83D\uDD25 \u0421\u0442\u0440\u0438\u043A \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438: 12 \u0434\u043D\u0435\u0439" })] })] })] }), _jsx(Box, { flexDirection: "column", marginY: 1, children: history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "greenBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))) }), isSlash && filteredCommands.length > 0 && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "yellow", paddingX: 1, marginY: 0, children: [_jsx(Box, { justifyContent: "space-between", marginBottom: 0, children: _jsx(Text, { bold: true, color: "yellow", children: "\u041A\u043E\u043C\u0430\u043D\u0434\u044B Zerf CLI (\u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044F \u2191/\u2193, Tab \u0434\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430):" }) }), filteredCommands.map((item, idx) => {
+                        const isSel = idx === selectedIdx;
+                        return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'yellow' : 'cyanBright', children: [isSel ? '▶ ' : '  ', item.label.padEnd(16)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, item.cmd));
+                    })] })), _jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: setInputVal, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, /today, /cal, /chat, ? \u0434\u043B\u044F \u0441\u043F\u0440\u0430\u0432\u043A\u0438..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u0421\u0442\u0440\u0435\u043B\u043A\u0438 \u2191/\u2193 \u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044F \u043F\u043E / \u00B7 Tab \u0432\u044B\u0431\u043E\u0440 \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
 }
