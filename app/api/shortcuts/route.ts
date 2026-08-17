@@ -329,10 +329,17 @@ export async function POST(req: NextRequest) {
       }, { status: 400, headers: NO_CACHE_HEADERS })
     }
 
-    await registerChatId(chatId)
+    // Parallelize all prerequisite DB queries and checks in 1 batch
+    const [limits, context, friends, userRec] = await Promise.all([
+      getUserUsageAndLimits(chatId),
+      getExistingItemsContext(chatId),
+      getFriends(chatId),
+      prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { authProvider: true } }),
+    ])
+
+    registerChatId(chatId).catch(() => {})
 
     // Limits check: Siri requests quota + voice seconds quota
-    const limits = await getUserUsageAndLimits(chatId)
     if (!limits.canUseSiri) {
       const limitMsg = `❌ Лимит Siri-запросов исчерпан (${limits.siri.max} запросов за всё время на бесплатном тарифе). Оформите Zerf Plus или Pro в боте — там Siri без ограничений!`
       if (format === 'json') {
@@ -347,7 +354,6 @@ export async function POST(req: NextRequest) {
       }
       return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
     }
-    await incrementLifetimeCount(COUNTERS.siri, chatId)
 
     // 1. Check if user asked Siri "What's on today?"
     if (isTodayQuery(inputText)) {
@@ -363,8 +369,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Parse and save task/goal/note
-    const context = await getExistingItemsContext(chatId)
-    const friends = await getFriends(chatId)
     const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
     const items = await parseIntentWithGroq(inputText, key, undefined, context, friendsContext)
 
@@ -380,42 +384,42 @@ export async function POST(req: NextRequest) {
 
     const { spokenText, tgMsg: delegationTgMsg } = await processShortcutsItems(items, chatId, inputText, friends)
 
-    // Track usage
-    const estimatedSec = Math.max(5, Math.round(inputText.length / 15))
-    await incrementUserUsage(chatId, 'voice', estimatedSec).catch(() => {})
-
-    // Send confirmation in Telegram
-    let tgMsg = delegationTgMsg
-    if (!tgMsg) {
-      if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
-        tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
-      } else {
-        tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
-        items.forEach((item, idx) => {
-          if (item.action === 'delete') {
-            tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
-          } else if (item.action === 'delete_all') {
-            tgMsg += `▪ *Все задачи очищены*\n`
-          } else if (item.action === 'completion' || item.type === 'completion') {
-            tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
-          } else {
-            const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-            tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+    // Execute tracking and messaging in background without delaying Siri response
+    ;(async () => {
+      const estimatedSec = Math.max(5, Math.round(inputText.length / 15))
+      await Promise.allSettled([
+        incrementLifetimeCount(COUNTERS.siri, chatId),
+        incrementUserUsage(chatId, 'voice', estimatedSec),
+        (async () => {
+          let tgMsg = delegationTgMsg
+          if (!tgMsg) {
+            if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
+              tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
+            } else {
+              tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
+              items.forEach((item, idx) => {
+                if (item.action === 'delete') {
+                  tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
+                } else if (item.action === 'delete_all') {
+                  tgMsg += `▪ *Все задачи очищены*\n`
+                } else if (item.action === 'completion' || item.type === 'completion') {
+                  tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
+                } else {
+                  const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+                  tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+                }
+              })
+            }
           }
-        })
-      }
-    }
-
-    // Send confirmation in Telegram or VK if applicable
-    try {
-      const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
-      if (userRec?.authProvider === 'vk') {
-        const { sendVkMessage } = await import('@/lib/backend/vk')
-        await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
-      } else if (!userRec || userRec.authProvider === 'telegram') {
-        sendTgNotification(chatId, tgMsg).catch(() => {})
-      }
-    } catch {}
+          if (userRec?.authProvider === 'vk') {
+            const { sendVkMessage } = await import('@/lib/backend/vk')
+            await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
+          } else {
+            await sendTgNotification(chatId, tgMsg)
+          }
+        })(),
+      ])
+    })().catch(() => {})
 
     if (format === 'json' || req.headers.get('accept')?.includes('application/json')) {
       return NextResponse.json({
@@ -502,10 +506,18 @@ export async function GET(req: NextRequest) {
   }
 
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
-  await registerChatId(chatId)
+
+  // Parallelize all prerequisite DB queries and checks in 1 batch
+  const [limits, context, friends, userRec] = await Promise.all([
+    getUserUsageAndLimits(chatId),
+    getExistingItemsContext(chatId),
+    getFriends(chatId),
+    prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { authProvider: true } }),
+  ])
+
+  registerChatId(chatId).catch(() => {})
 
   // Limits check
-  const limits = await getUserUsageAndLimits(chatId)
   if (!limits.canUseSiri) {
     const limitMsg = `❌ Лимит Siri-запросов исчерпан (${limits.siri.max} запросов за всё время на бесплатном тарифе). Оформите Zerf Plus или Pro в боте — там Siri без ограничений!`
     if (format === 'json') {
@@ -520,7 +532,6 @@ export async function GET(req: NextRequest) {
     }
     return new NextResponse(limitMsg, { headers: NO_CACHE_HEADERS, status: 200 })
   }
-  await incrementLifetimeCount(COUNTERS.siri, chatId)
 
   // Check today query
   if (isTodayQuery(text)) {
@@ -536,49 +547,47 @@ export async function GET(req: NextRequest) {
     return new NextResponse(spokenResponse, { headers: NO_CACHE_HEADERS })
   }
 
-  const context = await getExistingItemsContext(chatId)
-  const friends = await getFriends(chatId)
   const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
   const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext)
 
   const { spokenText, tgMsg: delegationTgMsg } = await processShortcutsItems(items, chatId, text, friends)
 
-  // Track usage
-  const estimatedSec = Math.max(5, Math.round(text.length / 15))
-  await incrementUserUsage(chatId, 'voice', estimatedSec).catch(() => {})
-
-  // Send confirmation in Telegram
-  let tgMsg = delegationTgMsg
-  if (!tgMsg) {
-    if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
-      tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
-    } else {
-      tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
-      items.forEach((item, idx) => {
-        if (item.action === 'delete') {
-          tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
-        } else if (item.action === 'delete_all') {
-          tgMsg += `▪ *Все задачи очищены*\n`
-        } else if (item.action === 'completion' || item.type === 'completion') {
-          tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
-        } else {
-          const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
-          tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+  // Execute tracking and messaging in background without delaying Siri response
+  ;(async () => {
+    const estimatedSec = Math.max(5, Math.round(text.length / 15))
+    await Promise.allSettled([
+      incrementLifetimeCount(COUNTERS.siri, chatId),
+      incrementUserUsage(chatId, 'voice', estimatedSec),
+      (async () => {
+        let tgMsg = delegationTgMsg
+        if (!tgMsg) {
+          if (items[0]?.type === 'answer' || items[0]?.action === 'reply') {
+            tgMsg = `💡 *Ответ ИИ-ассистента:*\n\n${items[0].summary || items[0].title}`
+          } else {
+            tgMsg = `✦ *Голосовой ввод через Siri / Быстрые команды*\n\n`
+            items.forEach((item, idx) => {
+              if (item.action === 'delete') {
+                tgMsg += `${idx + 1}. ▪ *Удалено:* ${item.targetTitle || item.title}\n`
+              } else if (item.action === 'delete_all') {
+                tgMsg += `▪ *Все задачи очищены*\n`
+              } else if (item.action === 'completion' || item.type === 'completion') {
+                tgMsg += `${idx + 1}. ▪ *Выполнено:* ${item.targetTitle || item.title}\n`
+              } else {
+                const due = item.dueTime ? ` _(до ${item.dueTime})_` : ''
+                tgMsg += `${idx + 1}. ▪ *${item.title}*${due}\n`
+              }
+            })
+          }
         }
-      })
-    }
-  }
-
-  // Send confirmation in Telegram or VK if applicable
-  try {
-    const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
-    if (userRec?.authProvider === 'vk') {
-      const { sendVkMessage } = await import('@/lib/backend/vk')
-      await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
-    } else if (!userRec || userRec.authProvider === 'telegram') {
-      sendTgNotification(chatId, tgMsg).catch(() => {})
-    }
-  } catch {}
+        if (userRec?.authProvider === 'vk') {
+          const { sendVkMessage } = await import('@/lib/backend/vk')
+          await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
+        } else {
+          await sendTgNotification(chatId, tgMsg)
+        }
+      })(),
+    ])
+  })().catch(() => {})
 
   if (format === 'json') {
     return NextResponse.json({
