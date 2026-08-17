@@ -10,9 +10,12 @@ function tunedDatabaseUrl(url: string | undefined): string | undefined {
   if (!url) return url
   try {
     const u = new URL(url)
-    if (!u.searchParams.has('connection_limit')) u.searchParams.set('connection_limit', '1')
-    if (!u.searchParams.has('pool_timeout')) u.searchParams.set('pool_timeout', '15')
-    if (!u.searchParams.has('connect_timeout')) u.searchParams.set('connect_timeout', '15')
+    if (!u.searchParams.has('connection_limit')) u.searchParams.set('connection_limit', '3')
+    if (!u.searchParams.has('pool_timeout')) u.searchParams.set('pool_timeout', '10')
+    if (!u.searchParams.has('connect_timeout')) u.searchParams.set('connect_timeout', '10')
+    if (!u.searchParams.has('pgbouncer') && (url.includes('pooler.supabase.com') || url.includes('6543'))) {
+      u.searchParams.set('pgbouncer', 'true')
+    }
     return u.toString()
   } catch {
     return url

@@ -41,6 +41,12 @@ model Task {
   parentTaskId String?
   projectDbId  String?
   remindersSentCount Int   @default(0)
+
+  @@index([ownerChatId])
+  @@index([authorChatId])
+  @@index([status])
+  @@index([dueDate, reminderSent])
+  @@index([createdAt])
 }
 
 model Goal {
@@ -57,6 +63,9 @@ model Goal {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   ownerChatId BigInt?
+
+  @@index([ownerChatId])
+  @@index([status])
 }
 
 model Note {
@@ -79,6 +88,10 @@ model Note {
   pinned       Boolean  @default(false)
   folder       String?  @default("Общее")
   ownerChatId  BigInt?
+
+  @@index([ownerChatId])
+  @@index([pinned])
+  @@index([createdAt])
 }
 
 model TelegramChat {
@@ -114,6 +127,10 @@ model TelegramChat {
   googleCalendarToken    String?   // JSON: { access_token, refresh_token, expiry_date }
   googleCalendarSync     Boolean   @default(false) // 2-way Google Calendar sync enabled
   addedAt                DateTime  @default(now())
+
+  @@index([username])
+  @@index([plan])
+  @@index([lastActiveAt])
 }
 
 model Friendship {
@@ -125,6 +142,9 @@ model Friendship {
   createdAt    DateTime @default(now())
 
   @@unique([userChatId, friendChatId])
+  @@index([userChatId])
+  @@index([friendChatId])
+  @@index([status])
 }
 
 // One-time login tokens for secure web browser auth
@@ -168,6 +188,9 @@ model ProjectDB {
   status      String   @default("active") // "active" | "completed" | "archived"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([ownerChatId])
+  @@index([status])
 }
 
 // Tracks every user ever seen in each Telegram group chat
@@ -190,6 +213,8 @@ model Habit {
   ownerChatId     BigInt?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([ownerChatId])
 }
 
 // Dynamic configuration key-value store (e.g. subscription price)
@@ -220,6 +245,9 @@ model AppActionLog {
   chatId    BigInt?
   details   String?
   createdAt DateTime @default(now())
+
+  @@index([chatId])
+  @@index([createdAt])
 }
 
 // Comments from channel posts & discussion groups analyzed by AI
@@ -264,4 +292,6 @@ model Team {
   inviteCode         String    @unique @default(cuid()) // Join link token
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+
+  @@index([ownerChatId])
 }
