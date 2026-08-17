@@ -18,11 +18,11 @@ export interface DetectedCli {
 }
 
 const SUPPORTED_LOCAL_CLIS: Array<{ command: AllowedCli; name: string; desc: string; type: 'local_cli' | 'local_llm' }> = [
-  { command: 'claude', name: 'claude', desc: 'Anthropic Claude Code терминальный агент', type: 'local_cli' },
-  { command: 'agy', name: 'agy', desc: 'Antigravity CLI автономный агент', type: 'local_cli' },
-  { command: 'opencode', name: 'opencode', desc: 'OpenCode terminal agent', type: 'local_cli' },
-  { command: 'gh', name: 'gh', desc: 'GitHub Copilot CLI помощник', type: 'local_cli' },
-  { command: 'ollama', name: 'ollama', desc: 'Локальные LLaMA/Qwen модели (localhost:11434)', type: 'local_llm' },
+  { command: 'claude', name: '🪽 Claude Code CLI (claude)', desc: 'Anthropic Claude Code терминальный агент', type: 'local_cli' },
+  { command: 'agy', name: '🌌 Antigravity CLI (agy)', desc: 'Antigravity автономный AI агент', type: 'local_cli' },
+  { command: 'opencode', name: '⚡ OpenCode CLI (opencode)', desc: 'OpenCode terminal agent', type: 'local_cli' },
+  { command: 'gh', name: '🐙 GitHub Copilot CLI (gh)', desc: 'GitHub Copilot терминальный помощник', type: 'local_cli' },
+  { command: 'ollama', name: '🦙 Ollama Local (ollama)', desc: 'Локальные LLaMA/Qwen модели на ПК (localhost:11434)', type: 'local_llm' },
 ]
 
 export function checkCliInstalled(cmd: AllowedCli): { installed: boolean; path?: string; version?: string } {
@@ -85,7 +85,6 @@ export async function runLocalCliBridge(
   }
 
   return new Promise((resolve, reject) => {
-    const isWin = os.platform() === 'win32'
     const exePath = cliInfo.path!
     const args = [userPrompt]
 

@@ -38,27 +38,27 @@ interface AiModelOption {
 }
 
 const CLOUD_MODELS: AiModelOption[] = [
-  { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и качества (120–200 мс)', type: 'cloud' },
-  { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
-  { id: 'groq/compound', name: 'Groq Compound Router', desc: 'Авто-роутинг оптимальной модели', type: 'cloud' },
-  { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок', type: 'cloud' },
+  { id: 'openai/gpt-oss-120b', name: '🧠 OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
+  { id: 'openai/gpt-oss-20b', name: '⚡ OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
+  { id: 'groq/compound', name: '✨ Groq Compound Router', desc: 'Авто-роутинг оптимальной модели под контекст', type: 'cloud' },
+  { id: 'meta-llama/Llama-3.1-8B-Instruct', name: '🪽 Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
 ]
 
 const BASE_MENU_ITEMS: MenuItem[] = [
-  { cmd: '/today', label: '/today', desc: 'Список дел и привычек с отсчетом времени', glyph: GLYPHS.task },
-  { cmd: '/cal', label: '/cal', desc: '7-дневный календарь с расписанием', glyph: GLYPHS.calendar },
-  { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: GLYPHS.chat },
-  { cmd: '/add ', label: '/add <текст>', desc: 'Добавить задачу с распознаванием даты', glyph: GLYPHS.task },
-  { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
-  { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить быструю заметку в базу', glyph: GLYPHS.note },
-  { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Pomodoro', glyph: GLYPHS.focus },
-  { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI', glyph: '🤖' },
+  { cmd: '/today', label: '/today', desc: 'Список дел и привычек с отсчетом времени', glyph: '❖' },
+  { cmd: '/cal', label: '/cal', desc: '7-дневный календарь с расписанием', glyph: '◫' },
+  { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: '💬' },
+  { cmd: '/add ', label: '/add <текст>', desc: 'Добавить задачу с распознаванием даты', glyph: '➕' },
+  { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: '✔' },
+  { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить быструю заметку в базу', glyph: '≡' },
+  { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Pomodoro', glyph: '⊘' },
+  { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI', glyph: '🧠' },
   { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и параметры', glyph: '⚙' },
-  { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: GLYPHS.friend },
-  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: '👥' },
+  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: '⚡' },
   { cmd: '/clear', label: '/clear', desc: 'Очистить историю диалога', glyph: '🧹' },
   { cmd: '/help', label: '/help', desc: 'Справка по всем командам', glyph: '?' },
-  { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '🚪' },
+  { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ]
 
 function getCountdownText(dueTime?: string | null, status?: string): string {
