@@ -26,8 +26,10 @@ import { ProjectsView } from '@/components/views/projects-view'
 import { AdminView } from '@/components/views/admin-view'
 import { ClockView } from '@/components/views/clock-view'
 import { GraphView } from '@/components/views/graph-view'
+import { ExtensionsView } from '@/components/views/extensions-view'
 import { AuthGateModal } from '@/components/auth-gate-modal'
 import { PullToRefresh } from '@/components/ui/pull-to-refresh'
+import { cn } from '@/lib/utils'
 
 export function AppShell() {
   const { state, dispatch, syncData } = useApp()
@@ -35,6 +37,21 @@ export function AppShell() {
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('zerf_sidebar_collapsed') === 'true'
+    }
+    return false
+  })
+
+  useEffect(() => {
+    const handleCollapseChange = (e: any) => {
+      setIsDesktopCollapsed(Boolean(e.detail))
+    }
+    window.addEventListener('zerf_sidebar_collapse_changed', handleCollapseChange)
+    return () => window.removeEventListener('zerf_sidebar_collapse_changed', handleCollapseChange)
+  }, [])
 
   const handleOpenNewTask = () => {
     const chatId = getTgChatId()
@@ -73,7 +90,7 @@ export function AppShell() {
         setTimeout(() => handleOpenVoice(), 300)
       }
 
-      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'teams', 'projects', 'settings'].includes(view)) {
+      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'teams', 'projects', 'extensions', 'settings'].includes(view)) {
         dispatch({ type: 'SET_VIEW', view: view as any })
       }
     }
@@ -96,12 +113,13 @@ export function AppShell() {
     stats:      <StatsView />,
     friends:    <FriendsView />,
     teams:      <TeamsView />,
+    extensions: <ExtensionsView />,
     settings:   <SettingsView />,
     projects:   <ProjectsView />,
     admin:      <AdminView />,
   }
 
-  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings'
+  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings' || state.currentView === 'extensions'
 
   return (
     <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]">
@@ -135,8 +153,21 @@ export function AppShell() {
       </AnimatePresence>
 
       {/* ── Desktop Sidebar ── */}
-      <div className="hidden sm:block sm:w-56 shrink-0 h-full overflow-y-auto no-scrollbar border-r border-border">
-        <Sidebar />
+      <div className={cn(
+        'hidden sm:block shrink-0 h-full overflow-y-auto no-scrollbar border-r border-border transition-all duration-200',
+        isDesktopCollapsed ? 'sm:w-16' : 'sm:w-56'
+      )}>
+        <Sidebar
+          isCollapsed={isDesktopCollapsed}
+          onToggleCollapse={() => {
+            const next = !isDesktopCollapsed
+            setIsDesktopCollapsed(next)
+            try {
+              localStorage.setItem('zerf_sidebar_collapsed', String(next))
+              window.dispatchEvent(new CustomEvent('zerf_sidebar_collapse_changed', { detail: next }))
+            } catch {}
+          }}
+        />
       </div>
 
       {/* ── Main content area ── */}

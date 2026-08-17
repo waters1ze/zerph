@@ -17,6 +17,7 @@ export type View =
   | 'stats'
   | 'friends'
   | 'teams'
+  | 'extensions'
   | 'settings'
   | 'admin'
 

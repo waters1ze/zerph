@@ -82,7 +82,11 @@ export function StatsView() {
   const total = tasks.length
   const completionRate = total > 0 ? Math.round((done / total) * 100) : 0
 
-  const sharedTasks = tasks.filter(t => t.isShared || t.assignees?.length > 0).length
+  const activeFriendsSet = new Set(state.friends.map(f => String(f.chatId || f.id || f.username)))
+  const hasCollab = state.friends.length > 0
+  const sharedTasks = hasCollab
+    ? tasks.filter(t => (t.isShared && state.friends.length > 0) || (t.assignees && t.assignees.some(a => activeFriendsSet.has(String(a))))).length
+    : 0
   const aiTasks = tasks.filter(t => t.aiGenerated).length
 
   const goalsOnTrack = state.goals.filter(g => g.status === 'on_track').length

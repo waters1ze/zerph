@@ -10,7 +10,7 @@ import {
   User, Users, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
-  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain
+  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -19,6 +19,7 @@ import { GiftSection } from '@/components/settings/gift-section'
 import { ImportExportSection } from '@/components/settings/import-export-section'
 import { TeamsSection } from '@/components/settings/teams-section'
 import { AiModelsSection } from '@/components/settings/ai-models-section'
+import { SidebarCustomizerSection } from '@/components/settings/sidebar-customizer-section'
 import {
   THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
   normalizeTheme, type ThemePresetId, type TextScaleStep,
@@ -76,7 +77,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
   { value: 3,  label: 'A' },
 ]
 
-type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'data'
+type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'sidebar' | 'pwa' | 'data'
 
 export function SettingsView() {
   const { state, dispatch, syncData } = useApp()
@@ -543,6 +544,7 @@ export function SettingsView() {
       group: 'ИНТЕРФЕЙС',
       items: [
         { id: 'appearance' as SettingsTab, label: 'Оформление & Цвета', icon: Palette, desc: 'Светлая/тёмная тема, палитра акцентов' },
+        { id: 'sidebar' as SettingsTab, label: 'Меню & Панели', icon: LayoutGrid, desc: 'Скрытие разделов, папки, кастомизация боковой панели' },
         { id: 'pwa' as SettingsTab, label: 'PWA Приложение', icon: Smartphone, desc: 'Установка на экран телефона и рабочий стол ПК' },
       ],
     },
@@ -2179,6 +2181,11 @@ export function SettingsView() {
       {/* ── TAB 9: Team & Corporate Workspaces ─────────────────────────────────── */}
       {activeTab === 'teams' && (
         <TeamsSection />
+      )}
+
+      {/* ── TAB 10: Sidebar & Menu Customizer ─────────────────────────────────── */}
+      {activeTab === 'sidebar' && (
+        <SidebarCustomizerSection />
       )}
 
         </div>

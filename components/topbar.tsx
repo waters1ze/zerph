@@ -12,21 +12,22 @@ import { Clock } from 'lucide-react'
 import { playAlarmChime, showWebNotification } from '@/lib/notifications'
 
 const VIEW_LABELS: Record<string, string> = {
-  today:    'Сегодня',
-  inbox:    'Входящие',
-  tasks:    'Задачи',
-  clock:    'Часы и Таймеры',
-  goals:    'Цели',
-  projects: 'Проекты',
-  notes:    'Заметки',
-  graph:    'Граф знаний',
-  calendar: 'Календарь',
-  chat:     'AI Чат',
-  stats:    'Аналитика',
-  friends:  'Друзья',
-  teams:    'Команды',
-  settings: 'Настройки',
-  admin:    'Админ-панель',
+  today:      'Сегодня',
+  inbox:      'Входящие',
+  tasks:      'Задачи',
+  clock:      'Часы и Таймеры',
+  goals:      'Цели',
+  projects:   'Проекты',
+  notes:      'Заметки',
+  graph:      'Граф знаний',
+  calendar:   'Календарь',
+  chat:       'AI Чат',
+  stats:      'Аналитика',
+  friends:    'Друзья',
+  teams:      'Команды',
+  extensions: 'Расширения',
+  settings:   'Настройки',
+  admin:      'Админ-панель',
 }
 
 interface Props {
