@@ -31,6 +31,54 @@ const VIEW_LABELS: Record<string, string> = {
   admin:      'Админ-панель',
 }
 
+function getDynamicViewTitle(view: string): string {
+  // 1. Direct label match
+  if (VIEW_LABELS[view]) return VIEW_LABELS[view]
+
+  // 2. Extensions and custom views from localStorage / catalog
+  if (typeof window !== 'undefined') {
+    try {
+      // Check catalog cache
+      const catalogRaw = localStorage.getItem('zerf_ext_catalog_cache')
+      if (catalogRaw) {
+        const parsed = JSON.parse(catalogRaw)
+        const list = Array.isArray(parsed) ? parsed : (parsed.extensions || parsed.items || [])
+        const match = list.find((e: any) => e.id === view || e.name === view)
+        if (match?.title || match?.name) {
+          return match.title || match.name
+        }
+      }
+
+      // Check sidebar custom config
+      const sidebarRaw = localStorage.getItem('zerf_sidebar_config_v2')
+      if (sidebarRaw) {
+        const parsed = JSON.parse(sidebarRaw)
+        const customItems = parsed.customItems || []
+        const match = customItems.find((e: any) => e.id === view)
+        if (match?.title) return match.title
+      }
+
+      // Check installed extensions list
+      const installedRaw = localStorage.getItem('zerf_installed_extensions')
+      if (installedRaw) {
+        const parsed = JSON.parse(installedRaw)
+        if (Array.isArray(parsed)) {
+          const match = parsed.find((e: any) => e.id === view || e.name === view)
+          if (match?.title || match?.name) return match.title || match.name
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Ext prefix fallback
+  if (view.startsWith('ext_')) {
+    const rawName = view.replace(/^ext_/, '').replace(/_/g, ' ')
+    return rawName.charAt(0).toUpperCase() + rawName.slice(1)
+  }
+
+  return view.charAt(0).toUpperCase() + view.slice(1)
+}
+
 interface Props {
   onNewTask?: () => void
   onMenuOpen?: () => void
@@ -133,7 +181,7 @@ export function TopBar({ onNewTask, onMenuOpen }: Props) {
       <div className="flex-1 min-w-0 flex items-center gap-3">
         <div className="flex items-baseline gap-2">
           <h1 className="text-base font-semibold text-foreground truncate">
-            {VIEW_LABELS[state.currentView] ?? 'Zerf'}
+            {getDynamicViewTitle(state.currentView)}
           </h1>
           {state.currentView === 'today' && (
             <span className="text-[11px] text-muted-foreground hidden sm:inline">
