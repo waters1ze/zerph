@@ -10,7 +10,8 @@ import {
   User, Users, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
-  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle
+  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
+  Mic, Crown, RefreshCw, FileText, Clock, Target
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -112,6 +113,7 @@ export function SettingsView() {
     siriKey?: string
     reminderIntervalMinutes?: number
     reminderRepeatCount?: number
+    subscriptionExpiry?: string | null
   }>({})
   const [newsToggleLoading, setNewsToggleLoading] = useState(false)
   const [showEmailLinkModal, setShowEmailLinkModal] = useState(false)
@@ -202,6 +204,28 @@ export function SettingsView() {
     saveUserNameToServer(name)
   }
 
+  const fetchUsage = () => {
+    fetch('/api/subscription', { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => {
+        if (d && !d.error) {
+          setUsage(d)
+          try {
+            localStorage.setItem('zerf-usage', JSON.stringify(d))
+          } catch {}
+          if (d.plan) {
+            setProfileData(prev => ({
+              ...prev,
+              plan: d.plan,
+              isPremium: d.plan !== 'free',
+              subscriptionExpiry: d.subscriptionExpiry,
+            }))
+          }
+        }
+      })
+      .catch(() => {})
+  }
+
   const fetchProfile = () => {
     if (currentChatId) {
       fetch(`/api/telegram/user?chatId=${currentChatId}`, {
@@ -226,6 +250,7 @@ export function SettingsView() {
               siriKey: d.siriKey,
               reminderIntervalMinutes: d.reminderIntervalMinutes,
               reminderRepeatCount: d.reminderRepeatCount,
+              subscriptionExpiry: d.subscriptionExpiry,
             })
             if (d.email) setLinkEmail(d.email)
             if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf' && !settings.name) {
@@ -251,7 +276,8 @@ export function SettingsView() {
 
   useEffect(() => {
     fetchProfile()
-  }, [currentChatId])
+    fetchUsage()
+  }, [currentChatId, activeTab])
 
   const handleUserBirthdayChange = async (val: string) => {
     setUserBirthday(val)
@@ -1880,8 +1906,189 @@ export function SettingsView() {
       {/* ── TAB 7: Subscription, Plans & Promo Codes ────────────────────────── */}
       {activeTab === 'subscription' && (
         <div className="space-y-6">
-          <Section title="Тарифные планы">
+          <Section title="Тарифные планы и лимиты">
             <div className="p-5 space-y-5">
+              {/* Live Subscription Status & Daily Limits Dashboard */}
+              <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0",
+                      (profileData.plan === 'plus' || profileData.plan === 'pro' || profileData.plan === 'corp')
+                        ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                        : "bg-primary/10 text-primary border border-primary/20"
+                    )}>
+                      {(profileData.plan === 'plus' || profileData.plan === 'pro' || profileData.plan === 'corp') ? <Crown className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-foreground text-sm">
+                          Текущий тариф: <span className="uppercase text-primary">{profileData.plan || 'Бесплатный (Free)'}</span>
+                        </h4>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold",
+                          profileData.isPremium ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-muted text-muted-foreground border border-border"
+                        )}>
+                          {profileData.isPremium ? 'Активен' : 'Базовый доступ'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {profileData.subscriptionExpiry ? (
+                          <>Подписка действует до: <b className="text-foreground">{new Date(profileData.subscriptionExpiry).toLocaleDateString('ru-RU')}</b></>
+                        ) : (
+                          <>Лимиты использования автоматически сбрасываются каждый день в <b>00:00 МСК</b></>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={fetchUsage}
+                    className="px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer transition-colors"
+                    title="Обновить данные по лимитам"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Обновить статус</span>
+                  </button>
+                </div>
+
+                {/* Grid of live limit metrics */}
+                {usage && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1 text-xs">
+                    {/* Voice */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Голос (сегодня)</span>
+                        <Mic className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">
+                        {Math.round((usage.voice?.secondsUsed || 0) / 60)} / {usage.voice?.maxSeconds >= 99999 ? '∞' : `${Math.round((usage.voice?.maxSeconds || 90) / 60)} мин`}
+                      </p>
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (usage.voice?.secondsUsed || 0) >= (usage.voice?.maxSeconds || 90) ? "bg-rose-500" : "bg-primary"
+                          )}
+                          style={{
+                            width: `${Math.min(100, Math.round(((usage.voice?.secondsUsed || 0) / (usage.voice?.maxSeconds || 90)) * 100))}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Siri */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Siri запросы</span>
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">
+                        {usage.siri?.used || 0} / {usage.siri?.max >= 99999 ? '∞' : usage.siri?.max || 10}
+                      </p>
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (usage.siri?.used || 0) >= (usage.siri?.max || 10) && usage.siri?.max < 99999 ? "bg-rose-500" : "bg-amber-400"
+                          )}
+                          style={{
+                            width: `${usage.siri?.max >= 99999 ? 100 : Math.min(100, Math.round(((usage.siri?.used || 0) / (usage.siri?.max || 10)) * 100))}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Заметки</span>
+                        <FileText className="w-3.5 h-3.5 text-blue-400" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">
+                        {usage.notes?.used || 0} / {usage.notes?.max >= 99999 ? '∞' : usage.notes?.max || 20}
+                      </p>
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (usage.notes?.used || 0) >= (usage.notes?.max || 20) && usage.notes?.max < 99999 ? "bg-rose-500" : "bg-blue-400"
+                          )}
+                          style={{
+                            width: `${usage.notes?.max >= 99999 ? 100 : Math.min(100, Math.round(((usage.notes?.used || 0) / (usage.notes?.max || 20)) * 100))}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Reminders */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Напоминания</span>
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">
+                        {usage.reminders?.used || 0} / {usage.reminders?.max >= 99999 ? '∞' : usage.reminders?.max || 10}
+                      </p>
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (usage.reminders?.used || 0) >= (usage.reminders?.max || 10) && usage.reminders?.max < 99999 ? "bg-rose-500" : "bg-emerald-400"
+                          )}
+                          style={{
+                            width: `${usage.reminders?.max >= 99999 ? 100 : Math.min(100, Math.round(((usage.reminders?.used || 0) / (usage.reminders?.max || 10)) * 100))}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Goals */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Цели (день)</span>
+                        <Target className="w-3.5 h-3.5 text-purple-400" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">
+                        {usage.goals?.used || 0} / {usage.goals?.max >= 99999 ? '∞' : `${usage.goals?.max || 5}`}
+                      </p>
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (usage.goals?.used || 0) >= (usage.goals?.max || 5) && usage.goals?.max < 99999 ? "bg-rose-500" : "bg-purple-400"
+                          )}
+                          style={{
+                            width: `${usage.goals?.max >= 99999 ? 100 : Math.min(100, Math.round(((usage.goals?.used || 0) / (usage.goals?.max || 5)) * 100))}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Photos */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Фото / Распозн.</span>
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">
+                        {usage.photos?.used || 0} / {usage.photos?.max >= 99999 ? '∞' : `${usage.photos?.max || 0}`}
+                      </p>
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (usage.photos?.used || 0) >= (usage.photos?.max || 0) && usage.photos?.max > 0 ? "bg-rose-500" : "bg-cyan-400"
+                          )}
+                          style={{
+                            width: `${usage.photos?.max >= 99999 ? 100 : usage.photos?.max > 0 ? Math.min(100, Math.round(((usage.photos?.used || 0) / usage.photos?.max) * 100)) : 0}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* Billing Cycle Switcher (Monthly / Yearly -15%) */}
               <div className="flex items-center justify-between p-3 rounded-2xl bg-muted/40 border border-border">
                 <div>

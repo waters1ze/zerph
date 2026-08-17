@@ -2765,15 +2765,12 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       })
     }
 
-    // Resolve the ACTIVE plan: root admin is always top tier; paid plans
-    // require a valid expiry (corp without expiry = permanent).
+    // Resolve the ACTIVE plan: paid plans require a valid expiry
     let planId = normalizePlan(chat.plan)
-    if (isRoot) {
-      planId = 'corp'
-    } else if (planId !== 'free') {
+    if (planId !== 'free') {
       const expired = chat.subscriptionExpiry
         ? new Date(chat.subscriptionExpiry) < new Date()
-        : planId !== 'corp'
+        : false
       if (expired) {
         planId = 'free'
         await prisma.telegramChat.update({
