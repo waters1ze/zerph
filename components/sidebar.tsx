@@ -228,67 +228,59 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
       'flex flex-col h-full bg-card text-card-foreground border-r border-border select-none font-sans transition-all duration-200',
       isCollapsed ? 'w-16 items-center' : 'w-full'
     )}>
-      {/* Top Header with Hamburger Toggle */}
+      {/* Top Header: User Profile Card + Collapse Button in one row */}
       <div className={cn(
-        'px-3 pt-3 pb-2 flex items-center border-b border-border/50',
-        isCollapsed ? 'justify-center' : 'justify-between'
+        'pt-2.5 pb-2 flex items-center border-b border-border/40',
+        isCollapsed ? 'px-2 justify-center flex-col gap-2' : 'px-2.5 justify-between gap-1.5'
       )}>
-        {!isCollapsed && (
-          <div className="flex items-center gap-2 px-1">
-            <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-xs shadow-xs">
-              Z
-            </div>
-            <span className="font-bold text-sm text-foreground tracking-tight">Zerf Note</span>
-          </div>
-        )}
-
-        <button
-          onClick={toggleCollapse}
-          className="p-1.5 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          title={isCollapsed ? 'Развернуть меню (3 полоски)' : 'Свернуть меню'}
+        {/* Dynamic User Profile Card */}
+        <div 
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+          className={cn(
+            'flex-1 min-w-0 rounded-xl bg-muted/40 hover:bg-muted/70 border border-border/50 flex items-center cursor-pointer transition-colors group',
+            isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-1.5 gap-2.5'
+          )}
+          title={`Профиль: ${displayName} (кликните для настроек)`}
         >
-          {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-        </button>
-      </div>
+          <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
+            {tgUser?.photoUrl ? (
+              <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : displayName !== 'Мой профиль' ? (
+              <span className="text-[11px] font-bold uppercase">{displayName[0]}</span>
+            ) : (
+              <User className="w-3.5 h-3.5" />
+            )}
+          </div>
 
-      {/* Dynamic User Profile Card */}
-      <div 
-        onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
-        className={cn(
-          'mt-2 mb-2 rounded-xl bg-muted/50 border border-border/60 flex items-center cursor-pointer hover:bg-muted/80 transition-colors group',
-          isCollapsed ? 'p-2 mx-1 justify-center' : 'mx-2 px-3 py-2.5 gap-2.5'
-        )}
-        title={`Профиль: ${displayName} (кликните для настроек)`}
-      >
-        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
-          {tgUser?.photoUrl ? (
-            <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
-          ) : displayName !== 'Мой профиль' ? (
-            <span className="text-[11px] font-bold uppercase">{displayName[0]}</span>
-          ) : (
-            <User className="w-3.5 h-3.5" />
+          {!isCollapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-foreground truncate font-sans leading-tight" title={displayName}>
+                  {displayName}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate font-sans leading-tight mt-0.5">
+                  {userSubtext}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  'w-1.5 h-1.5 rounded-full shrink-0',
+                  isConnected ? 'bg-[var(--status-done)]' : 'bg-muted-foreground/30'
+                )}
+                title={isConnected ? 'Telegram Подключён' : 'Не подключён'}
+              />
+            </>
           )}
         </div>
 
-        {!isCollapsed && (
-          <>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-foreground truncate font-sans" title={displayName}>
-                {displayName}
-              </p>
-              <p className="text-[10px] text-muted-foreground truncate font-sans">
-                {userSubtext}
-              </p>
-            </div>
-            <div
-              className={cn(
-                'w-1.5 h-1.5 rounded-full shrink-0',
-                isConnected ? 'bg-[var(--status-done)]' : 'bg-muted-foreground/30'
-              )}
-              title={isConnected ? 'Telegram Подключён' : 'Не подключён'}
-            />
-          </>
-        )}
+        {/* Collapse Button directly next to User Profile */}
+        <button
+          onClick={toggleCollapse}
+          className="p-2 rounded-xl bg-muted/40 hover:bg-muted/80 border border-border/50 text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+          title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+        >
+          {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Dynamic Folders & Navigation */}
