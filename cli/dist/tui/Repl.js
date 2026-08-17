@@ -118,12 +118,24 @@ export function Repl({ initialData }) {
             status: c.installed ? 'Готов к работе' : 'Не установлен в PATH',
         })),
     ];
-    const customExtItems = (data?.extensions || []).map((ext) => ({
-        cmd: `/ext ${ext.id || ext.name}`,
-        label: `/ext ${ext.name || ext.id}`,
-        desc: `[Расширение] ${ext.description || ext.title || 'Пользовательский модуль'}`,
-        glyph: '◈',
-    }));
+    const customExtItems = (data?.extensions || []).flatMap((ext) => {
+        const extCommands = ext.content?.commands || ext.commands || [];
+        if (Array.isArray(extCommands) && extCommands.length > 0) {
+            return extCommands.map((c) => ({
+                cmd: c.cmd?.startsWith('/') ? c.cmd : `/${c.cmd || ext.name || ext.id}`,
+                label: c.cmd?.startsWith('/') ? c.cmd : `/${c.cmd || ext.name || ext.id}`,
+                desc: `[${ext.title || ext.name || 'Плагин'}] ${c.description || ext.description}`,
+                glyph: '◈',
+            }));
+        }
+        const defaultCmd = ext.id === 'ext_nexus_search' || ext.name === 'zerf-search' ? '/search' : `/ext ${ext.name || ext.id}`;
+        return [{
+                cmd: defaultCmd,
+                label: defaultCmd,
+                desc: `[${ext.title || ext.name || 'Плагин'}] ${ext.description || 'Пользовательский модуль'}`,
+                glyph: '◈',
+            }];
+    });
     const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems];
     const isSlash = (inputVal.startsWith('/') || menuForced) && !pickingModel && !pickingChatFriend;
     const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim();
@@ -458,6 +470,66 @@ export function Repl({ initialData }) {
             catch (e) {
                 setActionProgress(null);
                 setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }]);
+            }
+            return;
+        }
+        // ── Nexus Search AI (Perplexity style Deep Web Search) ──
+        if (raw.startsWith('/search') || raw.startsWith('/серч') || raw.startsWith('/поиск')) {
+            const query = raw.replace(/^(\/search|\/серч|\/поиск)/, '').trim();
+            if (!query) {
+                setHistory(h => [
+                    ...h,
+                    {
+                        id: makeUniqueId(),
+                        type: 'assistant',
+                        text: '🔮 Nexus AI Search (Perplexity Style)',
+                        details: [
+                            'Использование: /search <ваш поисковый запрос или вопрос>',
+                            'Пример: /search последние тренды в веб-разработке 2026',
+                            'Nexus выполнит глубокий анализ фактов, синтез данных и предоставит структурированный ответ со ссылками на источники [1][2].',
+                        ],
+                    },
+                ]);
+                return;
+            }
+            setActionProgress({ label: `Nexus AI: Поиск и синтез источников по «${query}»...`, ratio: 0.4 });
+            const progTimer = setTimeout(() => {
+                setActionProgress({ label: 'Nexus AI: Анализ цитат и структурирование ответа...', ratio: 0.8 });
+            }, 500);
+            try {
+                const searchPrompt = `Ты — ведущий поисково-аналитический движок Nexus Search AI (в стиле Perplexity).
+Пользователь ищет: "${query}".
+
+Сформируй глубокий, точный и структурированный ответ со следующей структурой:
+1. Краткий прямой ответ (Direct Summary).
+2. Подробный разбор с цитатами и фактами. Помечай факты сносками [1], [2], [3].
+3. Список проверенных источников (Sources & References):
+   [1] Источник 1 (Название и контекст)
+   [2] Источник 2 (Название и контекст)
+4. Связанные follow-up вопросы (Related questions) — 2-3 пункта.
+
+Стиль: строгий, технологичный, ч/б символы (◈, ❖, ▪). Без лишней "воды".`;
+                const res = await sendAiQuery(creds, searchPrompt, 'openai/gpt-oss-120b');
+                clearTimeout(progTimer);
+                setActionProgress({ label: 'Nexus AI: Ответ готов', ratio: 1.0 });
+                setTimeout(() => setActionProgress(null), 800);
+                setHistory(h => [
+                    ...h,
+                    {
+                        id: makeUniqueId(),
+                        type: 'assistant',
+                        text: `🔮 Nexus AI Search: «${query}»`,
+                        details: res.message ? res.message.split('\n') : (res.details || []),
+                    },
+                ]);
+            }
+            catch (err) {
+                clearTimeout(progTimer);
+                setActionProgress(null);
+                setHistory(h => [
+                    ...h,
+                    { id: makeUniqueId(), type: 'error', text: `Nexus Search ошибка: ${err.message}` },
+                ]);
             }
             return;
         }

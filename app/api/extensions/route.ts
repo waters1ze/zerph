@@ -37,6 +37,36 @@ export interface ExtensionItem {
 // Built-in official creator extensions loaded from open-source GitHub specifications
 const STARTER_EXTENSIONS: ExtensionItem[] = [
   {
+    id: 'ext_nexus_search',
+    title: 'Nexus AI Search & Deep Research Engine',
+    version: '1.5.0',
+    description: 'Интеллектуальный поиск в стиле Perplexity: глубокий анализ фактов, сноски на источники [1][2], генерация сводки и сохранение инсайтов в заметки или задачи.',
+    type: 'widget',
+    category: 'ИИ & Промпты',
+    icon: '🔮',
+    githubUrl: 'https://github.com/nexus-search/zerf-nexus-ai',
+    authorChatId: '6136950061',
+    authorName: 'Nexus Labs',
+    authorGithub: 'nexus-search',
+    price: 0,
+    minPlan: 'free',
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 18,
+    likesCount: 34,
+    installCount: 89,
+    content: {
+      engine: 'nexus_deep_search',
+      commands: [
+        { cmd: '/search', description: 'Nexus AI — Глубокий ИИ-поиск и синтез источников' },
+      ],
+      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
+      maxSources: 5,
+    },
+    createdAt: '2026-08-10T10:00:00Z',
+    updatedAt: '2026-08-17T20:00:00Z',
+  },
+  {
     id: 'ext_pomodoro_widget',
     title: 'Smart Pomodoro & Interval Focus Widget',
     version: '1.2.0',
