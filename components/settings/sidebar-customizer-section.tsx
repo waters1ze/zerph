@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/store'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { ExtensionItem } from '@/app/api/extensions/route'
 import { ExtensionIcon } from '@/components/views/extensions-view'
 
@@ -176,6 +177,7 @@ export function getInitialSidebarConfig(): SidebarConfig {
 }
 
 export function SidebarCustomizerSection() {
+  const confirmDialog = useConfirmDialog()
   const [config, setConfig] = useState<SidebarConfig>(getInitialSidebarConfig)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
   const [newFolderName, setNewFolderName] = useState('')
@@ -212,8 +214,15 @@ export function SidebarCustomizerSection() {
     } catch {}
   }
 
-  const applyLayoutPreset = (preset: LayoutPreset) => {
-    if (!confirm(`Применить пресет раскладки «${preset.title}»?`)) return
+  const applyLayoutPreset = async (preset: LayoutPreset) => {
+    const ok = await confirmDialog({
+      title: `Применить пресет «${preset.title}»?`,
+      description: 'Текущее расположение папок и пунктов меню будет заменено выбранным шаблоном.',
+      confirmText: 'Применить пресет',
+      cancelText: 'Отмена',
+      variant: 'primary',
+    })
+    if (!ok) return
     saveConfig(preset.config)
   }
 
@@ -303,9 +312,17 @@ export function SidebarCustomizerSection() {
   }
 
   // Delete folder
-  const deleteFolder = (folderId: string) => {
-    if (!confirm('Удалить эту папку? Пункты из неё будут перенесены в первую доступную папку.')) return
+  const deleteFolder = async (folderId: string) => {
     const folderToDelete = config.folders.find(f => f.id === folderId)
+    const ok = await confirmDialog({
+      title: `Удалить папку «${folderToDelete?.title || 'Папка'}»?`,
+      description: 'Пункты меню из неё будут автоматически перенесены в первую доступную папку.',
+      confirmText: 'Удалить папку',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    })
+    if (!ok) return
+
     const remainingFolders = config.folders.filter(f => f.id !== folderId)
 
     if (folderToDelete && folderToDelete.itemIds.length > 0 && remainingFolders.length > 0) {
@@ -375,8 +392,15 @@ export function SidebarCustomizerSection() {
     saveConfig({ ...config, folders: updatedFolders })
   }
 
-  const resetToDefault = () => {
-    if (!confirm('Сбросить структуру бокового меню к изначальным настройкам?')) return
+  const resetToDefault = async () => {
+    const ok = await confirmDialog({
+      title: 'Сбросить структуру бокового меню?',
+      description: 'Все папки и порядок пунктов меню будут возвращены к стандартным заводским настройкам.',
+      confirmText: 'Сбросить по умолчанию',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    })
+    if (!ok) return
     saveConfig({
       hiddenItems: [],
       folders: DEFAULT_SIDEBAR_FOLDERS,

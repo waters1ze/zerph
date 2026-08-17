@@ -67,151 +67,6 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     createdAt: '2026-08-17T20:00:00Z',
     updatedAt: '2026-08-17T22:00:00Z',
   },
-  {
-    id: 'ext_nexus_search',
-    title: 'Nexus AI Search & Deep Research Engine',
-    version: '1.5.0',
-    description: 'Интеллектуальный поиск в стиле Perplexity: глубокий анализ фактов, сноски на источники [1][2], генерация сводки и сохранение инсайтов в заметки или задачи.',
-    type: 'widget',
-    category: 'ИИ & Промпты',
-    icon: '🔮',
-    githubUrl: 'https://github.com/nexus-search/zerf-nexus-ai',
-    authorChatId: '6136950061',
-    authorName: 'Nexus Labs',
-    authorGithub: 'nexus-search',
-    price: 0,
-    minPlan: 'free',
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 18,
-    likesCount: 34,
-    installCount: 89,
-    content: {
-      engine: 'nexus_deep_search',
-      commands: [
-        { cmd: '/search', description: 'Nexus AI — Глубокий ИИ-поиск и синтез источников' },
-      ],
-      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
-      maxSources: 5,
-    },
-    createdAt: '2026-08-10T10:00:00Z',
-    updatedAt: '2026-08-17T20:00:00Z',
-  },
-  {
-    id: 'ext_pomodoro_widget',
-    title: 'Smart Pomodoro & Interval Focus Widget',
-    version: '1.2.0',
-    description: 'Интерактивный Pomodoro таймер с гибкой настройкой рабочих спринтов, звуковыми уведомлениями и трекингом глубокой концентрации.',
-    type: 'widget',
-    category: 'Виджеты & Фокус',
-    icon: '⏱️',
-    githubUrl: 'https://github.com/zerf-note/pomodoro-focus-widget',
-    authorChatId: '6136950061',
-    authorName: 'Создатель',
-    authorGithub: 'zerf-note',
-    price: 0,
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 1,
-    likesCount: 1,
-    installCount: 1,
-    content: {
-      workDuration: 25,
-      breakDuration: 5,
-      longBreakDuration: 15,
-      cyclesBeforeLongBreak: 4,
-      soundTheme: 'gentle_bell',
-      autoStartBreak: true,
-    },
-    createdAt: '2026-08-01T10:00:00Z',
-    updatedAt: '2026-08-01T10:00:00Z',
-  },
-  {
-    id: 'ext_startup_checklist',
-    title: 'SaaS Launch Checklist: 45 Шагов к $1k MRR',
-    version: '2.0.1',
-    description: 'Открытый репозиторий с пошаговым чек-листом запуска цифровых продуктов: валидация, MVP, юридические требования и первые продажи.',
-    type: 'template',
-    category: 'Бизнес & Стартапы',
-    icon: '🚀',
-    githubUrl: 'https://github.com/alex-dev/zerf-saas-launch-template',
-    authorChatId: '6136950061',
-    authorName: 'Создатель',
-    authorGithub: 'zerf-note',
-    price: 79,
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 1,
-    likesCount: 1,
-    installCount: 1,
-    content: {
-      templateType: 'project',
-      tasksCount: 45,
-      tasks: [
-        'Интервью с 10 потенциальными клиентами (CustDev)',
-        'Формирование ценностного предложения (Lean Canvas)',
-        'Создание кликабельного прототипа в Figma',
-        'Разработка MVP функционала за 14 дней',
-        'Подключение платежного шлюза и оферты',
-        'Запуск первых 3 рекламных каналов',
-      ],
-    },
-    createdAt: '2026-08-05T12:00:00Z',
-    updatedAt: '2026-08-05T12:00:00Z',
-  },
-  {
-    id: 'ext_cyberpunk_neon_theme',
-    title: 'Cyberpunk Neon Glass CSS Theme',
-    version: '1.1.0',
-    description: 'Кастомная стилизация интерфейса: неоновые изумрудные акценты, эффект матового стекла (backdrop-blur) и повышенная контрастность.',
-    type: 'theme',
-    category: 'Оформление',
-    icon: '🌌',
-    githubUrl: 'https://github.com/zerf-design/cyberpunk-theme',
-    authorChatId: '6136950061',
-    authorName: 'Создатель',
-    authorGithub: 'zerf-design',
-    price: 0,
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 1,
-    likesCount: 1,
-    installCount: 1,
-    content: {
-      primaryColor: '#10b981',
-      accentColor: '#06b6d4',
-      bgStyle: 'neon_glass',
-      borderRadius: '16px',
-    },
-    createdAt: '2026-08-10T14:00:00Z',
-    updatedAt: '2026-08-10T14:00:00Z',
-  },
-  {
-    id: 'ext_water_energy_widget',
-    title: 'Hydration & Health Balance Tracker',
-    version: '1.0.4',
-    description: 'Виджет баланса гидратации с умными напоминаниями пить воду каждые 2 часа и графиком суточной нормы.',
-    type: 'widget',
-    category: 'Здоровье & Привычки',
-    icon: '💧',
-    githubUrl: 'https://github.com/open-health/zerf-hydration-widget',
-    authorChatId: '6136950061',
-    authorName: 'Создатель',
-    authorGithub: 'open-health',
-    price: 0,
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 1,
-    likesCount: 1,
-    installCount: 1,
-    content: {
-      dailyGoalMl: 2500,
-      intervalHours: 2,
-      cupSizeMl: 250,
-    },
-    createdAt: '2026-08-12T16:00:00Z',
-    updatedAt: '2026-08-12T16:00:00Z',
-  },
 ]
 
 /**
@@ -281,6 +136,17 @@ async function getCustomExtensions(): Promise<ExtensionItem[]> {
   }
 }
 
+async function getDeletedExtensionIds(): Promise<string[]> {
+  try {
+    const row = await prisma.config.findUnique({
+      where: { key: 'deleted_extensions_list' },
+    })
+    return row?.value ? JSON.parse(row.value) : []
+  } catch {
+    return []
+  }
+}
+
 async function getUserInstalledExtensions(chatId: string): Promise<string[]> {
   try {
     const row = await prisma.config.findUnique({
@@ -319,10 +185,16 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req)
     const chatId = authUser?.chatId || null
 
+    const deletedIds = await getDeletedExtensionIds()
     const customItems = await getCustomExtensions()
     const allMap = new Map<string, ExtensionItem>()
-    STARTER_EXTENSIONS.forEach(e => allMap.set(e.id, e))
-    customItems.forEach(e => allMap.set(e.id, e))
+
+    STARTER_EXTENSIONS.forEach(e => {
+      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
+    })
+    customItems.forEach(e => {
+      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
+    })
     const catalog = Array.from(allMap.values())
 
     let installedIds: string[] = []
@@ -568,21 +440,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: extItem })
     }
 
-    // ── ACTION: DELETE CUSTOM EXTENSION (Author or Admin only) ──
+    // ── ACTION: DELETE EXTENSION (Author or Admin) ──
     if (action === 'delete_custom' || action === 'delete') {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
       const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
-      if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
-
-      const current: ExtensionItem = JSON.parse(extRec.value)
-      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
-      if (current.authorChatId !== chatId && !isCreator) {
-        return NextResponse.json({ error: 'Вы можете удалять только созданные вами расширения' }, { status: 403 })
+      if (extRec) {
+        await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
       }
 
-      await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
+      // Record in deleted list to permanently hide any deleted extension
+      const deletedList = await getDeletedExtensionIds()
+      if (!deletedList.includes(extensionId)) {
+        deletedList.push(extensionId)
+        await prisma.config.upsert({
+          where: { key: 'deleted_extensions_list' },
+          update: { value: JSON.stringify(deletedList) },
+          create: { key: 'deleted_extensions_list', value: JSON.stringify(deletedList) },
+        })
+      }
+
       return NextResponse.json({ success: true, deletedId: extensionId })
     }
 

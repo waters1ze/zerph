@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { ExtensionItem } from '@/app/api/extensions/route'
 
 function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
@@ -43,15 +44,14 @@ export async function compressExtensionImage(file: File, maxSize = 80, quality =
           const minDim = Math.min(img.width, img.height)
           const sx = (img.width - minDim) / 2
           const sy = (img.height - minDim) / 2
-
           canvas.width = maxSize
           canvas.height = maxSize
+
           const ctx = canvas.getContext('2d')
           if (!ctx) {
             resolve(src)
             return
           }
-
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = 'high'
           ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, maxSize, maxSize)
@@ -151,98 +151,6 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     createdAt: '2026-08-17T20:00:00Z',
     updatedAt: '2026-08-17T22:00:00Z',
   },
-  {
-    id: 'ext_nexus_search',
-    title: 'Nexus AI Search & Deep Research Engine',
-    version: '1.5.0',
-    description: 'Интеллектуальный поиск в стиле Perplexity: глубокий анализ фактов, сноски на источники [1][2], генерация сводки и сохранение инсайтов в заметки или задачи.',
-    type: 'widget',
-    category: 'ИИ & Промпты',
-    icon: '🔮',
-    githubUrl: 'https://github.com/nexus-search/zerf-nexus-ai',
-    authorChatId: '6136950061',
-    authorName: 'Nexus Labs',
-    authorGithub: 'nexus-search',
-    price: 0,
-    minPlan: 'free',
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 18,
-    likesCount: 34,
-    installCount: 89,
-    content: {
-      engine: 'nexus_deep_search',
-      commands: [
-        { cmd: '/search', description: 'Nexus AI — Глубокий ИИ-поиск и синтез источников' },
-      ],
-      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
-      maxSources: 5,
-    },
-    createdAt: '2026-08-10T10:00:00Z',
-    updatedAt: '2026-08-17T20:00:00Z',
-  },
-  {
-    id: 'ext_pomodoro_widget',
-    title: 'Smart Pomodoro & Interval Focus Widget',
-    version: '1.2.0',
-    description: 'Интерактивный Pomodoro таймер с гибкой настройкой рабочих спринтов, звуковыми уведомлениями и трекингом глубокой концентрации.',
-    type: 'widget',
-    category: 'Виджеты & Фокус',
-    icon: '⏱️',
-    githubUrl: 'https://github.com/zerf-note/pomodoro-focus-widget',
-    authorChatId: '6136950061',
-    authorName: 'Создатель',
-    authorGithub: 'zerf-note',
-    price: 0,
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 1,
-    likesCount: 1,
-    installCount: 1,
-    content: {
-      workDuration: 25,
-      breakDuration: 5,
-      longBreakDuration: 15,
-      cyclesBeforeLongBreak: 4,
-      soundTheme: 'gentle_bell',
-      autoStartBreak: true,
-    },
-    createdAt: '2026-08-01T10:00:00Z',
-    updatedAt: '2026-08-01T10:00:00Z',
-  },
-  {
-    id: 'ext_startup_checklist',
-    title: 'SaaS Launch Checklist: 45 Шагов к $1k MRR',
-    version: '2.0.1',
-    description: 'Открытый репозиторий с пошаговым чек-листом запуска цифровых продуктов: валидация, MVP, юридические требования и первые продажи.',
-    type: 'template',
-    category: 'Бизнес & Стартапы',
-    icon: '🚀',
-    githubUrl: 'https://github.com/alex-dev/zerf-saas-launch-template',
-    authorChatId: '6136950061',
-    authorName: 'Создатель',
-    authorGithub: 'zerf-note',
-    price: 79,
-    isOfficial: true,
-    rating: 5.0,
-    ratingCount: 1,
-    likesCount: 1,
-    installCount: 1,
-    content: {
-      templateType: 'project',
-      tasksCount: 45,
-      tasks: [
-        'Интервью с 10 потенциальными клиентами (CustDev)',
-        'Формирование ценностного предложения (Lean Canvas)',
-        'Создание кликабельного прототипа в Figma',
-        'Разработка MVP функционала за 14 дней',
-        'Подключение платежного шлюза и оферты',
-        'Запуск первых 3 рекламных каналов',
-      ],
-    },
-    createdAt: '2026-08-05T12:00:00Z',
-    updatedAt: '2026-08-05T12:00:00Z',
-  },
 ]
 
 const getInitialExtensionsData = () => {
@@ -278,6 +186,7 @@ const getInitialExtensionsData = () => {
 
 export function ExtensionsView() {
   const { dispatch, syncData } = useApp()
+  const confirmDialog = useConfirmDialog()
   const initialCache = getInitialExtensionsData()
 
   const [catalog, setCatalog] = useState<ExtensionItem[]>(initialCache.catalog)
@@ -645,9 +554,15 @@ export function ExtensionsView() {
   }
 
   const handleBuy = async (ext: ExtensionItem) => {
-    if (!confirm(`Приобрести расширение «${ext.title}» за ${ext.price} ₽?\n\n80% (${Math.round(ext.price * 0.8)} ₽) поступит автору на баланс, 20% — комиссия платформы.`)) {
-      return
-    }
+    const ok = await confirmDialog({
+      title: `Приобрести «${ext.title}»?`,
+      description: `Стоимость расширения: ${ext.price} ₽.\n80% (${Math.round(ext.price * 0.8)} ₽) поступит автору на баланс, 20% — комиссия платформы Zerf.`,
+      confirmText: `Купить за ${ext.price} ₽`,
+      cancelText: 'Отмена',
+      variant: 'primary',
+    })
+    if (!ok) return
+
     try {
       setActionLoading(ext.id)
       const res = await fetch('/api/extensions', {
@@ -670,8 +585,19 @@ export function ExtensionsView() {
   }
 
   const handleDeleteMyExt = async (extensionId: string) => {
-    if (!confirm('Вы уверены, что хотите удалить это расширение из каталога?')) return
+    const ext = catalog.find(e => e.id === extensionId)
+    const extTitle = ext ? ext.title : 'это расширение'
+    const ok = await confirmDialog({
+      title: `Удалить «${extTitle}»?`,
+      description: 'Расширение будет полностью удалено из каталога магазина и больше не будет доступно для установки пользователями.',
+      confirmText: 'Удалить расширение',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    })
+    if (!ok) return
+
     try {
+      setActionLoading(`del_${extensionId}`)
       const res = await fetch('/api/extensions', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
@@ -679,9 +605,26 @@ export function ExtensionsView() {
       })
       const data = await res.json()
       if (data.success) {
+        setCatalog(prev => prev.filter(e => e.id !== extensionId))
+        setInstalledIds(prev => prev.filter(id => id !== extensionId))
+        try {
+          const cached = localStorage.getItem('zerf_ext_catalog_cache')
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            parsed.catalog = (parsed.catalog || []).filter((e: any) => e.id !== extensionId)
+            parsed.installedIds = (parsed.installedIds || []).filter((id: string) => id !== extensionId)
+            localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify(parsed))
+          }
+        } catch {}
         fetchExtensions()
+      } else {
+        alert(data.error || 'Не удалось удалить расширение')
       }
-    } catch {}
+    } catch {
+      alert('Ошибка при удалении')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   // Filtered and Sorted catalog
