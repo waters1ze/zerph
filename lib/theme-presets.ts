@@ -205,11 +205,29 @@ export function applyVisualsToDocument(opts: ApplyVisualsOptions) {
       ? palette.find(a => a.id === opts.accentId)
       : undefined
 
+  const targets = [root, body]
+
   if (accent) {
-    root.style.setProperty('--primary', accent.color)
-    root.style.setProperty('--primary-foreground', accent.fg)
+    for (const el of targets) {
+      el.style.setProperty('--primary', accent.color, 'important')
+      el.style.setProperty('--primary-foreground', accent.fg, 'important')
+      el.style.setProperty('--brand', accent.color, 'important')
+      el.style.setProperty('--brand-foreground', accent.fg, 'important')
+      el.style.setProperty('--sidebar-primary', accent.color, 'important')
+      el.style.setProperty('--sidebar-primary-foreground', accent.fg, 'important')
+      el.style.setProperty('--ring', `color-mix(in oklab, ${accent.color} 40%, transparent)`, 'important')
+      el.style.setProperty('--chart-1', accent.color, 'important')
+    }
   } else {
-    root.style.removeProperty('--primary')
-    root.style.removeProperty('--primary-foreground')
+    for (const el of targets) {
+      el.style.removeProperty('--primary')
+      el.style.removeProperty('--primary-foreground')
+      el.style.removeProperty('--brand')
+      el.style.removeProperty('--brand-foreground')
+      el.style.removeProperty('--sidebar-primary')
+      el.style.removeProperty('--sidebar-primary-foreground')
+      el.style.removeProperty('--ring')
+      el.style.removeProperty('--chart-1')
+    }
   }
 }
