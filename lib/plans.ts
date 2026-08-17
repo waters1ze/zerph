@@ -168,7 +168,9 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     priceYearly: 3049,
     tagline: 'Максимальный интеллект и глубокая автоматизация',
     features: [
-      '🧠 Флагманский ИИ: OpenAI GPT-OSS 120B / DeepSeek R1',
+      '🧠 Флагманский ИИ: OpenAI GPT-OSS 120B',
+      '🔌 Подключение своей нейросети по API (OpenAI, Claude, Gemini, Ollama)',
+      '💻 Создание и запуск расширений через Local CLI',
       '🎛 Кастомизация моделей под каждую задачу (Siri, чат, аналитика)',
       '5 000 заметок в аккаунте',
       '1 000 активных напоминаний',

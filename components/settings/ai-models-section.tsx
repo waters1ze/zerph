@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Brain, Sparkles, Lock, Check, Zap, MessageSquare, ListTodo, Target, RotateCcw, BarChart2, Mic, Crown } from 'lucide-react'
+import { Brain, Sparkles, Lock, Check, Zap, MessageSquare, ListTodo, Target, RotateCcw, BarChart2, Mic, Crown, Cpu, Terminal, Key, Eye, EyeOff, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/store'
 import { PlanId } from '@/lib/plans'
@@ -32,6 +32,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
+  const [showApiKey, setShowApiKey] = useState(false)
 
   const showSaved = () => {
     setSavedToast(true)
@@ -460,6 +461,188 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
             </p>
           </button>
         </div>
+      </div>
+
+      {/* Custom AI Neural Network via API & Local CLI (Pro & Corp) */}
+      <div className="p-5 rounded-2xl bg-card border border-border space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Cpu className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                <span>Подключение собственной нейросети по API & Local CLI</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                  Pro / Corp
+                </span>
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Подключайте свои API-ключи нейросетей (OpenAI, Claude, Gemini, Ollama, Groq) и управляйте платформой из терминала
+              </p>
+            </div>
+          </div>
+
+          {isProOrCorp ? (
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.integrations?.customAiEnabled)}
+                onChange={(e) => {
+                  update({
+                    integrations: {
+                      ...settings.integrations,
+                      customAiEnabled: e.target.checked,
+                    }
+                  })
+                  showSaved()
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          ) : (
+            <button
+              onClick={onUpgradeClick}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 text-[10px] font-bold border border-amber-500/30 hover:bg-amber-500/25 transition-all cursor-pointer"
+            >
+              Доступно в Pro (299 ₽)
+            </button>
+          )}
+        </div>
+
+        {isProOrCorp && settings.integrations?.customAiEnabled && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="space-y-4 pt-2 border-t border-border/60 text-xs"
+          >
+            {/* Quick Provider Selection */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground text-[11px] block">Провайдер или тип модели:</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { id: 'openai', label: 'OpenAI (GPT-4o)', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+                  { id: 'claude', label: 'Claude (Anthropic)', url: 'https://api.anthropic.com/v1', model: 'claude-3-7-sonnet-20250219' },
+                  { id: 'gemini', label: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-2.5-pro' },
+                  { id: 'ollama', label: 'Local Ollama / LM Studio', url: 'http://localhost:11434/v1', model: 'llama3:latest' },
+                  { id: 'groq', label: 'Groq Cloud', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+                  { id: 'custom', label: 'Кастомный эндпоинт', url: '', model: '' },
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      update({
+                        integrations: {
+                          ...settings.integrations,
+                          customAiProvider: p.id,
+                          customAiBaseUrl: p.url || settings.integrations?.customAiBaseUrl,
+                          customAiModel: p.model || settings.integrations?.customAiModel,
+                        }
+                      })
+                      showSaved()
+                    }}
+                    className={cn(
+                      'p-2 rounded-xl text-left font-medium text-[11px] border transition-all cursor-pointer truncate',
+                      settings.integrations?.customAiProvider === p.id
+                        ? 'border-primary bg-primary/10 text-primary font-bold shadow-2xs'
+                        : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground text-[11px] block">Ваш секретный API-ключ:</label>
+              <div className="relative">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={settings.integrations?.customAiApiKey || ''}
+                  onChange={(e) => {
+                    update({
+                      integrations: {
+                        ...settings.integrations,
+                        customAiApiKey: e.target.value,
+                      }
+                    })
+                  }}
+                  placeholder="sk-..."
+                  className="w-full h-9 pl-3 pr-9 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                >
+                  {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Base URL and Model */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground text-[11px] block">Base URL (эндпоинт):</label>
+                <input
+                  type="text"
+                  value={settings.integrations?.customAiBaseUrl || ''}
+                  onChange={(e) => {
+                    update({
+                      integrations: {
+                        ...settings.integrations,
+                        customAiBaseUrl: e.target.value,
+                      }
+                    })
+                  }}
+                  placeholder="https://api.openai.com/v1"
+                  className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground text-[11px] block">Имя модели (Model ID):</label>
+                <input
+                  type="text"
+                  value={settings.integrations?.customAiModel || ''}
+                  onChange={(e) => {
+                    update({
+                      integrations: {
+                        ...settings.integrations,
+                        customAiModel: e.target.value,
+                      }
+                    })
+                  }}
+                  placeholder="gpt-4o / claude-3-7-sonnet"
+                  className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Local CLI Bridge Instructions */}
+            <div className="p-3.5 rounded-2xl bg-muted/30 border border-border space-y-2">
+              <div className="flex items-center gap-2 font-bold text-foreground text-xs">
+                <Terminal className="w-3.5 h-3.5 text-primary" />
+                <span>Управление и создание расширений через Local CLI</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Вы можете запускать локальные CLI-агенты, создавать расширения из командной строки и подключать автономные скрипты к вашему аккаунту Zerf Note:
+              </p>
+              <pre className="p-2.5 rounded-xl bg-card border border-border font-mono text-[10px] text-primary overflow-x-auto whitespace-pre-wrap">
+{`# Авторизация в CLI через веб-токен:
+npx zerf-cli auth --token YOUR_TOKEN
+
+# Создание и публикация нового расширения из локального терминала:
+npx zerf-cli extension init my-cool-widget
+npx zerf-cli extension publish ./my-cool-widget`}
+              </pre>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   )

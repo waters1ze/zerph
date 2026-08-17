@@ -213,6 +213,11 @@ export interface UserSettings {
     aiApiKey?: string
     aiModel: string
     groqApiKey?: string
+    customAiEnabled?: boolean
+    customAiProvider?: string
+    customAiApiKey?: string
+    customAiBaseUrl?: string
+    customAiModel?: string
     aiTaskModels?: {
       chat?: string
       parser?: string
