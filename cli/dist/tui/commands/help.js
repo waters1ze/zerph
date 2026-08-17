@@ -4,6 +4,7 @@ import { setScreen } from '../state.js';
 import { GLYPH } from '../theme.js';
 import { StatusBar } from '../StatusBar.js';
 const COMMANDS_LIST = [
+    { cmd: '/menu', desc: 'Интерактивное меню команд со стрелочной навигацией (↑/↓)' },
     { cmd: '/today', desc: 'Задачи, привычки и цели на сегодня (Space — переключить)' },
     { cmd: '/add <текст>', desc: 'Создать задачу с распознаванием даты и времени' },
     { cmd: '/done <текст>', desc: 'Завершить задачу по названию (нечёткий поиск)' },

@@ -13,6 +13,7 @@ const CLOUD_MODELS = [
     { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
 ];
 const BASE_MENU_ITEMS = [
+    { cmd: '/menu', label: '/menu', desc: 'Интерактивное меню команд (стрелки ↑/↓)', glyph: '❖' },
     { cmd: '/today', label: '/today', desc: 'Список дел и привычек с отсчетом времени', glyph: '❖' },
     { cmd: '/cal', label: '/cal', desc: '7-дневный календарь с расписанием', glyph: '◫' },
     { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: '◈' },
