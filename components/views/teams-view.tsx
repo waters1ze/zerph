@@ -532,33 +532,10 @@ export function TeamsView() {
         </div>
       </div>
 
-      {/* ── 2. Multi-Team Switcher Bar ── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-        {loading ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span>Загрузка воркспейсов...</span>
-          </div>
-        ) : teams.length === 0 ? (
-          <div className="p-4 rounded-2xl bg-card border border-border/80 w-full flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-foreground">У вас пока нет активных команд</p>
-                <p className="text-[11px] text-muted-foreground">Создайте первую команду или попросите коллегу прислать инвайт-код</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setCreateModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold shrink-0 cursor-pointer"
-            >
-              Создать
-            </button>
-          </div>
-        ) : (
-          teams.map(t => {
+      {/* ── 2. Multi-Team Switcher Bar (when teams exist) ── */}
+      {teams.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+          {teams.map(t => {
             const isActive = t.id === activeTeamId
             return (
               <button
@@ -590,12 +567,86 @@ export function TeamsView() {
                 </div>
               </button>
             )
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
-      {/* ── 3. Active Team Dashboard ── */}
-      {teamDetail && (
+      {/* ── 3. Active Team Dashboard OR Empty State ── */}
+      {loading ? (
+        <div className="p-16 rounded-3xl bg-card border border-border flex flex-col items-center justify-center gap-3 text-center shadow-xs">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm font-semibold text-foreground">Загрузка воркспейсов...</p>
+          <p className="text-xs text-muted-foreground">Синхронизируем список ваших команд</p>
+        </div>
+      ) : teams.length === 0 ? (
+        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-card/95 via-card/80 to-card/40 border border-border/80 shadow-lg text-center space-y-6">
+          <div className="w-16 h-16 rounded-3xl bg-primary/10 text-primary border border-primary/25 flex items-center justify-center mx-auto shadow-inner">
+            <Building2 className="w-8 h-8" />
+          </div>
+
+          <div className="max-w-md mx-auto space-y-2">
+            <span className="px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-bold uppercase tracking-wider border border-primary/25 inline-block">
+              Воркспейсы для команд и компаний
+            </span>
+            <h3 className="text-xl sm:text-2xl font-bold text-foreground pt-1">
+              У вас пока нет активных команд
+            </h3>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Создайте свою первую команду для совместного управления проектами, распределения задач и работы с коллегами без ограничений, или вступите по инвайт-коду.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="w-full sm:w-auto h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-xs sm:text-sm font-bold hover:brightness-110 active:scale-95 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Создать первую команду</span>
+            </button>
+            <button
+              onClick={() => setJoinModalOpen(true)}
+              className="w-full sm:w-auto h-11 px-6 rounded-2xl bg-muted/70 hover:bg-muted text-foreground text-xs sm:text-sm font-bold border border-border transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Key className="w-4 h-4 text-muted-foreground" />
+              <span>Вступить по коду</span>
+            </button>
+          </div>
+
+          {/* 3 Value Pillars */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-border/60 text-left">
+            <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 space-y-1.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                <FolderOpen className="w-4 h-4" />
+              </div>
+              <h4 className="text-xs font-bold text-foreground">Совместные проекты</h4>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Общие проекты с этапами, целями и задачами, доступные каждому участнику воркспейса.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 space-y-1.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                <CheckSquare className="w-4 h-4" />
+              </div>
+              <h4 className="text-xs font-bold text-foreground">Задачи без подтверждений</h4>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Поручайте задачи коллегам напрямую в боте и на сайте без ожидания взаимных разрешений.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 space-y-1.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+              <h4 className="text-xs font-bold text-foreground">Роли и управление</h4>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Назначайте администраторов, генерируйте инвайт-ссылки и управляйте доступом в один клик.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : teamDetail ? (
         <div className="space-y-6">
           {/* Active Team Header Card */}
           <div className="p-5 rounded-3xl bg-card border border-border/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1016,7 +1067,7 @@ export function TeamsView() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* ── MODAL: Create Team ── */}
       <AnimatePresence>

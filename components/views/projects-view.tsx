@@ -602,8 +602,90 @@ function ProjectModal({
   const [members, setMembers] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
+  // Team & Friend candidate members for quick 1-click selection
+  const [candidates, setCandidates] = useState<Array<{
+    id: string
+    name: string
+    username: string | null
+    tag: string
+    teamName?: string
+  }>>([])
+  const [loadingCandidates, setLoadingCandidates] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+    const loadCandidates = async () => {
+      setLoadingCandidates(true)
+      const list: Array<{ id: string; name: string; username: string | null; tag: string; teamName?: string }> = []
+      const seen = new Set<string>()
+
+      // 1. Friends from store
+      if (state.friends && Array.isArray(state.friends)) {
+        for (const f of state.friends) {
+          const cleanU = (f.username || '').replace(/^@/, '').trim()
+          const key = cleanU ? cleanU.toLowerCase() : f.id
+          if (!seen.has(key)) {
+            seen.add(key)
+            list.push({
+              id: f.id,
+              name: f.name || cleanU || 'Друг',
+              username: cleanU || null,
+              tag: '👤 Друг',
+            })
+          }
+        }
+      }
+
+      // 2. Fetch Teams and team members
+      try {
+        const teamsRes = await fetch('/api/teams', { headers: getAuthHeaders() })
+        const teamsData = await teamsRes.json()
+        if (teamsData.success && Array.isArray(teamsData.teams)) {
+          const teamDetails = await Promise.all(
+            teamsData.teams.slice(0, 8).map(async (t: any) => {
+              try {
+                const res = await fetch(`/api/teams/${t.id}`, { headers: getAuthHeaders() })
+                const data = await res.json()
+                return { teamName: t.name, members: data.team?.members || [] }
+              } catch {
+                return { teamName: t.name, members: [] }
+              }
+            })
+          )
+
+          for (const td of teamDetails) {
+            for (const m of td.members) {
+              if (m.isMe) continue
+              const cleanU = (m.username || '').replace(/^@/, '').trim()
+              const fullName = [m.firstName, m.lastName].filter(Boolean).join(' ') || cleanU || `ID ${m.chatId}`
+              const key = cleanU ? cleanU.toLowerCase() : m.chatId
+              if (!seen.has(key)) {
+                seen.add(key)
+                list.push({
+                  id: m.chatId,
+                  name: fullName,
+                  username: cleanU || null,
+                  tag: `🏢 ${td.teamName}`,
+                  teamName: td.teamName,
+                })
+              }
+            }
+          }
+        }
+      } catch {}
+
+      if (isMounted) {
+        setCandidates(list)
+        setLoadingCandidates(false)
+      }
+    }
+
+    loadCandidates()
+    return () => { isMounted = false }
+  }, [state.friends])
+
   const handleAddMember = () => {
-    const clean = memberInput.trim().replace('@', '')
+    const clean = memberInput.trim().replace(/^@/, '')
     if (clean && !members.includes(clean)) {
       setMembers([...members, clean])
       setMemberInput('')
@@ -654,11 +736,11 @@ function ProjectModal({
         initial={{ scale: 0.95, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, y: 10 }}
-        className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-xl flex flex-col gap-4"
+        className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between border-b border-border/50 pb-3">
           <h2 className="text-sm font-bold text-foreground">{project ? 'Редактировать проект' : 'Новый проект'}</h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -700,7 +782,7 @@ function ProjectModal({
                   key={c}
                   onClick={() => setColor(c)}
                   className={cn(
-                    'w-7 h-7 rounded-full transition-transform',
+                    'w-7 h-7 rounded-full transition-transform cursor-pointer',
                     color === c && 'scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card'
                   )}
                   style={{ background: c }}
@@ -709,7 +791,7 @@ function ProjectModal({
             </div>
           </div>
 
-            {/* Add Members by Username or from Friends */}
+          {/* Add Members by Username or from Team Candidates */}
           <div>
             <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
               Участники (Telegram username)
@@ -725,60 +807,81 @@ function ProjectModal({
               <button
                 type="button"
                 onClick={handleAddMember}
-                className="px-3 rounded-xl bg-muted hover:bg-muted/80 text-xs font-semibold border border-border text-foreground transition-colors"
+                className="px-3 rounded-xl bg-muted hover:bg-muted/80 text-xs font-semibold border border-border text-foreground transition-colors cursor-pointer"
               >
                 Добавить
               </button>
             </div>
 
-            {/* Quick Friend Selector from Team */}
-            {state.friends && state.friends.length > 0 && (
-              <div className="mt-2.5">
-                <p className="text-[10px] text-muted-foreground font-medium mb-1.5 flex items-center gap-1">
-                  <Users className="w-3 h-3 text-primary/80" />
-                  <span>Выбрать из Команды:</span>
+            {/* Quick Candidate Selector from Teams & Friends */}
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  <span>Выбрать из команды и друзей:</span>
                 </p>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                  {state.friends.map(f => {
-                    const cleanU = (f.username || f.name).replace(/^@/, '')
-                    const isSelected = members.includes(cleanU)
+                {loadingCandidates && (
+                  <span className="text-[10px] text-muted-foreground animate-pulse">Загрузка...</span>
+                )}
+              </div>
+
+              {candidates.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1 py-1">
+                  {candidates.map(c => {
+                    const valueToStore = c.username || c.name
+                    const cleanValue = valueToStore.replace(/^@/, '').trim()
+                    const isSelected = members.includes(cleanValue) || (c.username && members.includes(c.username))
+
                     return (
                       <button
-                        key={f.id}
+                        key={c.id + (c.username || '')}
                         type="button"
                         onClick={() => {
                           if (isSelected) {
-                            setMembers(members.filter(m => m !== cleanU))
+                            setMembers(members.filter(m => m !== cleanValue && m !== c.username))
                           } else {
-                            setMembers([...members, cleanU])
+                            setMembers([...members, cleanValue])
                           }
                         }}
                         className={cn(
-                          'px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all',
+                          'px-2.5 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-2 transition-all cursor-pointer text-left',
                           isSelected
-                            ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold'
-                            : 'bg-muted/50 border-border text-foreground hover:bg-muted hover:border-border/80'
+                            ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold ring-1 ring-primary/40'
+                            : 'bg-muted/40 border-border text-foreground hover:bg-muted hover:border-border/80'
                         )}
                       >
-                        <span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold shrink-0">
-                          {f.name?.[0] || 'U'}
+                        <span className={cn(
+                          'w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0',
+                          isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary/10 text-primary'
+                        )}>
+                          {c.name[0]?.toUpperCase() || 'U'}
                         </span>
-                        <span>{f.name}</span>
-                        {f.username && <span className="text-[10px] opacity-70">@{cleanU}</span>}
-                        {isSelected ? <Check className="w-3 h-3 ml-0.5" /> : <Plus className="w-3 h-3 ml-0.5 opacity-60" />}
+                        <div className="min-w-0 pr-1 leading-tight">
+                          <p className="text-[11px] font-bold truncate max-w-[120px]">{c.name}</p>
+                          <p className="text-[9px] opacity-75">{c.tag}</p>
+                        </div>
+                        {isSelected ? (
+                          <Check className="w-3.5 h-3.5 shrink-0 ml-0.5 text-primary-foreground" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5 shrink-0 ml-0.5 opacity-50" />
+                        )}
                       </button>
                     )
                   })}
                 </div>
-              </div>
-            )}
+              ) : !loadingCandidates ? (
+                <p className="text-[10px] text-muted-foreground/80 py-1">
+                  💡 Участники ваших команд и друзья появятся здесь для быстрого выбора в 1 клик.
+                </p>
+              ) : null}
+            </div>
 
             {members.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
+              <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-border/50">
                 {members.map(u => (
-                  <span key={u} className="px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-medium text-primary flex items-center gap-1">
-                    @{u}
-                    <button onClick={() => setMembers(members.filter(m => m !== u))} className="hover:text-destructive">
+                  <span key={u} className="px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                    @{u.replace(/^@/, '')}
+                    <button onClick={() => setMembers(members.filter(m => m !== u))} className="hover:text-destructive cursor-pointer">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
