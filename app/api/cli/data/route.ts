@@ -43,6 +43,19 @@ async function getChatIdAndPlan(req: NextRequest) {
   }
 }
 
+function serialize(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj
+  if (obj instanceof Date) return obj.toISOString()
+  if (typeof obj === 'bigint') return Number(obj)
+  if (Array.isArray(obj)) return obj.map(serialize)
+  if (typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [k, serialize(v)])
+    )
+  }
+  return obj
+}
+
 // GET /api/cli/data — Fetch full snapshot for CLI dashboard
 export async function GET(req: NextRequest) {
   try {
@@ -72,7 +85,7 @@ export async function GET(req: NextRequest) {
       getFriends(user.chatIdNum),
     ])
 
-    return NextResponse.json({
+    const payload = {
       allowed: true,
       user: {
         chatId: String(user.chatId),
@@ -92,7 +105,9 @@ export async function GET(req: NextRequest) {
       goals,
       habits,
       friends,
-    })
+    }
+
+    return NextResponse.json(serialize(payload))
   } catch (err: unknown) {
     console.error('CLI data fetch error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
