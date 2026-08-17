@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callGroqChatCompletion, groqPool, getHuggingFaceTokens, getModelForUserPlan } from '@/lib/backend/groq-pool'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
+import { getDailyCount, incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 
 // ── Regular Search Daily Limits ────────────────────────────────────────────
 export const ENTROPY_ROLE_LIMITS: Record<string, number> = {
@@ -36,13 +37,10 @@ export const ENTROPY_USER_LIMIT_OVERRIDES: Record<string, { regular: number; pro
 }
 
 // Daily In-Memory Usage Trackers (key: YYYY-MM-DD:chatId)
-const dailyEntropyRegularUsage: Map<string, number> = new Map()
-const dailyEntropyProUsage: Map<string, number> = new Map()
-
-function getTodayKey(chatId: string): string {
-  const dateStr = new Date().toISOString().split('T')[0]
-  return `${dateStr}:${chatId}`
-}
+// Счётчики хранятся в БД (Config, ключ cnt_<kind>_<chatId>_<UTCdate>) — единая
+// точка правды на всех инстансах Vercel. Прежняя in-memory Map жила только в
+// памяти одной лямбды: лимиты «плавали» между инстансами и сбрасывались при
+// холодном старте.
 
 function getUserLimits(chatId?: string, userPlan: string = 'free') {
   if (!chatId) {
@@ -116,10 +114,9 @@ export async function GET(req: NextRequest) {
     const userPlan = limits?.plan || 'free'
 
     const { regularLimit, proLimit, isUnlimited } = getUserLimits(ownerChatId, userPlan)
-    const todayKey = getTodayKey(ownerChatId)
 
-    const regUsed = dailyEntropyRegularUsage.get(todayKey) || 0
-    const proUsed = dailyEntropyProUsage.get(todayKey) || 0
+    const regUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropy, ownerChatId) : 0
+    const proUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropyPro, ownerChatId) : 0
 
     const regRemaining = regularLimit === -1 ? 999999 : Math.max(0, regularLimit - regUsed)
     const proRemaining = proLimit === -1 ? 999999 : Math.max(0, proLimit - proUsed)
@@ -168,10 +165,9 @@ export async function POST(req: NextRequest) {
     const userLimits = ownerChatId !== 'guest' ? await getUserUsageAndLimits(ownerChatId) : null
     const userPlan = userLimits?.plan || 'free'
     const { regularLimit, proLimit, isUnlimited } = getUserLimits(ownerChatId, userPlan)
-    const todayKey = getTodayKey(ownerChatId)
 
-    const regUsed = dailyEntropyRegularUsage.get(todayKey) || 0
-    const proUsed = dailyEntropyProUsage.get(todayKey) || 0
+    const regUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropy, ownerChatId) : 0
+    const proUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropyPro, ownerChatId) : 0
 
     // Check Pro Search permission and quota
     if (isPro) {
@@ -189,7 +185,7 @@ export async function POST(req: NextRequest) {
       if (proLimit !== -1 && proUsed >= proLimit) {
         return NextResponse.json(
           {
-            error: `❌ Дневной лимит Pro Search исчерпан (${proUsed}/${proLimit} для тарифа ${userPlan.toUpperCase()}). Доступно завтра или при переходе на более высокий тариф.`,
+            error: `❌ Дневной лимит Pro Search исчерпан (${proUsed}/${proLimit} для тарифа ${userPlan.toUpperCase()}). Лимит обновится в 03:00 по МСК, либо перейдите на более высокий тариф.`,
             proLimitReached: true,
             used: proUsed,
             limit: proLimit,
@@ -202,7 +198,7 @@ export async function POST(req: NextRequest) {
       if (regularLimit !== -1 && regUsed >= regularLimit) {
         return NextResponse.json(
           {
-            error: `❌ Дневной лимит поисковых запросов исчерпан (${regUsed}/${regularLimit} для тарифа ${userPlan.toUpperCase()}). Подключите Zerf Plus для 100 запросов в день!`,
+            error: `❌ Дневной лимит поисковых запросов исчерпан (${regUsed}/${regularLimit} для тарифа ${userPlan.toUpperCase()}). Подключите Zerf Plus для 100 запросов в день! Лимит обновится в 03:00 по МСК.`,
             limitReached: true,
             used: regUsed,
             limit: regularLimit,
@@ -314,11 +310,9 @@ JSON Схема:
       : []
     const cleanTikhonya = cleanStr(llmResult.tikhonyaComment) || 'Тихоня завершил глубокий синтез источников [ ˘ ᴗ ˘ ]'
 
-    // Increment user's daily usage
-    if (isPro) {
-      dailyEntropyProUsage.set(todayKey, proUsed + 1)
-    } else {
-      dailyEntropyRegularUsage.set(todayKey, regUsed + 1)
+    // Increment user's daily usage (persisted in DB — survives serverless instances)
+    if (ownerChatId !== 'guest') {
+      await incrementDailyCount(isPro ? COUNTERS.entropyPro : COUNTERS.entropy, ownerChatId)
     }
 
     const newRegUsed = isPro ? regUsed : regUsed + 1

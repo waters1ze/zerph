@@ -65,7 +65,9 @@ export function EntropySearchView() {
   const { state, dispatch } = useApp()
   const [query, setQuery] = useState('')
   const [activeMode, setActiveMode] = useState<'web' | 'academic' | 'notes' | 'fast' | 'code'>('web')
-  const [isProSearch, setIsProSearch] = useState(true)
+  // По умолчанию ВЫКЛ: Pro-поиски жёстко лимитированы (Plus 3/день) и не должны
+  // молча тратиться — раньше каждый «обычный» поиск съедал Pro-квоту
+  const [isProSearch, setIsProSearch] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [searchStep, setSearchStep] = useState<number>(0)
   const [result, setResult] = useState<EntropySearchResult | null>(null)

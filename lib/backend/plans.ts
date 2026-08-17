@@ -87,6 +87,8 @@ export const COUNTERS = {
   reminder: 'reminder',
   cli: 'cli',
   chat: 'chat',
+  entropy: 'entropy',
+  entropyPro: 'entropy_pro',
 } as const
 
 /** User preference keys (Config-backed settings). */
