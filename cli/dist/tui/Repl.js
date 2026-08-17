@@ -6,6 +6,7 @@ import { loadCredentials, mutateItem, sendAiQuery, loadConfig, saveConfig } from
 import { detectInstalledClis, runLocalCliBridge } from '../local-cli.js';
 import { getAllaySpriteLines, GLYPHS } from '../mascot.js';
 import { makeUniqueId } from './utils.js';
+import { scaffoldExtension, installExtensionPackage, getInstalledExtensions } from '../extensions/registry.js';
 const CLOUD_MODELS = [
     { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
     { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
@@ -13,20 +14,26 @@ const CLOUD_MODELS = [
     { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
 ];
 const BASE_MENU_ITEMS = [
-    { cmd: '/menu', label: '/menu', desc: 'Интерактивное меню команд (стрелки ↑/↓)', glyph: '❖' },
-    { cmd: '/today', label: '/today', desc: 'Список дел и привычек с отсчетом времени', glyph: '❖' },
-    { cmd: '/cal', label: '/cal', desc: '7-дневный календарь с расписанием', glyph: '◫' },
+    { cmd: '/today', label: '/today', desc: 'Задачи, привычки и цели на сегодня с таймером', glyph: '❖' },
+    { cmd: '/cal', label: '/cal', desc: 'Календарь задач по дням недели с расписанием', glyph: '◫' },
+    { cmd: '/tasks', label: '/tasks', desc: 'Полный список всех активных и завершенных задач', glyph: '❖' },
+    { cmd: '/notes', label: '/notes', desc: 'Все сохранённые заметки и конспекты', glyph: '≡' },
+    { cmd: '/goals', label: '/goals', desc: 'Трекинг долгосрочных целей и шкала прогресса', glyph: '◈' },
+    { cmd: '/habits', label: '/habits', desc: 'Привычки, прогресс-бары и серии дней', glyph: '●' },
+    { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Pomodoro с таймером', glyph: '⊘' },
     { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: '◈' },
-    { cmd: '/add ', label: '/add <текст>', desc: 'Добавить задачу с распознаванием даты', glyph: '▸' },
+    { cmd: '/friends', label: '/friends', desc: 'Список команды/друзей и ссылка-приглашение', glyph: '◈' },
+    { cmd: '/ext', label: '/ext', desc: 'Каталог расширений и маркетплейс Zerf Ext', glyph: '◈' },
+    { cmd: '/ext create ', label: '/ext create <имя>', desc: 'Создать новое расширение (шаблон плагина)', glyph: '▸' },
+    { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с умным распознаванием даты', glyph: '▸' },
     { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: '✔' },
-    { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить быструю заметку в базу', glyph: '≡' },
-    { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Pomodoro', glyph: '⊘' },
-    { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI', glyph: '◈' },
-    { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и параметры', glyph: '⚙' },
-    { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: '◈' },
-    { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: '●' },
+    { cmd: '/note ', label: '/note <текст>', desc: 'Быстрая заметка в базу знаний', glyph: '≡' },
+    { cmd: '/model', label: '/model', desc: 'Выбор нейросети (GPT-OSS, Compound) или CLI', glyph: '◈' },
+    { cmd: '/settings', label: '/settings', desc: 'Настройки профиля, параметров и подключений', glyph: '⚙' },
+    { cmd: '/limits', label: '/limits', desc: 'Статус лимитов и квот на текущие сутки', glyph: '●' },
+    { cmd: '/stats', label: '/stats', desc: 'Аналитика продуктивности за 7 дней', glyph: '●' },
     { cmd: '/clear', label: '/clear', desc: 'Очистить историю диалога', glyph: '─' },
-    { cmd: '/help', label: '/help', desc: 'Справка по всем командам', glyph: '?' },
+    { cmd: '/help', label: '/help', desc: 'Справка по всем возможностям', glyph: '?' },
     { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ];
 function getCountdownText(dueTime, status) {
@@ -113,7 +120,7 @@ export function Repl({ initialData }) {
     }));
     const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems];
     const isSlash = (inputVal.startsWith('/') || menuForced) && !pickingModel && !pickingChatFriend;
-    const filterQuery = menuForced ? '' : inputVal.toLowerCase().trim();
+    const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim();
     const filteredCommands = isSlash
         ? allMenuItems.filter(m => !filterQuery || m.cmd.toLowerCase().startsWith(filterQuery))
         : [];
@@ -230,10 +237,11 @@ export function Repl({ initialData }) {
         let raw = val.trim();
         if (!raw)
             return;
-        if (isSlash && filteredCommands.length > 0 && (menuForced || !raw.includes(' ') || raw === '/')) {
+        // If menu was open and user pressed enter on selected item
+        if (isSlash && filteredCommands.length > 0 && (menuForced || raw === '/menu' || raw === '/')) {
             const selectedItem = filteredCommands[selectedIdx];
-            if (selectedItem && (menuForced || raw === '/' || !raw.includes(' '))) {
-                if (selectedItem.cmd.endsWith(' ') && !raw.trim().includes(' ')) {
+            if (selectedItem) {
+                if (selectedItem.cmd.endsWith(' ')) {
                     setInputVal(selectedItem.cmd);
                     setMenuForced(false);
                     return;
@@ -256,6 +264,7 @@ export function Repl({ initialData }) {
         }
         if (raw === '/menu') {
             setMenuForced(true);
+            setSelectedIdx(0);
             return;
         }
         if (raw === '/model' || raw === '/ai') {
@@ -291,23 +300,159 @@ export function Repl({ initialData }) {
                     type: 'assistant',
                     text: '❖ Быстрые команды Zerf CLI:',
                     details: [
-                        '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
+                        '/menu           — Интерактивное меню со всеми разделами (стрелки ↑/↓)',
+                        '/today          — Задачи, привычки и цели на сегодня с отсчетом',
+                        '/cal            — 7-дневный календарь с расписанием задач по дням',
+                        '/tasks          — Полный список задач (активные и выполненные)',
+                        '/notes          — Все сохранённые заметки и конспекты',
+                        '/goals          — Трекинг целей и прогресс',
+                        '/habits         — Привычки, шкалы прогресса и стрик',
+                        '/focus [минуты] — Сфера концентрации Pomodoro с таймером',
+                        '/chat <текст>   — Чат с друзьями / поручение задачи',
+                        '/friends        — Список команды и персональная ссылка-приглашение',
+                        '/ext            — Маркетплейс и каталог расширений',
+                        '/ext create     — Создать новый плагин',
                         '/model          — Выбор нейросети (GPT-OSS, Compound, agy, claude)',
                         '/settings       — Окно параметров и настроек',
-                        '/today          — Список задач с обратным отсчетом и шкалой',
-                        '/cal            — 7-дневный календарь расписания',
-                        '/chat <текст>   — Чат с друзьями / поручение задачи',
-                        '/friends        — Список друзей и персональная ссылка',
-                        '/add <текст>    — Создать задачу с распознаванием даты',
-                        '/done <имя>     — Завершить задачу по названию',
-                        '/focus [минуты] — Запустить Pomodoro таймер',
-                        '/note <текст>   — Сохранить заметку в базу',
                         '/limits         — Статус использования лимитов',
                         '/clear          — Очистить историю диалога',
                         '/exit           — Выйти из CLI',
                     ],
                 },
             ]);
+            return;
+        }
+        // ── Tasks list (/tasks) ──
+        if (raw === '/tasks' || raw === '/задачи_все') {
+            const tasks = data?.tasks || [];
+            if (tasks.length === 0) {
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Задач пока нет. Добавьте первую через /add <текст>' }]);
+            }
+            else {
+                const pending = tasks.filter((t) => t.status !== 'done');
+                const done = tasks.filter((t) => t.status === 'done');
+                const lines = [];
+                lines.push(`Активные задачи (${pending.length}):`);
+                pending.slice(0, 10).forEach((t) => {
+                    const due = t.dueDate ? ` [на ${t.dueDate}${t.dueTime ? ` в ${t.dueTime}` : ''}]` : '';
+                    lines.push(`  • [◌] ${t.title}${due}`);
+                });
+                if (done.length > 0) {
+                    lines.push(`Завершенные задачи (${done.length}):`);
+                    done.slice(0, 5).forEach((t) => {
+                        lines.push(`  • [✔] ${t.title}`);
+                    });
+                }
+                setHistory(h => [
+                    ...h,
+                    { id: makeUniqueId(), type: 'assistant', text: `❖ База задач Zerf (${tasks.length} всего):`, details: lines },
+                ]);
+            }
+            return;
+        }
+        // ── Notes list (/notes) ──
+        if (raw === '/notes' || raw === '/заметки') {
+            const notes = data?.notes || [];
+            if (notes.length === 0) {
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Заметок пока нет. Создайте через /note <текст>' }]);
+            }
+            else {
+                const lines = notes.slice(0, 10).map((n) => `• ≡ ${n.title || n.body} (${n.createdAt ? n.createdAt.slice(0, 10) : 'сегодня'})`);
+                setHistory(h => [
+                    ...h,
+                    { id: makeUniqueId(), type: 'assistant', text: `≡ Сохранённые заметки (${notes.length}):`, details: lines },
+                ]);
+            }
+            return;
+        }
+        // ── Goals list (/goals) ──
+        if (raw === '/goals' || raw === '/цели') {
+            const goals = data?.goals || [];
+            if (goals.length === 0) {
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Цели пока не заданы.' }]);
+            }
+            else {
+                const lines = goals.map((g) => {
+                    const prog = typeof g.progress === 'number' ? g.progress : 50;
+                    return `• ◈ ${g.title.padEnd(24)} ${renderProgressBar(prog / 100, 8)} ${prog}%`;
+                });
+                setHistory(h => [
+                    ...h,
+                    { id: makeUniqueId(), type: 'assistant', text: `◈ Долгосрочные цели (${goals.length}):`, details: lines },
+                ]);
+            }
+            return;
+        }
+        // ── Habits list (/habits) ──
+        if (raw === '/habits' || raw === '/привычки') {
+            const habits = data?.habits || [];
+            if (habits.length === 0) {
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Привычки пока не настроены.' }]);
+            }
+            else {
+                const lines = habits.map((hb) => {
+                    const cur = hb.currentStreak || hb.progress || 3;
+                    const target = hb.targetDays || 10;
+                    return `• ● ${hb.title.padEnd(18)} ${renderProgressBar(cur / target, 8)} ${cur}/${target} · стрик ${cur} дн.`;
+                });
+                setHistory(h => [
+                    ...h,
+                    { id: makeUniqueId(), type: 'assistant', text: `● Трекер привычек (${habits.length}):`, details: lines },
+                ]);
+            }
+            return;
+        }
+        // ── Extensions commands (/ext) ──
+        if (raw === '/ext' || raw === '/extensions') {
+            const installed = getInstalledExtensions();
+            const lines = [
+                `Установлено расширений: ${installed.length}`,
+                ...installed.map(i => `  • ◈ ${i.name} v${i.version} — ${i.description}`),
+                '',
+                'Доступные команды:',
+                '  • /ext create <название> — создать каркас нового плагина',
+                '  • /ext install <имя>    — установить расширение из каталога',
+            ];
+            setHistory(h => [
+                ...h,
+                { id: makeUniqueId(), type: 'assistant', text: '◈ Маркетплейс расширений Zerf Ext:', details: lines },
+            ]);
+            return;
+        }
+        if (raw.startsWith('/ext create')) {
+            const name = raw.replace('/ext create', '').trim() || 'my-plugin';
+            const { dir } = scaffoldExtension(name, 'Пользовательский модуль расширения Zerf');
+            setHistory(h => [
+                ...h,
+                {
+                    id: makeUniqueId(),
+                    type: 'assistant',
+                    text: `✔ Расширение ${name} успешно создано!`,
+                    details: [`Директория: ${dir}`, 'Файлы: zerf.manifest.json, index.js', 'Команда добавлена в локальный реестр.'],
+                },
+            ]);
+            return;
+        }
+        if (raw.startsWith('/ext install')) {
+            const name = raw.replace('/ext install', '').trim();
+            if (!name) {
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: 'Укажите название расширения: /ext install <name>' }]);
+                return;
+            }
+            setActionProgress({ label: `Установка ${name}...`, ratio: 0.5 });
+            try {
+                await installExtensionPackage(name);
+                setActionProgress({ label: `${name} установлено`, ratio: 1.0 });
+                setTimeout(() => setActionProgress(null), 1000);
+                setHistory(h => [
+                    ...h,
+                    { id: makeUniqueId(), type: 'assistant', text: `✔ Расширение ${name} установлено и готово к использованию!` },
+                ]);
+            }
+            catch (e) {
+                setActionProgress(null);
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }]);
+            }
             return;
         }
         if (raw === '/today' || raw === '/задачи') {
@@ -341,32 +486,45 @@ export function Repl({ initialData }) {
             }
             return;
         }
-        if (raw === '/cal') {
+        // ── Rich 7-day calendar with real tasks (/cal) ──
+        if (raw === '/cal' || raw === '/calendar' || raw === '/календарь') {
             const today = new Date();
             const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+            const monthNames = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
             const tasks = data?.tasks || [];
-            const days = [];
+            const details = [];
             for (let i = 0; i < 7; i++) {
                 const d = new Date();
                 d.setDate(today.getDate() + i);
                 const dateStr = d.toISOString().slice(0, 10);
                 const dayLabel = dayNames[d.getDay()];
+                const dayNum = d.getDate();
+                const monthName = monthNames[d.getMonth()];
                 const dayTasks = tasks.filter((t) => t.dueDate && t.dueDate.startsWith(dateStr));
-                days.push({
-                    header: `${dayLabel} ${d.getDate()}`,
-                    count: dayTasks.length,
-                    isToday: i === 0,
-                });
+                const isToday = i === 0;
+                const isTomorrow = i === 1;
+                const dayTag = isToday ? ' (Сегодня)' : isTomorrow ? ' (Завтра)' : '';
+                const countTag = dayTasks.length > 0 ? ` · ${dayTasks.length} ${dayTasks.length === 1 ? 'дело' : 'дел(а)'}` : '';
+                details.push(`• [${dayLabel} ${dayNum} ${monthName}]${dayTag}${countTag}`);
+                if (dayTasks.length === 0) {
+                    details.push(`  └─ нет запланированных задач`);
+                }
+                else {
+                    dayTasks.forEach((t) => {
+                        const check = t.status === 'done' ? '[✔]' : '[◌]';
+                        const timeStr = t.dueTime ? ` [${t.dueTime}]` : '';
+                        const prio = t.priority === 'urgent' ? ' [Срочно]' : '';
+                        details.push(`  └─ ${check} ${t.title}${timeStr}${prio}`);
+                    });
+                }
             }
-            const gridHeader = days.map(d => (d.isToday ? `[${d.header}]`.padEnd(9) : d.header.padEnd(9))).join('│ ');
-            const gridCounts = days.map(d => (d.count > 0 ? ` ${d.count} дел `.padEnd(9) : '   —    '.padEnd(9))).join('│ ');
             setHistory(h => [
                 ...h,
                 {
                     id: makeUniqueId(),
                     type: 'assistant',
-                    text: `◫ Календарь на 7 дней (${today.toISOString().slice(0, 10)}):`,
-                    details: [gridHeader, gridCounts],
+                    text: `◫ Календарь задач на 7 дней (${today.getDate()} ${monthNames[today.getMonth()]} — ${new Date(today.getTime() + 6 * 86400000).getDate()} ${monthNames[new Date(today.getTime() + 6 * 86400000).getMonth()]}):`,
+                    details,
                 },
             ]);
             return;
@@ -546,6 +704,60 @@ export function Repl({ initialData }) {
             ]);
             return;
         }
+        // ── Smart Natural Language Summaries Detection (e.g. "выдай мне сводку на след месяц по задачам") ──
+        const lower = raw.toLowerCase();
+        const isSummaryRequest = (lower.includes('сводк') || lower.includes('отчет') || lower.includes('итог') || lower.includes('план')) &&
+            (lower.includes('задач') || lower.includes('месяц') || lower.includes('недел') || lower.includes('календар'));
+        if (isSummaryRequest) {
+            setActionProgress({ label: 'Формирование сводки задач...', ratio: 0.7 });
+            const allTasks = data?.tasks || [];
+            const goals = data?.goals || [];
+            const habits = data?.habits || [];
+            const pendingTasks = allTasks.filter((t) => t.status !== 'done');
+            const doneTasks = allTasks.filter((t) => t.status === 'done');
+            const details = [
+                `📊 Аналитика расписания:`,
+                `  • Всего задач: ${allTasks.length} (активно: ${pendingTasks.length}, завершено: ${doneTasks.length})`,
+                '',
+                `📅 Ближайшие запланированные задачи:`,
+            ];
+            if (pendingTasks.length === 0) {
+                details.push('  • Нет невыполненных задач');
+            }
+            else {
+                pendingTasks.slice(0, 8).forEach((t) => {
+                    const due = t.dueDate ? ` [${t.dueDate}${t.dueTime ? ` в ${t.dueTime}` : ''}]` : ' [без даты]';
+                    details.push(`  • [◌] ${t.title}${due}`);
+                });
+            }
+            if (goals.length > 0) {
+                details.push('');
+                details.push(`◈ Прогресс ключевых целей:`);
+                goals.slice(0, 3).forEach((g) => {
+                    const p = typeof g.progress === 'number' ? g.progress : 50;
+                    details.push(`  • ${g.title} (${p}%) ${renderProgressBar(p / 100, 6)}`);
+                });
+            }
+            if (habits.length > 0) {
+                details.push('');
+                details.push(`● Активные привычки:`);
+                habits.slice(0, 3).forEach((hb) => {
+                    details.push(`  • ${hb.title} — стрик ${hb.currentStreak || hb.progress || 3} дн.`);
+                });
+            }
+            setActionProgress({ label: 'Сводка сформирована', ratio: 1.0 });
+            setTimeout(() => setActionProgress(null), 800);
+            setHistory(h => [
+                ...h,
+                {
+                    id: makeUniqueId(),
+                    type: 'assistant',
+                    text: `❖ Сводка по задачам и планам:`,
+                    details,
+                },
+            ]);
+            return;
+        }
         // AI Query / Free text
         try {
             const currentModel = config.model || 'openai/gpt-oss-120b';
@@ -585,7 +797,7 @@ export function Repl({ initialData }) {
     const spriteLines = getAllaySpriteLines('idle', wingFrame);
     const todayTasks = (data?.tasks || []).filter((t) => !t.dueDate || t.dueDate.startsWith(new Date().toISOString().slice(0, 10)));
     const overdueTasks = (data?.tasks || []).filter((t) => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10) && t.status !== 'done');
-    return (_jsxs(Box, { flexDirection: "column", paddingX: 1, width: 90, children: [_jsxs(Box, { justifyContent: "space-between", width: 86, marginY: 0, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u25C8" }), _jsx(Text, { bold: true, color: "white", children: "Zerf CLI v2.0.26" })] }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "gray", children: userName }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { bold: true, color: "cyanBright", children: planTag }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { color: "white", children: "\u0441\u0442\u0440\u0438\u043A 12 \u0434\u043D." })] })] }), _jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", width: 86, marginY: 0, children: [_jsxs(Box, { flexDirection: "column", width: 40, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", userName] }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, `sprite_${idx}`))) }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), username && _jsxs(Text, { color: "gray", children: ["\u00B7 ", username] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/menu" }), " \u2014 \u0438\u043D\u0442\u0435\u0440\u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0435 \u043C\u0435\u043D\u044E (\u2191/\u2193)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0437\u0430\u0434\u0430\u0447\u0438 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043D\u0435\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/chat" }), " \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u043D\u044B\u0439 \u0447\u0430\u0442"] })] }), _jsx(Box, { marginY: 0, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "cyanBright", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsxs(Text, { color: "white", children: ["\u2756 \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "white", children: "\u25CF \u0421\u0442\u0440\u0438\u043A: 12 \u0434\u043D\u0435\u0439" })] })] })] }), history.slice(-5).map(item => (_jsx(Box, { flexDirection: "column", marginY: 0, marginTop: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, `detail_${item.id}_${i}`)))] })) }, `hist_${item.id}`))), pickingChatFriend && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u25C8 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u0430 \u0434\u043B\u044F \u043D\u0430\u0447\u0430\u043B\u0430 \u0434\u0438\u0430\u043B\u043E\u0433\u0430 (\u2191/\u2193, Enter):" }), _jsx(Text, { color: "gray", children: "ESC \u043E\u0442\u043C\u0435\u043D\u0430" })] }), (data?.friends || []).map((f, idx) => {
+    return (_jsxs(Box, { flexDirection: "column", paddingX: 1, width: 90, children: [_jsxs(Box, { justifyContent: "space-between", width: 86, marginY: 0, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u25C8" }), _jsx(Text, { bold: true, color: "white", children: "Zerf CLI v2.0.26" })] }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "gray", children: userName }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { bold: true, color: "cyanBright", children: planTag }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { color: "white", children: "\u0441\u0442\u0440\u0438\u043A 12 \u0434\u043D." })] })] }), _jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", width: 86, marginY: 0, children: [_jsxs(Box, { flexDirection: "column", width: 40, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", userName] }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, `sprite_${idx}`))) }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), username && _jsxs(Text, { color: "gray", children: ["\u00B7 ", username] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/menu" }), " \u2014 \u0438\u043D\u0442\u0435\u0440\u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0435 \u043C\u0435\u043D\u044E (\u2191/\u2193)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0437\u0430\u0434\u0430\u0447\u0438 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C \u0441 \u0437\u0430\u0434\u0430\u0447\u0430\u043C\u0438"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/tasks" }), " \u2014 \u0432\u0441\u0435 \u0437\u0430\u0434\u0430\u0447\u0438 \u00B7 ", _jsx(Text, { color: "cyanBright", children: "/notes" })] })] }), _jsx(Box, { marginY: 0, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "cyanBright", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsxs(Text, { color: "white", children: ["\u2756 \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "white", children: "\u25CF \u0421\u0442\u0440\u0438\u043A: 12 \u0434\u043D\u0435\u0439" })] })] })] }), history.slice(-5).map(item => (_jsx(Box, { flexDirection: "column", marginY: 0, marginTop: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, `detail_${item.id}_${i}`)))] })) }, `hist_${item.id}`))), pickingChatFriend && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u25C8 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u0430 \u0434\u043B\u044F \u043D\u0430\u0447\u0430\u043B\u0430 \u0434\u0438\u0430\u043B\u043E\u0433\u0430 (\u2191/\u2193, Enter):" }), _jsx(Text, { color: "gray", children: "ESC \u043E\u0442\u043C\u0435\u043D\u0430" })] }), (data?.friends || []).map((f, idx) => {
                         const isSel = idx === selectedFriendIdx;
                         const usernameTag = f.username ? `@${f.username}` : 'без юзернейма';
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', f.name.padEnd(20)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", usernameTag.padEnd(18), " [\u0412 \u0441\u0435\u0442\u0438] \u041D\u0430\u0447\u0430\u0442\u044C \u0434\u0438\u0430\u043B\u043E\u0433"] })] }, `friend_opt_${f.id || idx}_${idx}`));
@@ -594,10 +806,10 @@ export function Repl({ initialData }) {
                         const isCurrent = config.model === m.id;
                         const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]';
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', m.name.padEnd(30)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", tag, " ", m.desc, " ", isCurrent ? '(Текущий)' : ''] })] }, `model_opt_${m.id}_${idx}`));
-                    })] })), isSlash && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
+                    })] })), isSlash && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню возможностей Zerf CLI (навигация ↑/↓, Enter для открытия):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.slice(0, 10).map((item, idx) => {
                         const isSel = idx === selectedIdx;
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', item.label.padEnd(18)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, `cmd_opt_${item.cmd}_${idx}`));
-                    })] })), actionProgress && (_jsxs(Box, { gap: 1, marginY: 0, marginTop: 1, marginLeft: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: renderProgressBar(actionProgress.ratio, 14) }), _jsxs(Text, { bold: true, color: "white", children: [Math.round(actionProgress.ratio * 100), "%"] }), _jsxs(Text, { color: "gray", children: ["\u2014 ", actionProgress.label] })] })), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
+                    }), filteredCommands.length > 10 && (_jsxs(Text, { color: "gray", dimColor: true, children: ["  ... \u0438 \u0435\u0449\u0451 ", filteredCommands.length - 10, " \u043A\u043E\u043C\u0430\u043D\u0434 (\u0443\u0442\u043E\u0447\u043D\u0438\u0442\u0435 \u043F\u043E\u0438\u0441\u043A \u0438\u043B\u0438 \u043B\u0438\u0441\u0442\u0430\u0439\u0442\u0435 \u2191/\u2193)"] }))] })), actionProgress && (_jsxs(Box, { gap: 1, marginY: 0, marginTop: 1, marginLeft: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: renderProgressBar(actionProgress.ratio, 14) }), _jsxs(Text, { bold: true, color: "white", children: [Math.round(actionProgress.ratio * 100), "%"] }), _jsxs(Text, { color: "gray", children: ["\u2014 ", actionProgress.label] })] })), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
                                     setInputVal(val);
                                     if (!val)
                                         setMenuForced(false);
