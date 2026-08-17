@@ -730,7 +730,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           <Text bold color="white">С возвращением, {userName}</Text>
           <Box flexDirection="column" alignItems="center" marginY={1}>
             {spriteLines.map((line, idx) => (
-              <Text key={idx}>{line}</Text>
+              <Text key={`sprite_${idx}`}>{line}</Text>
             ))}
           </Box>
           <Box gap={1}>
@@ -767,7 +767,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
       {/* ── Action History Feed ──────────────────────────────────────────── */}
       {history.map(item => (
-        <Box key={item.id} flexDirection="column" marginY={0} marginTop={1}>
+        <Box key={`hist_${item.id}`} flexDirection="column" marginY={0} marginTop={1}>
           {item.type === 'user' ? (
             <Box gap={1}>
               <Text bold color="cyanBright">{'>'}</Text>
@@ -785,7 +785,7 @@ export function Repl({ initialData }: { initialData?: any }) {
                 <Text color="white">{item.text}</Text>
               </Box>
               {item.details && item.details.map((d, i) => (
-                <Box key={i} marginLeft={2}>
+                <Box key={`detail_${item.id}_${i}`} marginLeft={2}>
                   <Text color="gray">{d}</Text>
                 </Box>
               ))}
@@ -806,7 +806,7 @@ export function Repl({ initialData }: { initialData?: any }) {
             const isCurrent = config.model === m.id
             const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]'
             return (
-              <Box key={m.id} gap={1}>
+              <Box key={`model_opt_${m.id}_${idx}`} gap={1}>
                 <Text bold color={isSel ? 'cyanBright' : 'gray'}>
                   {isSel ? '▶ ' : '  '}{m.name.padEnd(30)}
                 </Text>
@@ -831,7 +831,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           {filteredCommands.map((item, idx) => {
             const isSel = idx === selectedIdx
             return (
-              <Box key={item.cmd} gap={1}>
+              <Box key={`cmd_opt_${item.cmd}_${idx}`} gap={1}>
                 <Text bold color={isSel ? 'cyanBright' : 'gray'}>
                   {isSel ? '▶ ' : '  '}{item.label.padEnd(18)}
                 </Text>
