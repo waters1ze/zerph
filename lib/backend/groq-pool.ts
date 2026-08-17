@@ -378,8 +378,9 @@ export async function callGroqChatCompletion(options: {
   if (hfTokens.length > 0) {
     const tier2Deadline = Date.now() + 45_000
     const hfChatModels = [
-      'meta-llama/Llama-3.2-3B-Instruct',
       'meta-llama/Llama-3.1-8B-Instruct',
+      'Qwen/Qwen2.5-7B-Instruct',
+      'meta-llama/Llama-3.2-3B-Instruct',
       'Qwen/Qwen2.5-72B-Instruct',
       'mistralai/Mistral-7B-Instruct-v0.3',
     ]

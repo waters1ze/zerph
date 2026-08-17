@@ -108,6 +108,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
 export interface PlanCatalogEntry {
   id: PlanId
   name: string
+  aiModel: string
   priceMonthly: number | null // null = by request
   priceYearly: number | null
   tagline: string
@@ -118,10 +119,12 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
   {
     id: 'free',
     name: 'Базовый',
+    aiModel: 'Llama 3.1 8B / Qwen 7B',
     priceMonthly: 0,
     priceYearly: 0,
     tagline: 'Начните пользоваться прямо сейчас',
     features: [
+      '🤖 ИИ: Llama 3.1 8B / Qwen 7B',
       '∞ заметок',
       '5 напоминаний в день',
       '10 запросов Siri в день',
@@ -133,10 +136,12 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
   {
     id: 'plus',
     name: 'Plus',
+    aiModel: 'Qwen 3.6 27B',
     priceMonthly: 99,
     priceYearly: 1009,
     tagline: 'Для ежедневной продуктивности',
     features: [
+      '🤖 ИИ: Qwen 3.6 27B (продвинутая логика)',
       '∞ заметок',
       '∞ напоминаний',
       '∞ запросов Siri',
@@ -149,10 +154,12 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
   {
     id: 'pro',
     name: 'Pro',
+    aiModel: 'GPT-OSS 120B Flagship',
     priceMonthly: 299,
     priceYearly: 3049,
     tagline: 'Полная свобода без лимитов ввода',
     features: [
+      '🧠 Флагманский ИИ: GPT-OSS 120B',
       'Всё из Plus',
       '∞ голосовых распознаваний',
       '∞ распознаваний по фото',
@@ -161,10 +168,15 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
   {
     id: 'corp',
     name: 'Corp',
+    aiModel: 'GPT-OSS 120B Flagship',
     priceMonthly: null,
     priceYearly: null,
     tagline: 'Для команд — всё безлимитно',
-    features: ['Все возможности без ограничений', 'Тариф по запросу'],
+    features: [
+      '🧠 Флагманский ИИ: GPT-OSS 120B',
+      'Все возможности без ограничений',
+      'Тариф по запросу',
+    ],
   },
 ]
 
