@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { planAtLeast, incrementDailyCount, incrementLifetimeCount, COUNTERS } from '@/lib/backend/plans'
 import crypto from 'crypto'
-import { parseIntentWithGroq, transcribeAudioWithGroq, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
+import { parseIntentWithGroq, parseSiriFastIntent, transcribeAudioWithGroq, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
 import { saveParsedItemToDb, getExistingItemsContext, registerChatId, getAllTasks, extractNaturalTime, getUserUsageAndLimits, incrementUserUsage, getFriends, findFriendMatches } from '@/lib/backend/db'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { prisma } from '@/lib/backend/prisma'
@@ -329,12 +329,12 @@ export async function POST(req: NextRequest) {
       }, { status: 400, headers: NO_CACHE_HEADERS })
     }
 
-    // Parallelize all prerequisite DB queries and checks in 1 batch
-    const [limits, context, friends, userRec] = await Promise.all([
+    const isMutationOrComplex = /(удали|стереть|сотри|очисти|вычеркни|отмени|измени|поменяй|перенеси|расписание|график)/i.test(inputText)
+
+    // Parallelize prerequisite DB queries in 1 lightweight batch
+    const [limits, friends] = await Promise.all([
       getUserUsageAndLimits(chatId),
-      getExistingItemsContext(chatId),
       getFriends(chatId),
-      prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { authProvider: true } }),
     ])
 
     registerChatId(chatId).catch(() => {})
@@ -368,12 +368,20 @@ export async function POST(req: NextRequest) {
       }, { headers: NO_CACHE_HEADERS })
     }
 
-    // 2. Select ultra-fast optimized neural model based on user plan:
-    // Paid (Plus, Pro, Corp): openai/gpt-oss-20b (~150-200ms ultra low-latency)
-    // Free: meta-llama/Llama-3.1-8B-Instruct
-    const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'meta-llama/Llama-3.1-8B-Instruct'
-    const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
-    const items = await parseIntentWithGroq(inputText, key, siriModel, context, friendsContext)
+    // 2. Select ultra-fast optimized neural parser
+    const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
+    const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+
+    let items: any[]
+    if (isMutationOrComplex) {
+      const context = await getExistingItemsContext(chatId)
+      items = await parseIntentWithGroq(inputText, key, siriModel, context, friendsContext)
+    } else {
+      items = await parseSiriFastIntent(inputText, key, siriModel, friendsContext)
+      if (!items || items.length === 0) {
+        items = await parseIntentWithGroq(inputText, key, siriModel, undefined, friendsContext)
+      }
+    }
 
     if (!items || items.length === 0) {
       const failText = 'Не удалось распознать задачу. Попробуйте сказать иначе.'
@@ -414,6 +422,7 @@ export async function POST(req: NextRequest) {
               })
             }
           }
+          const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { authProvider: true } }).catch(() => null)
           if (userRec?.authProvider === 'vk') {
             const { sendVkMessage } = await import('@/lib/backend/vk')
             await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))
@@ -510,12 +519,12 @@ export async function GET(req: NextRequest) {
 
   const key = GROQ_API_KEY || process.env.GROQ_API_KEY || ''
 
-  // Parallelize all prerequisite DB queries and checks in 1 batch
-  const [limits, context, friends, userRec] = await Promise.all([
+  const isMutationOrComplex = /(удали|стереть|сотри|очисти|вычеркни|отмени|измени|поменяй|перенеси|расписание|график)/i.test(text)
+
+  // Parallelize prerequisite DB queries in 1 lightweight batch
+  const [limits, friends] = await Promise.all([
     getUserUsageAndLimits(chatId),
-    getExistingItemsContext(chatId),
     getFriends(chatId),
-    prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { authProvider: true } }),
   ])
 
   registerChatId(chatId).catch(() => {})
@@ -550,9 +559,19 @@ export async function GET(req: NextRequest) {
     return new NextResponse(spokenResponse, { headers: NO_CACHE_HEADERS })
   }
 
-  const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'meta-llama/Llama-3.1-8B-Instruct'
-  const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
-  const items = await parseIntentWithGroq(text, key, siriModel, context, friendsContext)
+  const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
+  const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+
+  let items: any[]
+  if (isMutationOrComplex) {
+    const context = await getExistingItemsContext(chatId)
+    items = await parseIntentWithGroq(text, key, siriModel, context, friendsContext)
+  } else {
+    items = await parseSiriFastIntent(text, key, siriModel, friendsContext)
+    if (!items || items.length === 0) {
+      items = await parseIntentWithGroq(text, key, siriModel, undefined, friendsContext)
+    }
+  }
 
   const { spokenText, tgMsg: delegationTgMsg } = await processShortcutsItems(items, chatId, text, friends)
 
@@ -583,6 +602,7 @@ export async function GET(req: NextRequest) {
             })
           }
         }
+        const userRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) }, select: { authProvider: true } }).catch(() => null)
         if (userRec?.authProvider === 'vk') {
           const { sendVkMessage } = await import('@/lib/backend/vk')
           await sendVkMessage(String(chatId), tgMsg.replace(/[*_`]/g, ''))

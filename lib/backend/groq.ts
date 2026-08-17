@@ -780,5 +780,128 @@ export async function generateSmartReschedulePlan(
   }
 }
 
+/**
+ * Ultra-fast, low-latency intent parser tailored for Apple Siri, Action Button, and voice widgets.
+ * Uses a concise 100-token prompt to avoid Groq TPM limits and completes in ~200-350ms.
+ */
+export async function parseSiriFastIntent(
+  text: string,
+  apiKey?: string,
+  model = 'openai/gpt-oss-20b',
+  friendsContext?: string
+): Promise<ParsedItem[]> {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+
+  const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+  const mskTime = `${getPart('hour')}:${getPart('minute')}`
+
+  let systemPrompt = `You are Zerf Note Siri Fast Parser. Output ONLY valid JSON.
+Current Moscow Date: ${mskDate}, Time Right Now: ${mskTime} (MSK/UTC+3).
+
+Schema:
+{
+  "items": [
+    {
+      "action": "create",
+      "type": "task",
+      "title": "Clean concise task title in Russian without command words",
+      "dueTime": "HH:MM 24-hour format or null",
+      "dueDate": "YYYY-MM-DD or null",
+      "priority": "urgent" | "high" | "medium" | "low",
+      "recipientName": null,
+      "isBothShared": false,
+      "repeat": "daily" | "weekdays" | "weekly" | "yearly" | null
+    }
+  ]
+}
+
+Rules:
+1. Title MUST be in Russian.
+2. Relative times ("через 10 минут", "в 18:00", "завтра в 9 утра", "будильник на 7:00") MUST be calculated relative to current Moscow time ${mskTime} on ${mskDate}.
+3. If user says "поручи [Имя]..." -> "type": "delegate", "isBothShared": false, "recipientName": "[Имя]".
+4. If user says "нам с [Имя] общая задача..." -> "type": "delegate", "isBothShared": true, "recipientName": "[Имя]".`
+
+  if (friendsContext) {
+    systemPrompt += `\nFriends: ${friendsContext}`
+  }
+
+  try {
+    const result = await callGroqChatCompletion({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text },
+      ],
+      model,
+      temperature: 0.1,
+      max_tokens: 250,
+      response_format: { type: 'json_object' },
+      apiKey,
+      fallbackModels: ['openai/gpt-oss-20b', 'groq/compound-mini', 'openai/gpt-oss-120b']
+    })
+
+    const raw = result.content || '{}'
+    let cleanRaw = raw.trim()
+    if (cleanRaw.startsWith('```json')) cleanRaw = cleanRaw.replace(/^```json\s*/i, '')
+    if (cleanRaw.startsWith('```')) cleanRaw = cleanRaw.replace(/^```\s*/i, '')
+    if (cleanRaw.endsWith('```')) cleanRaw = cleanRaw.replace(/```\s*$/i, '')
+    cleanRaw = cleanRaw.trim()
+
+    const p = JSON.parse(cleanRaw)
+    let rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
+    rawItems = rawItems.filter((item: any) => item && (item.title || item.action === 'delete_all'))
+    if (rawItems.length === 0) return []
+
+    return rawItems.map((item: any) => {
+      const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+        text,
+        item.recipientName,
+        item.isBothShared
+      )
+
+      const effectiveType = (cleanRecName || item.type === 'delegate') ? 'delegate' : (item.type || 'task')
+
+      return {
+        action: item.action || 'create',
+        targetId: item.targetId || null,
+        type: effectiveType,
+        title: item.title || text.slice(0, 50),
+        summary: item.title || text,
+        priority: item.priority || 'medium',
+        dueDate: item.dueDate || null,
+        dueTime: item.dueTime || null,
+        daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
+        recipientName: cleanRecName,
+        isBothShared: cleanIsBothShared,
+        repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+        targetTitle: item.targetTitle || null,
+        projectId: null,
+        goalId: null,
+        folder: null,
+        members: null,
+        tags: ['siri', 'быстрый ввод'],
+        subtasks: [],
+        milestones: [],
+        motivation: null,
+        rawText: text,
+        originalText: text,
+      }
+    })
+  } catch (err) {
+    console.error('parseSiriFastIntent error:', err)
+    return []
+  }
+}
+
 
 
