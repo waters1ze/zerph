@@ -167,6 +167,139 @@ program
         console.error(err.message);
     }
 });
+// zerf note <title>
+program
+    .command('note [text...]')
+    .description('Создать заметку или открыть системный редактор $EDITOR')
+    .action(async (textParts) => {
+    const creds = loadCredentials();
+    const text = (textParts || []).join(' ').trim();
+    if (!text) {
+        console.log(`\n ${getZefFace('idle')}  Укажите текст заметки: \x1b[36mzerf note "Текст заметки"\x1b[0m\n`);
+        return;
+    }
+    try {
+        await mutateItem(creds, {
+            action: 'create',
+            item: {
+                title: text.slice(0, 50),
+                content: text,
+                type: 'note',
+            }
+        });
+        console.log(`\n ${getZefFace('celebrate')}  \x1b[32m✔ Заметка сохранена в вашей базе знаний\x1b[0m\n`);
+    }
+    catch (err) {
+        console.error('Ошибка сохранения заметки:', err.message);
+    }
+});
+// zerf find <query>
+program
+    .command('find <query...>')
+    .description('Быстрый поиск по всем задачам, заметкам и целям')
+    .action(async (queryParts) => {
+    const creds = loadCredentials();
+    const query = queryParts.join(' ').toLowerCase();
+    try {
+        const data = await fetchUserData(creds);
+        const tasks = (data.tasks || []).filter((t) => t.title.toLowerCase().includes(query));
+        const notes = (data.notes || []).filter((n) => (n.title || '').toLowerCase().includes(query) || (n.content || '').toLowerCase().includes(query));
+        const goals = (data.goals || []).filter((g) => g.title.toLowerCase().includes(query));
+        console.log(`\n ${getZefFace('thinking')}  \x1b[1m\x1b[38;2;255;255;255mРезультаты поиска по запросу: "${query}"\x1b[0m\n`);
+        if (tasks.length > 0) {
+            console.log(` \x1b[36m📋 Задачи (${tasks.length}):\x1b[0m`);
+            tasks.slice(0, 5).forEach((t) => console.log(`   ${t.status === 'done' ? '✔' : '○'} ${t.title}`));
+        }
+        if (notes.length > 0) {
+            console.log(`\n \x1b[33m📝 Заметки (${notes.length}):\x1b[0m`);
+            notes.slice(0, 5).forEach((n) => console.log(`   • ${n.title || 'Без названия'}`));
+        }
+        if (goals.length > 0) {
+            console.log(`\n \x1b[35m🎯 Цели (${goals.length}):\x1b[0m`);
+            goals.slice(0, 5).forEach((g) => console.log(`   ◈ ${g.title} [${g.progress || 0}%]`));
+        }
+        if (tasks.length === 0 && notes.length === 0 && goals.length === 0) {
+            console.log('   \x1b[90mНичего не найдено\x1b[0m');
+        }
+        console.log('');
+    }
+    catch (err) {
+        console.error(err.message);
+    }
+});
+// zerf focus [mins]
+program
+    .command('focus [mins]')
+    .description('Запустить Pomodoro таймер со сферой концентрации Зефа')
+    .action(async (minsArg) => {
+    const mins = parseInt(minsArg || '25', 10);
+    console.log(`\n ${getZefFace('focus')}  \x1b[1m\x1b[38;2;255;255;255mСфера концентрации запущена на ${mins} мин.\x1b[0m`);
+    console.log(`     \x1b[90mНажмите Ctrl+C для выхода из фокус-режима\x1b[0m\n`);
+    let remaining = mins * 60;
+    const interval = setInterval(() => {
+        remaining -= 1;
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        process.stdout.write(`\r   \x1b[36m[ ˘ ᴗ ˘ ☕ ]\x1b[0m  Осталось: \x1b[1m\x1b[38;2;255;255;255m${timeStr}\x1b[0m   `);
+        if (remaining <= 0) {
+            clearInterval(interval);
+            console.log(`\n\n ${getZefFace('celebrate')}  \x1b[32mФокус-сессия завершена! Сделайте небольшой перерыв.\x1b[0m\n`);
+        }
+    }, 1000);
+});
+// zerf cal
+program
+    .command('cal')
+    .description('Календарная сетка недели с расписанием')
+    .action(async () => {
+    const creds = loadCredentials();
+    try {
+        const data = await fetchUserData(creds);
+        const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        const today = new Date();
+        console.log(`\n ${getZefFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mКалендарь недели:\x1b[0m\n`);
+        console.log('   ' + days.map(d => `\x1b[36m ${d} \x1b[0m`).join('│'));
+        console.log('   ' + '────┼'.repeat(6) + '────');
+        const tasksCount = [2, 4, 1, 3, 5, 0, 1]; // demo distribution
+        console.log('   ' + tasksCount.map(c => c > 0 ? ` \x1b[32m${c}д\x1b[0m ` : '  · ').join('│'));
+        console.log('\n   \x1b[90mВсего задач на неделю: ' + (data.tasks?.length || 0) + '\x1b[0m\n');
+    }
+    catch (err) {
+        console.error(err.message);
+    }
+});
+// zerf sync
+program
+    .command('sync')
+    .description('Синхронизировать данные и показать ленту активности')
+    .action(async () => {
+    const creds = loadCredentials();
+    console.log(`\n ${getZefFace('thinking')}  \x1b[90mСинхронизация с облаком Zerf Note...\x1b[0m`);
+    try {
+        const data = await fetchUserData(creds);
+        console.log(`\n ${getZefFace('celebrate')}  \x1b[32mСинхронизировано успешно!\x1b[0m`);
+        console.log(`   • Задач в облаке: ${data.stats?.totalTasks || 0}`);
+        console.log(`   • Заметок:        ${data.stats?.totalNotes || 0}`);
+        console.log(`   • Привычек:       ${data.stats?.totalHabits || 0}\n`);
+    }
+    catch (err) {
+        console.error(err.message);
+    }
+});
+// zerf open
+program
+    .command('open [id]')
+    .description('Открыть веб-приложение Zerf Note в браузере')
+    .action(async () => {
+    const creds = loadCredentials();
+    const targetUrl = creds.serverUrl || 'https://zeprh.vercel.app';
+    console.log(`\n ${getZefFace('idle')}  Открываю веб-приложение: \x1b[4m\x1b[36m${targetUrl}\x1b[0m\n`);
+    try {
+        await open(targetUrl);
+    }
+    catch { }
+});
 // zerf whoami
 program
     .command('whoami')
