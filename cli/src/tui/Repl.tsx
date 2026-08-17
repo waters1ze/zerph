@@ -11,6 +11,7 @@ import {
   ZerfCredentials,
   ZerfConfig
 } from '../api.js'
+import { detectInstalledClis, runLocalCliBridge, DetectedCli } from '../local-cli.js'
 import { GLYPHS } from '../mascot.js'
 
 interface LogEntry {
@@ -27,11 +28,20 @@ interface MenuItem {
   glyph: string
 }
 
-const AVAILABLE_MODELS = [
-  { id: 'groq/llama-3.3-70b', name: '⚡ Groq Llama 3.3 70B', desc: 'Молниеносный отклик (120–200 мс)' },
-  { id: 'deepseek/deepseek-r1', name: '🧠 DeepSeek R1 Reasoning', desc: 'Глубокое рассуждение и аналитика' },
-  { id: 'openai/gpt-4o-mini', name: '✨ OpenAI GPT-4o Mini', desc: 'Сбалансированная точность' },
-  { id: 'anthropic/claude-3.5-haiku', name: '🪽 Claude 3.5 Haiku', desc: 'Креативность и структурирование' },
+interface AiModelOption {
+  id: string
+  name: string
+  desc: string
+  type: 'cloud' | 'local_cli'
+  status?: string
+}
+
+// Officially supported cloud models on Groq / Zerf Cloud
+const CLOUD_MODELS: AiModelOption[] = [
+  { id: 'llama-3.3-70b-versatile', name: '⚡ Groq Llama 3.3 70B', desc: 'Флагман скорости и точности (120–200 мс)', type: 'cloud' },
+  { id: 'deepseek-r1-distill-llama-70b', name: '🧠 DeepSeek R1 70B', desc: 'Глубокие логические рассуждения', type: 'cloud' },
+  { id: 'llama-3.1-8b-instant', name: '⚡ Llama 3.1 8B Instant', desc: 'Сверхлегкая быстрая модель', type: 'cloud' },
+  { id: 'gemma2-9b-it', name: '✨ Google Gemma 2 9B', desc: 'Лаконичные и структурированные ответы', type: 'cloud' },
 ]
 
 const BASE_MENU_ITEMS: MenuItem[] = [
@@ -39,14 +49,14 @@ const BASE_MENU_ITEMS: MenuItem[] = [
   { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
   { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
   { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
-  { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
+  { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
   { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
   { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
+  { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI (agy/claude)', glyph: '🤖' },
+  { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и нейросетей', glyph: '⚙' },
   { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и распознавание речи', glyph: '🎙' },
-  { cmd: '/model', label: '/model', desc: 'Выбор активной нейросети (LLM)', glyph: '🤖' },
-  { cmd: '/settings', label: '/settings', desc: 'Окно настроек и параметров', glyph: '⚙' },
   { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-  { cmd: '/friends', label: '/friends', desc: 'Список друзей и статус', glyph: GLYPHS.friend },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
   { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
   { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
   { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
@@ -64,6 +74,15 @@ export function Repl({ initialData }: { initialData?: any }) {
   const [menuForced, setMenuForced] = useState(false)
   const [pickingModel, setPickingModel] = useState(false)
   const [selectedModelIdx, setSelectedModelIdx] = useState(0)
+  const [detectedClis, setDetectedClis] = useState<DetectedCli[]>([])
+
+  // Scan for local CLIs on mount
+  useEffect(() => {
+    try {
+      const found = detectInstalledClis()
+      setDetectedClis(found)
+    } catch {}
+  }, [])
 
   // Load user data if not passed initially
   const loadData = async () => {
@@ -81,6 +100,18 @@ export function Repl({ initialData }: { initialData?: any }) {
       loadData()
     }
   }, [])
+
+  // Combine Cloud models + Local CLI bridges
+  const allAvailableModels: AiModelOption[] = [
+    ...CLOUD_MODELS,
+    ...detectedClis.map(c => ({
+      id: c.id,
+      name: c.name,
+      desc: c.desc,
+      type: 'local_cli' as const,
+      status: c.installed ? 'Готов к работе' : 'Не установлен в PATH',
+    })),
+  ]
 
   // Build dynamic menu including custom user extensions
   const customExtItems: MenuItem[] = (data?.extensions || []).map((ext: any) => ({
@@ -116,25 +147,31 @@ export function Repl({ initialData }: { initialData?: any }) {
     // Model selection navigation
     if (pickingModel) {
       if (key.upArrow) {
-        setSelectedModelIdx(prev => (prev > 0 ? prev - 1 : AVAILABLE_MODELS.length - 1))
+        setSelectedModelIdx(prev => (prev > 0 ? prev - 1 : allAvailableModels.length - 1))
         return
       }
       if (key.downArrow) {
-        setSelectedModelIdx(prev => (prev < AVAILABLE_MODELS.length - 1 ? prev + 1 : 0))
+        setSelectedModelIdx(prev => (prev < allAvailableModels.length - 1 ? prev + 1 : 0))
         return
       }
       if (key.return) {
-        const chosen = AVAILABLE_MODELS[selectedModelIdx]
+        const chosen = allAvailableModels[selectedModelIdx]
         if (chosen) {
           const updated = saveConfig({ model: chosen.id })
           setConfig(updated)
+          const isLocal = chosen.type === 'local_cli'
           setHistory(h => [
             ...h,
             {
               id: String(Date.now()),
               type: 'assistant',
-              text: `🤖 Активная модель переключена на: ${chosen.name}`,
-              details: [chosen.desc, 'Все последующие запросы и голосовой парсинг будут выполняться этой нейросетью.']
+              text: `🤖 Активная нейросеть / CLI агент: ${chosen.name}`,
+              details: [
+                chosen.desc,
+                isLocal
+                  ? '⚡ Все запросы кода и команды будут выполняться через ваш локальный CLI инструмент с полным доступом к файлам!'
+                  : '☁ Запросы обрабатываются в облаке Zerf (планирование, вопросы, база знаний).'
+              ]
             }
           ])
         }
@@ -241,7 +278,7 @@ export function Repl({ initialData }: { initialData?: any }) {
             '1. Telegram: отправьте голосовое сообщение боту @Zerph_bot',
             '2. iOS: используйте Siri / Action Button для мгновенного ввода',
             '3. Web: нажмите микрофон в приложении https://zeprh.vercel.app',
-            `Движок распознавания: ${config.voiceEngine || 'Whisper Large v3 (Groq LPU)'}`,
+            `Движок распознавания: Whisper Large v3 (Groq LPU)`,
           ]
         }
       ])
@@ -249,7 +286,8 @@ export function Repl({ initialData }: { initialData?: any }) {
     }
 
     if (raw === '/settings' || raw === '/настройки') {
-      const currentModelObj = AVAILABLE_MODELS.find(m => m.id === config.model) || AVAILABLE_MODELS[0]
+      const currentModelObj = allAvailableModels.find(m => m.id === config.model) || allAvailableModels[0]
+      const installedCliCount = detectedClis.filter(c => c.installed).length
       setHistory(h => [
         ...h,
         {
@@ -257,12 +295,13 @@ export function Repl({ initialData }: { initialData?: any }) {
           type: 'assistant',
           text: '⚙ Настройки Zerf CLI:',
           details: [
-            `• Активная модель ИИ:   ${currentModelObj?.name} (сменить: /model)`,
-            `• Тема оформления:      ${config.theme === 'strict' ? 'Strict Cyan (Монохром)' : 'Стандартная'}`,
-            `• Автосинхронизация:    ${config.autoSync ? 'Включена (каждые 30 сек)' : 'Выключена'}`,
+            `• Активная модель / CLI: ${currentModelObj?.name} (сменить: /model)`,
+            `• Локальные CLI на ПК:  Обнаружено: ${installedCliCount} (agy, claude, gemini, ollama)`,
+            `• Тема оформления:      Strict Cyan (Монохром + Тихоня)`,
+            `• Автосинхронизация:    Включена (каждые 30 сек)`,
             `• Telegram Бот:         Подключен (@Zerph_bot)`,
             `• Текущий тариф:        ${(data?.user?.plan || 'corp').toUpperCase()}`,
-            '💡 Для смены модели нейросети введите: /model',
+            '💡 Чтобы переключить нейросеть или подключить локальный CLI: /model',
           ]
         }
       ])
@@ -278,9 +317,8 @@ export function Repl({ initialData }: { initialData?: any }) {
           text: '❖ Быстрые команды Zerf CLI:',
           details: [
             '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
-            '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, GPT-4o, Claude)',
+            '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, agy, claude)',
             '/settings       — Окно параметров и настроек',
-            '/voice          — Голосовой ввод и распознавание',
             '/today          — Список задач и привычек на сегодня',
             '/cal            — Недельный календарь и расписание',
             '/chat <текст>   — Чат с коллегой / заметка другу',
@@ -492,9 +530,34 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    // ── Natural Language AI Processing (Intent Parser & Smart Chat) ──────────
+    // ── Local CLI Bridge OR Cloud AI Routing ────────────────────────────────
+    const activeModel = config.model || 'llama-3.3-70b-versatile'
+
+    if (activeModel.startsWith('cli:')) {
+      // Route query to local CLI agent (agy, claude, gemini, ollama)
+      try {
+        const cliOutput = await runLocalCliBridge(activeModel, raw)
+        setHistory(h => [
+          ...h,
+          {
+            id: String(Date.now()),
+            type: 'assistant',
+            text: `[${activeModel.replace('cli:', '').toUpperCase()}] Результат выполнения:`,
+            details: cliOutput.split('\n').slice(0, 20),
+          }
+        ])
+      } catch (err: any) {
+        setHistory(h => [
+          ...h,
+          { id: String(Date.now()), type: 'error', text: `Ошибка запуска ${activeModel}: ${err.message}` }
+        ])
+      }
+      return
+    }
+
+    // ── Cloud AI Processing (Natural Language Intent & Chat) ────────────────
     try {
-      const res = await sendAiQuery(creds, raw, config.model)
+      const res = await sendAiQuery(creds, raw, activeModel)
       setHistory(h => [
         ...h,
         {
@@ -551,19 +614,20 @@ export function Repl({ initialData }: { initialData?: any }) {
       {pickingModel && (
         <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={0}>
           <Box justifyContent="space-between" marginBottom={0}>
-            <Text bold color="cyanBright">🤖 Выберите нейросеть для Zerf CLI (↑/↓, Enter для выбора):</Text>
+            <Text bold color="cyanBright">🤖 Выберите нейросеть или локальный CLI агент (↑/↓, Enter):</Text>
             <Text color="gray">ESC для закрытия</Text>
           </Box>
-          {AVAILABLE_MODELS.map((m, idx) => {
+          {allAvailableModels.map((m, idx) => {
             const isSel = idx === selectedModelIdx
             const isCurrent = config.model === m.id
+            const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]'
             return (
               <Box key={m.id} gap={1}>
                 <Text bold color={isSel ? 'cyanBright' : 'gray'}>
-                  {isSel ? '▶ ' : '  '}{m.name.padEnd(28)}
+                  {isSel ? '▶ ' : '  '}{m.name.padEnd(30)}
                 </Text>
                 <Text color={isSel ? 'white' : 'gray'}>
-                  — {m.desc} {isCurrent ? '(Текущая)' : ''}
+                  — {tag} {m.desc} {isCurrent ? '(Текущий)' : ''}
                 </Text>
               </Box>
             )
@@ -615,7 +679,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
         {/* Footer info & limits bar (Claude Code bottom style) */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>/menu меню · /model ИИ · /settings · ? справка</Text>
+          <Text color="gray" dimColor>/menu меню · /model ИИ/CLI · /settings · ? справка</Text>
           <Text color="gray" dimColor>
             [{planTag}: {cliCount}/{limits?.maxCli || '∞'} CLI | {Math.floor((limits?.voiceUsedSeconds || 0) / 60)}/{limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)}м голос]
           </Text>

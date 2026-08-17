@@ -3,26 +3,28 @@ import { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import { fetchUserData, loadCredentials, mutateItem, sendAiQuery, loadConfig, saveConfig } from '../api.js';
+import { detectInstalledClis, runLocalCliBridge } from '../local-cli.js';
 import { GLYPHS } from '../mascot.js';
-const AVAILABLE_MODELS = [
-    { id: 'groq/llama-3.3-70b', name: '⚡ Groq Llama 3.3 70B', desc: 'Молниеносный отклик (120–200 мс)' },
-    { id: 'deepseek/deepseek-r1', name: '🧠 DeepSeek R1 Reasoning', desc: 'Глубокое рассуждение и аналитика' },
-    { id: 'openai/gpt-4o-mini', name: '✨ OpenAI GPT-4o Mini', desc: 'Сбалансированная точность' },
-    { id: 'anthropic/claude-3.5-haiku', name: '🪽 Claude 3.5 Haiku', desc: 'Креативность и структурирование' },
+// Officially supported cloud models on Groq / Zerf Cloud
+const CLOUD_MODELS = [
+    { id: 'llama-3.3-70b-versatile', name: '⚡ Groq Llama 3.3 70B', desc: 'Флагман скорости и точности (120–200 мс)', type: 'cloud' },
+    { id: 'deepseek-r1-distill-llama-70b', name: '🧠 DeepSeek R1 70B', desc: 'Глубокие логические рассуждения', type: 'cloud' },
+    { id: 'llama-3.1-8b-instant', name: '⚡ Llama 3.1 8B Instant', desc: 'Сверхлегкая быстрая модель', type: 'cloud' },
+    { id: 'gemma2-9b-it', name: '✨ Google Gemma 2 9B', desc: 'Лаконичные и структурированные ответы', type: 'cloud' },
 ];
 const BASE_MENU_ITEMS = [
     { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
     { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
     { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
     { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
-    { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
+    { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
     { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
     { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
+    { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI (agy/claude)', glyph: '🤖' },
+    { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и нейросетей', glyph: '⚙' },
     { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и распознавание речи', glyph: '🎙' },
-    { cmd: '/model', label: '/model', desc: 'Выбор активной нейросети (LLM)', glyph: '🤖' },
-    { cmd: '/settings', label: '/settings', desc: 'Окно настроек и параметров', glyph: '⚙' },
     { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-    { cmd: '/friends', label: '/friends', desc: 'Список друзей и статус', glyph: GLYPHS.friend },
+    { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
     { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
     { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
     { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
@@ -39,6 +41,15 @@ export function Repl({ initialData }) {
     const [menuForced, setMenuForced] = useState(false);
     const [pickingModel, setPickingModel] = useState(false);
     const [selectedModelIdx, setSelectedModelIdx] = useState(0);
+    const [detectedClis, setDetectedClis] = useState([]);
+    // Scan for local CLIs on mount
+    useEffect(() => {
+        try {
+            const found = detectInstalledClis();
+            setDetectedClis(found);
+        }
+        catch { }
+    }, []);
     // Load user data if not passed initially
     const loadData = async () => {
         try {
@@ -55,6 +66,17 @@ export function Repl({ initialData }) {
             loadData();
         }
     }, []);
+    // Combine Cloud models + Local CLI bridges
+    const allAvailableModels = [
+        ...CLOUD_MODELS,
+        ...detectedClis.map(c => ({
+            id: c.id,
+            name: c.name,
+            desc: c.desc,
+            type: 'local_cli',
+            status: c.installed ? 'Готов к работе' : 'Не установлен в PATH',
+        })),
+    ];
     // Build dynamic menu including custom user extensions
     const customExtItems = (data?.extensions || []).map((ext) => ({
         cmd: `/ext ${ext.id || ext.name}`,
@@ -84,25 +106,31 @@ export function Repl({ initialData }) {
         // Model selection navigation
         if (pickingModel) {
             if (key.upArrow) {
-                setSelectedModelIdx(prev => (prev > 0 ? prev - 1 : AVAILABLE_MODELS.length - 1));
+                setSelectedModelIdx(prev => (prev > 0 ? prev - 1 : allAvailableModels.length - 1));
                 return;
             }
             if (key.downArrow) {
-                setSelectedModelIdx(prev => (prev < AVAILABLE_MODELS.length - 1 ? prev + 1 : 0));
+                setSelectedModelIdx(prev => (prev < allAvailableModels.length - 1 ? prev + 1 : 0));
                 return;
             }
             if (key.return) {
-                const chosen = AVAILABLE_MODELS[selectedModelIdx];
+                const chosen = allAvailableModels[selectedModelIdx];
                 if (chosen) {
                     const updated = saveConfig({ model: chosen.id });
                     setConfig(updated);
+                    const isLocal = chosen.type === 'local_cli';
                     setHistory(h => [
                         ...h,
                         {
                             id: String(Date.now()),
                             type: 'assistant',
-                            text: `🤖 Активная модель переключена на: ${chosen.name}`,
-                            details: [chosen.desc, 'Все последующие запросы и голосовой парсинг будут выполняться этой нейросетью.']
+                            text: `🤖 Активная нейросеть / CLI агент: ${chosen.name}`,
+                            details: [
+                                chosen.desc,
+                                isLocal
+                                    ? '⚡ Все запросы кода и команды будут выполняться через ваш локальный CLI инструмент с полным доступом к файлам!'
+                                    : '☁ Запросы обрабатываются в облаке Zerf (планирование, вопросы, база знаний).'
+                            ]
                         }
                     ]);
                 }
@@ -198,14 +226,15 @@ export function Repl({ initialData }) {
                         '1. Telegram: отправьте голосовое сообщение боту @Zerph_bot',
                         '2. iOS: используйте Siri / Action Button для мгновенного ввода',
                         '3. Web: нажмите микрофон в приложении https://zeprh.vercel.app',
-                        `Движок распознавания: ${config.voiceEngine || 'Whisper Large v3 (Groq LPU)'}`,
+                        `Движок распознавания: Whisper Large v3 (Groq LPU)`,
                     ]
                 }
             ]);
             return;
         }
         if (raw === '/settings' || raw === '/настройки') {
-            const currentModelObj = AVAILABLE_MODELS.find(m => m.id === config.model) || AVAILABLE_MODELS[0];
+            const currentModelObj = allAvailableModels.find(m => m.id === config.model) || allAvailableModels[0];
+            const installedCliCount = detectedClis.filter(c => c.installed).length;
             setHistory(h => [
                 ...h,
                 {
@@ -213,12 +242,13 @@ export function Repl({ initialData }) {
                     type: 'assistant',
                     text: '⚙ Настройки Zerf CLI:',
                     details: [
-                        `• Активная модель ИИ:   ${currentModelObj?.name} (сменить: /model)`,
-                        `• Тема оформления:      ${config.theme === 'strict' ? 'Strict Cyan (Монохром)' : 'Стандартная'}`,
-                        `• Автосинхронизация:    ${config.autoSync ? 'Включена (каждые 30 сек)' : 'Выключена'}`,
+                        `• Активная модель / CLI: ${currentModelObj?.name} (сменить: /model)`,
+                        `• Локальные CLI на ПК:  Обнаружено: ${installedCliCount} (agy, claude, gemini, ollama)`,
+                        `• Тема оформления:      Strict Cyan (Монохром + Тихоня)`,
+                        `• Автосинхронизация:    Включена (каждые 30 сек)`,
                         `• Telegram Бот:         Подключен (@Zerph_bot)`,
                         `• Текущий тариф:        ${(data?.user?.plan || 'corp').toUpperCase()}`,
-                        '💡 Для смены модели нейросети введите: /model',
+                        '💡 Чтобы переключить нейросеть или подключить локальный CLI: /model',
                     ]
                 }
             ]);
@@ -233,9 +263,8 @@ export function Repl({ initialData }) {
                     text: '❖ Быстрые команды Zerf CLI:',
                     details: [
                         '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
-                        '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, GPT-4o, Claude)',
+                        '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, agy, claude)',
                         '/settings       — Окно параметров и настроек',
-                        '/voice          — Голосовой ввод и распознавание',
                         '/today          — Список задач и привычек на сегодня',
                         '/cal            — Недельный календарь и расписание',
                         '/chat <текст>   — Чат с коллегой / заметка другу',
@@ -439,9 +468,33 @@ export function Repl({ initialData }) {
             }
             return;
         }
-        // ── Natural Language AI Processing (Intent Parser & Smart Chat) ──────────
+        // ── Local CLI Bridge OR Cloud AI Routing ────────────────────────────────
+        const activeModel = config.model || 'llama-3.3-70b-versatile';
+        if (activeModel.startsWith('cli:')) {
+            // Route query to local CLI agent (agy, claude, gemini, ollama)
+            try {
+                const cliOutput = await runLocalCliBridge(activeModel, raw);
+                setHistory(h => [
+                    ...h,
+                    {
+                        id: String(Date.now()),
+                        type: 'assistant',
+                        text: `[${activeModel.replace('cli:', '').toUpperCase()}] Результат выполнения:`,
+                        details: cliOutput.split('\n').slice(0, 20),
+                    }
+                ]);
+            }
+            catch (err) {
+                setHistory(h => [
+                    ...h,
+                    { id: String(Date.now()), type: 'error', text: `Ошибка запуска ${activeModel}: ${err.message}` }
+                ]);
+            }
+            return;
+        }
+        // ── Cloud AI Processing (Natural Language Intent & Chat) ────────────────
         try {
-            const res = await sendAiQuery(creds, raw, config.model);
+            const res = await sendAiQuery(creds, raw, activeModel);
             setHistory(h => [
                 ...h,
                 {
@@ -462,10 +515,11 @@ export function Repl({ initialData }) {
     };
     const limits = data?.limits;
     const planTag = (data?.user?.plan || 'corp').toUpperCase();
-    return (_jsxs(Box, { flexDirection: "column", width: 88, children: [history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))), pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "double", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\uD83E\uDD16 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u0435\u0439\u0440\u043E\u0441\u0435\u0442\u044C \u0434\u043B\u044F Zerf CLI (\u2191/\u2193, Enter \u0434\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430):" }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), AVAILABLE_MODELS.map((m, idx) => {
+    return (_jsxs(Box, { flexDirection: "column", width: 88, children: [history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))), pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "double", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\uD83E\uDD16 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u0435\u0439\u0440\u043E\u0441\u0435\u0442\u044C \u0438\u043B\u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 CLI \u0430\u0433\u0435\u043D\u0442 (\u2191/\u2193, Enter):" }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), allAvailableModels.map((m, idx) => {
                         const isSel = idx === selectedModelIdx;
                         const isCurrent = config.model === m.id;
-                        return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', m.name.padEnd(28)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", m.desc, " ", isCurrent ? '(Текущая)' : ''] })] }, m.id));
+                        const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]';
+                        return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', m.name.padEnd(30)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", tag, " ", m.desc, " ", isCurrent ? '(Текущий)' : ''] })] }, m.id));
                     })] })), isSlash && filteredCommands.length > 0 && !pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
                         const isSel = idx === selectedIdx;
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', item.label.padEnd(18)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, item.cmd));
@@ -473,5 +527,5 @@ export function Repl({ initialData }) {
                                     setInputVal(val);
                                     if (!val)
                                         setMenuForced(false);
-                                }, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, \u0432\u043E\u043F\u0440\u043E\u0441 \u0418\u0418, /menu, /model, /settings..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "/menu \u043C\u0435\u043D\u044E \u00B7 /model \u0418\u0418 \u00B7 /settings \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
+                                }, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, \u0432\u043E\u043F\u0440\u043E\u0441 \u0418\u0418, /menu, /model, /settings..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "/menu \u043C\u0435\u043D\u044E \u00B7 /model \u0418\u0418/CLI \u00B7 /settings \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
 }
