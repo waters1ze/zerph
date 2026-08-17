@@ -98,14 +98,14 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     canDisableNews: true,
   },
   corp: {
-    maxStoredNotes: UNLIMITED,
-    maxActiveReminders: UNLIMITED,
-    siriLifetimeRequests: UNLIMITED,
-    voiceSecondsPerDay: UNLIMITED,
-    photosPerDay: UNLIMITED,
-    goalsPerDay: UNLIMITED,
-    chatMessagesPerDay: UNLIMITED,
-    cliRequestsPerDay: UNLIMITED,
+    maxStoredNotes: 25000,
+    maxActiveReminders: 5000,
+    siriLifetimeRequests: 25000,
+    voiceSecondsPerDay: 28800, // 8 часов голоса в день (на команду из ~4 человек)
+    photosPerDay: 500,
+    goalsPerDay: 500,
+    chatMessagesPerDay: 4000, // 4000 запросов к ИИ в день
+    cliRequestsPerDay: 8000, // 8000 CLI операций в день
     sharedRequiresPlan: null,
     canDisableNews: true,
   },
