@@ -48,7 +48,7 @@ export function loadConfig() {
         theme: 'strict',
         sound: true,
         autoSync: true,
-        model: 'groq/llama-3.3-70b',
+        model: 'openai/gpt-oss-120b',
         voiceEngine: 'whisper-large-v3',
     };
 }
@@ -132,7 +132,7 @@ export async function mutateItem(creds, payload) {
     return res.json();
 }
 // AI Smart Intent Parser & Conversational Engine
-export async function sendAiQuery(creds, text, model = 'groq/llama-3.3-70b') {
+export async function sendAiQuery(creds, text, model = 'openai/gpt-oss-120b') {
     if (!creds.token)
         throw new Error('Not logged in');
     const serverUrl = creds.serverUrl || DEFAULT_SERVER_URL;

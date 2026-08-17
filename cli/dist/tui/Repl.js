@@ -5,12 +5,13 @@ import TextInput from 'ink-text-input';
 import { fetchUserData, loadCredentials, mutateItem, sendAiQuery, loadConfig, saveConfig } from '../api.js';
 import { detectInstalledClis, runLocalCliBridge } from '../local-cli.js';
 import { GLYPHS } from '../mascot.js';
-// Officially supported cloud models on Groq / Zerf Cloud
+// Officially supported active cloud models on Groq / Zerf Cloud
 const CLOUD_MODELS = [
-    { id: 'llama-3.3-70b-versatile', name: '⚡ Groq Llama 3.3 70B', desc: 'Флагман скорости и точности (120–200 мс)', type: 'cloud' },
-    { id: 'deepseek-r1-distill-llama-70b', name: '🧠 DeepSeek R1 70B', desc: 'Глубокие логические рассуждения', type: 'cloud' },
-    { id: 'llama-3.1-8b-instant', name: '⚡ Llama 3.1 8B Instant', desc: 'Сверхлегкая быстрая модель', type: 'cloud' },
-    { id: 'gemma2-9b-it', name: '✨ Google Gemma 2 9B', desc: 'Лаконичные и структурированные ответы', type: 'cloud' },
+    { id: 'openai/gpt-oss-120b', name: '🚀 OpenAI GPT-OSS 120B', desc: 'Флагман нового поколения, максимальный интеллект', type: 'cloud' },
+    { id: 'openai/gpt-oss-20b', name: '⚡ OpenAI GPT-OSS 20B', desc: 'Быстрый и точный отклик (120 мс)', type: 'cloud' },
+    { id: 'qwen/qwen3.6-27b', name: '🧠 Qwen 3.6 27B', desc: 'Превосходная логика и русский язык', type: 'cloud' },
+    { id: 'groq/compound', name: '🛡 Groq Compound Router', desc: 'Автоматический выбор оптимальной модели', type: 'cloud' },
+    { id: 'meta-llama/Llama-3.1-8B-Instruct', name: '⚡ Llama 3.1 8B Instruct', desc: 'Легкая модель для быстрых задач', type: 'cloud' },
 ];
 const BASE_MENU_ITEMS = [
     { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },

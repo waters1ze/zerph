@@ -68,7 +68,7 @@ export function loadConfig(): ZerfConfig {
     theme: 'strict',
     sound: true,
     autoSync: true,
-    model: 'groq/llama-3.3-70b',
+    model: 'openai/gpt-oss-120b',
     voiceEngine: 'whisper-large-v3',
   }
 }
@@ -166,7 +166,7 @@ export async function mutateItem(creds: ZerfCredentials, payload: any): Promise<
 export async function sendAiQuery(
   creds: ZerfCredentials,
   text: string,
-  model = 'groq/llama-3.3-70b'
+  model = 'openai/gpt-oss-120b'
 ): Promise<{ type: 'created' | 'answer'; message: string; details?: string[] }> {
   if (!creds.token) throw new Error('Not logged in')
   const serverUrl = creds.serverUrl || DEFAULT_SERVER_URL
