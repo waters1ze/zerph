@@ -114,6 +114,10 @@ export function SettingsView() {
   const [showEmailLinkModal, setShowEmailLinkModal] = useState(false)
   const [linkEmail, setLinkEmail] = useState('')
   const [linkPassword, setLinkPassword] = useState('')
+  const [showVkLinkModal, setShowVkLinkModal] = useState(false)
+  const [vkInput, setVkInput] = useState('')
+  const [showGoogleLinkModal, setShowGoogleLinkModal] = useState(false)
+  const [googleInput, setGoogleInput] = useState('')
 
   const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
   const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
@@ -304,45 +308,122 @@ export function SettingsView() {
     }
   }
 
-  const handleLinkGoogle = async () => {
-    const emailPrompt = prompt('Введите ваш Google Email для привязки к этому аккаунту:', profileData.googleEmail || '')
-    if (!emailPrompt || !emailPrompt.includes('@')) return
+  const openVkModal = () => {
+    setVkInput(profileData.vkId || '')
+    setAuthError(null)
+    setShowVkLinkModal(true)
+    setShowGoogleLinkModal(false)
+    setShowEmailLinkModal(false)
+  }
+
+  const openGoogleModal = () => {
+    setGoogleInput(profileData.googleEmail || '')
+    setAuthError(null)
+    setShowGoogleLinkModal(true)
+    setShowVkLinkModal(false)
+    setShowEmailLinkModal(false)
+  }
+
+  const handleVkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    let clean = vkInput.trim()
+    const idMatch = clean.match(/(?:vk\.com\/)?(?:id)?(\d+)/i)
+    if (idMatch && idMatch[1]) {
+      clean = idMatch[1]
+    } else {
+      clean = clean.replace(/^(?:https?:\/\/)?(?:www\.)?vk\.com\//i, '').replace(/^@/, '')
+    }
+    if (!clean) return
+
     setAuthLoading(true)
+    setAuthError(null)
     try {
       const res = await fetch('/api/telegram/user', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ googleEmail: emailPrompt })
+        body: JSON.stringify({ vkId: clean })
       })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки Google')
-      setProfileData(prev => ({ ...prev, googleEmail: emailPrompt }))
-      setAuthSuccess('Google аккаунт успешно привязан!')
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки VK')
+      setProfileData(prev => ({ ...prev, vkId: clean }))
+      setShowVkLinkModal(false)
+      setAuthSuccess('ВКонтакте успешно привязан к профилю!')
       setTimeout(() => setAuthSuccess(null), 3000)
     } catch (err: any) {
-      alert(err.message || 'Ошибка привязки')
+      setAuthError(err.message || 'Ошибка привязки VK')
     } finally {
       setAuthLoading(false)
     }
   }
 
-  const handleLinkVk = async () => {
-    const vkPrompt = prompt('Введите ваш ID ВКонтакте (например, 240878278):', profileData.vkId || '')
-    if (!vkPrompt) return
+  const handleUnlinkVk = async () => {
     setAuthLoading(true)
+    setAuthError(null)
     try {
       const res = await fetch('/api/telegram/user', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vkId: vkPrompt })
+        body: JSON.stringify({ vkId: '' })
       })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки VK')
-      setProfileData(prev => ({ ...prev, vkId: vkPrompt }))
-      setAuthSuccess('ВКонтакте успешно привязан к профилю!')
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка отвязки VK')
+      setProfileData(prev => ({ ...prev, vkId: null }))
+      setShowVkLinkModal(false)
+      setAuthSuccess('ВКонтакте успешно отвязан!')
       setTimeout(() => setAuthSuccess(null), 3000)
     } catch (err: any) {
-      alert(err.message || 'Ошибка привязки')
+      setAuthError(err.message || 'Ошибка отвязки VK')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleGoogleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const clean = googleInput.trim().toLowerCase()
+    if (!clean || !clean.includes('@')) {
+      setAuthError('Введите корректный Google Email')
+      return
+    }
+
+    setAuthLoading(true)
+    setAuthError(null)
+    try {
+      const res = await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleEmail: clean })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки Google')
+      setProfileData(prev => ({ ...prev, googleEmail: clean }))
+      setShowGoogleLinkModal(false)
+      setAuthSuccess('Google аккаунт успешно привязан к профилю!')
+      setTimeout(() => setAuthSuccess(null), 3000)
+    } catch (err: any) {
+      setAuthError(err.message || 'Ошибка привязки Google')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleUnlinkGoogle = async () => {
+    setAuthLoading(true)
+    setAuthError(null)
+    try {
+      const res = await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleEmail: '' })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка отвязки Google')
+      setProfileData(prev => ({ ...prev, googleEmail: null }))
+      setShowGoogleLinkModal(false)
+      setAuthSuccess('Google аккаунт успешно отвязан!')
+      setTimeout(() => setAuthSuccess(null), 3000)
+    } catch (err: any) {
+      setAuthError(err.message || 'Ошибка отвязки Google')
     } finally {
       setAuthLoading(false)
     }
@@ -750,7 +831,7 @@ export function SettingsView() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={handleLinkVk}
+                      onClick={openVkModal}
                       className="flex-1 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <span>{profileData.vkId ? 'Изменить VK ID' : 'Указать VK ID'}</span>
@@ -792,13 +873,167 @@ export function SettingsView() {
                     )}
                   </div>
                   <button
-                    onClick={handleLinkGoogle}
+                    onClick={openGoogleModal}
                     className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <span>{profileData.googleEmail ? 'Изменить Google Email' : 'Привязать Google'}</span>
                   </button>
                 </div>
               </div>
+
+              {/* Inline Modal/Form for VK Linking */}
+              <AnimatePresence>
+                {showVkLinkModal && (
+                  <motion.form
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    onSubmit={handleVkSubmit}
+                    className="p-4 rounded-2xl bg-[#0077FF]/5 border border-[#0077FF]/30 space-y-3 mt-3 overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-[#0077FF] text-white flex items-center justify-center font-bold text-[10px]">
+                          VK
+                        </div>
+                        <p className="text-xs font-bold text-foreground">
+                          {profileData.vkId ? 'Изменение привязки ВКонтакте' : 'Привязка аккаунта ВКонтакте'}
+                        </p>
+                      </div>
+                      <a
+                        href="https://vk.com/id0"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-semibold text-[#0077FF] hover:underline flex items-center gap-1"
+                      >
+                        <span>Моя страница VK</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] text-muted-foreground font-semibold block">
+                        Ваш цифровой ID или адрес страницы ВКонтакте:
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={vkInput}
+                        onChange={e => setVkInput(e.target.value)}
+                        placeholder="240878278 или id240878278 или vk.com/id240878278"
+                        className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-[#0077FF]"
+                      />
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        💡 Чтобы узнать свой ID, откройте <a href="https://vk.com/id0" target="_blank" rel="noreferrer" className="text-[#0077FF] underline font-semibold">свою страницу ВКонтакте</a> и скопируйте цифры из ссылки, либо откройте <a href="https://vk.com/im?sel=-240878278" target="_blank" rel="noreferrer" className="text-[#0077FF] underline font-semibold">чат с ботом Zerf</a>.
+                      </p>
+                    </div>
+
+                    {authError && (
+                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+                        {authError}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={authLoading || !vkInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-[#0077FF] text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                      >
+                        {authLoading ? 'Сохранение...' : 'Привязать ВКонтакте'}
+                      </button>
+                      {profileData.vkId && (
+                        <button
+                          type="button"
+                          onClick={handleUnlinkVk}
+                          disabled={authLoading}
+                          className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Отвязать VK
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowVkLinkModal(false)}
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
+
+              {/* Inline Modal/Form for Google Linking */}
+              <AnimatePresence>
+                {showGoogleLinkModal && (
+                  <motion.form
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    onSubmit={handleGoogleSubmit}
+                    className="p-4 rounded-2xl bg-rose-500/5 border border-rose-500/30 space-y-3 mt-3 overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-rose-500 text-white flex items-center justify-center font-bold text-[10px]">
+                          G
+                        </div>
+                        <p className="text-xs font-bold text-foreground">
+                          {profileData.googleEmail ? 'Изменение привязки Google' : 'Привязка аккаунта Google'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] text-muted-foreground font-semibold block">
+                        Ваш Google Email адрес:
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={googleInput}
+                        onChange={e => setGoogleInput(e.target.value)}
+                        placeholder="yourname@gmail.com"
+                        className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-rose-500"
+                      />
+                    </div>
+
+                    {authError && (
+                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+                        {authError}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={authLoading || !googleInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-rose-500 text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                      >
+                        {authLoading ? 'Сохранение...' : 'Привязать Google'}
+                      </button>
+                      {profileData.googleEmail && (
+                        <button
+                          type="button"
+                          onClick={handleUnlinkGoogle}
+                          disabled={authLoading}
+                          className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Отвязать Google
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowGoogleLinkModal(false)}
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
 
               {/* Inline Modal/Form for Email Linking */}
               <AnimatePresence>
