@@ -472,10 +472,17 @@ function ownerActorScope(actorChatId?: number | bigint | string | null) {
 }
 
 export async function updateTask(id: string, data: Partial<{
+  title: string
+  description: string | null
   status: string
   priority: string
-  dueDate: string
-  dueTime: string
+  dueDate: string | null
+  dueTime: string | null
+  parentTaskId: string | null
+  projectId: string | null
+  assignees: string[]
+  tags: string[]
+  subtasks: any
   reminderSent: boolean
   remindersSentCount: number
   completedAt: Date
