@@ -4,19 +4,20 @@ import { Box, Text, useInput, useApp } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import { fetchUserData, loadCredentials, mutateItem } from '../api.js';
-import { getAllaySpriteLines } from '../mascot.js';
+import { getAllaySpriteLines, GLYPHS } from '../mascot.js';
 const MENU_ITEMS = [
-    { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня' },
-    { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты' },
-    { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени' },
-    { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание' },
-    { cmd: '/chat ', label: '/chat <текст>', desc: 'Чат с коллегой / заметка другу' },
-    { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний' },
-    { cmd: '/focus 25', label: '/focus [мин]', desc: 'Pomodoro таймер со сферой' },
-    { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов' },
-    { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала' },
-    { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши' },
-    { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI' },
+    { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
+    { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
+    { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени', glyph: GLYPHS.taskDone },
+    { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
+    { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
+    { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
+    { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
+    { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
+    { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные проекты', glyph: GLYPHS.friend },
+    { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
+    { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
+    { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ];
 export function Repl() {
     const { exit } = useApp();
@@ -99,7 +100,6 @@ export function Repl() {
         if (isSlash && filteredCommands.length > 0 && (!raw.includes(' ') || raw === '/')) {
             const selectedItem = filteredCommands[selectedIdx];
             if (selectedItem && (raw === '/' || !raw.includes(' '))) {
-                // If command requires argument (like /add, /done, /chat, /note), autocomplete it into prompt
                 if (selectedItem.cmd.endsWith(' ') && !raw.trim().includes(' ')) {
                     setInputVal(selectedItem.cmd);
                     return;
@@ -125,16 +125,17 @@ export function Repl() {
                 {
                     id: String(Date.now()),
                     type: 'assistant',
-                    text: '📖 Быстрые команды Zerf CLI:',
+                    text: '❖ Быстрые команды Zerf CLI:',
                     details: [
                         '/today          — Список задач и привычек на сегодня',
-                        '/cal            — Недельный календарь',
+                        '/cal            — Недельный календарь и расписание',
                         '/chat <текст>   — Чат с коллегой / заметка другу',
-                        '/add <текст>    — Добавить задачу с распознаванием даты',
-                        '/done <имя>     — Завершить задачу',
-                        '/focus [минуты] — Запустить Pomodoro таймер',
+                        '/add <текст>    — Создать задачу с распознаванием даты',
+                        '/done <имя>     — Завершить задачу по названию',
+                        '/focus [минуты] — Запустить сферу концентрации',
                         '/note <текст>   — Сохранить заметку в базу',
                         '/limits         — Статус использования лимитов',
+                        '/friends        — Список друзей и их статус',
                         '/clear          — Очистить историю диалога',
                         '/exit           — Выйти из CLI',
                     ]
@@ -151,12 +152,12 @@ export function Repl() {
             }
             else {
                 const lines = todayTasks.map((t) => {
-                    const check = t.status === 'done' ? '✔' : '○';
+                    const check = t.status === 'done' ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `;
                     const time = t.dueTime ? ` (${t.dueTime})` : '';
                     const team = t.isShared ? ' [Команда]' : '';
                     return `${check} ${t.title}${time}${team}`;
                 });
-                setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `Задачи на сегодня (${todayTasks.length}):`, details: lines }]);
+                setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `❖ Задачи на сегодня (${todayTasks.length}):`, details: lines }]);
             }
             return;
         }
@@ -169,13 +170,13 @@ export function Repl() {
                 {
                     id: String(Date.now()),
                     type: 'assistant',
-                    text: `📅 Календарь недели (${todayStr}):`,
+                    text: `◫ Календарь недели (${todayStr}):`,
                     details: [
                         '  Пн        Вт        Ср        Чт        Пт        Сб        Вс',
                         '─────────────────────────────────────────────────────────────────',
                         ` ${todayTasks.length} дел      —         —         —         —         —         —`,
                         '─────────────────────────────────────────────────────────────────',
-                        '💡 Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
+                        '✦ Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
                     ]
                 }
             ]);
@@ -189,7 +190,7 @@ export function Repl() {
                     {
                         id: String(Date.now()),
                         type: 'assistant',
-                        text: '💬 Командный чат:',
+                        text: '◈ Командный чат:',
                         details: [
                             '[17:40] Вовчик: Привет! По проекту всё готово к релизу?',
                             '[17:42] Вы: Да, собираю финальный билд CLI терминала.',
@@ -202,11 +203,27 @@ export function Repl() {
                 setMood('celebrate');
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'assistant', text: `💬 Сообщение отправлено Вовчику: «${msg}»` },
-                    { id: String(Date.now() + 1), type: 'assistant', text: `💬 Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
+                    { id: String(Date.now()), type: 'assistant', text: `◈ Сообщение отправлено Вовчику: «${msg}»` },
+                    { id: String(Date.now() + 1), type: 'assistant', text: `◈ Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
                 ]);
                 setTimeout(() => setMood('idle'), 2500);
             }
+            return;
+        }
+        if (raw === '/friends' || raw === '/друзья') {
+            setHistory(h => [
+                ...h,
+                {
+                    id: String(Date.now()),
+                    type: 'assistant',
+                    text: '🪽 Список друзей и команды:',
+                    details: [
+                        '• Вовчик (@vovchik)  — [Онлайн] Доступ к задачам открыт',
+                        '• Лера (@lera)       — [Был(а) недавно]',
+                        '💡 Чтобы отправить сообщение: /chat <сообщение>',
+                    ]
+                }
+            ]);
             return;
         }
         if (raw === '/limits' || raw === '/лимиты' || raw === '/usage') {
@@ -219,7 +236,7 @@ export function Repl() {
                     type: 'assistant',
                     text: `⚡ Статус лимитов на сегодня (${planName}):`,
                     details: [
-                        `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'}`,
+                        `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} [██░░░░░░░░]`,
                         `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
                         `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
                         `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
@@ -235,7 +252,7 @@ export function Repl() {
             setMood('focus');
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'assistant', text: `☕ Сфера концентрации Тихони запущена на ${mins} мин.` }
+                { id: String(Date.now()), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
             ]);
             return;
         }
@@ -252,7 +269,7 @@ export function Repl() {
                 }));
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается 🔥` }
+                    { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается ✦` }
                 ]);
                 setTimeout(() => setMood('idle'), 2500);
             }
@@ -278,7 +295,7 @@ export function Repl() {
             setMood('celebrate');
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'assistant', text: `✔ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
+                { id: String(Date.now()), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
             ]);
             setTimeout(() => setMood('idle'), 2500);
             return;
@@ -351,7 +368,7 @@ export function Repl() {
         return (_jsx(Box, { flexDirection: "column", padding: 1, children: _jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyan", children: _jsx(Spinner, { type: "dots" }) }), _jsx(Text, { color: "gray", children: "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F Zerf Second Brain..." })] }) }));
     }
     if (error) {
-        return (_jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\uD83D\uDC51 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0430 Plus, Pro \u0438\u043B\u0438 Corp" }), _jsx(Text, { color: "gray", children: error }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "cyan", children: "\u041E\u0444\u043E\u0440\u043C\u0438\u0442\u044C: " }), _jsx(Text, { underline: true, color: "blueBright", children: "https://t.me/Zerph_bot?start=buy" })] })] }));
+        return (_jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\u2756 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0430 Plus, Pro \u0438\u043B\u0438 Corp" }), _jsx(Text, { color: "gray", children: error }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "cyan", children: "\u041E\u0444\u043E\u0440\u043C\u0438\u0442\u044C: " }), _jsx(Text, { underline: true, color: "blueBright", children: "https://t.me/Zerph_bot?start=buy" })] })] }));
     }
     const tasks = data?.tasks || [];
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -360,8 +377,8 @@ export function Repl() {
     const spriteLines = getAllaySpriteLines(mood, 0);
     const limits = data?.limits;
     const planTag = (data?.user?.plan || 'corp').toUpperCase();
-    return (_jsxs(Box, { flexDirection: "column", padding: 1, width: 88, children: [_jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsx(Box, { justifyContent: "center", marginBottom: 1, children: _jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", data?.user?.name || 'Кирилл', "!"] }) }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, idx))) }), _jsxs(Box, { flexDirection: "column", alignItems: "center", marginTop: 1, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), data?.user?.username && _jsxs(Text, { color: "gray", children: ["\u00B7 @", data.user.username] })] }), _jsxs(Text, { color: "gray", dimColor: true, children: ["~/ZerfNotes/", todayStr] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, gap: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/" }), " \u2014 \u0430\u0432\u0442\u043E\u043A\u043E\u043C\u043F\u043B\u0438\u0442 \u0438 \u043C\u0435\u043D\u044E (\u0441\u0442\u0440\u0435\u043B\u043A\u0438 \u2191/\u2193)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0441\u043F\u0438\u0441\u043E\u043A \u0437\u0430\u0434\u0430\u0447 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/chat" }), " \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u043D\u044B\u0439 \u0447\u0430\u0442"] })] }), _jsx(Box, { marginY: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "yellow", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsxs(Text, { color: "white", children: ["\uD83D\uDCCB \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "yellow", children: "\uD83D\uDD25 \u0421\u0442\u0440\u0438\u043A \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438: 12 \u0434\u043D\u0435\u0439" })] })] })] }), _jsx(Box, { flexDirection: "column", marginY: 1, children: history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "greenBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))) }), isSlash && filteredCommands.length > 0 && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "yellow", paddingX: 1, marginY: 0, children: [_jsx(Box, { justifyContent: "space-between", marginBottom: 0, children: _jsx(Text, { bold: true, color: "yellow", children: "\u041A\u043E\u043C\u0430\u043D\u0434\u044B Zerf CLI (\u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044F \u2191/\u2193, Tab \u0434\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430):" }) }), filteredCommands.map((item, idx) => {
+    return (_jsxs(Box, { flexDirection: "column", padding: 1, width: 88, children: [_jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsx(Box, { justifyContent: "center", marginBottom: 1, children: _jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", data?.user?.name || 'Кирилл', "!"] }) }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, idx))) }), _jsxs(Box, { flexDirection: "column", alignItems: "center", marginTop: 1, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), data?.user?.username && _jsxs(Text, { color: "gray", children: ["\u00B7 @", data.user.username] })] }), _jsxs(Text, { color: "gray", dimColor: true, children: ["~/ZerfNotes/", todayStr] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, gap: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/" }), " \u2014 \u0430\u0432\u0442\u043E\u043A\u043E\u043C\u043F\u043B\u0438\u0442 \u0438 \u043C\u0435\u043D\u044E (\u0441\u0442\u0440\u0435\u043B\u043A\u0438 \u2191/\u2193)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0437\u0430\u0434\u0430\u0447\u0438 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/chat" }), " \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u043D\u044B\u0439 \u0447\u0430\u0442"] })] }), _jsx(Box, { marginY: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "cyanBright", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsxs(Text, { color: "white", children: ["\u2756 \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "cyanBright", children: "\u2726 \u0421\u0442\u0440\u0438\u043A \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438: 12 \u0434\u043D\u0435\u0439" })] })] })] }), _jsx(Box, { flexDirection: "column", marginY: 1, children: history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))) }), isSlash && filteredCommands.length > 0 && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsx(Box, { justifyContent: "space-between", marginBottom: 0, children: _jsx(Text, { bold: true, color: "cyanBright", children: "\u041A\u043E\u043C\u0430\u043D\u0434\u044B Zerf CLI (\u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044F \u2191/\u2193, Tab \u0432\u044B\u0431\u043E\u0440):" }) }), filteredCommands.map((item, idx) => {
                         const isSel = idx === selectedIdx;
-                        return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'yellow' : 'cyanBright', children: [isSel ? '▶ ' : '  ', item.label.padEnd(16)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, item.cmd));
+                        return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', item.label.padEnd(16)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, item.cmd));
                     })] })), _jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: setInputVal, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, /today, /cal, /chat, ? \u0434\u043B\u044F \u0441\u043F\u0440\u0430\u0432\u043A\u0438..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u0421\u0442\u0440\u0435\u043B\u043A\u0438 \u2191/\u2193 \u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044F \u043F\u043E / \u00B7 Tab \u0432\u044B\u0431\u043E\u0440 \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
 }

@@ -8,7 +8,7 @@ import {
   mutateItem,
   ZerfCredentials
 } from '../api.js'
-import { getAllaySpriteLines, getAllayFace, MascotMood } from '../mascot.js'
+import { getAllaySpriteLines, getAllayFace, GLYPHS, MascotMood } from '../mascot.js'
 
 interface LogEntry {
   id: string
@@ -18,17 +18,18 @@ interface LogEntry {
 }
 
 const MENU_ITEMS = [
-  { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня' },
-  { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты' },
-  { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени' },
-  { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание' },
-  { cmd: '/chat ', label: '/chat <текст>', desc: 'Чат с коллегой / заметка другу' },
-  { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний' },
-  { cmd: '/focus 25', label: '/focus [мин]', desc: 'Pomodoro таймер со сферой' },
-  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов' },
-  { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала' },
-  { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши' },
-  { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI' },
+  { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
+  { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
+  { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени', glyph: GLYPHS.taskDone },
+  { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
+  { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
+  { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
+  { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
+  { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные проекты', glyph: GLYPHS.friend },
+  { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
+  { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
+  { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ]
 
 export function Repl() {
@@ -116,7 +117,6 @@ export function Repl() {
     if (isSlash && filteredCommands.length > 0 && (!raw.includes(' ') || raw === '/')) {
       const selectedItem = filteredCommands[selectedIdx]
       if (selectedItem && (raw === '/' || !raw.includes(' '))) {
-        // If command requires argument (like /add, /done, /chat, /note), autocomplete it into prompt
         if (selectedItem.cmd.endsWith(' ') && !raw.trim().includes(' ')) {
           setInputVal(selectedItem.cmd)
           return
@@ -147,16 +147,17 @@ export function Repl() {
         {
           id: String(Date.now()),
           type: 'assistant',
-          text: '📖 Быстрые команды Zerf CLI:',
+          text: '❖ Быстрые команды Zerf CLI:',
           details: [
             '/today          — Список задач и привычек на сегодня',
-            '/cal            — Недельный календарь',
+            '/cal            — Недельный календарь и расписание',
             '/chat <текст>   — Чат с коллегой / заметка другу',
-            '/add <текст>    — Добавить задачу с распознаванием даты',
-            '/done <имя>     — Завершить задачу',
-            '/focus [минуты] — Запустить Pomodoro таймер',
+            '/add <текст>    — Создать задачу с распознаванием даты',
+            '/done <имя>     — Завершить задачу по названию',
+            '/focus [минуты] — Запустить сферу концентрации',
             '/note <текст>   — Сохранить заметку в базу',
             '/limits         — Статус использования лимитов',
+            '/friends        — Список друзей и их статус',
             '/clear          — Очистить историю диалога',
             '/exit           — Выйти из CLI',
           ]
@@ -173,12 +174,12 @@ export function Repl() {
         setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }])
       } else {
         const lines = todayTasks.map((t: any) => {
-          const check = t.status === 'done' ? '✔' : '○'
+          const check = t.status === 'done' ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `
           const time = t.dueTime ? ` (${t.dueTime})` : ''
           const team = t.isShared ? ' [Команда]' : ''
           return `${check} ${t.title}${time}${team}`
         })
-        setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `Задачи на сегодня (${todayTasks.length}):`, details: lines }])
+        setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `❖ Задачи на сегодня (${todayTasks.length}):`, details: lines }])
       }
       return
     }
@@ -192,13 +193,13 @@ export function Repl() {
         {
           id: String(Date.now()),
           type: 'assistant',
-          text: `📅 Календарь недели (${todayStr}):`,
+          text: `◫ Календарь недели (${todayStr}):`,
           details: [
             '  Пн        Вт        Ср        Чт        Пт        Сб        Вс',
             '─────────────────────────────────────────────────────────────────',
             ` ${todayTasks.length} дел      —         —         —         —         —         —`,
             '─────────────────────────────────────────────────────────────────',
-            '💡 Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
+            '✦ Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
           ]
         }
       ])
@@ -213,7 +214,7 @@ export function Repl() {
           {
             id: String(Date.now()),
             type: 'assistant',
-            text: '💬 Командный чат:',
+            text: '◈ Командный чат:',
             details: [
               '[17:40] Вовчик: Привет! По проекту всё готово к релизу?',
               '[17:42] Вы: Да, собираю финальный билд CLI терминала.',
@@ -225,11 +226,28 @@ export function Repl() {
         setMood('celebrate')
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'assistant', text: `💬 Сообщение отправлено Вовчику: «${msg}»` },
-          { id: String(Date.now() + 1), type: 'assistant', text: `💬 Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
+          { id: String(Date.now()), type: 'assistant', text: `◈ Сообщение отправлено Вовчику: «${msg}»` },
+          { id: String(Date.now() + 1), type: 'assistant', text: `◈ Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
         ])
         setTimeout(() => setMood('idle'), 2500)
       }
+      return
+    }
+
+    if (raw === '/friends' || raw === '/друзья') {
+      setHistory(h => [
+        ...h,
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: '🪽 Список друзей и команды:',
+          details: [
+            '• Вовчик (@vovchik)  — [Онлайн] Доступ к задачам открыт',
+            '• Лера (@lera)       — [Был(а) недавно]',
+            '💡 Чтобы отправить сообщение: /chat <сообщение>',
+          ]
+        }
+      ])
       return
     }
 
@@ -243,7 +261,7 @@ export function Repl() {
           type: 'assistant',
           text: `⚡ Статус лимитов на сегодня (${planName}):`,
           details: [
-            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'}`,
+            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} [██░░░░░░░░]`,
             `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
             `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
             `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
@@ -260,7 +278,7 @@ export function Repl() {
       setMood('focus')
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `☕ Сфера концентрации Тихони запущена на ${mins} мин.` }
+        { id: String(Date.now()), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
       ])
       return
     }
@@ -279,7 +297,7 @@ export function Repl() {
         }))
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается 🔥` }
+          { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается ✦` }
         ])
         setTimeout(() => setMood('idle'), 2500)
       } else {
@@ -305,7 +323,7 @@ export function Repl() {
       setMood('celebrate')
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `✔ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
+        { id: String(Date.now()), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
       ])
       setTimeout(() => setMood('idle'), 2500)
       return
@@ -389,7 +407,7 @@ export function Repl() {
   if (error) {
     return (
       <Box flexDirection="column" padding={1}>
-        <Text bold color="yellow">👑 Требуется подписка Plus, Pro или Corp</Text>
+        <Text bold color="yellow">❖ Требуется подписка Plus, Pro или Corp</Text>
         <Text color="gray">{error}</Text>
         <Box marginTop={1}>
           <Text color="cyan">Оформить: </Text>
@@ -437,10 +455,10 @@ export function Repl() {
 
         {/* Right Column: Tips & Status */}
         <Box flexDirection="column" width={42} paddingX={1}>
-          <Text bold color="yellow">Советы & Шорткаты</Text>
+          <Text bold color="cyanBright">Советы & Шорткаты</Text>
           <Box flexDirection="column" marginTop={1} gap={0}>
             <Text color="gray">• <Text color="cyanBright">/</Text> — автокомплит и меню (стрелки ↑/↓)</Text>
-            <Text color="gray">• <Text color="cyanBright">/today</Text> — список задач на сегодня</Text>
+            <Text color="gray">• <Text color="cyanBright">/today</Text> — задачи на сегодня</Text>
             <Text color="gray">• <Text color="cyanBright">/cal</Text> — открыть календарь</Text>
             <Text color="gray">• <Text color="cyanBright">/chat</Text> — командный чат</Text>
           </Box>
@@ -449,12 +467,12 @@ export function Repl() {
             <Text color="gray" dimColor>───────────────────────────────────</Text>
           </Box>
 
-          <Text bold color="yellow">Активность сегодня</Text>
+          <Text bold color="cyanBright">Активность сегодня</Text>
           <Box flexDirection="column" marginTop={1}>
             <Text color="white">
-              📋 Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
+              ❖ Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
             </Text>
-            <Text color="yellow">🔥 Стрик продуктивности: 12 дней</Text>
+            <Text color="cyanBright">✦ Стрик продуктивности: 12 дней</Text>
           </Box>
         </Box>
       </Box>
@@ -476,7 +494,7 @@ export function Repl() {
             ) : (
               <Box flexDirection="column" marginLeft={2}>
                 <Box gap={1}>
-                  <Text color="greenBright">●</Text>
+                  <Text color="cyanBright">●</Text>
                   <Text color="white">{item.text}</Text>
                 </Box>
                 {item.details && item.details.map((d, i) => (
@@ -492,15 +510,15 @@ export function Repl() {
 
       {/* ── Floating Slash Autocomplete / Menu (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
       {isSlash && filteredCommands.length > 0 && (
-        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginY={0}>
+        <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={0}>
           <Box justifyContent="space-between" marginBottom={0}>
-            <Text bold color="yellow">Команды Zerf CLI (навигация ↑/↓, Tab для выбора):</Text>
+            <Text bold color="cyanBright">Команды Zerf CLI (навигация ↑/↓, Tab выбор):</Text>
           </Box>
           {filteredCommands.map((item, idx) => {
             const isSel = idx === selectedIdx
             return (
               <Box key={item.cmd} gap={1}>
-                <Text bold color={isSel ? 'yellow' : 'cyanBright'}>
+                <Text bold color={isSel ? 'cyanBright' : 'gray'}>
                   {isSel ? '▶ ' : '  '}{item.label.padEnd(16)}
                 </Text>
                 <Text color={isSel ? 'white' : 'gray'}>
@@ -526,7 +544,7 @@ export function Repl() {
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
-        {/* Footer info & limits bar (Claude Code bottom style) */}
+        {/* Footer info & limits bar (Strict Monochrome & Ethereal Cyan) */}
         <Box justifyContent="space-between" marginTop={0}>
           <Text color="gray" dimColor>Стрелки ↑/↓ навигация по / · Tab выбор · ? справка</Text>
           <Text color="gray" dimColor>
