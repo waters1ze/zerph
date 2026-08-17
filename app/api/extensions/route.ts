@@ -173,6 +173,17 @@ async function getUserLikedExtensions(chatId: string): Promise<string[]> {
   }
 }
 
+async function getAuthorPayoutCard(chatId: string): Promise<any | null> {
+  try {
+    const row = await prisma.config.findUnique({
+      where: { key: `author_payout_card_${chatId}` },
+    })
+    return row?.value ? JSON.parse(row.value) : null
+  } catch {
+    return null
+  }
+}
+
 async function getAuthorBalance(chatId: string): Promise<{ balance: number; totalEarned: number; salesCount: number }> {
   try {
     const row = await prisma.config.findUnique({
@@ -210,12 +221,14 @@ export async function GET(req: NextRequest) {
     let installedIds: string[] = []
     let likedIds: string[] = []
     let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
+    let boundCard: any = null
     let userPlan = 'free'
 
     if (chatId) {
       installedIds = await getUserInstalledExtensions(chatId)
       likedIds = await getUserLikedExtensions(chatId)
       authorStats = await getAuthorBalance(chatId)
+      boundCard = await getAuthorPayoutCard(chatId)
       try {
         const userRec = await prisma.telegramChat.findUnique({
           where: { chatId: BigInt(chatId) },
@@ -233,6 +246,13 @@ export async function GET(req: NextRequest) {
       userPlan,
       canCreateExtensions: planAtLeast(userPlan, 'plus'),
       authorStats,
+      boundCard,
+      payoutConfig: {
+        platformPercent: 20,
+        authorPercent: 80,
+        gatewayFeePercent: 3.5, // 3.5% banking/SBP payout gateway fee deducted from author on payout
+        minPayoutRub: 100,
+      },
       revenueShare: {
         authorPercent: 80,
         platformPercent: 20,
@@ -680,6 +700,128 @@ export async function POST(req: NextRequest) {
 
       await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
       return NextResponse.json({ success: true })
+    }
+
+    // ── ACTION: BIND PAYOUT CARD / SBP DETAILS ──
+    if (action === 'bind_card') {
+      const { payoutType, cardNumber, phone, bankName, recipientName } = body
+      if (!cardNumber && !phone) {
+        return NextResponse.json({ error: 'Укажите номер карты или номер телефона СБП' }, { status: 400 })
+      }
+
+      const cardData = {
+        payoutType: payoutType || 'card', // 'card' | 'sbp' | 'yoomoney'
+        cardNumber: cardNumber ? String(cardNumber).replace(/\s+/g, '') : '',
+        phone: phone ? String(phone).trim() : '',
+        bankName: bankName ? String(bankName).trim() : '',
+        recipientName: recipientName ? String(recipientName).trim() : '',
+        updatedAt: new Date().toISOString(),
+      }
+
+      await prisma.config.upsert({
+        where: { key: `author_payout_card_${chatId}` },
+        update: { value: JSON.stringify(cardData) },
+        create: { key: `author_payout_card_${chatId}`, value: JSON.stringify(cardData) },
+      })
+
+      return NextResponse.json({ success: true, boundCard: cardData })
+    }
+
+    // ── ACTION: UNBIND PAYOUT CARD ──
+    if (action === 'unbind_card') {
+      await prisma.config.delete({ where: { key: `author_payout_card_${chatId}` } }).catch(() => {})
+      return NextResponse.json({ success: true })
+    }
+
+    // ── ACTION: REQUEST SECURE PAYOUT (Fee is deducted from author payout, owner 20% untouched) ──
+    if (action === 'request_payout') {
+      const authorStats = await getAuthorBalance(chatId)
+      const requestedAmount = Number(body.amount) || authorStats.balance
+      const minPayout = 100
+
+      if (authorStats.balance < minPayout || requestedAmount < minPayout) {
+        return NextResponse.json({ error: `Минимальная сумма для вывода: ${minPayout} ₽` }, { status: 400 })
+      }
+      if (requestedAmount > authorStats.balance) {
+        return NextResponse.json({ error: 'Недостаточно средств на балансе автора' }, { status: 400 })
+      }
+
+      const boundCard = await getAuthorPayoutCard(chatId)
+      const details = body.payoutDetails || boundCard
+      if (!details || (!details.cardNumber && !details.phone)) {
+        return NextResponse.json({ error: 'Привяжите банковскую карту или укажите телефон СБП для вывода' }, { status: 400 })
+      }
+
+      // Calculation of net amount after banking payout gateway fee (3.5%)
+      // This protects the platform owner completely so payout transfer fees are never paid out-of-pocket!
+      const gatewayFeePercent = 3.5
+      const gatewayFeeRub = Math.round(requestedAmount * (gatewayFeePercent / 100))
+      const netPayoutRub = requestedAmount - gatewayFeeRub
+
+      // Deduct requested balance
+      authorStats.balance -= requestedAmount
+      await prisma.config.upsert({
+        where: { key: `author_balance_${chatId}` },
+        update: { value: JSON.stringify(authorStats) },
+        create: { key: `author_balance_${chatId}`, value: JSON.stringify(authorStats) },
+      })
+
+      // Log payout request in database
+      const payoutId = `payout_${Date.now()}_${chatId}`
+      await prisma.config.create({
+        data: {
+          key: `payout_req_${payoutId}`,
+          value: JSON.stringify({
+            payoutId,
+            chatId,
+            requestedAmount,
+            gatewayFeeRub,
+            netPayoutRub,
+            details,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+          }),
+        },
+      }).catch(() => {})
+
+      // Send telegram notification to admin
+      const botToken = process.env.TELEGRAM_BOT_TOKEN
+      if (botToken) {
+        const destStr = details.payoutType === 'sbp'
+          ? `⚡ СБП: ${details.phone} (${details.bankName || 'Банк не указан'})`
+          : details.payoutType === 'yoomoney'
+          ? `🟣 ЮMoney: ${details.cardNumber}`
+          : `💳 Карта: ${details.cardNumber} (${details.bankName || ''})`
+
+        const adminMsg = `💸 *Новая заявка на вывод средств от автора расширений!*\n\n` +
+          `👤 ChatID: \`${chatId}\`\n` +
+          `💰 Сумма списания: *${requestedAmount} ₽*\n` +
+          `📉 Комиссия шлюза выплат (3.5%): *${gatewayFeeRub} ₽*\n` +
+          `💵 *К зачислению автору: ${netPayoutRub} ₽*\n\n` +
+          `📌 Реквизиты:\n${destStr}\n` +
+          (details.recipientName ? `Получатель: ${details.recipientName}\n` : '') +
+          `\n✅ Доля платформы (20%) остаётся нетронутой.`
+
+        fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: '6136950061',
+            text: adminMsg,
+            parse_mode: 'Markdown',
+          }),
+        }).catch(() => {})
+      }
+
+      return NextResponse.json({
+        success: true,
+        authorStats,
+        payout: {
+          requestedAmount,
+          gatewayFeeRub,
+          netPayoutRub,
+        },
+      })
     }
 
     return NextResponse.json({ error: 'Неизвестное действие' }, { status: 400 })

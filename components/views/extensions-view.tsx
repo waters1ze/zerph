@@ -9,7 +9,8 @@ import {
   BookOpen, HelpCircle, Lightbulb, Code2, ArrowRight,
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
   Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus,
-  Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown
+  Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown,
+  CreditCard, Wallet, Banknote
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -316,7 +317,32 @@ export function ExtensionsView() {
   const [showSpecModal, setShowSpecModal] = useState<boolean>(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showPayoutModal, setShowPayoutModal] = useState<boolean>(false)
-  const [payoutCard, setPayoutCard] = useState<string>('')
+  const [showCardModal, setShowCardModal] = useState<boolean>(false)
+  const [boundCard, setBoundCard] = useState<{
+    payoutType: 'card' | 'sbp' | 'yoomoney'
+    cardNumber: string
+    phone: string
+    bankName: string
+    recipientName?: string
+    updatedAt?: string
+  } | null>(null)
+  const [payoutConfig, setPayoutConfig] = useState<{
+    platformPercent: number
+    authorPercent: number
+    gatewayFeePercent: number
+    minPayoutRub: number
+  }>({ platformPercent: 20, authorPercent: 80, gatewayFeePercent: 3.5, minPayoutRub: 100 })
+  const [cardPayoutType, setCardPayoutType] = useState<'card' | 'sbp' | 'yoomoney'>('card')
+  const [cardNumberInput, setCardNumberInput] = useState<string>('')
+  const [cardPhoneInput, setCardPhoneInput] = useState<string>('')
+  const [cardBankInput, setCardBankInput] = useState<string>('')
+  const [cardRecipientInput, setCardRecipientInput] = useState<string>('')
+  const [payoutAmountInput, setPayoutAmountInput] = useState<string>('')
+  const [payoutResult, setPayoutResult] = useState<{
+    requestedAmount: number
+    gatewayFeeRub: number
+    netPayoutRub: number
+  } | null>(null)
   const [payoutSuccess, setPayoutSuccess] = useState<boolean>(false)
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false)
 
@@ -362,6 +388,8 @@ export function ExtensionsView() {
         setUserPlan(data.userPlan || 'free')
         setCanCreate(Boolean(data.canCreateExtensions))
         setAuthorStats(data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 })
+        if (data.boundCard) setBoundCard(data.boundCard)
+        if (data.payoutConfig) setPayoutConfig(data.payoutConfig)
 
         try {
           localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify({
@@ -371,6 +399,7 @@ export function ExtensionsView() {
             userPlan: data.userPlan || 'free',
             canCreate: Boolean(data.canCreateExtensions),
             authorStats: data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 },
+            boundCard: data.boundCard || null,
           }))
         } catch {}
       }
@@ -635,6 +664,134 @@ export function ExtensionsView() {
     const matchingType = EXTENSION_TYPES.find(t => t.id === typeId)
     if (matchingType) {
       setFormCode(JSON.stringify(matchingType.defaultJson, null, 2))
+    }
+  }
+
+  const handleOpenCardModal = () => {
+    if (boundCard) {
+      setCardPayoutType(boundCard.payoutType || 'card')
+      setCardNumberInput(boundCard.cardNumber || '')
+      setCardPhoneInput(boundCard.phone || '')
+      setCardBankInput(boundCard.bankName || '')
+      setCardRecipientInput(boundCard.recipientName || '')
+    } else {
+      setCardPayoutType('card')
+      setCardNumberInput('')
+      setCardPhoneInput('')
+      setCardBankInput('')
+      setCardRecipientInput('')
+    }
+    setShowCardModal(true)
+  }
+
+  const handleSaveCard = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      setActionLoading('save_card')
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bind_card',
+          payoutType: cardPayoutType,
+          cardNumber: cardNumberInput,
+          phone: cardPhoneInput,
+          bankName: cardBankInput,
+          recipientName: cardRecipientInput,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setBoundCard(data.boundCard)
+        setShowCardModal(false)
+      } else {
+        alert(data.error || 'Ошибка при сохранении реквизитов')
+      }
+    } catch {
+      alert('Ошибка при сохранении реквизитов')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleUnbindCard = async () => {
+    const ok = await confirmDialog({
+      title: 'Отвязать карту / реквизиты выплат?',
+      description: 'Вы сможете привязать новую карту или СБП в любой момент.',
+      confirmText: 'Да, отвязать',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    })
+    if (!ok) return
+
+    try {
+      setActionLoading('unbind_card')
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unbind_card' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setBoundCard(null)
+      }
+    } catch {
+      alert('Ошибка при отвязке карты')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleOpenPayout = () => {
+    setPayoutAmountInput(String(authorStats.balance))
+    setPayoutSuccess(false)
+    setPayoutResult(null)
+    setShowPayoutModal(true)
+  }
+
+  const handleExecutePayout = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const amount = Number(payoutAmountInput) || authorStats.balance
+    if (amount < payoutConfig.minPayoutRub) {
+      alert(`Минимальная сумма для вывода: ${payoutConfig.minPayoutRub} ₽`)
+      return
+    }
+    if (amount > authorStats.balance) {
+      alert('Запрошенная сумма превышает ваш доступный баланс')
+      return
+    }
+
+    if (!boundCard) {
+      alert('Сначала привяжите банковскую карту или телефон СБП для выплат')
+      setShowPayoutModal(false)
+      setShowCardModal(true)
+      return
+    }
+
+    try {
+      setActionLoading('request_payout')
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_payout',
+          amount,
+          payoutDetails: boundCard,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAuthorStats(data.authorStats)
+        setPayoutResult(data.payout)
+        setPayoutSuccess(true)
+        fetchExtensions()
+      } else {
+        alert(data.error || 'Ошибка при оформлении заявки на вывод')
+      }
+    } catch {
+      alert('Ошибка при оформлении заявки на вывод')
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -1121,10 +1278,10 @@ export function ExtensionsView() {
 
                         {/* Price Badge */}
                         <span className={cn(
-                          'px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                          'px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border tracking-tight',
                           isFree
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                            : 'bg-primary/10 text-primary border border-primary/25'
                         )}>
                           {isFree ? 'FREE' : `${ext.price} ₽`}
                         </span>
@@ -1244,10 +1401,10 @@ export function ExtensionsView() {
                         <button
                           onClick={() => handleBuy(ext)}
                           disabled={actionLoading === ext.id}
-                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                         >
-                          <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">Купить ({ext.price} ₽)</span>
+                          <Sparkles className="w-3.5 h-3.5 shrink-0 text-primary-foreground/90" />
+                          <span className="truncate">Купить за {ext.price} ₽</span>
                         </button>
                       )}
                     </div>
@@ -1557,6 +1714,7 @@ export function ExtensionsView() {
       {/* ── TAB 4: EARNINGS & REVENUE SHARE (80/20) ── */}
       {activeTab === 'earnings' && (
         <div className="space-y-5">
+          {/* Top Stats Tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-1">
               <p className="text-xs text-muted-foreground font-medium flex items-center justify-between">
@@ -1564,7 +1722,7 @@ export function ExtensionsView() {
                 <DollarSign className="w-4 h-4 text-emerald-400" />
               </p>
               <p className="text-2xl font-bold text-emerald-400">{authorStats.balance} ₽</p>
-              <p className="text-[10px] text-muted-foreground">ваш чистый доход</p>
+              <p className="text-[10px] text-muted-foreground">ваш чистый авторский доход</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-1">
@@ -1573,40 +1731,152 @@ export function ExtensionsView() {
                 <TrendingUp className="w-4 h-4 text-blue-400" />
               </p>
               <p className="text-2xl font-bold text-blue-400">{authorStats.totalEarned} ₽</p>
-              <p className="text-[10px] text-muted-foreground">за все время</p>
+              <p className="text-[10px] text-muted-foreground">за всё время продаж</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-1">
               <p className="text-xs text-muted-foreground font-medium flex items-center justify-between">
                 <span>Продаж плагинов</span>
-                <Sparkles className="w-4 h-4 text-purple-400" />
+                <Sparkles className="w-4 h-4 text-primary" />
               </p>
-              <p className="text-2xl font-bold text-purple-400">{authorStats.salesCount}</p>
-              <p className="text-[10px] text-muted-foreground">покупок клиентами</p>
+              <p className="text-2xl font-bold text-foreground">{authorStats.salesCount}</p>
+              <p className="text-[10px] text-muted-foreground">успешных покупок клиентами</p>
             </div>
           </div>
 
+          {/* Bound Payout Card / SBP Section */}
           <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-xl shrink-0">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-foreground">Привязанные реквизиты для выплат</h4>
+                  <p className="text-[10px] text-muted-foreground">
+                    Куда переводятся средства с продаж ваших плагинов
+                  </p>
+                </div>
+              </div>
+
+              {boundCard ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenCardModal}
+                    className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer flex items-center gap-1.5 border border-border"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Изменить реквизиты</span>
+                  </button>
+                  <button
+                    onClick={handleUnbindCard}
+                    disabled={actionLoading === 'unbind_card'}
+                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer border border-rose-500/20"
+                    title="Отвязать карту"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleOpenCardModal}
+                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Привязать карту или СБП</span>
+                </button>
+              )}
+            </div>
+
+            {boundCard ? (
+              <div className="p-3.5 rounded-2xl bg-muted/40 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-card border border-border flex items-center justify-center font-bold text-sm text-foreground shrink-0 shadow-2xs">
+                    {boundCard.payoutType === 'sbp' ? '⚡' : boundCard.payoutType === 'yoomoney' ? '🟣' : '💳'}
+                  </div>
+                  <div>
+                    <div className="font-bold text-foreground flex items-center gap-2">
+                      <span>
+                        {boundCard.payoutType === 'sbp'
+                          ? `СБП: ${boundCard.phone}`
+                          : boundCard.payoutType === 'yoomoney'
+                          ? `ЮMoney: ${boundCard.cardNumber}`
+                          : `Карта: •••• ${boundCard.cardNumber ? boundCard.cardNumber.slice(-4) : '••••'}`}
+                      </span>
+                      {boundCard.bankName && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-card border border-border text-muted-foreground font-medium">
+                          {boundCard.bankName}
+                        </span>
+                      )}
+                    </div>
+                    {boundCard.recipientName && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Получатель: {boundCard.recipientName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/20 w-fit">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Активно для выплат</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-muted/20 border border-dashed border-border/80 text-center space-y-1">
+                <p className="text-xs text-muted-foreground font-medium">
+                  Реквизиты пока не привязаны. Привяжите карту МИР, Visa, Mastercard или телефон СБП.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Revenue Transparency & Protected Payout CTA */}
+          <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Shield className="w-4 h-4 text-primary" />
-              <span>Прозрачные условия монетизации GitHub расширений в Zerf Note</span>
+              <span>Прозрачные условия монетизации и выплат</span>
             </h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Вы получаете <b>80%</b> от стоимости каждой продажи вашего плагина или шаблона. <b>20%</b> составляет комиссия платформы за эквайринг, серверные мощности и поддержание шлюзов.
-            </p>
-            <div className="pt-2">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs leading-relaxed">
+              <div className="p-3.5 rounded-2xl bg-muted/30 border border-border space-y-1">
+                <div className="font-bold text-foreground flex items-center gap-1.5">
+                  <span>💰 Доход автора:</span>
+                  <span className="text-emerald-400 font-bold">80% с каждой продажи</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  При продаже плагина 80% суммы моментально поступает на ваш баланс. Доля платформы (20%) удерживается автоматически.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-muted/30 border border-border space-y-1">
+                <div className="font-bold text-foreground flex items-center gap-1.5">
+                  <span>⚡ Комиссия шлюза выплат:</span>
+                  <span className="text-amber-400 font-bold">3.5% при выводе</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Банковские издержки шлюза за перевод (3.5%) удерживаются с суммы вывода. Доля платформы остаётся нетронутой.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border/60">
+              <div className="text-xs text-muted-foreground">
+                Минимальная сумма вывода: <b className="text-foreground">100 ₽</b>
+              </div>
+
               <button
-                onClick={() => setShowPayoutModal(true)}
-                disabled={authorStats.balance <= 0}
+                onClick={handleOpenPayout}
+                disabled={authorStats.balance < 100}
                 className={cn(
-                  'px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer',
-                  authorStats.balance > 0
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+                  'px-5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs',
+                  authorStats.balance >= 100
+                    ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
                     : 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
                 )}
               >
                 <ArrowUpRight className="w-4 h-4" />
-                <span>Вывести средства на ЮMoney / Карту</span>
+                <span>Запросить вывод средств ({authorStats.balance} ₽)</span>
               </button>
             </div>
           </div>
@@ -1990,7 +2260,191 @@ export function ExtensionsView() {
         )}
       </AnimatePresence>
 
-      {/* MODAL: PAYOUT REQUEST */}
+      {/* MODAL: BIND PAYOUT CARD / SBP DETAILS */}
+      <AnimatePresence>
+        {showCardModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 text-xs"
+            >
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-bold">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      {boundCard ? 'Изменить реквизиты для выплат' : 'Привязать карту для выплат'}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      Для безопасного получения выплат за продажу плагинов
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCardModal(false)}
+                  className="p-1 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCard} className="space-y-3.5">
+                {/* Method selector */}
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground text-[11px] block">Способ получения выплат:</label>
+                  <div className="grid grid-cols-3 gap-1.5 bg-muted/40 p-1 rounded-2xl border border-border">
+                    {[
+                      { id: 'card', icon: '💳', label: 'Карта РФ' },
+                      { id: 'sbp', icon: '⚡', label: 'СБП (Телефон)' },
+                      { id: 'yoomoney', icon: '🟣', label: 'ЮMoney' },
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setCardPayoutType(m.id as any)}
+                        className={cn(
+                          'p-2 rounded-xl text-center font-semibold text-xs transition-all cursor-pointer flex flex-col items-center gap-1',
+                          cardPayoutType === m.id
+                            ? 'bg-card text-foreground font-bold shadow-xs border border-border'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-card/40'
+                        )}
+                      >
+                        <span className="text-sm">{m.icon}</span>
+                        <span className="text-[11px] leading-none">{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Form fields based on selected method */}
+                {cardPayoutType === 'card' && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground text-[11px] block">Номер банковской карты (МИР, Visa, Mastercard):</label>
+                      <input
+                        type="text"
+                        value={cardNumberInput}
+                        onChange={e => setCardNumberInput(e.target.value)}
+                        placeholder="2202 2000 0000 0000"
+                        maxLength={23}
+                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground text-[11px] block">Банк получателя:</label>
+                        <input
+                          type="text"
+                          value={cardBankInput}
+                          onChange={e => setCardBankInput(e.target.value)}
+                          placeholder="Сбербанк, Т-Банк..."
+                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground text-[11px] block">ФИО получателя:</label>
+                        <input
+                          type="text"
+                          value={cardRecipientInput}
+                          onChange={e => setCardRecipientInput(e.target.value)}
+                          placeholder="Иван Иванов"
+                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {cardPayoutType === 'sbp' && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="font-semibold text-foreground text-[11px] block">Номер телефона СБП:</label>
+                      <input
+                        type="tel"
+                        value={cardPhoneInput}
+                        onChange={e => setCardPhoneInput(e.target.value)}
+                        placeholder="+7 (999) 000-00-00"
+                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground text-[11px] block">Банк в СБП:</label>
+                        <input
+                          type="text"
+                          value={cardBankInput}
+                          onChange={e => setCardBankInput(e.target.value)}
+                          placeholder="Т-Банк, Сбербанк..."
+                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground text-[11px] block">Имя получателя:</label>
+                        <input
+                          type="text"
+                          value={cardRecipientInput}
+                          onChange={e => setCardRecipientInput(e.target.value)}
+                          placeholder="Иван И."
+                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {cardPayoutType === 'yoomoney' && (
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Номер кошелька ЮMoney:</label>
+                    <input
+                      type="text"
+                      value={cardNumberInput}
+                      onChange={e => setCardNumberInput(e.target.value)}
+                      placeholder="410010000000000"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="p-3 rounded-2xl bg-muted/30 border border-border text-[10px] text-muted-foreground leading-relaxed">
+                  🔒 Ваши платёжные данные сохраняются в зашифрованном виде и используются исключительно для выплаты вознаграждения.
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowCardModal(false)}
+                    className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading === 'save_card'}
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    {actionLoading === 'save_card' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>Сохранить реквизиты</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: PAYOUT REQUEST WITH TRANSPARENT FEE BREAKDOWN */}
       <AnimatePresence>
         {showPayoutModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
@@ -1998,57 +2452,185 @@ export function ExtensionsView() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-xl space-y-4 text-xs"
+              className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 text-xs"
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
-                  <span>Вывод заработанных средств</span>
-                </h3>
-                <button onClick={() => setShowPayoutModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold">
+                    <DollarSign className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Вывод заработанных средств</h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      Выплата автору с прозрачным расчётом комиссий
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPayoutModal(false)}
+                  className="p-1 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-xs"
+                >
+                  ✕
+                </button>
               </div>
 
-              {payoutSuccess ? (
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-center space-y-2">
-                  <p className="font-bold">✓ Заявка на вывод принята!</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Средства в размере {authorStats.balance} ₽ будут отправлены на ваши реквизиты в течение 24 часов.
+              {payoutSuccess && payoutResult ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 space-y-3">
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <Check className="w-4 h-4" />
+                    <span>Заявка на выплату успешно создана!</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-card/80 border border-emerald-500/20 text-xs space-y-1.5 font-medium text-foreground">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Списано с баланса:</span>
+                      <b>{payoutResult.requestedAmount} ₽</b>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Комиссия перевода (3.5%):</span>
+                      <span className="text-rose-400">-{payoutResult.gatewayFeeRub} ₽</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border/60 pt-1.5 text-emerald-400 font-bold">
+                      <span>Итого к получению на карту:</span>
+                      <span className="text-sm font-bold">{payoutResult.netPayoutRub} ₽</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Перевод поступит на ваши реквизиты в течение 1–24 часов. Уведомление отправлено администратору.
                   </p>
+
                   <button
                     onClick={() => { setShowPayoutModal(false); setPayoutSuccess(false) }}
-                    className="mt-2 px-4 py-1.5 rounded-xl bg-emerald-600 text-white font-semibold"
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-xs"
                   >
                     Готово
                   </button>
                 </div>
               ) : (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    setPayoutSuccess(true)
-                  }}
-                  className="space-y-3"
-                >
-                  <p className="text-muted-foreground">
-                    Сумма к выводу: <b className="text-foreground font-bold">{authorStats.balance} ₽</b>
-                  </p>
-                  <div>
-                    <label className="font-semibold text-foreground block mb-1">Номер карты / ЮMoney / СБП телефон:</label>
-                    <input
-                      type="text"
-                      value={payoutCard}
-                      onChange={e => setPayoutCard(e.target.value)}
-                      placeholder="4100... или 2202... или +79..."
-                      className="w-full h-9 px-3 rounded-xl bg-muted/50 border border-border text-foreground outline-none focus:border-primary"
-                      required
-                    />
+                <form onSubmit={handleExecutePayout} className="space-y-4">
+                  {/* Bound Card Status */}
+                  <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground text-[11px]">Реквизиты для зачисления:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPayoutModal(false)
+                          handleOpenCardModal()
+                        }}
+                        className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
+                      >
+                        {boundCard ? 'Изменить' : '+ Привязать'}
+                      </button>
+                    </div>
+
+                    {boundCard ? (
+                      <div className="flex items-center gap-2.5 text-xs font-bold text-foreground">
+                        <span>{boundCard.payoutType === 'sbp' ? '⚡' : boundCard.payoutType === 'yoomoney' ? '🟣' : '💳'}</span>
+                        <span>
+                          {boundCard.payoutType === 'sbp'
+                            ? `СБП: ${boundCard.phone} (${boundCard.bankName || ''})`
+                            : boundCard.payoutType === 'yoomoney'
+                            ? `ЮMoney: ${boundCard.cardNumber}`
+                            : `Карта: •••• ${boundCard.cardNumber ? boundCard.cardNumber.slice(-4) : '••••'} (${boundCard.bankName || ''})`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] flex items-center justify-between">
+                        <span>Сначала привяжите карту для выплат</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPayoutModal(false)
+                            handleOpenCardModal()
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] cursor-pointer"
+                        >
+                          Привязать
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold cursor-pointer shadow-xs"
-                  >
-                    Подтвердить вывод {authorStats.balance} ₽
-                  </button>
+
+                  {/* Amount input */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-foreground text-[11px]">Сумма к выводу в рублях:</label>
+                      <span className="text-[10px] text-muted-foreground">
+                        Доступно: <b className="text-foreground">{authorStats.balance} ₽</b>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={payoutConfig.minPayoutRub}
+                        max={authorStats.balance}
+                        value={payoutAmountInput}
+                        onChange={e => setPayoutAmountInput(e.target.value)}
+                        placeholder="100"
+                        className="flex-1 h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs font-bold"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPayoutAmountInput(String(authorStats.balance))}
+                        className="px-3 h-9 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border cursor-pointer shrink-0"
+                      >
+                        Вся сумма
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Transparent Fee Breakdown */}
+                  {(() => {
+                    const inputNum = Number(payoutAmountInput) || 0
+                    const feeNum = Math.round(inputNum * (payoutConfig.gatewayFeePercent / 100))
+                    const netNum = Math.max(0, inputNum - feeNum)
+
+                    return (
+                      <div className="p-3.5 rounded-2xl bg-card border border-border space-y-2 text-xs">
+                        <span className="font-bold text-foreground text-[11px] block">Прозрачный расчёт перевода:</span>
+                        <div className="space-y-1.5 text-[11px]">
+                          <div className="flex items-center justify-between text-muted-foreground">
+                            <span>Запрошенная сумма:</span>
+                            <span className="text-foreground font-bold font-mono">{inputNum} ₽</span>
+                          </div>
+                          <div className="flex items-center justify-between text-muted-foreground">
+                            <span>Комиссия платформы (20%):</span>
+                            <span className="text-emerald-400 font-medium">Удержана при продаже (0 ₽)</span>
+                          </div>
+                          <div className="flex items-center justify-between text-muted-foreground">
+                            <span>Комиссия шлюза выплат ({payoutConfig.gatewayFeePercent}%):</span>
+                            <span className="text-rose-400 font-mono">-{feeNum} ₽</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-border/60 pt-2 font-bold text-foreground">
+                            <span>К зачислению на карту:</span>
+                            <span className="text-sm font-bold text-emerald-400 font-mono">{netNum} ₽</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowPayoutModal(false)}
+                      className="px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={actionLoading === 'request_payout' || !boundCard || (Number(payoutAmountInput) || 0) < payoutConfig.minPayoutRub}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === 'request_payout' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
+                      <span>Подтвердить вывод</span>
+                    </button>
+                  </div>
                 </form>
               )}
             </motion.div>
