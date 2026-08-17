@@ -842,7 +842,7 @@ export function ExtensionsView() {
               return (
                 <div
                   key={ext.id}
-                  className="p-5 rounded-2xl bg-card border border-border shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between gap-4 relative group"
+                  className="p-5 rounded-2xl bg-card border border-border shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between gap-4 relative group overflow-hidden"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -944,10 +944,10 @@ export function ExtensionsView() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 w-full pt-1">
                       <button
                         onClick={() => setSelectedExt(ext)}
-                        className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
+                        className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer shrink-0"
                         title="Манифест"
                       >
                         <Eye className="w-3.5 h-3.5" />
@@ -958,14 +958,14 @@ export function ExtensionsView() {
                         <>
                           <button
                             onClick={() => handleOpenEdit(ext)}
-                            className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs transition-colors cursor-pointer"
+                            className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs transition-colors cursor-pointer shrink-0"
                             title="Редактировать параметры и код"
                           >
                             <Code2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteMyExt(ext.id)}
-                            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs transition-colors cursor-pointer"
+                            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs transition-colors cursor-pointer shrink-0"
                             title="Удалить из магазина"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -978,11 +978,10 @@ export function ExtensionsView() {
                         <button
                           onClick={() => handleApplyTemplate(ext)}
                           disabled={actionLoading === `apply_${ext.id}`}
-                          className="px-2.5 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs border border-primary/20 transition-all flex items-center gap-1 cursor-pointer"
+                          className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs border border-primary/20 transition-all flex items-center justify-center cursor-pointer shrink-0"
                           title="Создать задачи по этому шаблону в Zerf Note"
                         >
                           <CheckSquare className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">В список</span>
                         </button>
                       )}
 
@@ -990,11 +989,10 @@ export function ExtensionsView() {
                       {ext.type === 'widget' && (
                         <button
                           onClick={() => setActiveWidgetExt(ext)}
-                          className="px-2.5 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border transition-all flex items-center gap-1 cursor-pointer"
+                          className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs border border-border transition-all flex items-center justify-center cursor-pointer shrink-0"
                           title="Интерактивный запуск виджета"
                         >
                           <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-                          <span className="hidden sm:inline">Запуск</span>
                         </button>
                       )}
 
@@ -1002,30 +1000,30 @@ export function ExtensionsView() {
                         <button
                           onClick={() => handleUninstall(ext.id)}
                           disabled={actionLoading === ext.id}
-                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-400 hover:text-rose-400 font-semibold text-xs transition-all border border-emerald-500/30 hover:border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer group/btn"
+                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-400 hover:text-rose-400 font-semibold text-xs transition-all border border-emerald-500/30 hover:border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer group/btn"
                         >
-                          <Check className="w-3.5 h-3.5 group-hover/btn:hidden" />
-                          <Trash2 className="w-3.5 h-3.5 hidden group-hover/btn:block" />
-                          <span className="group-hover/btn:hidden">Установлено</span>
-                          <span className="hidden group-hover/btn:inline">Удалить</span>
+                          <Check className="w-3.5 h-3.5 shrink-0 group-hover/btn:hidden" />
+                          <Trash2 className="w-3.5 h-3.5 shrink-0 hidden group-hover/btn:block" />
+                          <span className="truncate group-hover/btn:hidden">Установлено</span>
+                          <span className="truncate hidden group-hover/btn:inline">Удалить</span>
                         </button>
                       ) : isFree ? (
                         <button
                           onClick={() => handleInstall(ext.id)}
                           disabled={actionLoading === ext.id}
-                          className="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                         >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Установить</span>
+                          <Download className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Установить</span>
                         </button>
                       ) : (
                         <button
                           onClick={() => handleBuy(ext)}
                           disabled={actionLoading === ext.id}
-                          className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                         >
-                          <DollarSign className="w-3.5 h-3.5" />
-                          <span>Купить ({ext.price} ₽)</span>
+                          <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Купить ({ext.price} ₽)</span>
                         </button>
                       )}
                     </div>
