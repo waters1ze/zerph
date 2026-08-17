@@ -150,8 +150,8 @@ async function processShortcutsItems(
     let matchedFriend: any = null
     if (cleanRecName) {
       const matches = await findFriendMatches(chatId, cleanRecName)
-      const allowedMatch = matches.find(m => m.isAllowed) || matches[0]
-      if (allowedMatch) {
+      const allowedMatch = matches.find(m => m.isAllowed === true)
+      if (allowedMatch && allowedMatch.isAllowed) {
         matchedFriend = allowedMatch.friend
       }
     }

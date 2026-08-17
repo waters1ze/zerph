@@ -636,9 +636,9 @@ export async function POST(req: NextRequest) {
           const recName = cleanRecName || item.recipientName
           if (recName) {
             const matches = await findFriendMatches(vkChatId, recName)
-            const allowedMatch = matches.find(m => m.isAllowed) || matches[0]
+            const allowedMatch = matches.find(m => m.isAllowed === true)
 
-            if (allowedMatch && String(allowedMatch.friend.chatId) !== String(vkChatId)) {
+            if (allowedMatch && allowedMatch.isAllowed && String(allowedMatch.friend.chatId) !== String(vkChatId)) {
               const friendUser = allowedMatch.friend
               const isBothShared = cleanIsBothShared
 

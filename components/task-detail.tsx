@@ -353,44 +353,45 @@ export function TaskDetail() {
         )}
 
         {/* Collaborators */}
-        {task.assignees && task.assignees.length > 0 && (
-          <div className="p-3.5 rounded-xl bg-accent/40 border border-border/60">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2.5 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-primary" /> КОМАНДА И УЧАСТНИКИ ЗАДАЧИ
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {task.assignees.map(aid => {
-                const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : ''
-                const isMe = currentChatId && String(currentChatId) === String(aid)
-                const friend = state.friends.find(f =>
-                  String(f.id) === String(aid) ||
-                  String(f.chatId) === String(aid)
-                )
-                let name: string
-                if (isMe) {
-                  name = 'Вы'
-                } else if (friend?.name) {
-                  name = friend.name
-                } else if (friend?.username) {
-                  name = `@${friend.username}`
-                } else {
-                  name = `Участник #${String(aid).slice(-4)}`
-                }
-                const initials = isMe ? 'ВЫ' : name.replace('@', '').slice(0, 2).toUpperCase()
-                return (
-                  <div key={aid} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card border border-border/60 shadow-xs">
-                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-primary">
-                        {initials}
-                      </span>
+        {(() => {
+          const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : ''
+          const validAssignees = (task.assignees || []).map(aid => {
+            const isMe = currentChatId && String(currentChatId) === String(aid)
+            const friend = state.friends.find(f =>
+              String(f.id) === String(aid) ||
+              String(f.chatId) === String(aid)
+            )
+            if (isMe) return { aid, name: 'Вы', isMe: true }
+            if (friend?.name) return { aid, name: friend.name, isMe: false }
+            if (friend?.username) return { aid, name: `@${friend.username.replace(/^@/, '')}`, isMe: false }
+            return null
+          }).filter(Boolean) as { aid: string; name: string; isMe: boolean }[]
+
+          if (validAssignees.length === 0) return null
+
+          return (
+            <div className="p-3.5 rounded-xl bg-accent/40 border border-border/60">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2.5 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-primary" /> КОМАНДА И УЧАСТНИКИ ЗАДАЧИ
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {validAssignees.map(({ aid, name, isMe }) => {
+                  const initials = isMe ? 'ВЫ' : name.replace('@', '').slice(0, 2).toUpperCase()
+                  return (
+                    <div key={aid} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card border border-border/60 shadow-xs">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-primary">
+                          {initials}
+                        </span>
+                      </div>
+                      <span className="text-[12px] font-medium text-foreground">{name}</span>
                     </div>
-                    <span className="text-[12px] font-medium text-foreground">{name}</span>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* AI Description & Summary */}
         {task.summary && task.summary !== task.title && (
