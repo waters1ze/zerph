@@ -1863,17 +1863,22 @@ export function ProjectsView() {
   const handleDeleteProject = async (id: string) => {
     const ok = await confirm({
       title: 'Удалить этот проект?',
-      description: 'Все связанные с проектом задачи и ветки будут архивированы.',
+      description: 'Все связанные с проектом задачи и ветки будут удалены.',
       confirmText: 'Удалить проект',
       variant: 'danger',
     })
     if (!ok) return
 
+    // Instantly remove from local UI state
+    setProjects(prev => prev.filter(p => p.id !== id))
+    if (selected?.id === id) {
+      setSelected(null)
+    }
+
     try {
       await fetch('/api/projects?id=' + id, { method: 'DELETE', headers: getAuthHeaders() })
-      setSelected(null)
-      loadProjects()
     } catch {}
+    loadProjects()
   }
 
   return (

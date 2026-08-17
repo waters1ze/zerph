@@ -178,8 +178,18 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                const theme = localStorage.getItem('theme') || 'dark';
-                document.documentElement.classList.add(theme);
+                var s = {};
+                var raw = localStorage.getItem('zerf-settings');
+                if (raw) s = JSON.parse(raw);
+                var theme = s.theme || 'strict';
+                if (theme === 'light') theme = 'paper';
+                var isDark = theme !== 'paper' && theme !== 'blue';
+                var root = document.documentElement;
+                root.classList.add('theme-' + theme);
+                if (isDark) root.classList.add('dark');
+                if (s.density) root.classList.add('density-' + s.density);
+                if (s.borderRadius) root.classList.add('radius-' + s.borderRadius);
+                if (s.roundShapes === false) root.classList.add('shapes-square');
               } catch (e) {}
             `,
           }}

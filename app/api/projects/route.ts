@@ -91,7 +91,20 @@ export async function DELETE(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   try {
-    await (prisma as any).projectDB.update({ where: { id }, data: { status: 'archived' } })
+    const project = await (prisma as any).projectDB.findUnique({ where: { id } })
+    if (!project) return NextResponse.json({ ok: true })
+
+    const isOwner = project.ownerChatId === chatId
+    if (isOwner) {
+      // Owner deletes project -> delete associated tasks and the project record
+      await prisma.task.deleteMany({ where: { projectId: id } })
+      await (prisma as any).projectDB.delete({ where: { id } })
+    } else {
+      // Member leaves/removes project -> remove member from memberIds
+      const updatedMembers = (project.memberIds || []).filter((m: bigint) => m !== chatId)
+      await (prisma as any).projectDB.update({ where: { id }, data: { memberIds: updatedMembers } })
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err) { return NextResponse.json({ error: String(err) }, { status: 500 }) }
 }
