@@ -695,53 +695,33 @@ const TYPE_RU: Record<string, string> = {
 
 async function handleSubscribe(chatId: number) {
   const limits = await getUserUsageAndLimits(chatId)
-  const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
-
-  const monthParams = new URLSearchParams({
-    receiver,
-    'quickpay-form': 'shop',
-    targets: 'Подписка Zerf Premium (30 дней)',
-    paymentType: 'AC',
-    sum: '99',
-    label: `${chatId}_30`,
-    successURL: `${appUrl}/?payment=success`,
-  })
-  const monthUrl = `https://yoomoney.ru/quickpay/confirm?${monthParams.toString()}`
-
-  const yearParams = new URLSearchParams({
-    receiver,
-    'quickpay-form': 'shop',
-    targets: 'Подписка Zerf Premium на 1 год (со скидкой 15%)',
-    paymentType: 'AC',
-    sum: '1009',
-    label: `${chatId}_365`,
-    successURL: `${appUrl}/?payment=success`,
-  })
-  const yearUrl = `https://yoomoney.ru/quickpay/confirm?${yearParams.toString()}`
+  const pricingUrl = `${appUrl}/#pricing`
 
   if (planAtLeast(limits.plan, 'plus')) {
     const exp = limits.subscriptionExpiry
       ? new Date(limits.subscriptionExpiry).toLocaleDateString('ru-RU')
-      : '?'
+      : 'Бессрочно'
+    const planName = limits.plan === 'corp' ? 'Corp' : limits.plan === 'pro' ? 'Pro' : 'Plus'
+
     await send(chatId,
-      `✨ *У тебя уже активна подписка Zerf Plus!*\n\n` +
-      `📅 Активна до: *${exp}*\n\n` +
-      `• 🤖 ИИ: Qwen 3.6 27B (продвинутая логика)\n` +
-      `• 🎙 Голос: до 15 минут в день\n` +
-      `• 📌 Заметки и Напоминания: безлимитно (∞)\n` +
-      `• 🍏 Siri и Быстрые команды: безлимитно (∞)\n` +
-      `• 📷 Распознавание по фото: 15 в день\n` +
-      `• 🧠 ИИ-перепланирование (/reschedule): безлимитно\n` +
-      `• 🔥 Режим фокуса (/focus): до 180 минут\n` +
-      `• 📊 Полная статистика продуктивности (/stats)\n\n` +
-      `_Продлить подписку со скидкой:_`,
+      `👑 *У вас активен тариф Zerf ${planName}!*\n\n` +
+      `📅 Активен до: *${exp}*\n\n` +
+      `◈ *Текущие лимиты и возможности:*\n` +
+      `• 🤖 ИИ: *${limits.plan === 'plus' ? 'Qwen 3.6 27B' : 'OpenAI GPT-OSS 120B Flagship'}*\n` +
+      `• 🎙 Голос: *${limits.plan === 'corp' ? '8 часов (480 мин)' : limits.plan === 'pro' ? '2 часа (120 мин)' : '15 минут'} в день*\n` +
+      `• 📌 Заметки: *${limits.plan === 'corp' ? '25 000' : limits.plan === 'pro' ? '5 000' : '250'} в аккаунте*\n` +
+      `• ⏰ Напоминания: *${limits.plan === 'corp' ? '5 000' : limits.plan === 'pro' ? '1 000' : '100'} активных*\n` +
+      `• 🍏 Siri и Быстрые команды: *${limits.plan === 'corp' ? '25 000' : limits.plan === 'pro' ? '5 000' : '250'} запросов*\n` +
+      `• 📷 Vision OCR: *${limits.plan === 'corp' ? '500' : limits.plan === 'pro' ? '200' : '25'} фото в день*\n` +
+      `• 💬 ИИ-сообщения: *${limits.plan === 'corp' ? '4 000' : limits.plan === 'pro' ? '1 000' : '150'} в день*\n` +
+      `• 💻 Zerf CLI: *${limits.plan === 'corp' ? '8 000' : limits.plan === 'pro' ? '1 500' : '300'} операций в день*\n\n` +
+      `_Управление подпиской и продление доступны на официальном сайте:_`,
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: '⭐ Продлить на 1 год (-15%) — 1009 ₽', url: yearUrl }],
-            [{ text: '💳 Продлить на 1 месяц — 99 ₽', url: monthUrl }],
-            [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
+            [{ text: '⭐ Управление тарифом на сайте', url: pricingUrl }],
+            [{ text: '📱 Открыть Zerf Web App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
           ]
         }
       }
@@ -750,28 +730,33 @@ async function handleSubscribe(chatId: number) {
   }
 
   await send(chatId,
-    `⭐ *Тарифы Zerf*\n\n` +
-    `🆓 *Сейчас у тебя бесплатный тариф:*\n` +
+    `⭐ *Тарифные планы Zerf*\n\n` +
+    `🆓 *Ваш текущий тариф: Базовый (Free)*\n` +
     `• 🤖 ИИ: Llama 3.1 8B / Qwen 7B\n` +
-    `• 🎙 Голос: 1:30 мин в день (осталось: ${Math.max(0, 90 - (limits.voice.secondsUsed || 0))} сек)\n` +
-    `• 📌 Заметки: до 20 заметок в аккаунте (${limits.notes.used} / 20)\n` +
+    `• 🎙 Голос: 1:30 мин в день (${Math.max(0, 90 - (limits.voice.secondsUsed || 0))} сек осталось)\n` +
+    `• 📌 Заметки: до 20 в аккаунте (${limits.notes.used} / 20)\n` +
     `• ⏰ Напоминания: до 10 активных (${limits.reminders.used} / 10)\n` +
-    `• 🍏 Siri: 10 запросов за всё время (осталось: ${Math.max(0, 10 - (limits.siri.used || 0))})\n` +
-    `• 💬 ИИ чат: 10 в день (осталось: ${Math.max(0, 10 - (limits.chat.used || 0))})\n\n` +
-    `✨ *С подпиской Zerf Plus (99 ₽/мес):*\n` +
-    `• 🤖 ИИ: Qwen 3.6 27B (продвинутая логика)\n` +
-    `• 🎙 Голос: до 15 мин в день\n` +
-    `• 📌 Заметки и напоминания: безлимитно (∞)\n` +
-    `• 🍏 Siri: безлимитно (∞)\n` +
-    `• 📷 Фото-распознавание: 15 в день\n` +
-    `• 🧠 Умное перепланирование и глубокий фокус\n\n` +
-    `💰 *Выберите удобный период:*`,
+    `• 🍏 Siri: 10 запросов за всё время (${Math.max(0, 10 - (limits.siri.used || 0))} осталось)\n` +
+    `• 💬 ИИ чат: 10 сообщений в день (${Math.max(0, 10 - (limits.chat.used || 0))} осталось)\n` +
+    `• 🎯 Цели: 5 в день\n\n` +
+    `──────────────\n` +
+    `✨ *Тариф Plus (99 ₽/мес | 1009 ₽/год):*\n` +
+    `• 🤖 ИИ: Qwen 3.6 27B\n` +
+    `• 🎙 Голос: 15 минут в день | 📌 Заметки: 250 | ⏰ Напоминания: 100\n` +
+    `• 🍏 Siri: 250 запросов | 📷 Vision OCR: 25 фото/день | 💻 CLI: 300/день\n\n` +
+    `🚀 *Тариф Pro (299 ₽/мес | 3049 ₽/год):*\n` +
+    `• 🧠 ИИ: OpenAI GPT-OSS 120B + кастомизация нейросетей под задачи\n` +
+    `• 🎙 Голос: 2 часа (120 мин)/день | 📌 Заметки: 5 000 | ⏰ Напоминания: 1 000\n` +
+    `• 🍏 Siri: 5 000 | 📷 Vision: 200/день | 💻 CLI: 1 500/день | ⚡ Smart Reschedule\n\n` +
+    `🏢 *Тариф Corp (по запросу):*\n` +
+    `• 🧠 GPT-OSS 120B + Local CLI Bridge (agy, claude, gemini, ollama)\n` +
+    `• 🎙 Голос: 8 часов (480 мин)/день | 📌 Заметки: 25 000 | 💻 CLI: 8 000/день\n\n` +
+    `🔒 *Оформление подписки происходит безопасно только на официальном сайте:*`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '⭐ 1 год (Скидка 15%) — 1009 ₽', url: yearUrl }],
-          [{ text: '💳 1 месяц — 99 ₽', url: monthUrl }],
-          [{ text: '📱 Открыть Zerf App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
+          [{ text: '⭐ Оформить подписку на сайте', url: pricingUrl }],
+          [{ text: '📱 Открыть в Telegram Mini App', web_app: { url: `${appUrl}/tg?chatId=${chatId}` } }],
         ]
       }
     }
