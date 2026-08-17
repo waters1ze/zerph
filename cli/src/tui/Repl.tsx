@@ -10,8 +10,6 @@ import {
 } from '../api.js'
 import { getAllaySpriteLines, getAllayFace, MascotMood } from '../mascot.js'
 
-type TabType = 'repl' | 'today' | 'cal' | 'chat' | 'limits'
-
 interface LogEntry {
   id: string
   type: 'user' | 'assistant' | 'error' | 'system'
@@ -19,27 +17,15 @@ interface LogEntry {
   details?: string[]
 }
 
-interface ChatMessage {
-  id: string
-  from: string
-  text: string
-  time: string
-  isMe: boolean
-}
-
-const SLASH_COMMANDS = [
-  { cmd: '/today', desc: 'Задачи и привычки на сегодня', cat: 'Планирование' },
-  { cmd: '/add', desc: 'Создать задачу (<текст> [дата/время])', cat: 'Планирование' },
-  { cmd: '/done', desc: 'Завершить задачу по названию', cat: 'Планирование' },
-  { cmd: '/cal', desc: 'Календарь недели и расписание', cat: 'Просмотр' },
-  { cmd: '/chat', desc: 'Чат с другом в терминале', cat: 'Команда' },
-  { cmd: '/friends', desc: 'Список друзей и совместные дела', cat: 'Команда' },
-  { cmd: '/note', desc: 'Сохранить заметку в базу знаний', cat: 'База знаний' },
-  { cmd: '/focus', desc: 'Pomodoro таймер со сферой Тихони', cat: 'Продуктивность' },
-  { cmd: '/limits', desc: 'Статус использования лимитов', cat: 'Система' },
-  { cmd: '/clear', desc: 'Очистить экран терминала', cat: 'Система' },
-  { cmd: '/help', desc: 'Справка и горячие клавиши', cat: 'Система' },
-  { cmd: '/exit', desc: 'Выйти из Zerf CLI', cat: 'Система' },
+const MENU_ITEMS = [
+  { cmd: '/today', label: '📋 Задачи на сегодня', desc: 'Список дел, статусы и привычки' },
+  { cmd: '/cal', label: '📅 Календарь недели', desc: 'Недельное расписание' },
+  { cmd: '/chat', label: '💬 Чат с коллегой', desc: 'Командные сообщения и заметки' },
+  { cmd: '/focus 25', label: '☕ Таймер фокуса', desc: 'Pomodoro 25 мин со сферой' },
+  { cmd: '/note ', label: '📝 Сохранить заметку', desc: 'Добавить в базу знаний' },
+  { cmd: '/limits', label: '⚡ Лимиты & Квоты', desc: 'Использование суточных лимитов' },
+  { cmd: '/clear', label: '🧹 Очистить экран', desc: 'Сбросить историю диалога' },
+  { cmd: '/exit', label: '🚪 Выйти', desc: 'Закрыть терминал' },
 ]
 
 export function Repl() {
@@ -50,26 +36,12 @@ export function Repl() {
   const [error, setError] = useState<string | null>(null)
   const [inputVal, setInputVal] = useState('')
   const [mood, setMood] = useState<MascotMood>('idle')
-  const [wingFrame, setWingFrame] = useState(0)
   const [history, setHistory] = useState<LogEntry[]>([])
-  const [focusRemaining, setFocusRemaining] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState<TabType>('repl')
   const [cliCount, setCliCount] = useState<number>(0)
-  const [showHelpModal, setShowHelpModal] = useState(false)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { id: '1', from: 'Вовчик', text: 'Привет! По проекту всё готово к релизу?', time: '17:40', isMe: false },
-    { id: '2', from: 'Вы', text: 'Да, собираю финальный билд CLI терминала.', time: '17:42', isMe: true },
-  ])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [selectedMenuIdx, setSelectedMenuIdx] = useState(0)
 
-  // Wing flapping animation
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setWingFrame(f => f + 1)
-    }, 450)
-    return () => clearInterval(timer)
-  }, [])
-
-  // Load user data
+  // Load user data once on mount
   const loadData = async () => {
     try {
       setLoading(true)
@@ -79,7 +51,6 @@ export function Repl() {
       } else {
         setData(res)
         setCliCount(res.limits?.cliUsed || 0)
-        setMood('idle')
       }
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки данных')
@@ -92,72 +63,53 @@ export function Repl() {
     loadData()
   }, [creds])
 
-  // Focus Timer Tick
-  useEffect(() => {
-    if (focusRemaining === null || focusRemaining <= 0) return
-    const timer = setInterval(() => {
-      setFocusRemaining(prev => {
-        if (prev === null || prev <= 1) {
-          setMood('celebrate')
-          setHistory(h => [
-            ...h,
-            { id: String(Date.now()), type: 'assistant', text: '🔔 Фокус-сессия завершена! Отличная работа.' }
-          ])
-          setTimeout(() => setMood('idle'), 3500)
-          return null
-        }
-        return prev - 1
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [focusRemaining])
-
-  // Keyboard shortcut handlers
+  // Keyboard navigation
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
-      if (focusRemaining !== null) {
-        setFocusRemaining(null)
-        setMood('idle')
-        setHistory(h => [
-          ...h,
-          { id: String(Date.now()), type: 'system', text: '⏸ Фокус-таймер остановлен' }
-        ])
-        return
-      }
       exit()
       return
     }
 
-    // Tab key switches windows
-    if (key.tab) {
-      const tabs: TabType[] = ['repl', 'today', 'cal', 'chat', 'limits']
-      const nextIdx = (tabs.indexOf(activeTab) + 1) % tabs.length
-      setActiveTab(tabs[nextIdx])
-      return
+    if (menuOpen) {
+      if (key.upArrow) {
+        setSelectedMenuIdx(prev => (prev > 0 ? prev - 1 : MENU_ITEMS.length - 1))
+        return
+      }
+      if (key.downArrow) {
+        setSelectedMenuIdx(prev => (prev < MENU_ITEMS.length - 1 ? prev + 1 : 0))
+        return
+      }
+      if (key.return) {
+        const item = MENU_ITEMS[selectedMenuIdx]
+        setMenuOpen(false)
+        if (item) {
+          executeCommand(item.cmd)
+        }
+        return
+      }
+      if (key.escape) {
+        setMenuOpen(false)
+        return
+      }
     }
 
+    // Toggle menu with /menu or ?
     if (input === '?' && !inputVal) {
-      setShowHelpModal(prev => !prev)
-      return
-    }
-
-    if (key.escape && showHelpModal) {
-      setShowHelpModal(false)
+      setMenuOpen(prev => !prev)
       return
     }
   })
 
-  const handleCommand = async (val: string) => {
+  const executeCommand = async (val: string) => {
     const raw = val.trim()
     if (!raw) return
     setInputVal('')
-    setShowHelpModal(false)
+    setMenuOpen(false)
 
     // Add user command to history
     setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }])
     setCliCount(c => c + 1)
 
-    // 1. Slash commands & window navigation
     if (raw === '/exit' || raw === '/quit') {
       exit()
       return
@@ -168,74 +120,131 @@ export function Repl() {
       return
     }
 
+    if (raw === '/menu') {
+      setMenuOpen(true)
+      return
+    }
+
     if (raw === '/help' || raw === '?') {
-      setShowHelpModal(true)
+      setHistory(h => [
+        ...h,
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: '📖 Быстрые команды Zerf CLI:',
+          details: [
+            '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
+            '/today          — Список задач и привычек на сегодня',
+            '/cal            — Недельный календарь',
+            '/chat <текст>   — Чат с коллегой / заметка другу',
+            '/done <имя>     — Завершить задачу',
+            '/focus [минуты] — Запустить Pomodoro таймер',
+            '/note <текст>   — Сохранить заметку в базу',
+            '/limits         — Статус использования лимитов',
+            '/clear          — Очистить историю диалога',
+            '/exit           — Выйти из CLI',
+          ]
+        }
+      ])
       return
     }
 
     if (raw === '/today' || raw === '/задачи') {
-      setActiveTab('today')
+      const tasks = data?.tasks || []
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
+      if (todayTasks.length === 0) {
+        setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }])
+      } else {
+        const lines = todayTasks.map((t: any) => {
+          const check = t.status === 'done' ? '✔' : '○'
+          const time = t.dueTime ? ` (${t.dueTime})` : ''
+          const team = t.isShared ? ' [Команда]' : ''
+          return `${check} ${t.title}${time}${team}`
+        })
+        setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `Задачи на сегодня (${todayTasks.length}):`, details: lines }])
+      }
       return
     }
 
     if (raw === '/cal' || raw === '/календарь') {
-      setActiveTab('cal')
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const tasks = data?.tasks || []
+      const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
+      setHistory(h => [
+        ...h,
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: `📅 Календарь недели (${todayStr}):`,
+          details: [
+            '  Пн        Вт        Ср        Чт        Пт        Сб        Вс',
+            '─────────────────────────────────────────────────────────────────',
+            ` ${todayTasks.length} дел      —         —         —         —         —         —`,
+            '─────────────────────────────────────────────────────────────────',
+            '💡 Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
+          ]
+        }
+      ])
       return
     }
 
-    if (raw === '/chat' || raw === '/чат' || raw === '/friends' || raw === '/друзья') {
-      setActiveTab('chat')
+    if (raw.startsWith('/chat')) {
+      const msg = raw.replace('/chat', '').trim()
+      if (!msg) {
+        setHistory(h => [
+          ...h,
+          {
+            id: String(Date.now()),
+            type: 'assistant',
+            text: '💬 Командный чат:',
+            details: [
+              '[17:40] Вовчик: Привет! По проекту всё готово к релизу?',
+              '[17:42] Вы: Да, собираю финальный билд CLI терминала.',
+              'Отправка сообщения: /chat <текст сообщения>',
+            ]
+          }
+        ])
+      } else {
+        setMood('celebrate')
+        setHistory(h => [
+          ...h,
+          { id: String(Date.now()), type: 'assistant', text: `💬 Сообщение отправлено Вовчику: «${msg}»` },
+          { id: String(Date.now() + 1), type: 'assistant', text: `💬 Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
+        ])
+        setTimeout(() => setMood('idle'), 2500)
+      }
       return
     }
 
     if (raw === '/limits' || raw === '/лимиты' || raw === '/usage') {
-      setActiveTab('limits')
-      return
-    }
-
-    if (raw === '/repl' || raw === '/ai') {
-      setActiveTab('repl')
-      return
-    }
-
-    // Direct chat message to friend: /chat [текст]
-    if (raw.startsWith('/chat ') || activeTab === 'chat') {
-      const msgText = raw.startsWith('/chat ') ? raw.replace('/chat ', '').trim() : raw
-      if (msgText) {
-        const newMsg: ChatMessage = {
+      const l = data?.limits
+      const planName = (data?.user?.plan || 'corp').toUpperCase()
+      setHistory(h => [
+        ...h,
+        {
           id: String(Date.now()),
-          from: data?.user?.name || 'Вы',
-          text: msgText,
-          time: new Date().toTimeString().slice(0, 5),
-          isMe: true,
+          type: 'assistant',
+          text: `⚡ Статус лимитов на сегодня (${planName}):`,
+          details: [
+            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'}`,
+            `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
+            `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
+            `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
+            `• Сброс счётчиков:   ежедневно в 00:00 МСК`,
+          ]
         }
-        setChatMessages(prev => [...prev, newMsg])
-        setMood('celebrate')
-        setTimeout(() => {
-          setChatMessages(prev => [
-            ...prev,
-            {
-              id: String(Date.now() + 1),
-              from: 'Вовчик',
-              text: `Принято: «${msgText}». Сейчас гляну! 👍`,
-              time: new Date().toTimeString().slice(0, 5),
-              isMe: false,
-            }
-          ])
-          setMood('idle')
-        }, 1200)
-        return
-      }
+      ])
+      return
     }
 
     if (raw.startsWith('/focus')) {
       const parts = raw.split(' ')
       const mins = parseInt(parts[1] || '25', 10)
-      setFocusRemaining(mins * 60)
       setMood('focus')
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `☕ Сфера концентрации Тихони запущена на ${mins} мин. (нажмите Ctrl+C для паузы)` }
+        { id: String(Date.now()), type: 'assistant', text: `☕ Сфера концентрации Тихони запущена на ${mins} мин.` }
       ])
       return
     }
@@ -286,7 +295,7 @@ export function Repl() {
       return
     }
 
-    // 2. Natural language query / AI task creation
+    // Natural language query / AI dispatch
     setMood('thinking')
     try {
       await mutateItem(creds, {
@@ -303,7 +312,6 @@ export function Repl() {
         ...h,
         { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${raw}» создана и добавлена в расписание` }
       ])
-      // Refresh local tasks list
       await loadData()
       setTimeout(() => setMood('idle'), 2500)
     } catch (e: any) {
@@ -343,345 +351,134 @@ export function Repl() {
   const tasks = data?.tasks || []
   const todayStr = new Date().toISOString().slice(0, 10)
   const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
-  const activeTodayTasks = todayTasks.filter((t: any) => t.status !== 'done')
-  const doneTodayTasks = todayTasks.filter((t: any) => t.status === 'done')
   const overdueTasks = tasks.filter((t: any) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr)
-  const spriteLines = getAllaySpriteLines(mood, wingFrame)
+  const spriteLines = getAllaySpriteLines(mood, 0)
   const limits = data?.limits
   const planTag = (data?.user?.plan || 'corp').toUpperCase()
-  const habits = data?.habits || []
-  const friends = data?.friends || []
-
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60)
-    const s = secs % 60
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  }
-
-  // Filter slash command suggestions
-  const isSlashInput = inputVal.startsWith('/')
-  const suggestions = isSlashInput
-    ? SLASH_COMMANDS.filter(s => s.cmd.startsWith(inputVal.toLowerCase()))
-    : []
 
   return (
-    <Box flexDirection="column" padding={1} width={92}>
-      {/* ── Top Tabs Navigation Bar (Gemini / Claude CLI style) ──────────── */}
-      <Box borderStyle="single" borderColor="gray" paddingX={1} justifyContent="space-between" marginBottom={0}>
-        <Box gap={2}>
-          <Text bold color={activeTab === 'repl' ? 'cyanBright' : 'gray'}>
-            {activeTab === 'repl' ? '● [1] ❖ REPL' : '○ [1] ❖ REPL'}
-          </Text>
-          <Text bold color={activeTab === 'today' ? 'cyanBright' : 'gray'}>
-            {activeTab === 'today' ? '● [2] 📋 Сегодня' : '○ [2] 📋 Сегодня'}
-          </Text>
-          <Text bold color={activeTab === 'cal' ? 'cyanBright' : 'gray'}>
-            {activeTab === 'cal' ? '● [3] 📅 Календарь' : '○ [3] 📅 Календарь'}
-          </Text>
-          <Text bold color={activeTab === 'chat' ? 'cyanBright' : 'gray'}>
-            {activeTab === 'chat' ? '● [4] 💬 Чат & Друзья' : '○ [4] 💬 Чат & Друзья'}
-          </Text>
-          <Text bold color={activeTab === 'limits' ? 'cyanBright' : 'gray'}>
-            {activeTab === 'limits' ? '● [5] ⚡ Лимиты' : '○ [5] ⚡ Лимиты'}
-          </Text>
+    <Box flexDirection="column" padding={1} width={88}>
+      {/* ── Boxed Hero Header (Claude Code v2.1.19 style) ─────────────────── */}
+      <Box borderStyle="round" borderColor="cyan" flexDirection="row">
+        {/* Left Column: Cute Minecraft Allay Sprite */}
+        <Box flexDirection="column" width={42} paddingX={1} borderStyle="single" borderColor="gray" borderTop={false} borderBottom={false} borderLeft={false}>
+          <Box justifyContent="center" marginBottom={1}>
+            <Text bold color="white">С возвращением, {data?.user?.name || 'Кирилл'}!</Text>
+          </Box>
+
+          {/* Cute Minecraft Allay Pixel Art Render */}
+          <Box flexDirection="column" alignItems="center" marginY={1}>
+            {spriteLines.map((line, idx) => (
+              <Text key={idx}>{line}</Text>
+            ))}
+          </Box>
+
+          <Box flexDirection="column" alignItems="center" marginTop={1}>
+            <Box gap={1}>
+              <Text bold color="cyanBright">Groq AI</Text>
+              <Text color="gray">·</Text>
+              <Text bold color="greenBright">Zerf {planTag}</Text>
+              {data?.user?.username && <Text color="gray">· @{data.user.username}</Text>}
+            </Box>
+            <Text color="gray" dimColor>~/ZerfNotes/{todayStr}</Text>
+          </Box>
         </Box>
-        <Text color="gray" dimColor>Tab: сменить окно</Text>
+
+        {/* Right Column: Tips & Status */}
+        <Box flexDirection="column" width={42} paddingX={1}>
+          <Text bold color="yellow">Советы & Шорткаты</Text>
+          <Box flexDirection="column" marginTop={1} gap={0}>
+            <Text color="gray">• <Text color="cyanBright">/menu</Text> — интерактивное меню (Gemini CLI)</Text>
+            <Text color="gray">• <Text color="cyanBright">/today</Text> — список задач на сегодня</Text>
+            <Text color="gray">• <Text color="cyanBright">/cal</Text> — открыть календарь</Text>
+            <Text color="gray">• <Text color="cyanBright">/chat</Text> — командный чат</Text>
+          </Box>
+
+          <Box marginY={1}>
+            <Text color="gray" dimColor>───────────────────────────────────</Text>
+          </Box>
+
+          <Text bold color="yellow">Активность сегодня</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="white">
+              📋 Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
+            </Text>
+            <Text color="yellow">🔥 Стрик продуктивности: 12 дней</Text>
+          </Box>
+        </Box>
       </Box>
 
-      {/* ── Active Window Content ────────────────────────────────────────── */}
-
-      {/* 1. REPL Window (Claude Code style) */}
-      {activeTab === 'repl' && (
-        <Box flexDirection="column">
-          {/* Boxed Hero Header */}
-          <Box borderStyle="round" borderColor="cyan" flexDirection="row">
-            {/* Left Column: Minecraft Allay Pixel Sprite */}
-            <Box flexDirection="column" width={44} paddingX={1} borderStyle="single" borderColor="gray" borderTop={false} borderBottom={false} borderLeft={false}>
-              <Box justifyContent="center" marginBottom={1}>
-                <Text bold color="white">С возвращением, {data?.user?.name || 'Кирилл'}!</Text>
+      {/* ── Dialog / Action History Feed ─────────────────────────────────── */}
+      <Box flexDirection="column" marginY={1}>
+        {history.map(item => (
+          <Box key={item.id} flexDirection="column" marginBottom={1}>
+            {item.type === 'user' ? (
+              <Box gap={1}>
+                <Text bold color="cyanBright">{'>'}</Text>
+                <Text bold color="white">{item.text}</Text>
               </Box>
-
-              {/* Cute Boxy Minecraft Allay Sprite */}
-              <Box flexDirection="column" alignItems="center" marginY={1}>
-                {spriteLines.map((line, idx) => (
-                  <Text key={idx}>{line}</Text>
+            ) : item.type === 'error' ? (
+              <Box gap={1} marginLeft={2}>
+                <Text color="red">●</Text>
+                <Text color="red">{item.text}</Text>
+              </Box>
+            ) : (
+              <Box flexDirection="column" marginLeft={2}>
+                <Box gap={1}>
+                  <Text color="greenBright">●</Text>
+                  <Text color="white">{item.text}</Text>
+                </Box>
+                {item.details && item.details.map((d, i) => (
+                  <Box key={i} marginLeft={2}>
+                    <Text color="gray">{d}</Text>
+                  </Box>
                 ))}
               </Box>
-
-              <Box flexDirection="column" alignItems="center" marginTop={1}>
-                <Box gap={1}>
-                  <Text bold color="cyanBright">Groq AI</Text>
-                  <Text color="gray">·</Text>
-                  <Text bold color="greenBright">Zerf {planTag}</Text>
-                  {data?.user?.username && <Text color="gray">· @{data.user.username}</Text>}
-                </Box>
-                <Text color="gray" dimColor>~/ZerfNotes/{todayStr}</Text>
-              </Box>
-            </Box>
-
-            {/* Right Column: Quick Tips & Live Activity */}
-            <Box flexDirection="column" width={44} paddingX={1}>
-              <Text bold color="yellow">Советы & Шорткаты</Text>
-              <Box flexDirection="column" marginTop={1} gap={0}>
-                <Text color="gray">• <Text color="cyanBright">/today</Text> — открыть окно задач</Text>
-                <Text color="gray">• <Text color="cyanBright">/cal</Text> — открыть календарь</Text>
-                <Text color="gray">• <Text color="cyanBright">/chat</Text> — чат с коллегой</Text>
-                <Text color="gray">• <Text color="cyanBright">/focus 25</Text> — помодоро-таймер</Text>
-              </Box>
-
-              <Box marginY={1}>
-                <Text color="gray" dimColor>───────────────────────────────────</Text>
-              </Box>
-
-              <Text bold color="yellow">Сводка на сегодня</Text>
-              <Box flexDirection="column" marginTop={1}>
-                <Text color="white">
-                  📋 Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
-                </Text>
-                <Text color="yellow">🔥 Стрик: 12 дней</Text>
-                {focusRemaining !== null && (
-                  <Box marginTop={1}>
-                    <Text bold color="cyanBright">☕ Фокус: {formatTimer(focusRemaining)}</Text>
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          </Box>
-
-          {/* Action History Feed */}
-          <Box flexDirection="column" marginY={1}>
-            {history.map(item => (
-              <Box key={item.id} flexDirection="column" marginBottom={1}>
-                {item.type === 'user' ? (
-                  <Box gap={1}>
-                    <Text bold color="cyanBright">{'>'}</Text>
-                    <Text bold color="white">{item.text}</Text>
-                  </Box>
-                ) : item.type === 'error' ? (
-                  <Box gap={1} marginLeft={2}>
-                    <Text color="red">●</Text>
-                    <Text color="red">{item.text}</Text>
-                  </Box>
-                ) : (
-                  <Box flexDirection="column" marginLeft={2}>
-                    <Box gap={1}>
-                      <Text color="greenBright">●</Text>
-                      <Text color="white">{item.text}</Text>
-                    </Box>
-                    {item.details && item.details.map((d, i) => (
-                      <Box key={i} marginLeft={2}>
-                        <Text color="gray">{d}</Text>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* 2. Today Window (Tasks & Habits) */}
-      {activeTab === 'today' && (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyan" padding={1}>
-          <Box justifyContent="space-between" marginBottom={1}>
-            <Text bold color="white">📋 Задачи и привычки на сегодня ({todayStr})</Text>
-            <Text color="gray">Всего дел: {todayTasks.length}</Text>
-          </Box>
-
-          {/* Active Tasks */}
-          <Text bold color="cyanBright">В процессе ({activeTodayTasks.length}):</Text>
-          {activeTodayTasks.length === 0 ? (
-            <Text color="gray" dimColor>   Все задачи на сегодня выполнены!</Text>
-          ) : (
-            activeTodayTasks.map((t: any) => (
-              <Box key={t.id} marginLeft={1}>
-                <Text color="gray">[ ] </Text>
-                <Text color="white">{t.title}</Text>
-                {t.dueTime && <Text color="cyanBright"> ({t.dueTime})</Text>}
-                {t.isShared && <Text color="yellow"> [Команда]</Text>}
-              </Box>
-            ))
-          )}
-
-          {/* Completed Tasks */}
-          {doneTodayTasks.length > 0 && (
-            <Box flexDirection="column" marginTop={1}>
-              <Text bold color="greenBright">Завершено ({doneTodayTasks.length}):</Text>
-              {doneTodayTasks.map((t: any) => (
-                <Box key={t.id} marginLeft={1}>
-                  <Text color="greenBright">[✔] </Text>
-                  <Text color="gray" strikethrough>{t.title}</Text>
-                  {t.dueTime && <Text color="gray"> ({t.dueTime})</Text>}
-                </Box>
-              ))}
-            </Box>
-          )}
-
-          {/* Habits */}
-          <Box flexDirection="column" marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
-            <Text bold color="yellow">Привычки и трекер:</Text>
-            {habits.length === 0 ? (
-              <Text color="gray" dimColor>Привычки не настроены. Создайте их в боте или веб-версии.</Text>
-            ) : (
-              habits.map((h: any) => (
-                <Box key={h.id} justifyContent="space-between">
-                  <Text color="white">• {h.title}</Text>
-                  <Text color="cyanBright">[████████░░] 80% (стрик 12)</Text>
-                </Box>
-              ))
             )}
           </Box>
-        </Box>
-      )}
+        ))}
+      </Box>
 
-      {/* 3. Calendar Window */}
-      {activeTab === 'cal' && (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyan" padding={1}>
+      {/* ── Interactive /menu Dropdown Selector (Gemini CLI style) ────────── */}
+      {menuOpen && (
+        <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={1}>
-            <Text bold color="white">📅 Календарь на неделю</Text>
-            <Text color="yellow">Сегодня: {todayStr}</Text>
-          </Box>
-
-          <Box flexDirection="row" justifyContent="space-between" borderStyle="single" borderColor="gray" padding={1}>
-            {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day, idx) => (
-              <Box key={day} flexDirection="column" alignItems="center" width={10}>
-                <Text bold color={idx === 0 ? 'cyanBright' : 'white'}>{day}</Text>
-                <Text color="gray" dimColor>────────</Text>
-                <Text color={idx === 0 ? 'greenBright' : 'gray'}>
-                  {idx === 0 ? `${todayTasks.length} задач` : '—'}
-                </Text>
-              </Box>
-            ))}
-          </Box>
-
-          <Box marginTop={1}>
-            <Text color="gray">💡 Для добавления встречи напишите: <Text color="cyanBright">встреча с командой в пятницу в 15:00</Text></Text>
-          </Box>
-        </Box>
-      )}
-
-      {/* 4. Chat & Friends Window */}
-      {activeTab === 'chat' && (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyan" padding={1}>
-          <Box justifyContent="space-between" marginBottom={1}>
-            <Text bold color="white">💬 Командный чат & Заметки друзьям</Text>
-            <Text color="greenBright">● Онлайн: Вовчик, Лера</Text>
-          </Box>
-
-          {/* Chat Messages Feed */}
-          <Box flexDirection="column" height={8} borderStyle="single" borderColor="gray" paddingX={1} marginY={0}>
-            {chatMessages.map(msg => (
-              <Box key={msg.id} gap={1}>
-                <Text color="gray">[{msg.time}]</Text>
-                <Text bold color={msg.isMe ? 'cyanBright' : 'yellow'}>{msg.from}:</Text>
-                <Text color="white">{msg.text}</Text>
-              </Box>
-            ))}
-          </Box>
-
-          <Box marginTop={1}>
-            <Text color="gray">
-              Отправка сообщения: просто напишите текст внизу и нажмите <Text bold color="white">Enter</Text>
-            </Text>
-          </Box>
-        </Box>
-      )}
-
-      {/* 5. Limits & Account Quotas Window */}
-      {activeTab === 'limits' && (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyan" padding={1}>
-          <Box justifyContent="space-between" marginBottom={1}>
-            <Text bold color="white">⚡ Статус лимитов и квот ({planTag})</Text>
-            <Text color="greenBright">Активен</Text>
-          </Box>
-
-          <Box flexDirection="column" gap={1}>
-            <Box justifyContent="space-between">
-              <Text color="white">• Запросы в CLI терминале:</Text>
-              <Text bold color="cyanBright">{cliCount} / {limits?.maxCli || '∞'} [██░░░░░░░░]</Text>
-            </Box>
-            <Box justifyContent="space-between">
-              <Text color="white">• Распознавание голоса:</Text>
-              <Text bold color="cyanBright">{Math.floor((limits?.voiceUsedSeconds || 0) / 60)} / {limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)} мин</Text>
-            </Box>
-            <Box justifyContent="space-between">
-              <Text color="white">• ИИ сообщения & парсинг:</Text>
-              <Text bold color="cyanBright">{limits?.chatUsed || 0} / {limits?.maxChat || '∞'}</Text>
-            </Box>
-            <Box justifyContent="space-between">
-              <Text color="white">• Заметки в базе знаний:</Text>
-              <Text bold color="cyanBright">{limits?.notesCount || 0} / {limits?.maxNotes || '∞'}</Text>
-            </Box>
-            <Box justifyContent="space-between">
-              <Text color="white">• Запросы через Siri:</Text>
-              <Text bold color="cyanBright">0 / 25 000</Text>
-            </Box>
-          </Box>
-
-          <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
-            <Text color="gray" dimColor>
-              Для тарифа {planTag} лимиты рассчитаны с огромным запасом на команду до 4 человек.
-              Сброс суточных счётчиков происходит ежедневно в 00:00 МСК.
-            </Text>
-          </Box>
-        </Box>
-      )}
-
-      {/* ── Floating Autocomplete Popup for '/' ───────────────────────────── */}
-      {isSlashInput && suggestions.length > 0 && (
-        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginY={0}>
-          <Text bold color="yellow">Команды Zerf CLI:</Text>
-          {suggestions.map((s, idx) => (
-            <Box key={s.cmd} gap={1}>
-              <Text bold color="cyanBright">{s.cmd.padEnd(10)}</Text>
-              <Text color="gray">— {s.desc}</Text>
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* ── Quick Help Modal for '?' ─────────────────────────────────────── */}
-      {showHelpModal && (
-        <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" padding={1} marginY={1}>
-          <Box justifyContent="space-between">
-            <Text bold color="cyanBright">📖 Справка и горячие клавиши Zerf CLI</Text>
+            <Text bold color="yellow">❖ Меню команд Zerf CLI (выберите стрелками ↑/↓ и нажмите Enter):</Text>
             <Text color="gray">ESC для закрытия</Text>
           </Box>
-          <Box flexDirection="column" marginTop={1} gap={0}>
-            <Text color="white">• <Text bold color="cyanBright">Tab</Text> — переключение между окнами (REPL / Сегодня / Календарь / Чат / Лимиты)</Text>
-            <Text color="white">• <Text bold color="cyanBright">/today</Text> — перейти в список задач на сегодня</Text>
-            <Text color="white">• <Text bold color="cyanBright">/cal</Text> — открыть недельный календарь</Text>
-            <Text color="white">• <Text bold color="cyanBright">/chat</Text> — открыть командный чат с коллегой</Text>
-            <Text color="white">• <Text bold color="cyanBright">/focus 25</Text> — запустить Pomodoro таймер концентрации</Text>
-            <Text color="white">• <Text bold color="cyanBright">/done [текст]</Text> — закрыть задачу</Text>
-            <Text color="white">• <Text bold color="cyanBright">/note [текст]</Text> — сохранить заметку</Text>
-            <Text color="white">• <Text bold color="cyanBright">Ctrl + C</Text> — остановить фокус-таймер или выйти</Text>
-          </Box>
+          {MENU_ITEMS.map((item, idx) => {
+            const isSel = idx === selectedMenuIdx
+            return (
+              <Box key={item.cmd} gap={1} paddingX={1}>
+                <Text bold color={isSel ? 'cyanBright' : 'gray'} inverse={isSel}>
+                  {isSel ? '▶ ' : '  '}{item.label.padEnd(26)}
+                </Text>
+                <Text color={isSel ? 'white' : 'gray'}>
+                  {item.desc}
+                </Text>
+              </Box>
+            )
+          })}
         </Box>
       )}
 
       {/* ── Pinned Bottom Prompt Frame (Claude Code style) ────────────────── */}
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column">
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
         <Box gap={1} marginY={0}>
           <Text bold color="cyanBright">{'>'}</Text>
           <TextInput
             value={inputVal}
             onChange={setInputVal}
-            onSubmit={handleCommand}
-            placeholder={
-              activeTab === 'chat'
-                ? 'Напишите сообщение в чат другу...'
-                : 'Напишите задачу, /today, /cal, /chat, /focus 25, ? для помощи...'
-            }
+            onSubmit={executeCommand}
+            placeholder="Напишите задачу, /menu, /today, /cal, /chat, ? для справки..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
-        {/* Footer info & limits bar */}
+        {/* Footer info & limits bar (Claude Code bottom style) */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>? for help · Tab: переключить окно</Text>
+          <Text color="gray" dimColor>/menu для выбора · ? справка</Text>
           <Text color="gray" dimColor>
             [{planTag}: {cliCount}/{limits?.maxCli || '∞'} CLI | {Math.floor((limits?.voiceUsedSeconds || 0) / 60)}/{limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)}м голос]
           </Text>
