@@ -134,8 +134,8 @@ function FriendCard({
               </button>
               <button
                 onClick={onRemove}
-                title="Удалить из команды"
-                className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                title="Удалить из друзей"
+                className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -470,7 +470,7 @@ export function FriendsView() {
             ⚠️ Гостевой режим веб-версии
           </p>
           <p className="text-[11px] text-amber-200/90 leading-relaxed">
-            Чтобы автоматически синхронизировать команду с Telegram-ботом, откройте веб-сайт или Mini App через кнопку в боте <span className="font-semibold text-amber-400">@Zerph_bot</span> (или напишите /start в боте)!
+            Чтобы автоматически синхронизировать список друзей с Telegram-ботом, откройте веб-сайт или Mini App через кнопку в боте <span className="font-semibold text-amber-400">@Zerph_bot</span> (или напишите /start в боте)!
           </p>
         </div>
       )}
@@ -478,11 +478,8 @@ export function FriendsView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-primary" />
-            Друзья и контакты
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h2 className="text-base font-bold text-foreground">Друзья и контакты</h2>
+          <p className="text-xs text-muted-foreground">
             Обменивайтесь заметками и задачами, просматривайте расписание и дни рождения друзей
           </p>
         </div>
@@ -657,16 +654,16 @@ export function FriendsView() {
           {state.friends.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center bg-card/40 rounded-3xl border border-border/50">
               <Users className="w-12 h-12 text-muted-foreground/20" />
-              <p className="text-sm font-bold text-foreground">В вашей команде пока нет участников</p>
+              <p className="text-sm font-bold text-foreground">У вас пока нет добавленных друзей</p>
               <p className="text-xs text-muted-foreground max-w-sm">
-                Укажите @username друга выше, чтобы отправить ему запрос на совместную работу
+                Укажите @username друга по кнопке ниже или отправьте ему вашу персональную ссылку-приглашение
               </p>
               <button
                 onClick={() => setShowInvite(true)}
-                className="mt-2 flex items-center gap-1.5 h-8 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all shadow-xs"
+                className="mt-2 flex items-center gap-1.5 h-8 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 transition-all shadow-xs cursor-pointer"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>Пригласить участника</span>
+                <span>+ Добавить друга</span>
               </button>
             </div>
           ) : (
@@ -679,9 +676,9 @@ export function FriendsView() {
                   onSchedule={handleOpenSchedule}
                   onRemove={async () => {
                     const ok = await confirm({
-                      title: `Удалить ${f.name} из команды?`,
-                      description: 'Участник потеряет доступ к совместным задачам.',
-                      confirmText: 'Удалить участника',
+                      title: `Удалить ${f.name} из друзей?`,
+                      description: 'Пользователь больше не сможет отправлять вам совместные заметки и задачи.',
+                      confirmText: 'Удалить из друзей',
                       variant: 'danger',
                     })
                     if (!ok) return
@@ -749,19 +746,19 @@ export function FriendsView() {
             )}
           </div>
 
-          {/* Upcoming Team Birthdays */}
+          {/* Upcoming Friends Birthdays */}
           <div className="p-5 rounded-3xl bg-card border border-border/80 space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Cake className="w-4 h-4 text-pink-500" />
-                Дни рождения команды
+                Дни рождения друзей
               </span>
               <span className="text-[11px] font-semibold text-muted-foreground">({friendBirthdays.length})</span>
             </div>
 
             {friendBirthdays.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2 leading-relaxed">
-                Дни рождения участников не указаны. Их можно ввести в карточке каждого участника слева!
+                Дни рождения друзей не указаны. Их можно указать в карточке каждого друга слева!
               </p>
             ) : (
               <div className="space-y-2">
@@ -905,8 +902,8 @@ export function FriendsView() {
                         </p>
                         <p className="text-[11px] opacity-90 mt-0.5">
                           {profileModal.profile.allowTasks
-                            ? 'Вы можете поручать задачи этому пользователю и смотреть его график.'
-                            : 'Пользователь отключил прием задач от вас. Для открытия доступа он должен включить тумблер в своей вкладке «Команда».'}
+                            ? 'Вы можете поручать задачи этому другу и смотреть его график.'
+                            : 'Пользователь отключил прием задач от вас. Для открытия доступа он должен включить тумблер в своей вкладке «Друзья».'}
                         </p>
                       </div>
                     </div>
@@ -1070,7 +1067,7 @@ export function FriendsView() {
                         <Sparkles className="w-3.5 h-3.5" /> Как открыть доступ:
                       </p>
                       <p className="text-muted-foreground">
-                        Попросите <strong>{scheduleModal.friend.name}</strong> зайти во вкладку <strong>«Команда»</strong> и включить тумблер <em>«Разрешить задачи от этого человека»</em> на вашей карточке.
+                        Попросите <strong>{scheduleModal.friend.name}</strong> зайти во вкладку <strong>«Друзья»</strong> и включить тумблер <em>«Разрешить задачи от этого человека»</em> на вашей карточке.
                       </p>
                     </div>
                   </div>

@@ -1,11 +1,18 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+/* Монохромный шрифт эмодзи (самохостинг, без внешних запросов): все эмодзи
+   во всём приложении — команды, админка, плейсхолдеры, контент — рендерятся
+   минималистичными чёрно-белыми глифами в стилистике продукта */
+@import '@fontsource/noto-emoji/400.css';
+@import '@fontsource/noto-emoji/500.css';
+@import '@fontsource/noto-emoji/600.css';
+@import '@fontsource/noto-emoji/700.css';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: 'Inter', 'Inter Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', 'Inter Fallback', 'Noto Emoji', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   --color-brand: var(--brand);

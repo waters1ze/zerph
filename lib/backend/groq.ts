@@ -96,13 +96,13 @@ ${existingItemsContext}
 
   if (friendsContext) {
     prompt += `\n\n══════════════════════════════════════════
-👥 КОНТАКТЫ И УЧАСТНИКИ КОМАНДЫ ПОЛЬЗОВАТЕЛЯ:
+👥 ДРУЗЬЯ И КОНТАКТЫ ПОЛЬЗОВАТЕЛЯ:
 ${friendsContext}
 ══════════════════════════════════════════`
   }
 
   prompt += `\n\n══════════════════════════════════════════
-🤝 СТРОГИЕ ПРАВИЛА РАЗДЕЛЕНИЯ: «НАМ» (СОВМЕСТНАЯ / ОБЩАЯ) VS «КОМУ-ТО ОДНОМУ» (ПОРУЧЕНИЕ)
+🤝 СТРОГИЕ ПРАВИЛА РАЗДЕЛЕНИЯ: «НАМ» (СОВМЕСТНАЯ / ОБЩАЯ С ДРУГОМ) VS «КОМУ-ТО ОДНОМУ» (ПОРУЧЕНИЕ ДРУГУ)
 ══════════════════════════════════════════
 1. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ «НАМ», «ДЛЯ НАС», «МНЕ И [ИМЯ]», «НАМ С [ИМЯ]», «ОБЩАЯ ЗАДАЧА», «ВМЕСТЕ С [ИМЯ]», «ОБОИМ»:
    Примеры:
@@ -134,10 +134,10 @@ ${friendsContext}
 3. Личные задачи пользователя (СТРОГО "recipientName": null, "type": "task", "isBothShared": false):
    Если действие выполняет сам пользователь для себя (например: "позвонить Артему", "купить подарок маме", "встреча с Леной в 15:00", "написать отчет"), это ЛИЧНАЯ задача пользователя! Установи "recipientName": null.
 
-4. Запрос расписания / графика другого человека:
-   Если пользователь спрашивает график, расписание, планы или занятость участника команды (например: "какой график у Леры на завтра", "расписание Артема на неделю", "график Вани на 3 дня", "какие дела у Леры 18 августа"):
+4. Запрос расписания / графика друга:
+   Если пользователь спрашивает график, расписание, планы или занятость друга (например: "какой график у Леры на завтра", "расписание Артема на неделю", "график Вани на 3 дня", "какие дела у Леры 18 августа"):
    - "type": "schedule"
-   - "recipientName": "имя или @username человека" (например: "Лера", "Артем")
+   - "recipientName": "имя или @username друга" (например: "Лера", "Артем")
    - "dueDate": "YYYY-MM-DD" (дата начала)
    - "daysCount": 1 | 3 | 7 (1 для одного дня/завтра/даты, 7 для недели, N для нескольких дней)
 ══════════════════════════════════════════`
@@ -398,7 +398,6 @@ export async function parseIntentWithGroq(
             recipientName: cleanRecName,
             isBothShared: cleanIsBothShared,
             repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
-            reminderOffsetMinutes: Number(item.reminderOffsetMinutes) || 0,
             targetTitle: item.targetTitle || null,
             projectId: item.projectId || null,
             goalId: item.goalId || null,
@@ -635,12 +634,12 @@ export async function generateMorningGreeting(
 
 function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[]): string {
   return (
-    `☀️ *Доброе утро, ${firstName}!*\n\n` +
+    `✦ *Доброе утро, ${firstName}*\n\n` +
     `Сегодня ${dayName}.\n\n` +
     (pendingTasks.length
-      ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `• ${t}`).join('\n')}\n\n`
-      : `✅ На сегодня задач нет — можно планировать что-то новое!\n\n`) +
-    `_Продуктивного дня! 🚀_`
+      ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `▪ ${t}`).join('\n')}\n\n`
+      : `✓ На сегодня задач нет — отличная возможность спланировать день!\n\n`) +
+    `_Продуктивного дня! ✦_`
   )
 }
 
@@ -667,11 +666,12 @@ export async function generateEveningReview(
             role: 'system',
             content: `Ты — личный ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня.
 Пиши ТОЛЬКО на русском языке, в Markdown для Telegram.
+Стиль: минималистичный, эстетичный, поддерживающий.
 Структура:
 1. Тёплое вечернее обращение по имени.
 2. Похвала за закрытые задачи (если есть) или ободрение.
 3. Короткий дружеский совет по отдыху/восстановлению сил на завтра.
-Максимум 120 слов. Тон — тёплый, поддерживающий, уютный.`,
+Максимум 120 слов.`,
           },
           {
             role: 'user',
@@ -693,20 +693,20 @@ export async function generateEveningReview(
 }
 
 function buildFallbackEveningReview(firstName: string, completedTasks: string[], pendingTasks: string[]): string {
-  let msg = `🌙 *Добрый вечер, ${firstName}!*\n\n`
+  let msg = `✦ *Добрый вечер, ${firstName}*\n\n`
   if (completedTasks.length > 0) {
-    msg += `🎉 *Выполнено за сегодня (${completedTasks.length}):*\n` +
-      completedTasks.slice(0, 5).map(t => `  ~${t}~`).join('\n') + `\n\n`
+    msg += `✓ *Выполнено за сегодня (${completedTasks.length}):*\n` +
+      completedTasks.slice(0, 5).map(t => `  ▫ ~${t}~`).join('\n') + `\n\n`
   } else {
     msg += `Сегодня был спокойный день без закрытых задач.\n\n`
   }
 
   if (pendingTasks.length > 0) {
-    msg += `⏳ *Осталось незавершенных (${pendingTasks.length}):*\n` +
-      pendingTasks.slice(0, 5).map(t => `  • ${t}`).join('\n') + `\n\n`
-    msg += `_Отдохни и наберись сил! Если нужно, нажми кнопку ниже, чтобы перенести задачи на завтра._`
+    msg += `⏱ *Осталось незавершенных (${pendingTasks.length}):*\n` +
+      pendingTasks.slice(0, 5).map(t => `  ▪ ${t}`).join('\n') + `\n\n`
+    msg += `_Отдохните и наберитесь сил. При необходимости можно перенести задачи на завтра в 1 клик._`
   } else {
-    msg += `✨ *Все задачи закрыты! Идеальный результат! Отличного вечера и отдыха 🛋️*`
+    msg += `✦ *Все задачи закрыты! Идеальный результат. Приятного отдыха!*`
   }
 
   return msg

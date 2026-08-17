@@ -1297,33 +1297,140 @@ export async function getAllChatIds(): Promise<number[]> {
 
 export async function getExistingItemsContext(ownerChatId?: number | bigint | string | null): Promise<string> {
   try {
-    const tasks = await getAllTasks(ownerChatId)
-    const goals = await getAllGoals(ownerChatId)
-    const notes = await getAllNotes(ownerChatId)
+    if (!ownerChatId) return ''
+    const cid = BigInt(ownerChatId)
 
-    const activeTasks = tasks.filter(t => t.status !== 'done').slice(0, 15)
-    const activeGoals = goals.slice(0, 10)
+    const [tasks, goals, notes, habits] = await Promise.all([
+      getAllTasks(ownerChatId),
+      getAllGoals(ownerChatId),
+      getAllNotes(ownerChatId),
+      prisma.habit.findMany({ where: { ownerChatId: cid } }).catch(() => []),
+    ])
+
+    // Fetch user projects
+    let userProjects: any[] = []
+    try {
+      userProjects = await (prisma as any).projectDB.findMany({
+        where: {
+          OR: [{ ownerChatId: cid }, { memberIds: { has: cid } }],
+          status: { not: 'archived' },
+        },
+      })
+    } catch {}
+
+    // Fetch user teams
+    let userTeams: any[] = []
+    try {
+      const teamMemberships = await (prisma as any).teamMembership.findMany({
+        where: { userChatId: cid },
+        include: { team: true },
+      })
+      userTeams = teamMemberships.map((tm: any) => tm.team).filter(Boolean)
+    } catch {}
+
+    // Fetch user friends
+    let friendsList: any[] = []
+    try {
+      const friendships = await prisma.friendship.findMany({
+        where: {
+          OR: [{ userChatId: cid }, { friendChatId: cid }],
+          status: 'accepted',
+        },
+      })
+      const friendCids = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
+      if (friendCids.length > 0) {
+        const chats = await prisma.telegramChat.findMany({
+          where: { chatId: { in: friendCids } },
+          select: { chatId: true, firstName: true, lastName: true, username: true },
+        })
+        const friendshipMap = new Map(friendships.map(f => [
+          String(f.userChatId === cid ? f.friendChatId : f.userChatId),
+          f.allowTasks,
+        ]))
+        friendsList = chats.map(c => ({
+          ...c,
+          allowTasks: friendshipMap.get(String(c.chatId)) ?? false,
+        }))
+      }
+    } catch {}
+
+    const projectMap = new Map(userProjects.map(p => [p.id, p.title]))
+    const friendNameMap = new Map(friendsList.map(f => [
+      String(f.chatId),
+      `${f.firstName || ''} ${f.lastName || ''}`.trim() || (f.username ? `@${f.username}` : `ID ${f.chatId}`),
+    ]))
 
     const lines: string[] = []
 
-    if (activeGoals.length) {
-      lines.push('🎯 ЦЕЛИ ПОЛЬЗОВАТЕЛЯ:')
-      activeGoals.forEach(g => {
-        lines.push(`- ID: ${g.id} | Название: "${g.title}" | Дедлайн: ${g.deadline || 'не указан'} | Описание: ${g.description || ''}`)
+    // 1. Projects
+    if (userProjects.length > 0) {
+      lines.push('📁 ПРОЕКТЫ ПОЛЬЗОВАТЕЛЯ:')
+      userProjects.forEach(p => {
+        const role = p.ownerChatId === cid ? 'Владелец' : 'Участник'
+        lines.push(`- Проект: "${p.title}" | ID: ${p.id} | Роль: ${role} | Статус: ${p.status || 'active'}${p.description ? ` | Описание: ${p.description}` : ''}`)
       })
     }
 
-    if (activeTasks.length) {
+    // 2. Teams
+    if (userTeams.length > 0) {
+      lines.push('\n🏢 КОМАНДЫ ПОЛЬЗОВАТЕЛЯ:')
+      userTeams.forEach(t => {
+        lines.push(`- Команда: "${t.name}" | ID: ${t.id}${t.description ? ` | Описание: ${t.description}` : ''}`)
+      })
+    }
+
+    // 3. Friends
+    if (friendsList.length > 0) {
+      lines.push('\n👥 ДРУЗЬЯ ПОЛЬЗОВАТЕЛЯ:')
+      friendsList.forEach(f => {
+        const name = `${f.firstName || ''} ${f.lastName || ''}`.trim() || 'Без имени'
+        const un = f.username ? ` (@${f.username})` : ''
+        const tasksStatus = f.allowTasks ? 'задачи разрешены' : 'задачи отключены'
+        lines.push(`- Друг: ${name}${un} | ID: ${f.chatId} | Доступ: ${tasksStatus}`)
+      })
+    }
+
+    // 4. Goals
+    const activeGoals = goals.slice(0, 10)
+    if (activeGoals.length > 0) {
+      lines.push('\n🎯 ЦЕЛИ ПОЛЬЗОВАТЕЛЯ:')
+      activeGoals.forEach(g => {
+        lines.push(`- ID: ${g.id} | Название: "${g.title}" | Дедлайн: ${g.deadline || 'не указан'}${g.description ? ` | Описание: ${g.description}` : ''}`)
+      })
+    }
+
+    // 5. Habits
+    if (habits.length > 0) {
+      lines.push('\n🔥 ПРИВЫЧКИ И СЕРИИ:')
+      habits.forEach((h: any) => {
+        lines.push(`- Привычка: "${h.title}" | Стрик: ${h.streak || 0} дней | Частота: ${h.frequency || 'daily'}`)
+      })
+    }
+
+    // 6. Active Tasks with Origin Context
+    const activeTasks = tasks.filter(t => t.status !== 'done').slice(0, 20)
+    if (activeTasks.length > 0) {
       lines.push('\n📋 ЗАДАЧИ / НАПОМИНАНИЯ ПОЛЬЗОВАТЕЛЯ:')
       activeTasks.forEach(t => {
-        lines.push(`- ID: ${t.id} | Название: "${t.title}" | Дата: ${t.dueDate || 'не указана'} | Время: ${t.dueTime || 'не указано'} | Приоритет: ${t.priority}`)
+        let originNote = ''
+        if (t.projectId && projectMap.has(t.projectId)) {
+          originNote += ` [В проекте: "${projectMap.get(t.projectId)}"]`
+        }
+        if (t.authorChatId && t.authorChatId !== cid) {
+          const authorName = friendNameMap.get(String(t.authorChatId)) || `ID ${t.authorChatId}`
+          originNote += ` [Задача передана другом/коллегой: ${authorName}]`
+        }
+        const timeStr = t.dueTime ? ` в ${t.dueTime}` : ''
+        const dateStr = t.dueDate ? ` | Дедлайн: ${t.dueDate}${timeStr}` : ''
+        lines.push(`- ID: ${t.id} | Название: "${t.title}"${dateStr} | Приоритет: ${t.priority || 'medium'}${originNote}${t.description ? ` | Описание: ${t.description}` : ''}`)
       })
     }
 
-    if (notes.length) {
-      lines.push('\n📌 ВСЕ ЗАМЕТКИ ПОЛЬЗОВАТЕЛЯ (полный текст):')
-      notes.slice(0, 20).forEach(n => {
-        const bodyText = (n.content || n.originalText || '').replace(/\n+/g, ' ').slice(0, 500)
+    // 7. Notes
+    if (notes.length > 0) {
+      lines.push('\n📌 ЗАМЕТКИ ПОЛЬЗОВАТЕЛЯ:')
+      notes.slice(0, 15).forEach(n => {
+        const bodyText = (n.content || n.originalText || '').replace(/\n+/g, ' ').slice(0, 300)
         lines.push(`- ID: ${n.id} | Заголовок: "${n.title}" | Содержание: "${bodyText}"`)
       })
     }

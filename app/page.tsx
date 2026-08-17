@@ -126,7 +126,7 @@ export function AppShell() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed top-0 left-0 h-full w-[280px] max-w-[85vw] z-50 sm:hidden overflow-y-auto bg-card border-r border-border shadow-2xl flex flex-col"
+              className="fixed top-0 left-0 h-full w-[280px] max-w-[85vw] z-50 sm:hidden overflow-y-auto no-scrollbar bg-card border-r border-border shadow-2xl flex flex-col"
             >
               <Sidebar />
             </motion.div>
@@ -135,7 +135,7 @@ export function AppShell() {
       </AnimatePresence>
 
       {/* ── Desktop Sidebar ── */}
-      <div className="hidden sm:block sm:w-56 shrink-0 h-full overflow-y-auto border-r border-border">
+      <div className="hidden sm:block sm:w-56 shrink-0 h-full overflow-y-auto no-scrollbar border-r border-border">
         <Sidebar />
       </div>
 
