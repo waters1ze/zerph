@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn, isYearlyEventTask } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
@@ -11,49 +11,32 @@ import {
   UserCheck, Building2, Puzzle, ChevronRight, ChevronDown, Circle, User, Menu,
   PanelLeftClose, PanelLeftOpen, Folder
 } from 'lucide-react'
+import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, type SidebarFolder } from '@/components/settings/sidebar-customizer-section'
+import type { ExtensionItem } from '@/app/api/extensions/route'
 
 export interface NavItem {
   id: View
   label: string
   icon: React.ElementType
   badge?: number
-  section: string
 }
 
-export const BASE_NAV_ITEMS: NavItem[] = [
-  { id: 'today',      label: 'Сегодня',        icon: Sun,         section: 'workspace' },
-  { id: 'inbox',      label: 'Входящие',       icon: Inbox,        section: 'workspace' },
-  { id: 'tasks',      label: 'Задачи',         icon: CheckSquare, section: 'workspace' },
-  { id: 'clock',      label: 'Часы и Таймеры', icon: Clock,       section: 'workspace' },
-  { id: 'notes',      label: 'Заметки',        icon: FileText,    section: 'workspace' },
-  { id: 'graph',      label: 'Граф знаний',    icon: Network,     section: 'workspace' },
-  { id: 'calendar',   label: 'Календарь',      icon: Calendar,    section: 'planning' },
-  { id: 'goals',      label: 'Цели',           icon: Target,      section: 'planning' },
-  { id: 'projects',   label: 'Проекты',        icon: FolderOpen,  section: 'planning' },
-  { id: 'extensions', label: 'Расширения',     icon: Puzzle,      section: 'planning' },
-  { id: 'stats',      label: 'Аналитика',      icon: BarChart2,   section: 'аналитика' },
-  { id: 'friends',    label: 'Друзья',         icon: UserCheck,   section: 'совместная работа' },
-  { id: 'teams',      label: 'Команды',        icon: Building2,   section: 'совместная работа' },
-  { id: 'settings',   label: 'Настройки',      icon: Settings,    section: 'аккаунт' },
-]
-
-export const SECTIONS = [
-  { id: 'workspace',          label: 'Рабочее пространство' },
-  { id: 'planning',           label: 'Планирование' },
-  { id: 'аналитика',          label: 'Аналитика' },
-  { id: 'совместная работа',  label: 'Совместная работа' },
-  { id: 'аккаунт',            label: 'Аккаунт' },
-]
-
-export interface SidebarFolder {
-  id: string
-  title: string
-  itemIds: string[]
-}
-
-export interface SidebarConfig {
-  hiddenItems: string[]
-  folders?: SidebarFolder[]
+const NATIVE_NAV_ITEMS: Record<string, { label: string; icon: React.ElementType }> = {
+  today:      { label: 'Сегодня',        icon: Sun },
+  inbox:      { label: 'Входящие',       icon: Inbox },
+  tasks:      { label: 'Задачи',         icon: CheckSquare },
+  clock:      { label: 'Часы и Таймеры', icon: Clock },
+  notes:      { label: 'Заметки',        icon: FileText },
+  graph:      { label: 'Граф знаний',    icon: Network },
+  calendar:   { label: 'Календарь',      icon: Calendar },
+  goals:      { label: 'Цели',           icon: Target },
+  projects:   { label: 'Проекты',        icon: FolderOpen },
+  extensions: { label: 'Расширения',     icon: Puzzle },
+  stats:      { label: 'Аналитика',      icon: BarChart2 },
+  friends:    { label: 'Друзья',         icon: UserCheck },
+  teams:      { label: 'Команды',        icon: Building2 },
+  settings:   { label: 'Настройки',      icon: Settings },
+  admin:      { label: 'Админ-панель',   icon: Crown },
 }
 
 interface SidebarProps {
@@ -68,6 +51,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
+  const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
 
   // Local collapse state if not provided externally
   const [localCollapsed, setLocalCollapsed] = useState<boolean>(() => {
@@ -93,15 +77,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   }
 
   // Sidebar customization config
-  const [sidebarConfig, setSidebarConfig] = useState<SidebarConfig>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('zerf_sidebar_config')
-        if (saved) return JSON.parse(saved)
-      } catch {}
-    }
-    return { hiddenItems: [], folders: [] }
-  })
+  const [sidebarConfig, setSidebarConfig] = useState<SidebarConfig>(getInitialSidebarConfig)
 
   // Collapsed folders state
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})
@@ -112,10 +88,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
 
   useEffect(() => {
     const handleConfigChange = () => {
-      try {
-        const saved = localStorage.getItem('zerf_sidebar_config')
-        if (saved) setSidebarConfig(JSON.parse(saved))
-      } catch {}
+      setSidebarConfig(getInitialSidebarConfig())
     }
     window.addEventListener('zerf_sidebar_config_changed', handleConfigChange)
     return () => window.removeEventListener('zerf_sidebar_config_changed', handleConfigChange)
@@ -170,7 +143,6 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         }
       } catch {}
 
-      // Fallback to Telegram WebApp context
       if (typeof window !== 'undefined') {
         const tgWindow = window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string; last_name?: string; username?: string; photo_url?: string } } } } }
         const u = tgWindow.Telegram?.WebApp?.initDataUnsafe?.user
@@ -178,13 +150,19 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.first_name || 'Пользователь'
           setTgUser({
             name: fullName,
-            username: u.username ? `@${u.username}` : 'Telegram',
+            username: u.username || 'Telegram',
             photoUrl: u.photo_url,
+          })
+          dispatch({
+            type: 'UPDATE_SETTINGS',
+            updates: {
+              name: fullName,
+              integrations: { ...settings.integrations, telegram: true },
+            },
           })
         }
       }
     }
-
     fetchUserProfile()
 
     // Fetch pending team invites count
@@ -201,16 +179,23 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
       } catch {}
     }
     fetchPendingTeamRequests()
+
+    // Fetch installed extensions for sidebar
+    const fetchInstalledExts = async () => {
+      try {
+        const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
+        const data = await res.json()
+        if (data.success && Array.isArray(data.catalog) && Array.isArray(data.installedIds)) {
+          const installed = data.catalog.filter((e: ExtensionItem) => data.installedIds.includes(e.id))
+          setInstalledExts(installed)
+        }
+      } catch {}
+    }
+    fetchInstalledExts()
+
     const interval = setInterval(fetchPendingTeamRequests, 20000)
     return () => clearInterval(interval)
   }, [dispatch])
-
-  const fullNavItems: NavItem[] = isAdmin
-    ? [...BASE_NAV_ITEMS, { id: 'admin' as View, label: 'Админ-панель', icon: Crown, section: 'аккаунт' }]
-    : BASE_NAV_ITEMS
-
-  // Filter out items hidden by user in Settings
-  const navItems = fullNavItems.filter(item => !sidebarConfig.hiddenItems?.includes(item.id))
 
   const todayCount = tasks.filter(t => {
     const d = t.dueDate
@@ -226,6 +211,17 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const userSubtext = tgUser?.username
     ? `${tgUser.username} · Подключено`
     : (isConnected ? 'Telegram Подключён' : 'Telegram Не подключён')
+
+  // Map of extensions for quick lookup
+  const extensionsMap = useMemo(() => {
+    const map = new Map<string, ExtensionItem>()
+    installedExts.forEach(e => map.set(e.id, e))
+    return map
+  }, [installedExts])
+
+  const activeFolders = useMemo(() => {
+    return (sidebarConfig.folders || DEFAULT_SIDEBAR_FOLDERS).filter(f => !f.hidden)
+  }, [sidebarConfig])
 
   return (
     <aside className={cn(
@@ -295,138 +291,140 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         )}
       </div>
 
-      {/* Nav */}
+      {/* Dynamic Folders & Navigation */}
       <nav className={cn(
-        'flex-1 overflow-y-auto pb-4 space-y-1',
+        'flex-1 overflow-y-auto pb-4 space-y-2',
         isCollapsed ? 'px-1' : 'px-2'
       )}>
-        {/* Render Custom Folders First if defined */}
-        {sidebarConfig.folders && sidebarConfig.folders.length > 0 && (
-          <div className="space-y-1 mb-2">
-            {sidebarConfig.folders.map(folder => {
-              const folderItems = navItems.filter(i => folder.itemIds.includes(i.id))
-              if (!folderItems.length) return null
-              const isFolderOpen = !collapsedFolders[folder.id]
-
-              return (
-                <div key={folder.id} className="rounded-xl border border-border/40 bg-muted/20 overflow-hidden mb-1.5">
-                  {!isCollapsed && (
-                    <button
-                      onClick={() => toggleFolder(folder.id)}
-                      className="w-full px-2.5 py-1.5 flex items-center justify-between text-[11px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Folder className="w-3 h-3 text-primary" />
-                        <span>{folder.title}</span>
-                      </span>
-                      {isFolderOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    </button>
-                  )}
-
-                  {(!isCollapsed ? isFolderOpen : true) && (
-                    <div className={cn('space-y-0.5', !isCollapsed && 'px-1 pb-1')}>
-                      {folderItems.map(item => {
-                        const isActive = currentView === item.id
-                        return (
-                          <motion.button
-                            key={item.id}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}
-                            className={cn(
-                              'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
-                              isCollapsed ? 'p-2 justify-center' : 'gap-2 px-2.5 py-1.5',
-                              isActive
-                                ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
-                                : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
-                            )}
-                            title={item.label}
-                          >
-                            <item.icon className={cn(
-                              'w-4 h-4 shrink-0 transition-colors',
-                              isActive ? 'text-primary' : 'text-muted-foreground'
-                            )} />
-                            {!isCollapsed && <span className="flex-1 text-left line-clamp-1">{item.label}</span>}
-                          </motion.button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Regular Sections */}
-        {SECTIONS.map(section => {
-          // Exclude items that are already in custom folders
-          const folderItemIds = new Set((sidebarConfig.folders || []).flatMap(f => f.itemIds))
-          const items = navItems.filter(i => i.section === section.id && !folderItemIds.has(i.id))
-          if (!items.length) return null
+        {activeFolders.map(folder => {
+          const isFolderOpen = !collapsedFolders[folder.id]
+          // Filter out items hidden by user
+          const visibleItemIds = (folder.itemIds || []).filter(id => !sidebarConfig.hiddenItems?.includes(id))
+          if (visibleItemIds.length === 0) return null
 
           return (
-            <div key={section.id} className="mb-2">
+            <div key={folder.id} className="mb-1.5">
               {!isCollapsed && (
-                <p className="px-2.5 py-1 text-[9px] uppercase tracking-wider font-bold text-muted-foreground/70 font-sans">
-                  {section.label}
-                </p>
+                <button
+                  onClick={() => toggleFolder(folder.id)}
+                  className="w-full px-2 py-1 flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80 hover:text-foreground font-sans cursor-pointer group"
+                >
+                  <span className="truncate">{folder.title}</span>
+                  <span className="text-muted-foreground/50 group-hover:text-foreground">
+                    {isFolderOpen ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                  </span>
+                </button>
               )}
-              <div className="space-y-0.5 mt-0.5">
-                {items.map(item => {
-                  const isActive = currentView === item.id
-                  const badge =
-                    item.id === 'today' ? (todayCount || undefined) :
-                    item.id === 'inbox' ? (inboxCount || undefined) :
-                    item.id === 'notes' ? (notesCount || undefined) :
-                    item.id === 'friends' ? (pendingTeamRequestsCount || undefined) :
-                    item.badge
 
-                  return (
-                    <motion.button
-                      key={item.id}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}
-                      className={cn(
-                        'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
-                        isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
-                        isActive
-                          ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
-                          : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
-                      )}
-                      title={item.label}
-                    >
-                      <item.icon className={cn(
-                        'w-4 h-4 shrink-0 transition-colors',
-                        isActive ? 'text-primary' : 'text-muted-foreground'
-                      )} strokeWidth={isActive ? 2.5 : 2} />
+              {(!isCollapsed ? isFolderOpen : true) && (
+                <div className="space-y-0.5 mt-0.5">
+                  {visibleItemIds.map(itemId => {
+                    const nativeItem = NATIVE_NAV_ITEMS[itemId]
+                    const extensionItem = extensionsMap.get(itemId)
 
-                      {!isCollapsed && (
-                        <>
-                          <span className="flex-1 text-left line-clamp-1">{item.label}</span>
-                          {badge !== undefined && badge > 0 && (
-                            <span className={cn(
-                              'flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold shadow-xs',
-                              item.id === 'friends'
-                                ? 'bg-amber-500 text-black animate-pulse'
-                                : 'bg-primary text-primary-foreground'
-                            )}>
-                              {badge}
+                    if (nativeItem) {
+                      const isActive = currentView === itemId
+                      const badge =
+                        itemId === 'today' ? (todayCount || undefined) :
+                        itemId === 'inbox' ? (inboxCount || undefined) :
+                        itemId === 'notes' ? (notesCount || undefined) :
+                        itemId === 'friends' ? (pendingTeamRequestsCount || undefined) :
+                        undefined
+
+                      const Icon = nativeItem.icon
+
+                      return (
+                        <motion.button
+                          key={itemId}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => dispatch({ type: 'SET_VIEW', view: itemId as View })}
+                          className={cn(
+                            'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
+                            isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
+                            isActive
+                              ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
+                              : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
+                          )}
+                          title={nativeItem.label}
+                        >
+                          <Icon className={cn(
+                            'w-4 h-4 shrink-0 transition-colors',
+                            isActive ? 'text-primary' : 'text-muted-foreground'
+                          )} strokeWidth={isActive ? 2.5 : 2} />
+
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left line-clamp-1">{nativeItem.label}</span>
+                              {badge !== undefined && badge > 0 && (
+                                <span className={cn(
+                                  'flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold shadow-xs',
+                                  itemId === 'friends'
+                                    ? 'bg-amber-500 text-black animate-pulse'
+                                    : 'bg-primary text-primary-foreground'
+                                )}>
+                                  {badge}
+                                </span>
+                              )}
+                              {isActive && <ChevronRight className="w-3 h-3 text-primary shrink-0" />}
+                            </>
+                          )}
+
+                          {isCollapsed && badge !== undefined && badge > 0 && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary ring-2 ring-card" />
+                          )}
+                        </motion.button>
+                      )
+                    }
+
+                    if (extensionItem) {
+                      return (
+                        <motion.button
+                          key={itemId}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+                          className={cn(
+                            'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
+                            isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
+                            'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
+                          )}
+                          title={extensionItem.title}
+                        >
+                          <span className="text-sm shrink-0">{extensionItem.icon || '🧩'}</span>
+                          {!isCollapsed && (
+                            <span className="flex-1 text-left line-clamp-1 truncate text-xs">
+                              {extensionItem.title}
                             </span>
                           )}
-                          {isActive && <ChevronRight className="w-3 h-3 text-primary shrink-0" />}
-                        </>
-                      )}
+                        </motion.button>
+                      )
+                    }
 
-                      {isCollapsed && badge !== undefined && badge > 0 && (
-                        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary ring-2 ring-card" />
-                      )}
-                    </motion.button>
-                  )
-                })}
-              </div>
+                    return null
+                  })}
+                </div>
+              )}
             </div>
           )
         })}
+
+        {/* Admin panel link at bottom for admins if not placed in folders */}
+        {isAdmin && !sidebarConfig.hiddenItems?.includes('admin') && (
+          <div className="pt-2 border-t border-border/40 mt-2">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => dispatch({ type: 'SET_VIEW', view: 'admin' })}
+              className={cn(
+                'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer text-amber-400 hover:bg-amber-500/10',
+                isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
+                currentView === 'admin' && 'bg-amber-500/20 font-bold border border-amber-500/30'
+              )}
+              title="Админ-панель"
+            >
+              <Crown className="w-4 h-4 shrink-0 text-amber-400" />
+              {!isCollapsed && <span className="flex-1 text-left">Админ-панель</span>}
+            </motion.button>
+          </div>
+        )}
       </nav>
 
       {/* Bottom Status bar */}
