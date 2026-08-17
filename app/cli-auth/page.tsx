@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   Terminal, ShieldCheck, CheckCircle2, XCircle, Loader2,
-  Crown, ArrowRight, LogIn, Mail, Lock, Send, Edit3
+  Crown, ArrowRight, LogIn, Mail, Lock, Send, Edit3, Sparkles
 } from 'lucide-react'
 import { getAuthHeaders, getTgChatId } from '@/lib/store'
 
@@ -68,6 +68,30 @@ function CliAuthContent() {
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Auto-listen to Telegram Bot 1-click authorization
+  useEffect(() => {
+    const cleanCode = code.trim().toUpperCase()
+    if (!cleanCode || status === 'success') return
+
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/cli/auth?code=${encodeURIComponent(cleanCode)}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === 'approved') {
+            setStatus('success')
+            clearInterval(timer)
+          } else if (data.status === 'rejected') {
+            setStatus('rejected')
+            clearInterval(timer)
+          }
+        }
+      } catch {}
+    }, 1500)
+
+    return () => clearInterval(timer)
+  }, [code, status])
 
   const handleInlineLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -151,6 +175,10 @@ function CliAuthContent() {
     } catch {}
     setSubmitting(false)
   }
+
+  const tgBotCliUrl = code
+    ? `https://t.me/Zerph_bot?start=cli_${code.replace(/-/g, '_')}`
+    : `https://t.me/Zerph_bot?start=login`
 
   if (loading) {
     return (
@@ -322,14 +350,14 @@ function CliAuthContent() {
               </p>
             </div>
 
-            {/* Telegram Fast Login Link */}
+            {/* Telegram Fast 1-Click Auth Link */}
             <a
-              href={`https://t.me/Zerph_bot?start=login`}
+              href={tgBotCliUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full h-11 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Send className="w-4 h-4" /> Войти через Telegram Бота
+              <Send className="w-4 h-4" /> Войти через Telegram Бота (1 клик)
             </a>
 
             <div className="flex items-center gap-3 text-slate-600 text-[10px] uppercase font-bold">

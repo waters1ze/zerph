@@ -3294,6 +3294,45 @@ export async function POST(req: NextRequest) {
         } catch {
           await send(chatId, '❌ Не удалось сформировать голосовой брифинг.')
         }
+      } else if (cmd === '/start' && param?.startsWith('cli_')) {
+        const authCode = param.replace(/^cli_/, '').replace(/_/g, '-').toUpperCase()
+        try {
+          const { getUserUsageAndLimits } = await import('@/lib/backend/db')
+          const { createServerSession } = await import('@/lib/backend/auth')
+          const limits = await getUserUsageAndLimits(chatId)
+          const normPlan = limits.plan
+
+          // Check if key exists in config
+          const row = await prisma.config.findUnique({
+            where: { key: `cli_auth_${authCode}` }
+          })
+
+          if (row) {
+            const entry = JSON.parse(row.value)
+            const token = await createServerSession(chatId, 'Zerf CLI Terminal', 'cli')
+            entry.status = 'approved'
+            entry.chatId = String(chatId)
+            entry.token = token
+            entry.plan = normPlan
+
+            await prisma.config.update({
+              where: { key: `cli_auth_${authCode}` },
+              data: { value: JSON.stringify(entry) }
+            })
+
+            await send(chatId,
+              `🪽 *Zerf CLI успешно авторизован!*\n\n` +
+              `✅ Доступ к вашему аккаунту подтверждён.\n` +
+              `👑 Тариф: *${normPlan.toUpperCase()}*\n\n` +
+              `Сессия в терминале активна. Вы можете вернуться в терминал!`
+            )
+          } else {
+            await send(chatId, `❌ Код авторизации *${authCode}* не найден или истёк. Запустите \`zerf login\` ещё раз.`)
+          }
+        } catch (e: any) {
+          console.error('Telegram CLI auth error:', e)
+          await send(chatId, `❌ Ошибка подтверждения входа в CLI: ${e.message}`)
+        }
       } else if (cmd === '/start' && param?.startsWith('invite_')) {
         await handleStart(chatId, firstName)
         const inviterId = Number(param.split('_')[1])
