@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
-import { normalizePlan } from '@/lib/plans'
 import {
   getAllTasks,
   getAllNotes,
@@ -12,6 +11,21 @@ import {
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
+
+function safeJsonResponse(payload: any, status = 200) {
+  const json = JSON.stringify(payload, (_key, value) => {
+    if (typeof value === 'bigint') return Number(value)
+    if (value instanceof Date) return value.toISOString()
+    return value
+  })
+  return new Response(json, {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
+  })
+}
 
 async function getChatIdAndPlan(req: NextRequest) {
   const authUser = await getAuthenticatedUser(req)
@@ -43,37 +57,24 @@ async function getChatIdAndPlan(req: NextRequest) {
   }
 }
 
-function serialize(obj: unknown): unknown {
-  if (obj === null || obj === undefined) return obj
-  if (obj instanceof Date) return obj.toISOString()
-  if (typeof obj === 'bigint') return Number(obj)
-  if (Array.isArray(obj)) return obj.map(serialize)
-  if (typeof obj === 'object') {
-    return Object.fromEntries(
-      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [k, serialize(v)])
-    )
-  }
-  return obj
-}
-
 // GET /api/cli/data — Fetch full snapshot for CLI dashboard
 export async function GET(req: NextRequest) {
   try {
     const user = await getChatIdAndPlan(req)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+      return safeJsonResponse({ error: 'Unauthorized', requiresAuth: true }, 401)
     }
 
     // Check Plus+ Tier requirement
     if (!user.isPlusOrHigher) {
-      return NextResponse.json({
+      return safeJsonResponse({
         allowed: false,
         plan: user.plan,
         name: user.name,
         chatId: String(user.chatId),
         upgradeUrl: 'https://t.me/Zerph_bot?start=buy',
         message: 'Zerf CLI доступен для подписчиков тарифов Plus, Pro и Corp. Оформите подписку в боте или на сайте, чтобы разблокировать терминальный клиент!',
-      }, { status: 403 })
+      }, 403)
     }
 
     // Fetch all user assets in parallel
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
       },
       stats: {
         totalTasks: tasks.length,
-        doneTasks: tasks.filter(t => t.status === 'done').length,
+        doneTasks: tasks.filter((t: any) => t.status === 'done').length,
         totalNotes: notes.length,
         totalGoals: goals.length,
         totalHabits: habits.length,
@@ -107,10 +108,10 @@ export async function GET(req: NextRequest) {
       friends,
     }
 
-    return NextResponse.json(serialize(payload))
+    return safeJsonResponse(payload, 200)
   } catch (err: unknown) {
     console.error('CLI data fetch error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return safeJsonResponse({ error: String(err) }, 500)
   }
 }
 
@@ -119,18 +120,18 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getChatIdAndPlan(req)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+      return safeJsonResponse({ error: 'Unauthorized', requiresAuth: true }, 401)
     }
 
     if (!user.isPlusOrHigher) {
-      return NextResponse.json({
+      return safeJsonResponse({
         error: 'Forbidden: Plus, Pro or Corp tier required for CLI operations.',
         upgradeUrl: 'https://t.me/Zerph_bot?start=buy',
-      }, { status: 403 })
+      }, 403)
     }
 
     const body = await req.json()
-    const { action, itemType, item, id, query } = body
+    const { action, itemType, item, id } = body
 
     // 1. Toggle Task Done / Undone
     if (action === 'toggle_task' && id) {
@@ -144,9 +145,9 @@ export async function POST(req: NextRequest) {
             completedAt: nextStatus === 'done' ? new Date() : null,
           }
         })
-        return NextResponse.json({ success: true, task: updated })
+        return safeJsonResponse({ success: true, task: updated })
       }
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+      return safeJsonResponse({ error: 'Task not found' }, 404)
     }
 
     // 2. Delete Task / Note / Goal
@@ -158,18 +159,18 @@ export async function POST(req: NextRequest) {
       } else if (itemType === 'goal') {
         await prisma.goal.deleteMany({ where: { id, ownerChatId: user.chatId } })
       }
-      return NextResponse.json({ success: true, deletedId: id })
+      return safeJsonResponse({ success: true, deletedId: id })
     }
 
     // 3. Create parsed item
     if (action === 'create' && item) {
       const saved = await saveParsedItemToDb(item, user.chatIdNum)
-      return NextResponse.json({ success: true, saved })
+      return safeJsonResponse({ success: true, saved })
     }
 
-    return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
+    return safeJsonResponse({ error: 'Unsupported action' }, 400)
   } catch (err: unknown) {
     console.error('CLI mutate error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return safeJsonResponse({ error: String(err) }, 500)
   }
 }
