@@ -9,7 +9,7 @@ import {
 import { 
   X, ZoomIn, ZoomOut, RotateCcw, Search, Folder, 
   Layers, ExternalLink, Sparkles, Network, Maximize2, Minimize2, 
-  Sliders, FileText, Tag, Plus, Trash2, Palette, Filter, Eye, RefreshCw, Compass
+  Sliders, FileText, Tag, Plus, Trash2, Palette, Filter, Eye, RefreshCw, Compass, CheckSquare
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +21,7 @@ interface KnowledgeGraphModalProps {
   initialFolder?: string | null
   initialNoteId?: string | null
   onSelectNote: (noteId: string) => void
+  onSelectTask?: (taskId: string) => void
   onCreateNoteWithTitle?: (title: string, linkedFromNoteId?: string) => void
   onDeleteNote?: (noteId: string) => void
   isFullView?: boolean
@@ -34,6 +35,7 @@ export function KnowledgeGraphModal({
   initialFolder = null,
   initialNoteId = null,
   onSelectNote,
+  onSelectTask,
   onCreateNoteWithTitle,
   onDeleteNote,
   isFullView = false,
@@ -596,23 +598,35 @@ export function KnowledgeGraphModal({
     }
   }
 
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault()
-    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88
-    const newZoom = Math.max(0.15, Math.min(3.5, camera.zoom * zoomFactor))
-
+  // Non-passive wheel event listener to avoid "Unable to preventDefault inside passive event listener"
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left
-    const mouseY = e.clientY - rect.top
 
-    setCamera(prev => ({
-      zoom: newZoom,
-      x: mouseX - (mouseX - prev.x) * (newZoom / prev.zoom),
-      y: mouseY - (mouseY - prev.y) * (newZoom / prev.zoom),
-    }))
-  }
+    const onWheelHandler = (e: WheelEvent) => {
+      e.preventDefault()
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88
+      const canvasEl = canvasRef.current
+      if (!canvasEl) return
+      const rect = canvasEl.getBoundingClientRect()
+      const mouseX = e.clientX - rect.left
+      const mouseY = e.clientY - rect.top
+
+      setCamera(prev => {
+        const newZoom = Math.max(0.15, Math.min(3.5, prev.zoom * zoomFactor))
+        return {
+          zoom: newZoom,
+          x: mouseX - (mouseX - prev.x) * (newZoom / prev.zoom),
+          y: mouseY - (mouseY - prev.y) * (newZoom / prev.zoom),
+        }
+      })
+    }
+
+    canvas.addEventListener('wheel', onWheelHandler, { passive: false })
+    return () => {
+      canvas.removeEventListener('wheel', onWheelHandler)
+    }
+  }, [])
 
   const handleZoom = (direction: 'in' | 'out') => {
     const canvas = canvasRef.current
@@ -658,6 +672,14 @@ export function KnowledgeGraphModal({
         onCreateNoteWithTitle(node.title)
         if (onClose) onClose()
       }
+    } else if (node.id.startsWith('task_') || node.folder === 'Задачи') {
+      const realTaskId = node.id.replace(/^task_/, '')
+      if (onSelectTask) {
+        onSelectTask(realTaskId)
+      } else {
+        onSelectNote(node.id)
+      }
+      if (onClose) onClose()
     } else if (node.type === 'note') {
       onSelectNote(node.id)
       if (onClose) onClose()
@@ -789,7 +811,6 @@ export function KnowledgeGraphModal({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
-            onWheel={handleWheel}
             onContextMenu={e => e.preventDefault()}
             className="w-full h-full cursor-grab active:cursor-grabbing block select-none touch-none"
           />
@@ -1139,15 +1160,25 @@ export function KnowledgeGraphModal({
                   )}
                 </div>
 
-                <button
-                  onClick={() => handleNodePrimaryAction(selectedNode)}
-                  className="w-full py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-sm transition-all"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>
-                    {selectedNode.type === 'unresolved' ? 'Создать эту заметку' : 'Открыть заметку'}
-                  </span>
-                </button>
+                {selectedNode.id.startsWith('task_') || selectedNode.folder === 'Задачи' ? (
+                  <button
+                    onClick={() => handleNodePrimaryAction(selectedNode)}
+                    className="w-full py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Открыть задачу</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleNodePrimaryAction(selectedNode)}
+                    className="w-full py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>
+                      {selectedNode.type === 'unresolved' ? 'Создать эту заметку' : 'Открыть заметку'}
+                    </span>
+                  </button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1167,10 +1198,19 @@ export function KnowledgeGraphModal({
                   handleNodePrimaryAction(contextMenuPos.node)
                   setContextMenuPos(null)
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left cursor-pointer"
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Открыть заметку</span>
+                {contextMenuPos.node.id.startsWith('task_') || contextMenuPos.node.folder === 'Задачи' ? (
+                  <>
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Открыть задачу</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Открыть заметку</span>
+                  </>
+                )}
               </button>
 
               <button

@@ -61,7 +61,7 @@ export const DEFAULT_SIDEBAR_FOLDERS: SidebarFolder[] = [
   {
     id: 'planning',
     title: 'Планирование',
-    itemIds: ['calendar', 'goals', 'projects', 'extensions'],
+    itemIds: ['calendar', 'goals', 'projects'],
   },
   {
     id: 'analytics',
@@ -165,6 +165,10 @@ export function getInitialSidebarConfig(): SidebarConfig {
       if (saved) {
         const parsed = JSON.parse(saved)
         if (parsed && Array.isArray(parsed.folders) && parsed.folders.length > 0) {
+          parsed.folders = parsed.folders.map((f: SidebarFolder) => ({
+            ...f,
+            itemIds: (f.itemIds || []).filter((id: string) => id !== 'extensions'),
+          }))
           return parsed
         }
       }

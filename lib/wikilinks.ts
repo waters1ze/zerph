@@ -193,10 +193,11 @@ export function buildGraphData(
     tasks = [],
   } = options
 
-  // 1. Initial filter by folder
+  // 1. Initial filter by folder and filter out invalid/deleted items
+  const validNotes = (allNotes || []).filter(n => n && n.id && n.title && !(n as any).deleted)
   let candidateNotes = folderFilter
-    ? allNotes.filter(n => (n.folder || 'Общее').startsWith(folderFilter))
-    : allNotes
+    ? validNotes.filter(n => (n.folder || 'Общее').startsWith(folderFilter))
+    : validNotes
 
   const titleToNodeId = new Map<string, string>()
   const noteMap = new Map<string, Note>()
@@ -224,7 +225,7 @@ export function buildGraphData(
             }
           })
           // Backlinks
-          allNotes.forEach(other => {
+          validNotes.forEach(other => {
             if (other.id !== note.id && !visited.has(other.id)) {
               const links = extractWikilinks(other.content || '')
               if (links.some(l => l.targetTitle.toLowerCase().trim() === note.title.toLowerCase().trim())) {
@@ -270,14 +271,16 @@ export function buildGraphData(
     existingNodeIds.add(n.id)
   })
 
-  // 3b. Add Task Nodes if showTasks is true (or if there are no notes)
+  // 3b. Add Task Nodes if showTasks is true (only active, non-deleted, non-done tasks)
   if (showTasks && tasks && tasks.length > 0) {
-    tasks.filter(t => t.status !== 'draft').forEach(t => {
-      if (folderFilter && !(t.folder || 'Задачи').startsWith(folderFilter)) return
-      const taskId = `task_${t.id}`
-      if (!existingNodeIds.has(taskId)) {
-        existingNodeIds.add(taskId)
-        titleToNodeId.set(t.title.toLowerCase().trim(), taskId)
+    tasks
+      .filter(t => t && t.id && t.title && t.status !== 'draft' && t.status !== 'done' && !(t as any).deleted)
+      .forEach(t => {
+        if (folderFilter && !(t.folder || 'Задачи').startsWith(folderFilter)) return
+        const taskId = `task_${t.id}`
+        if (!existingNodeIds.has(taskId)) {
+          existingNodeIds.add(taskId)
+          titleToNodeId.set(t.title.toLowerCase().trim(), taskId)
         const customColor = matchColorGroup({
           id: taskId,
           title: t.title,

@@ -160,6 +160,28 @@ export function NotesView() {
     }
   }, [selectedId, activeNote])
 
+  // Synchronize when opening a specific note from the Knowledge Graph or shortcuts
+  useEffect(() => {
+    const handleOpenNote = (e: any) => {
+      const targetId = e?.detail?.noteId || localStorage.getItem('zerf_active_note_id')
+      if (targetId && notes.some(n => n.id === targetId)) {
+        setSelectedId(targetId)
+        setShowMobileList(false)
+        localStorage.removeItem('zerf_active_note_id')
+      }
+    }
+
+    const savedId = localStorage.getItem('zerf_active_note_id')
+    if (savedId && notes.some(n => n.id === savedId)) {
+      setSelectedId(savedId)
+      setShowMobileList(false)
+      localStorage.removeItem('zerf_active_note_id')
+    }
+
+    window.addEventListener('zerf:open_note', handleOpenNote as EventListener)
+    return () => window.removeEventListener('zerf:open_note', handleOpenNote as EventListener)
+  }, [notes])
+
   // Filter notes strictly by search & folder (supports hierarchical prefix matching)
   const filteredNotes = notes.filter(n => {
     const matchesSearch =

@@ -32,7 +32,6 @@ const NATIVE_NAV_ITEMS: Record<string, { label: string; icon: React.ElementType 
   calendar:   { label: 'Календарь',      icon: Calendar },
   goals:      { label: 'Цели',           icon: Target },
   projects:   { label: 'Проекты',        icon: FolderOpen },
-  extensions: { label: 'Расширения',     icon: Puzzle },
   stats:      { label: 'Аналитика',      icon: BarChart2 },
   friends:    { label: 'Друзья',         icon: UserCheck },
   teams:      { label: 'Команды',        icon: Building2 },

@@ -9,7 +9,15 @@ export function GraphView() {
   const { notes, tasks } = state
 
   const handleSelectNote = (noteId: string) => {
+    localStorage.setItem('zerf_active_note_id', noteId)
     dispatch({ type: 'SET_VIEW', view: 'notes' })
+    window.dispatchEvent(new CustomEvent('zerf:open_note', { detail: { noteId } }))
+  }
+
+  const handleSelectTask = (taskId: string) => {
+    dispatch({ type: 'SELECT_TASK', id: taskId })
+    dispatch({ type: 'SET_VIEW', view: 'tasks' })
+    window.dispatchEvent(new CustomEvent('zerf:open_task', { detail: { taskId } }))
   }
 
   const handleCreateNoteWithTitle = (title: string) => {
@@ -24,7 +32,9 @@ export function GraphView() {
       updatedAt: new Date().toISOString(),
     }
     dispatch({ type: 'ADD_NOTE', note: newNote })
+    localStorage.setItem('zerf_active_note_id', newNote.id)
     dispatch({ type: 'SET_VIEW', view: 'notes' })
+    window.dispatchEvent(new CustomEvent('zerf:open_note', { detail: { noteId: newNote.id } }))
   }
 
   const handleDeleteNote = (noteId: string) => {
@@ -38,6 +48,7 @@ export function GraphView() {
         notes={notes}
         tasks={tasks}
         onSelectNote={handleSelectNote}
+        onSelectTask={handleSelectTask}
         onCreateNoteWithTitle={handleCreateNoteWithTitle}
         onDeleteNote={handleDeleteNote}
         isFullView={true}

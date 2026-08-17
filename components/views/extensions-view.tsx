@@ -926,6 +926,10 @@ export function ExtensionsView() {
       promptUpgradeToPlus('установки расширений')
       return
     }
+    // Instant optimistic update
+    setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+    setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
+
     try {
       setActionLoading(extensionId)
       const res = await fetch('/api/extensions', {
@@ -937,6 +941,9 @@ export function ExtensionsView() {
       if (data.success) {
         setInstalledIds(data.installedIds)
       } else {
+        // Rollback
+        setInstalledIds(prev => prev.filter(id => id !== extensionId))
+        setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
         if (data.requiresPlan === 'plus') {
           promptUpgradeToPlus('установки расширений')
         } else {
@@ -944,6 +951,9 @@ export function ExtensionsView() {
         }
       }
     } catch {
+      // Rollback
+      setInstalledIds(prev => prev.filter(id => id !== extensionId))
+      setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
       alert('Ошибка при установке')
     } finally {
       setActionLoading(null)
@@ -951,6 +961,10 @@ export function ExtensionsView() {
   }
 
   const handleUninstall = async (extensionId: string) => {
+    // Instant optimistic update
+    setInstalledIds(prev => prev.filter(id => id !== extensionId))
+    setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
+
     try {
       setActionLoading(extensionId)
       const res = await fetch('/api/extensions', {
@@ -962,9 +976,15 @@ export function ExtensionsView() {
       if (data.success) {
         setInstalledIds(data.installedIds)
       } else {
+        // Rollback
+        setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+        setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
         alert(data.error || 'Ошибка при удалении')
       }
     } catch {
+      // Rollback
+      setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+      setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
       alert('Ошибка при удалении')
     } finally {
       setActionLoading(null)
