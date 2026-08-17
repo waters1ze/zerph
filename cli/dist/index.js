@@ -36,24 +36,31 @@ program
             await open(authUrl);
         }
         catch { }
-        console.log('     Ожидаю подтверждения в браузере...');
+        let dots = 0;
         const startTime = Date.now();
         while (Date.now() - startTime < 300_000) {
-            await new Promise(r => setTimeout(r, 2000));
-            const res = await pollDeviceAuth(code);
-            if (res.status === 'approved' && res.token) {
-                saveCredentials({
-                    token: res.token,
-                    chatId: res.chatId,
-                    plan: res.plan,
-                });
-                console.log(`\n ${getZefFace('celebrate')}  \x1b[32mУспешно авторизовано! Добро пожаловать в Zerf.\x1b[0m`);
-                console.log(`     Запустите \x1b[1m\x1b[38;2;56;189;248mzerf\x1b[0m для входа в REPL.\n`);
-                return;
+            await new Promise(r => setTimeout(r, 1500));
+            dots = (dots + 1) % 4;
+            process.stdout.write(`\r     \x1b[36m[ ⬡ . ⬡ ]\x1b[0m  Ожидаю подтверждения в браузере${'.'.repeat(dots)}${' '.repeat(4 - dots)} `);
+            try {
+                const res = await pollDeviceAuth(code);
+                if (res && res.status === 'approved' && res.token) {
+                    saveCredentials({
+                        token: res.token,
+                        chatId: res.chatId,
+                        plan: res.plan,
+                    });
+                    console.log(`\n\n ${getZefFace('celebrate')}  \x1b[32mУспешно авторизовано! Добро пожаловать в Zerf.\x1b[0m`);
+                    console.log(`     Запустите \x1b[1m\x1b[38;2;56;189;248mzerf\x1b[0m для входа в REPL.\n`);
+                    return;
+                }
+                if (res && res.status === 'rejected') {
+                    console.log(`\n\n ${getZefFace('alert')}  \x1b[31mЗапрос авторизации был отклонён на сайте.\x1b[0m\n`);
+                    return;
+                }
             }
-            if (res.status === 'rejected') {
-                console.log(`\n ${getZefFace('alert')}  \x1b[31mЗапрос авторизации был отклонён.\x1b[0m\n`);
-                return;
+            catch {
+                // Retry on transient poll hiccups
             }
         }
         console.log('\n     Время ожидания истекло. Попробуйте снова: zerf login\n');
