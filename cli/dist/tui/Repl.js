@@ -1,10 +1,10 @@
-import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import { fetchUserData, loadCredentials, mutateItem } from '../api.js';
-import { getZefFace } from '../mascot.js';
+import { getAllaySpriteLines } from '../mascot.js';
 export function Repl() {
     const { exit } = useApp();
     const [creds] = useState(() => loadCredentials());
@@ -13,8 +13,17 @@ export function Repl() {
     const [error, setError] = useState(null);
     const [inputVal, setInputVal] = useState('');
     const [mood, setMood] = useState('idle');
+    const [wingFrame, setWingFrame] = useState(0);
     const [history, setHistory] = useState([]);
     const [focusRemaining, setFocusRemaining] = useState(null);
+    const [thinkingMode, setThinkingMode] = useState(true);
+    // Wing flapping animation
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setWingFrame(f => f + 1);
+        }, 450);
+        return () => clearInterval(timer);
+    }, []);
     // Load user data
     useEffect(() => {
         async function load() {
@@ -48,9 +57,9 @@ export function Repl() {
                     setMood('celebrate');
                     setHistory(h => [
                         ...h,
-                        { id: String(Date.now()), type: 'system', text: 'Фокус-сессия завершена! Отличная работа.', icon: '🔔' }
+                        { id: String(Date.now()), type: 'assistant', text: '🔔 Фокус-сессия завершена! Отличная работа.' }
                     ]);
-                    setTimeout(() => setMood('idle'), 3000);
+                    setTimeout(() => setMood('idle'), 3500);
                     return null;
                 }
                 return prev - 1;
@@ -58,7 +67,7 @@ export function Repl() {
         }, 1000);
         return () => clearInterval(timer);
     }, [focusRemaining]);
-    // Keyboard shortcut for exit
+    // Keyboard shortcut handlers
     useInput((input, key) => {
         if (key.ctrl && input === 'c') {
             if (focusRemaining !== null) {
@@ -66,11 +75,15 @@ export function Repl() {
                 setMood('idle');
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'system', text: 'Фокус-таймер остановлен', icon: '⏸' }
+                    { id: String(Date.now()), type: 'system', text: '⏸ Фокус-таймер остановлен' }
                 ]);
                 return;
             }
             exit();
+            return;
+        }
+        if (key.tab) {
+            setThinkingMode(prev => !prev);
         }
     });
     const handleCommand = async (val) => {
@@ -89,16 +102,26 @@ export function Repl() {
             setHistory([]);
             return;
         }
-        if (raw === '/help') {
+        if (raw === '/help' || raw === '?') {
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'system', text: 'Доступные команды:', icon: '💡' },
-                { id: String(Date.now() + 1), type: 'result', text: '/today — Задачи на сегодня' },
-                { id: String(Date.now() + 2), type: 'result', text: '/done <название> — Завершить задачу' },
-                { id: String(Date.now() + 3), type: 'result', text: '/focus [минуты] — Запустить Pomodoro таймер' },
-                { id: String(Date.now() + 4), type: 'result', text: '/habit — Трекер полезных привычек' },
-                { id: String(Date.now() + 5), type: 'result', text: '/clear — Очистить экран' },
-                { id: String(Date.now() + 6), type: 'result', text: '/exit — Выйти из REPL' },
+                {
+                    id: String(Date.now()),
+                    type: 'assistant',
+                    text: 'Доступные команды Zerf CLI:',
+                    details: [
+                        '/today          — Список задач и привычек на сегодня',
+                        '/add <текст>    — Создать задачу с датой и временем',
+                        '/done <поиск>   — Завершить задачу по названию',
+                        '/note <текст>   — Сохранить заметку в базу знаний',
+                        '/habit          — Трекер привычек и стрики',
+                        '/focus [минуты] — Запустить Pomodoro таймер со сферой Тихони',
+                        '/find <текст>   — Поиск по всем задачам, заметкам и целям',
+                        '/sync           — Синхронизация с сервером',
+                        '/clear          — Очистить историю диалога',
+                        '/exit           — Выйти из CLI',
+                    ]
+                }
             ]);
             return;
         }
@@ -107,14 +130,15 @@ export function Repl() {
             const todayStr = new Date().toISOString().slice(0, 10);
             const todayTasks = tasks.filter((t) => !t.dueDate || t.dueDate.startsWith(todayStr));
             if (todayTasks.length === 0) {
-                setHistory(h => [...h, { id: String(Date.now()), type: 'system', text: 'На сегодня задач нет!', icon: '✨' }]);
+                setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }]);
             }
             else {
-                todayTasks.forEach((t) => {
+                const lines = todayTasks.map((t) => {
                     const check = t.status === 'done' ? '✔' : '○';
-                    const time = t.dueTime ? ` в ${t.dueTime}` : '';
-                    setHistory(h => [...h, { id: String(Date.now() + Math.random()), type: 'result', text: `${check} ${t.title}${time}` }]);
+                    const time = t.dueTime ? ` (${t.dueTime})` : '';
+                    return `${check} ${t.title}${time}`;
                 });
+                setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `Задачи на сегодня (${todayTasks.length}):`, details: lines }]);
             }
             return;
         }
@@ -125,7 +149,7 @@ export function Repl() {
             setMood('focus');
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'system', text: `Сфера концентрации активна на ${mins} мин.`, icon: '☕' }
+                { id: String(Date.now()), type: 'assistant', text: `☕ Сфера концентрации Тихони запущена на ${mins} мин. (нажмите Ctrl+C для паузы)` }
             ]);
             return;
         }
@@ -142,22 +166,41 @@ export function Repl() {
                 }));
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'result', text: `задача «${match.title}» закрыта!`, icon: '✔' }
+                    { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается 🔥` }
                 ]);
                 setTimeout(() => setMood('idle'), 2500);
             }
             else {
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'error', text: `Задача не найдена по запросу: "${query}"`, icon: '✖' }
+                    { id: String(Date.now()), type: 'error', text: `Задача не найдена по запросу: "${query}"` }
                 ]);
             }
+            return;
+        }
+        if (raw.startsWith('/note')) {
+            const noteText = raw.replace('/note', '').trim();
+            if (!noteText) {
+                setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст: /note <текст заметки>' }]);
+                return;
+            }
+            setMood('thinking');
+            await mutateItem(creds, {
+                action: 'create',
+                item: { title: noteText.slice(0, 50), content: noteText, type: 'note' }
+            });
+            setMood('celebrate');
+            setHistory(h => [
+                ...h,
+                { id: String(Date.now()), type: 'assistant', text: `✔ Заметка «${noteText.slice(0, 40)}...» сохранена в базе` }
+            ]);
+            setTimeout(() => setMood('idle'), 2500);
             return;
         }
         // 2. Natural language query / AI dispatch
         setMood('thinking');
         try {
-            const res = await mutateItem(creds, {
+            await mutateItem(creds, {
                 action: 'create',
                 item: {
                     title: raw,
@@ -169,7 +212,7 @@ export function Repl() {
             setMood('celebrate');
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'result', text: `задача «${raw}» сохранена`, icon: '✔' }
+                { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${raw}» создана и добавлена в расписание` }
             ]);
             setTimeout(() => setMood('idle'), 2500);
         }
@@ -177,7 +220,7 @@ export function Repl() {
             setMood('alert');
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}`, icon: '✖' }
+                { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
             ]);
             setTimeout(() => setMood('idle'), 2500);
         }
@@ -192,10 +235,11 @@ export function Repl() {
     const todayStr = new Date().toISOString().slice(0, 10);
     const todayTasks = tasks.filter((t) => !t.dueDate || t.dueDate.startsWith(todayStr));
     const overdueTasks = tasks.filter((t) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
+    const spriteLines = getAllaySpriteLines(mood, wingFrame);
     const formatTimer = (secs) => {
         const m = Math.floor(secs / 60);
         const s = secs % 60;
         return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     };
-    return (_jsxs(Box, { flexDirection: "column", padding: 1, width: 85, children: [_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsxs(Box, { justifyContent: "space-between", children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyan", children: "\u2756" }), _jsx(Text, { bold: true, color: "white", children: "Zerf \u2014 \u0432\u0442\u043E\u0440\u043E\u0439 \u043C\u043E\u0437\u0433" })] }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "gray", children: data?.user?.name || 'Пользователь' }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { bold: true, color: "greenBright", children: data?.user?.plan?.toUpperCase() || 'PLUS' }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { color: "yellow", children: "\u0441\u0442\u0440\u0438\u043A 12 \uD83D\uDD25" })] })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" })] }), _jsxs(Box, { gap: 1, marginBottom: 1, children: [_jsx(Text, { children: getZefFace(mood) }), focusRemaining !== null ? (_jsxs(Text, { color: "cyanBright", children: [formatTimer(focusRemaining), " \u2026 \u0441\u0444\u0435\u0440\u0430 \u043A\u043E\u043D\u0446\u0435\u043D\u0442\u0440\u0430\u0446\u0438\u0438 \u0430\u043A\u0442\u0438\u0432\u043D\u0430 (Ctrl+C \u0434\u043B\u044F \u043F\u0430\u0443\u0437\u044B)"] })) : (_jsxs(Text, { color: "gray", children: [todayTasks.length, " \u0437\u0430\u0434\u0430\u0447 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F", overdueTasks.length > 0 ? `, ${overdueTasks.length} просрочено` : ''] }))] }), history.map(item => (_jsx(Box, { gap: 1, marginLeft: item.type === 'user' ? 0 : 2, marginBottom: 0, children: item.type === 'user' ? (_jsxs(_Fragment, { children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(_Fragment, { children: [_jsx(Text, { color: "red", children: item.icon || '✖' }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(_Fragment, { children: [_jsx(Text, { color: "green", children: item.icon || '✔' }), _jsx(Text, { color: "gray", children: item.text })] })) }, item.id))), _jsxs(Box, { marginTop: history.length > 0 ? 1 : 0, children: [_jsxs(Text, { bold: true, color: "cyanBright", children: ['>', " "] }), _jsx(TextInput, { value: inputVal, onChange: setInputVal, onSubmit: handleCommand, placeholder: "\u043A\u0443\u043F\u0438 \u0445\u043B\u0435\u0431, /today, /focus 25, /help..." })] })] }));
+    return (_jsxs(Box, { flexDirection: "column", padding: 1, width: 88, children: [_jsxs(Box, { borderStyle: "round", borderColor: "cyanBright", flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: 44, paddingX: 1, borderStyle: "single", borderColor: "cyan", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsx(Box, { justifyContent: "center", marginBottom: 1, children: _jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", data?.user?.name || 'Кирилл', "!"] }) }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, idx))) }), _jsxs(Box, { flexDirection: "column", alignItems: "center", marginTop: 1, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", data?.user?.plan?.toUpperCase() || 'CORP'] }), data?.user?.username && _jsxs(Text, { color: "gray", children: ["\u00B7 @", data.user.username] })] }), _jsxs(Text, { color: "gray", dimColor: true, children: ["~/ZerfNotes/", todayStr] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "yellow", children: "\u0421\u043E\u0432\u0435\u0442\u044B \u043F\u043E \u043D\u0430\u0447\u0430\u043B\u0443 \u0440\u0430\u0431\u043E\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, gap: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0437\u0430\u0434\u0430\u0447\u0438 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/focus 25" }), " \u2014 \u0442\u0430\u0439\u043C\u0435\u0440 \u0444\u043E\u043A\u0443\u0441\u0430"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/done [\u0438\u043C\u044F]" }), " \u2014 \u0437\u0430\u043A\u0440\u044B\u0442\u044C \u0437\u0430\u0434\u0430\u0447\u0443"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/help" }), " \u2014 \u0432\u0441\u0435 \u043A\u043E\u043C\u0430\u043D\u0434\u044B"] })] }), _jsx(Box, { marginY: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "yellow", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsxs(Text, { color: "white", children: ["\uD83D\uDCCB ", todayTasks.length, " \u0437\u0430\u0434\u0430\u0447 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "yellow", children: "\uD83D\uDD25 \u0421\u0442\u0440\u0438\u043A \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438: 12 \u0434\u043D\u0435\u0439" }), focusRemaining !== null && (_jsx(Box, { marginTop: 1, children: _jsxs(Text, { bold: true, color: "cyanBright", children: ["\u2615 \u0424\u043E\u043A\u0443\u0441: ", formatTimer(focusRemaining)] }) }))] })] })] }), _jsx(Box, { flexDirection: "column", marginY: 1, children: history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "greenBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))) }), _jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: setInputVal, onSubmit: handleCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, /today, /focus 25, /help..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "? for shortcuts \u00B7 /today \u00B7 /focus \u00B7 /done" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["Thinking ", thinkingMode ? 'on' : 'off', " (tab to toggle)"] })] })] })] }));
 }

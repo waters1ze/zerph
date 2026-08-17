@@ -14,7 +14,7 @@ import {
   fetchUserData,
   mutateItem,
 } from './api.js'
-import { getZefFace, renderZefBanner } from './mascot.js'
+import { getAllayFace, renderAllayBanner } from './mascot.js'
 
 const program = new Command()
 
@@ -28,7 +28,7 @@ program
   .action(async () => {
     const creds = loadCredentials()
     if (!creds.token) {
-      console.log(`\n ${getZefFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mДобро пожаловать в Zerf CLI!\x1b[0m`)
+      console.log(`\n ${getAllayFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mДобро пожаловать в Zerf CLI!\x1b[0m`)
       console.log(`     \x1b[38;2;148;163;184mДля входа в аккаунт выполните:\x1b[0m \x1b[38;2;56;189;248mzerf login\x1b[0m\n`)
       return
     }
@@ -41,7 +41,7 @@ program
   .command('login')
   .description('Авторизация в Zerf через браузер (Device Code Flow)')
   .action(async () => {
-    console.log(`\n ${getZefFace('thinking')}  \x1b[38;2;148;163;184mГенерирую код подключения к Zerf Note...\x1b[0m`)
+    console.log(`\n ${getAllayFace('thinking')}  \x1b[38;2;148;163;184mГенерирую код подключения к Zerf Note...\x1b[0m`)
 
     try {
       const { code, authUrl } = await startDeviceAuth()
@@ -68,13 +68,13 @@ program
               chatId: res.chatId,
               plan: res.plan,
             })
-            console.log(`\n\n ${getZefFace('celebrate')}  \x1b[32mУспешно авторизовано! Добро пожаловать в Zerf.\x1b[0m`)
+            console.log(`\n\n ${getAllayFace('celebrate')}  \x1b[32mУспешно авторизовано! Добро пожаловать в Zerf.\x1b[0m`)
             console.log(`     Запустите \x1b[1m\x1b[38;2;56;189;248mzerf\x1b[0m для входа в REPL.\n`)
             return
           }
 
           if (res && res.status === 'rejected') {
-            console.log(`\n\n ${getZefFace('alert')}  \x1b[31mЗапрос авторизации был отклонён на сайте.\x1b[0m\n`)
+            console.log(`\n\n ${getAllayFace('alert')}  \x1b[31mЗапрос авторизации был отклонён на сайте.\x1b[0m\n`)
             return
           }
         } catch {
@@ -97,15 +97,15 @@ program
     try {
       const data = await fetchUserData(creds)
       if (data.allowed === false) {
-        console.log(`\n ${getZefFace('alert')}  ${data.message}\n`)
+        console.log(`\n ${getAllayFace('alert')}  ${data.message}\n`)
         return
       }
 
       const todayStr = new Date().toISOString().slice(0, 10)
       const tasks = (data.tasks || []).filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
 
-      console.log(`\n` + renderZefBanner(data.user?.name || 'User', data.user?.plan || 'plus'))
-      console.log(` ${getZefFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mЗадачи на сегодня (${tasks.length}):\x1b[0m\n`)
+      console.log(`\n` + renderAllayBanner(data.user?.name || 'User', data.user?.plan || 'plus'))
+      console.log(` ${getAllayFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mЗадачи на сегодня (${tasks.length}):\x1b[0m\n`)
 
       if (tasks.length === 0) {
         console.log('   \x1b[38;2;148;163;184mНа сегодня задач нет! Отличный день для отдыха.\x1b[0m\n')
@@ -140,7 +140,7 @@ program
           rawText: taskText,
         }
       })
-      console.log(`\n ${getZefFace('celebrate')}  \x1b[32m✔ задача «${taskText}» сохранена\x1b[0m\n`)
+      console.log(`\n ${getAllayFace('celebrate')}  \x1b[32m✔ задача «${taskText}» сохранена\x1b[0m\n`)
     } catch (err: any) {
       console.error('Ошибка сохранения:', err.message)
     }
@@ -160,9 +160,9 @@ program
 
       if (match) {
         await mutateItem(creds, { action: 'toggle_task', id: match.id })
-        console.log(`\n ${getZefFace('celebrate')}  \x1b[32m✔ задача «${match.title}» закрыта!\x1b[0m\n`)
+        console.log(`\n ${getAllayFace('celebrate')}  \x1b[32m✔ задача «${match.title}» закрыта!\x1b[0m\n`)
       } else {
-        console.log(`\n ${getZefFace('alert')}  \x1b[31m✖ Задача не найдена по запросу: "${query}"\x1b[0m\n`)
+        console.log(`\n ${getAllayFace('alert')}  \x1b[31m✖ Задача не найдена по запросу: "${query}"\x1b[0m\n`)
       }
     } catch (err: any) {
       console.error(err.message)
@@ -179,7 +179,7 @@ program
       const data = await fetchUserData(creds)
       const habits = data.habits || []
 
-      console.log(`\n ${getZefFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mПривычки (${habits.length}):\x1b[0m\n`)
+      console.log(`\n ${getAllayFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mПривычки (${habits.length}):\x1b[0m\n`)
       if (habits.length === 0) {
         console.log('   \x1b[90mПривычки пока не настроены. Создайте их в боте или на сайте.\x1b[0m\n')
       } else {
@@ -203,7 +203,7 @@ program
     const creds = loadCredentials()
     const text = (textParts || []).join(' ').trim()
     if (!text) {
-      console.log(`\n ${getZefFace('idle')}  Укажите текст заметки: \x1b[36mzerf note "Текст заметки"\x1b[0m\n`)
+      console.log(`\n ${getAllayFace('idle')}  Укажите текст заметки: \x1b[36mzerf note "Текст заметки"\x1b[0m\n`)
       return
     }
     try {
@@ -215,7 +215,7 @@ program
           type: 'note',
         }
       })
-      console.log(`\n ${getZefFace('celebrate')}  \x1b[32m✔ Заметка сохранена в вашей базе знаний\x1b[0m\n`)
+      console.log(`\n ${getAllayFace('celebrate')}  \x1b[32m✔ Заметка сохранена в вашей базе знаний\x1b[0m\n`)
     } catch (err: any) {
       console.error('Ошибка сохранения заметки:', err.message)
     }
@@ -234,7 +234,7 @@ program
       const notes = (data.notes || []).filter((n: any) => (n.title || '').toLowerCase().includes(query) || (n.content || '').toLowerCase().includes(query))
       const goals = (data.goals || []).filter((g: any) => g.title.toLowerCase().includes(query))
 
-      console.log(`\n ${getZefFace('thinking')}  \x1b[1m\x1b[38;2;255;255;255mРезультаты поиска по запросу: "${query}"\x1b[0m\n`)
+      console.log(`\n ${getAllayFace('thinking')}  \x1b[1m\x1b[38;2;255;255;255mРезультаты поиска по запросу: "${query}"\x1b[0m\n`)
 
       if (tasks.length > 0) {
         console.log(` \x1b[36m📋 Задачи (${tasks.length}):\x1b[0m`)
@@ -266,7 +266,7 @@ program
   .description('Запустить Pomodoro таймер со сферой концентрации Зефа')
   .action(async (minsArg?: string) => {
     const mins = parseInt(minsArg || '25', 10)
-    console.log(`\n ${getZefFace('focus')}  \x1b[1m\x1b[38;2;255;255;255mСфера концентрации запущена на ${mins} мин.\x1b[0m`)
+    console.log(`\n ${getAllayFace('focus')}  \x1b[1m\x1b[38;2;255;255;255mСфера концентрации запущена на ${mins} мин.\x1b[0m`)
     console.log(`     \x1b[90mНажмите Ctrl+C для выхода из фокус-режима\x1b[0m\n`)
 
     let remaining = mins * 60
@@ -279,7 +279,7 @@ program
 
       if (remaining <= 0) {
         clearInterval(interval)
-        console.log(`\n\n ${getZefFace('celebrate')}  \x1b[32mФокус-сессия завершена! Сделайте небольшой перерыв.\x1b[0m\n`)
+        console.log(`\n\n ${getAllayFace('celebrate')}  \x1b[32mФокус-сессия завершена! Сделайте небольшой перерыв.\x1b[0m\n`)
       }
     }, 1000)
   })
@@ -294,7 +294,7 @@ program
       const data = await fetchUserData(creds)
       const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
       const today = new Date()
-      console.log(`\n ${getZefFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mКалендарь недели:\x1b[0m\n`)
+      console.log(`\n ${getAllayFace('idle')}  \x1b[1m\x1b[38;2;255;255;255mКалендарь недели:\x1b[0m\n`)
       console.log('   ' + days.map(d => `\x1b[36m ${d} \x1b[0m`).join('│'))
       console.log('   ' + '────┼'.repeat(6) + '────')
 
@@ -312,10 +312,10 @@ program
   .description('Синхронизировать данные и показать ленту активности')
   .action(async () => {
     const creds = loadCredentials()
-    console.log(`\n ${getZefFace('thinking')}  \x1b[90mСинхронизация с облаком Zerf Note...\x1b[0m`)
+    console.log(`\n ${getAllayFace('thinking')}  \x1b[90mСинхронизация с облаком Zerf Note...\x1b[0m`)
     try {
       const data = await fetchUserData(creds)
-      console.log(`\n ${getZefFace('celebrate')}  \x1b[32mСинхронизировано успешно!\x1b[0m`)
+      console.log(`\n ${getAllayFace('celebrate')}  \x1b[32mСинхронизировано успешно!\x1b[0m`)
       console.log(`   • Задач в облаке: ${data.stats?.totalTasks || 0}`)
       console.log(`   • Заметок:        ${data.stats?.totalNotes || 0}`)
       console.log(`   • Привычек:       ${data.stats?.totalHabits || 0}\n`)
@@ -331,7 +331,7 @@ program
   .action(async () => {
     const creds = loadCredentials()
     const targetUrl = creds.serverUrl || 'https://zeprh.vercel.app'
-    console.log(`\n ${getZefFace('idle')}  Открываю веб-приложение: \x1b[4m\x1b[36m${targetUrl}\x1b[0m\n`)
+    console.log(`\n ${getAllayFace('idle')}  Открываю веб-приложение: \x1b[4m\x1b[36m${targetUrl}\x1b[0m\n`)
     try {
       await open(targetUrl)
     } catch {}
@@ -349,7 +349,7 @@ program
     }
     try {
       const data = await fetchUserData(creds)
-      console.log(`\n` + renderZefBanner(data.user?.name || 'User', data.user?.plan || 'plus'))
+      console.log(`\n` + renderAllayBanner(data.user?.name || 'User', data.user?.plan || 'plus'))
       console.log(`  Пользователь: \x1b[1m${data.user?.name}\x1b[0m (@${data.user?.username || 'no_uname'})`)
       console.log(`  Chat ID:      ${data.user?.chatId}`)
       console.log(`  Тариф:        \x1b[32m${data.user?.plan?.toUpperCase()}\x1b[0m`)
@@ -366,7 +366,7 @@ program
   .description('Выйти из аккаунта и очистить токен на диске')
   .action(() => {
     clearCredentials()
-    console.log(`\n ${getZefFace('idle')}  Вы вышли из аккаунта. Конфигурация очищена.\n`)
+    console.log(`\n ${getAllayFace('idle')}  Вы вышли из аккаунта. Конфигурация очищена.\n`)
   })
 
 program.parse(process.argv)
