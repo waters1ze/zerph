@@ -39,7 +39,7 @@ export interface ParsedItem {
   tasksToCreate?: { title: string; dueDate: string | null; dueTime: string | null }[]
 }
 
-export function getDynamicSystemPrompt(existingItemsContext?: string, friendsContext?: string): string {
+export function getDynamicSystemPrompt(existingItemsContext?: string, friendsContext?: string, extensionsContext?: string): string {
   const now = new Date()
   const formatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Moscow',
@@ -78,6 +78,14 @@ CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
 - If current time is past the mentioned time (e.g. at night 02:00 saying "проснуться в 9 утра"), set "dueDate" to the upcoming morning!
 - Example: If current Moscow time is "${mskTime}" and user says "через минуту" or "через 1 минуту", dueTime MUST be calculated as current minute + 1 minute (e.g. if current is 22:57, dueTime is 22:58). DO NOT SHIFT TIME OR ADD EXTRA HOURS!
 - Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.`
+
+  if (extensionsContext) {
+    prompt += `\n\n══════════════════════════════════════════
+🧩 ИНСТРУКЦИИ И НАВЫКИ УСТАНОВЛЕННЫХ РАСШИРЕНИЙ ПОЛЬЗОВАТЕЛЯ:
+${extensionsContext}
+══════════════════════════════════════════
+- ПРАВИЛО РАСШИРЕНИЙ: Если запрос пользователя активирует триггер, команду или тему одного из установленных расширений выше — следуй правилам и инструкциям автора расширения.`
+  }
 
   if (existingItemsContext) {
     prompt += `\n\n══════════════════════════════════════════
@@ -339,9 +347,10 @@ export async function parseIntentWithGroq(
   apiKey?: string,
   model?: string,
   existingItemsContext?: string,
-  friendsContext?: string
+  friendsContext?: string,
+  extensionsContext?: string
 ): Promise<ParsedItem[]> {
-  const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext, friendsContext)
+  const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext, friendsContext, extensionsContext)
 
   const result = await callGroqChatCompletion({
     messages: [
@@ -788,7 +797,8 @@ export async function parseSiriFastIntent(
   text: string,
   apiKey?: string,
   model = 'openai/gpt-oss-20b',
-  friendsContext?: string
+  friendsContext?: string,
+  extensionsContext?: string
 ): Promise<ParsedItem[]> {
   const now = new Date()
   const formatter = new Intl.DateTimeFormat('en-GB', {
@@ -831,6 +841,10 @@ Rules:
 2. Relative times ("через 10 минут", "в 18:00", "завтра в 9 утра", "будильник на 7:00") MUST be calculated relative to current Moscow time ${mskTime} on ${mskDate}.
 3. If user says "поручи [Имя]..." -> "type": "delegate", "isBothShared": false, "recipientName": "[Имя]".
 4. If user says "нам с [Имя] общая задача..." -> "type": "delegate", "isBothShared": true, "recipientName": "[Имя]".`
+
+  if (extensionsContext) {
+    systemPrompt += `\nExtensions Instructions:\n${extensionsContext}`
+  }
 
   if (friendsContext) {
     systemPrompt += `\nFriends: ${friendsContext}`

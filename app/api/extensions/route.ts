@@ -31,6 +31,13 @@ export interface ExtensionItem {
   likesCount: number
   installCount: number
   manifestUrl?: string
+  aiInstructions?: string
+  triggers?: string[]
+  aiSkills?: Array<{
+    name: string
+    description: string
+    action?: string
+  }>
   content: Record<string, any>
   createdAt: string
   updatedAt: string
@@ -59,6 +66,15 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     ratingCount: 0,
     likesCount: 0,
     installCount: 0,
+    aiInstructions: 'Когда пользователь запрашивает глубокий поиск, поиск инсайтов, фактов или использует команды /search, /entropy — синтезируй ответ с обязательными числовыми цитатами первоисточников [1][2], структурируй вывод по ключевым пунктам и предлагай авто-экспорт в базу заметок Zerf.',
+    triggers: ['/search', '/entropy', 'глубокий поиск', 'исследуй', 'entropy', 'найди инсайты', 'синтез источников'],
+    aiSkills: [
+      {
+        name: 'Entropy Deep Research',
+        description: 'Синтез фактов из верифицированных источников с цитированием [1][2]',
+        action: 'entropy_deep_search',
+      },
+    ],
     content: {
       engine: 'entropy_deep_search',
       commands: [
@@ -151,14 +167,70 @@ async function getDeletedExtensionIds(): Promise<string[]> {
   }
 }
 
-async function getUserInstalledExtensions(chatId: string): Promise<string[]> {
+export async function getUserInstalledExtensions(chatId: string | number): Promise<string[]> {
   try {
     const row = await prisma.config.findUnique({
-      where: { key: `user_extensions_${chatId}` },
+      where: { key: `user_extensions_${String(chatId)}` },
     })
     return row?.value ? JSON.parse(row.value) : []
   } catch {
     return []
+  }
+}
+
+export async function loadExtensionsCatalog(): Promise<ExtensionItem[]> {
+  try {
+    const deletedIds = await getDeletedExtensionIds()
+    const customItems = await getCustomExtensions()
+    const allMap = new Map<string, ExtensionItem>()
+
+    STARTER_EXTENSIONS.forEach(e => {
+      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
+    })
+    customItems.forEach(e => {
+      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
+    })
+    return Array.from(allMap.values())
+  } catch {
+    return STARTER_EXTENSIONS
+  }
+}
+
+/**
+ * Compiles AI instructions, custom prompts, and triggers from all extensions
+ * installed by a specific user (for Telegram bot, Siri shortcuts, Web AI chat, Voice, etc.)
+ */
+export async function getUserExtensionsAIContext(chatId: string | number): Promise<string> {
+  try {
+    const cid = String(chatId)
+    const installedIds = await getUserInstalledExtensions(cid)
+    if (!installedIds || installedIds.length === 0) return ''
+
+    const catalog = await loadExtensionsCatalog()
+    const installedExts = catalog.filter(e => installedIds.includes(e.id))
+    if (installedExts.length === 0) return ''
+
+    const instructions: string[] = []
+    for (const ext of installedExts) {
+      const rawAi = ext.aiInstructions || ext.content?.aiInstructions || ext.content?.systemPrompt
+      const triggers = ext.triggers || ext.content?.triggers || (ext.content?.commands?.map((c: any) => c.cmd) || [])
+      
+      if (rawAi || (triggers && triggers.length > 0)) {
+        let block = `• [Расширение «${ext.title}» (${ext.category || 'Утилита'})]`
+        if (triggers && triggers.length > 0) {
+          block += `\n  Ключевые слова / Триггеры: ${triggers.join(', ')}`
+        }
+        if (rawAi) {
+          block += `\n  Инструкция для ИИ от автора: ${rawAi}`
+        }
+        instructions.push(block)
+      }
+    }
+
+    return instructions.join('\n\n')
+  } catch (err) {
+    console.error('Error generating user extensions AI context:', err)
+    return ''
   }
 }
 
@@ -200,18 +272,9 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req)
     const chatId = authUser?.chatId || null
 
-    const deletedIds = await getDeletedExtensionIds()
-    const customItems = await getCustomExtensions()
-    const allMap = new Map<string, ExtensionItem>()
-
-    STARTER_EXTENSIONS.forEach(e => {
-      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
-    })
-    customItems.forEach(e => {
-      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
-    })
+    const allItems = await loadExtensionsCatalog()
     const isCreator = chatId === '6136950061' || chatId === '5078516086'
-    const catalog = Array.from(allMap.values()).filter(ext => {
+    const catalog = allItems.filter(ext => {
       if (ext.isPublished === false) {
         return chatId && (ext.authorChatId === chatId || isCreator)
       }
@@ -469,6 +532,17 @@ export async function POST(req: NextRequest) {
         ratingCount: existingData?.ratingCount || 1,
         likesCount: existingData?.likesCount || 0,
         installCount: existingData?.installCount || 0,
+        aiInstructions: body.aiInstructions !== undefined
+          ? String(body.aiInstructions)
+          : (manifestContent?.aiInstructions || existingData?.aiInstructions || ''),
+        triggers: Array.isArray(body.triggers)
+          ? body.triggers
+          : (typeof body.triggers === 'string'
+              ? body.triggers.split(',').map((s: string) => s.trim()).filter(Boolean)
+              : (manifestContent?.triggers || existingData?.triggers || [])),
+        aiSkills: Array.isArray(body.aiSkills)
+          ? body.aiSkills
+          : (manifestContent?.aiSkills || existingData?.aiSkills || []),
         content: manifestContent,
         createdAt: existingData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),

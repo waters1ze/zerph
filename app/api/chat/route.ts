@@ -25,6 +25,7 @@ const SYSTEM_PROMPT = `Ты — Zerf AI, интеллектуальный пер
 
 import { getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext } from '@/lib/backend/db'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { getUserExtensionsAIContext } from '@/app/api/extensions/route'
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,11 +64,16 @@ export async function POST(req: NextRequest) {
 
     // Auto-fetch workspace context (notes, tasks, goals) for ownerChatId
     const serverContext = ownerChatId ? await getExistingItemsContext(ownerChatId) : ''
+    const extensionsContext = ownerChatId ? await getUserExtensionsAIContext(ownerChatId) : ''
 
     // Build system message with context
     let systemContent =
       SYSTEM_PROMPT +
       `\n\nТОЧНОЕ ТЕКУЩЕЕ ВРЕМЯ И ДАТА ПОЛЬЗОВАТЕЛЯ (Москва, MSK): ${nowMsk}.\nПри ответах ориентируйся строго на это текущее время!`
+
+    if (extensionsContext) {
+      systemContent += `\n\n## 🧩 Инструкции и триггеры установленных расширений:\n${extensionsContext}`
+    }
 
     if (serverContext) {
       systemContent += `\n\n## Полный контекст пользователя (Заметки, Задачи, Цели):\n${serverContext}`

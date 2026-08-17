@@ -28,6 +28,7 @@ import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { recordChannelComment } from '@/lib/backend/comment-analyzer'
 import { getSiriUserKey } from '@/app/api/shortcuts/route'
+import { getUserExtensionsAIContext } from '@/app/api/extensions/route'
 import { NAME_TO_CLUSTER_MAP, tokenMatchesCandidateName, namesAreRelated } from '@/lib/backend/name-aliases'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)
@@ -1089,7 +1090,8 @@ async function processText(chatId: number, text: string) {
     const context = await getExistingItemsContext(chatId)
     const friends = await getFriends(chatId)
     const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
-    const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext)
+    const extensionsContext = await getUserExtensionsAIContext(chatId)
+    const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext, extensionsContext)
 
     await saveAndRespondParsedItems(chatId, items)
   } catch (err: unknown) {
@@ -1753,7 +1755,8 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
     const context = await getExistingItemsContext(chatId)
     const friends = await getFriends(chatId)
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
-    const items = await parseIntentWithGroq(transcript, key, undefined, context, friendsContext)
+    const extensionsContext = await getUserExtensionsAIContext(chatId)
+    const items = await parseIntentWithGroq(transcript, key, undefined, context, friendsContext, extensionsContext)
 
     await saveAndRespondParsedItems(chatId, items, transcript)
 

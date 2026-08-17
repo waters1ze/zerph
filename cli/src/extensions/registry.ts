@@ -59,12 +59,15 @@ export function scaffoldExtension(name: string, desc: string): { dir: string; ma
     fs.mkdirSync(targetDir, { recursive: true })
   }
 
+  const cmdName = cleanName.replace('zerf-', '')
   const manifest = {
     name: cleanName,
     version: '1.0.0',
     description: desc || 'Модуль расширения Zerf CLI',
     author: os.userInfo().username || 'developer',
-    commands: [{ cmd: `/${cleanName.replace('zerf-', '')}`, description: desc || 'Команда расширения' }],
+    aiInstructions: `Инструкция для Zerf AI: при вызове команды /${cmdName} или связанных триггеров обрабатывай задачи согласно логике плагина ${cleanName}.`,
+    triggers: [`/${cmdName}`, `${cmdName}`],
+    commands: [{ cmd: `/${cmdName}`, description: desc || 'Команда расширения' }],
     permissions: ['tasks:read', 'tasks:write', 'notes:read'],
     entrypoint: 'index.js',
   }
@@ -79,6 +82,11 @@ export default {
   },
   async onCommand(cmd, args, ctx) {
     ctx.log.success('Команда ' + cmd + ' выполнена с аргументами: ' + args.join(' '));
+  },
+  // Обработчик для ИИ-инструкций в CLI и Telegram
+  async onAIAction(intent, context, ctx) {
+    ctx.log.info('ИИ активировал действие расширения: ' + intent);
+    return { success: true, processedBy: '${cleanName}' };
   }
 };
 `

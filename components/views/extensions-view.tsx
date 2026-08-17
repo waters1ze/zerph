@@ -349,7 +349,7 @@ export function ExtensionsView() {
   // Custom Extension Editor / Studio Modal
   const [showEditorModal, setShowEditorModal] = useState<boolean>(false)
   const [editingExt, setEditingExt] = useState<ExtensionItem | null>(null)
-  const [editorActiveTab, setEditorActiveTab] = useState<'general' | 'version' | 'access' | 'code' | 'github'>('general')
+  const [editorActiveTab, setEditorActiveTab] = useState<'ai' | 'general' | 'version' | 'access' | 'code' | 'github'>('ai')
   const [formTitle, setFormTitle] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formIcon, setFormIcon] = useState('🧩')
@@ -363,6 +363,8 @@ export function ExtensionsView() {
   const [formIsPublished, setFormIsPublished] = useState<boolean>(false)
   const [formChangelog, setFormChangelog] = useState<string>('')
   const [formGithubUrl, setFormGithubUrl] = useState<string>('')
+  const [formAiInstructions, setFormAiInstructions] = useState<string>('')
+  const [formTriggers, setFormTriggers] = useState<string>('')
   const [formCode, setFormCode] = useState(JSON.stringify(EXTENSION_TYPES[0].defaultJson, null, 2))
   const [isCompressingImage, setIsCompressingImage] = useState<boolean>(false)
   const formFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -839,9 +841,11 @@ export function ExtensionsView() {
     setFormIsPublished(false) // Default to unpublished draft
     setFormChangelog('')
     setFormGithubUrl('')
+    setFormAiInstructions('')
+    setFormTriggers('')
     const defaultTemplate = EXTENSION_TYPES.find(t => t.id === 'prompt')?.defaultJson || {}
     setFormCode(JSON.stringify(defaultTemplate, null, 2))
-    setEditorActiveTab('general')
+    setEditorActiveTab('ai')
     setIsCategoryOpen(false)
     setIsTypeOpen(false)
     setShowEditorModal(true)
@@ -860,8 +864,10 @@ export function ExtensionsView() {
     setFormIsPublished(ext.isPublished !== false)
     setFormChangelog(ext.changelog || '')
     setFormGithubUrl(ext.githubUrl || '')
+    setFormAiInstructions(ext.aiInstructions || ext.content?.aiInstructions || '')
+    setFormTriggers(Array.isArray(ext.triggers) ? ext.triggers.join(', ') : (ext.content?.triggers ? (Array.isArray(ext.content.triggers) ? ext.content.triggers.join(', ') : ext.content.triggers) : ''))
     setFormCode(JSON.stringify(ext.content || {}, null, 2))
-    setEditorActiveTab('general')
+    setEditorActiveTab('ai')
     setIsCategoryOpen(false)
     setIsTypeOpen(false)
     setShowEditorModal(true)
@@ -873,7 +879,7 @@ export function ExtensionsView() {
       return
     }
 
-    let parsedContent = {}
+    let parsedContent: Record<string, any> = {}
     if (formCode.trim()) {
       try {
         parsedContent = JSON.parse(formCode)
@@ -902,6 +908,8 @@ export function ExtensionsView() {
           changelog: formChangelog.trim(),
           price: Number(formPrice) || 0,
           minPlan: formMinPlan,
+          aiInstructions: formAiInstructions.trim(),
+          triggers: formTriggers.split(',').map(s => s.trim()).filter(Boolean),
           content: parsedContent,
         }),
       })
@@ -2813,6 +2821,7 @@ export function ExtensionsView() {
               {/* Sub Tabs Navigation */}
               <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-2xl border border-border overflow-x-auto">
                 {[
+                  { id: 'ai', label: '🤖 ИИ & Навыки' },
                   { id: 'general', label: '📝 Основное' },
                   { id: 'version', label: `🏷️ Версии (v${formVersion || '1.0.0'})` },
                   { id: 'access', label: '💎 Статус и Монетизация' },
@@ -2834,6 +2843,170 @@ export function ExtensionsView() {
                   </button>
                 ))}
               </div>
+
+              {/* TAB 0: AI & SKILLS + CAPABILITY LEARNING CARDS */}
+              {editorActiveTab === 'ai' && (
+                <div className="space-y-4 pt-1">
+                  {/* Capability Cards / Education */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                        <span>Возможности и обучение для авторов расширений</span>
+                      </h4>
+                      <span className="text-[10px] text-muted-foreground">Telegram Бот · Siri · Web AI · CLI</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* Card 1: AI Prompting & Siri */}
+                      <div className="p-3 rounded-2xl bg-muted/30 border border-border space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-foreground text-xs">
+                          <span className="text-base">🤖</span>
+                          <span>Инструкции для ИИ (TG / Siri / Web)</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Задайте ролевую инструкцию для Zerf AI: как бот в Telegram и Siri должны обрабатывать задачи, форматировать факты, добавлять цитаты или теги.
+                        </p>
+                      </div>
+
+                      {/* Card 2: Interactive Settings & UI */}
+                      <div className="p-3 rounded-2xl bg-muted/30 border border-border space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-foreground text-xs">
+                          <span className="text-base">🎛</span>
+                          <span>Кастомные настройки и виджеты</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Определите в JSON схему настроек (<code className="text-primary font-mono text-[9px]">settingsSchema</code>): переключатели, текстовые поля, API-ключи, слайдеры, которые пользователи смогут настраивать.
+                        </p>
+                      </div>
+
+                      {/* Card 3: Local Neural Networks & CLI */}
+                      <div className="p-3 rounded-2xl bg-muted/30 border border-border space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-foreground text-xs">
+                          <span className="text-base">💻</span>
+                          <span>CLI и Локальные нейросети (Ollama)</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Позволяет пользователям подключать локальные модели (Ollama/LM Studio) или вызывать CLI команды (<code className="text-primary font-mono text-[9px]">/search</code>, <code className="text-primary font-mono text-[9px]">/entropy</code>).
+                        </p>
+                      </div>
+
+                      {/* Card 4: Webhooks & Integrations */}
+                      <div className="p-3 rounded-2xl bg-muted/30 border border-border space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-foreground text-xs">
+                          <span className="text-base">🌐</span>
+                          <span>Внешние API & Экспорт заметок</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Интегрируйте экспорт в заметки Zerf, отправку вебхуков в Notion, Linear, GitHub Issues или ваши микросервисы.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1-Click Template Inserts */}
+                  <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-foreground text-[11px] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                        <span>Быстрая вставка готовых шаблонов ИИ:</span>
+                      </label>
+                      <span className="text-[10px] text-muted-foreground">В один клик</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormAiInstructions('Когда пользователь просит провести глубокий поиск, найти факты или исследовать тему — синтезируй данные с обязательными числовыми цитатами первоисточников [1][2], формируй структурированный отчет и предлагай экспорт в заметки Zerf.')
+                          setFormTriggers('/search, /entropy, глубокий поиск, исследуй, факты')
+                        }}
+                        className="p-2.5 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer space-y-1"
+                      >
+                        <div className="font-bold text-foreground text-xs flex items-center gap-1">
+                          <span>🔮</span>
+                          <span>ИИ-исследователь & Deep Search</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Синтез фактов, цитаты [1][2] и экспорт в заметки</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormAiInstructions('Ты — строгий персональный ассистент тайм-менеджмента и продуктивности. При планировании задач пользователя всегда выделяй 25-минутные интервалы Pomodoro, определяй приоритет (urgent/high/medium) и рекомендуй короткие перерывы.')
+                          setFormTriggers('/pomodoro, таймер, фокус, интервал, спринт')
+                        }}
+                        className="p-2.5 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer space-y-1"
+                      >
+                        <div className="font-bold text-foreground text-xs flex items-center gap-1">
+                          <span>⚡</span>
+                          <span>Pomodoro & Фокус-коуч</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Авто-интервалы фокуса и приоритеты задач</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormAiInstructions('Превращай длинные тексты и идеи пользователя в структурированные конспекты: главная суть (TL;DR), 3 ключевых вывода и список дальнейших действий (action items).')
+                          setFormTriggers('/summarize, саммари, кратко, конспект, выжимка')
+                        }}
+                        className="p-2.5 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer space-y-1"
+                      >
+                        <div className="font-bold text-foreground text-xs flex items-center gap-1">
+                          <span>📝</span>
+                          <span>Авто-суммаризатор заметок</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Выделение TL;DR, ключевых тезисов и action items</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormAiInstructions('Интеграция с локальной нейросетью Ollama/LM Studio по API: при вызове команд перенаправляй запросы на локальный эндпоинт http://localhost:11434 и форматируй ответ в стиле терминала.')
+                          setFormTriggers('/ollama, /local, локальная сеть, cli ai')
+                        }}
+                        className="p-2.5 rounded-xl bg-card hover:bg-muted border border-border text-left transition-all cursor-pointer space-y-1"
+                      >
+                        <div className="font-bold text-foreground text-xs flex items-center gap-1">
+                          <span>💻</span>
+                          <span>Локальная нейросеть (Ollama/CLI)</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Подключение локальных моделей через API</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Form Inputs: AI Instructions & Triggers */}
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-foreground text-[11px] flex items-center justify-between">
+                      <span>Инструкция для Zerf AI (Telegram Бот, Siri, Web AI, CLI):</span>
+                      <span className="text-[10px] text-muted-foreground">Промпт автора расширения</span>
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={formAiInstructions}
+                      onChange={e => setFormAiInstructions(e.target.value)}
+                      placeholder="Опишите, как Zerf AI должен реагировать на запросы пользователя, какие поля генерировать, как форматировать ответ и какие действия выполнять..."
+                      className="w-full p-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-foreground text-[11px] flex items-center justify-between">
+                      <span>Ключевые фразы и триггеры активации (через запятую):</span>
+                      <span className="text-[10px] text-muted-foreground">Например: /search, /entropy, глубокий поиск</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formTriggers}
+                      onChange={e => setFormTriggers(e.target.value)}
+                      placeholder="/search, /entropy, глубокий поиск, исследуй, найди инсайты"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* TAB 1: GENERAL INFO */}
               {editorActiveTab === 'general' && (

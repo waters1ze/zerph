@@ -14,6 +14,7 @@ import { prisma } from '@/lib/backend/prisma'
 import { createServerSession, secretsMatch } from '@/lib/backend/auth'
 import { tokenMatchesCandidateName } from '@/lib/backend/name-aliases'
 import { GROQ_API_KEY } from '@/lib/config'
+import { getUserExtensionsAIContext } from '@/app/api/extensions/route'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -372,15 +373,16 @@ export async function POST(req: NextRequest) {
     // 2. Select ultra-fast optimized neural parser according to user plan and settings
     const siriModel = getModelForUserPlan(limits.plan, undefined, 'siri')
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+    const extensionsContext = await getUserExtensionsAIContext(chatId)
 
     let items: any[]
     if (isMutationOrComplex) {
       const context = await getExistingItemsContext(chatId)
-      items = await parseIntentWithGroq(inputText, key, siriModel, context, friendsContext)
+      items = await parseIntentWithGroq(inputText, key, siriModel, context, friendsContext, extensionsContext)
     } else {
-      items = await parseSiriFastIntent(inputText, key, siriModel, friendsContext)
+      items = await parseSiriFastIntent(inputText, key, siriModel, friendsContext, extensionsContext)
       if (!items || items.length === 0) {
-        items = await parseIntentWithGroq(inputText, key, siriModel, undefined, friendsContext)
+        items = await parseIntentWithGroq(inputText, key, siriModel, undefined, friendsContext, extensionsContext)
       }
     }
 
@@ -562,15 +564,16 @@ export async function GET(req: NextRequest) {
 
   const siriModel = getModelForUserPlan(limits.plan, undefined, 'siri')
   const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
+  const extensionsContext = await getUserExtensionsAIContext(chatId)
 
   let items: any[]
   if (isMutationOrComplex) {
     const context = await getExistingItemsContext(chatId)
-    items = await parseIntentWithGroq(text, key, siriModel, context, friendsContext)
+    items = await parseIntentWithGroq(text, key, siriModel, context, friendsContext, extensionsContext)
   } else {
-    items = await parseSiriFastIntent(text, key, siriModel, friendsContext)
+    items = await parseSiriFastIntent(text, key, siriModel, friendsContext, extensionsContext)
     if (!items || items.length === 0) {
-      items = await parseIntentWithGroq(text, key, siriModel, undefined, friendsContext)
+      items = await parseIntentWithGroq(text, key, siriModel, undefined, friendsContext, extensionsContext)
     }
   }
 
