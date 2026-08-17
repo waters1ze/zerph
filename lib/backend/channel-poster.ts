@@ -207,14 +207,13 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
   }
 }
 
-/** 3. Post Morning News Digest (Detailed, Informative, Minimalist B&W with Live Rates & Tech News) */
-export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<boolean> {
-  if (!GROQ_API_KEY) return false
+export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<{ success: boolean; tgRes?: any; error?: string; channelId?: string }> {
+  if (!GROQ_API_KEY) return { success: false, error: 'GROQ_API_KEY missing' }
   const { mskDate } = getMskDateTime()
 
   try {
     if (!force) {
-      if (await isCronAlreadyDoneToday('channel_morning_post', mskDate)) return true
+      if (await isCronAlreadyDoneToday('channel_morning_post', mskDate)) return { success: true, error: 'already_done_today' }
     }
 
     const context = await fetchMorningNewsContext()
@@ -273,7 +272,7 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
     })
 
     let text = result.content?.trim()
-    if (!text) return false
+    if (!text) return { success: false, error: 'Groq returned empty text' }
 
     if (text.length > 4000) {
       text = text.slice(0, 3900) + '\n\n▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>'
@@ -303,10 +302,10 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
     // Duplicate to VK Community Wall
     postToVkWall(text).catch(err => console.error('[VK Crosspost Morning Error]:', err))
 
-    return tgRes?.ok ?? false
-  } catch (err) {
+    return { success: tgRes?.ok ?? false, tgRes, channelId }
+  } catch (err: any) {
     console.error('postDailyMorningPostToChannel error:', err)
-    return false
+    return { success: false, error: err?.message || String(err), channelId }
   }
 }
 

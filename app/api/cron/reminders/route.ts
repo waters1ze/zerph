@@ -31,8 +31,8 @@ export async function GET(req: NextRequest) {
       }
 
       if (action === 'morning_post') {
-        const ok = await postDailyMorningPostToChannel(undefined, true)
-        return NextResponse.json({ ok, action: 'morning_post' })
+        const postRes = await postDailyMorningPostToChannel(undefined, true)
+        return NextResponse.json({ action: 'morning_post', ...postRes })
       }
       if (action === 'poll') {
         const ok = await postDailyPollToChannel(undefined, true)
