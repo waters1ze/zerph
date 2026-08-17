@@ -504,6 +504,56 @@
   border-radius: calc(var(--radius) * 0.8);
 }
 
+/* ─── COLOR DISCIPLINE ──────────────────────────────────────────────
+   Компоненты содержат исторический хардкод tailwind-палитры. Вместо
+   правки сотен классов вручную перенаправляем их на токены темы. */
+
+/* 1. Жёлтые/янтарные утилиты не вписываются в строгие пресеты (Strict —
+      монохром, Blue — корпоративный, Paper — чернильный). Warm и Vivid
+      сохраняют янтарь как часть идентичности. */
+.theme-strict [class*="text-amber-"],
+.theme-blue   [class*="text-amber-"],
+.theme-paper  [class*="text-amber-"],
+.theme-strict [class*="text-yellow-"],
+.theme-blue   [class*="text-yellow-"],
+.theme-paper  [class*="text-yellow-"] {
+  color: var(--foreground) !important;
+}
+.theme-strict [class*="bg-amber-"],
+.theme-blue   [class*="bg-amber-"],
+.theme-paper  [class*="bg-amber-"],
+.theme-strict [class*="bg-yellow-"],
+.theme-blue   [class*="bg-yellow-"],
+.theme-paper  [class*="bg-yellow-"] {
+  background-color: var(--accent) !important;
+}
+.theme-strict [class*="border-amber-"],
+.theme-blue   [class*="border-amber-"],
+.theme-paper  [class*="border-amber-"],
+.theme-strict [class*="border-yellow-"],
+.theme-blue   [class*="border-yellow-"],
+.theme-paper  [class*="border-yellow-"] {
+  border-color: var(--border) !important;
+}
+
+/* 2. Хардкодные тёмные поверхности (neutral/zinc/stone/gray/slate) —
+      на темазависимые токены, чтобы все «чёрные» были одной температуры.
+      Полупрозрачные оверлеи (bg-black/…) не затрагиваются. */
+[class*="bg-neutral-800"], [class*="bg-zinc-800"], [class*="bg-stone-800"],
+[class*="bg-gray-800"], [class*="bg-slate-800"] {
+  background-color: var(--secondary) !important;
+}
+[class*="bg-neutral-900"], [class*="bg-neutral-950"],
+[class*="bg-zinc-900"], [class*="bg-zinc-950"],
+[class*="bg-stone-900"], [class*="bg-stone-950"],
+[class*="bg-gray-900"], [class*="bg-gray-950"],
+[class*="bg-slate-900"], [class*="bg-slate-950"] {
+  background-color: var(--card) !important;
+}
+.bg-black {
+  background-color: var(--card) !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

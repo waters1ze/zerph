@@ -88,7 +88,7 @@ export function GiftSection() {
 
   return (
     <div className="space-y-4 font-sans">
-      <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-card to-card border border-amber-500/20 shadow-xs space-y-4">
+      <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 via-card to-card border border-border shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-bold">

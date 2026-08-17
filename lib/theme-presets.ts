@@ -35,6 +35,22 @@ export interface ThemePresetMeta {
 
 export const THEME_PRESETS: ThemePresetMeta[] = [
   {
+    id: 'paper',
+    label: 'Paper',
+    tagline: 'Кремовая светлая, чернильный акцент',
+    isDark: false,
+    preview: { bg: 'oklch(0.972 0.007 85)', surface: 'oklch(0.995 0.004 85)', accent: 'oklch(0.17 0.006 80)' },
+    defaultAccent: 'ink',
+  },
+  {
+    id: 'blue',
+    label: 'Blue',
+    tagline: 'Светлый корпоративный, холодный и спокойный',
+    isDark: false,
+    preview: { bg: 'oklch(0.977 0.004 250)', surface: 'oklch(0.995 0.002 250)', accent: 'oklch(0.48 0.16 258)' },
+    defaultAccent: 'blue',
+  },
+  {
     id: 'strict',
     label: 'Strict',
     tagline: 'Инженерный монохром. Серьёзный инструмент',
@@ -51,28 +67,12 @@ export const THEME_PRESETS: ThemePresetMeta[] = [
     defaultAccent: 'gold',
   },
   {
-    id: 'blue',
-    label: 'Blue',
-    tagline: 'Светлый корпоративный, холодный и спокойный',
-    isDark: false,
-    preview: { bg: 'oklch(0.977 0.004 250)', surface: 'oklch(0.995 0.002 250)', accent: 'oklch(0.48 0.16 258)' },
-    defaultAccent: 'blue',
-  },
-  {
     id: 'vivid',
     label: 'Vivid',
     tagline: 'Тёмный с одним выразительным цветом',
     isDark: true,
     preview: { bg: 'oklch(0.115 0.012 300)', surface: 'oklch(0.175 0.014 300)', accent: 'oklch(0.72 0.19 300)' },
     defaultAccent: 'violet',
-  },
-  {
-    id: 'paper',
-    label: 'Paper',
-    tagline: 'Кремовая светлая, чернильный акцент',
-    isDark: false,
-    preview: { bg: 'oklch(0.972 0.007 85)', surface: 'oklch(0.995 0.004 85)', accent: 'oklch(0.17 0.006 80)' },
-    defaultAccent: 'ink',
   },
 ]
 
@@ -149,12 +149,12 @@ export function normalizeTheme(value: string | undefined): ThemePresetId {
   switch (value) {
     case 'strict': case 'warm': case 'blue': case 'vivid': case 'paper':
       return value
+    // Прежняя тёмная тема была золотой, но строгий корпоративный дефолт
+    // важнее сохранения старого вида: все получают Strict и выбирают сами
     case 'light':
       return 'paper'
-    case 'dark':
-      return 'warm' // прежние тёмные пользователи видели золотую тему — сохраняем её
     default:
-      return 'strict' // новый дефолт — самый серьёзный пресет
+      return 'strict'
   }
 }
 
@@ -177,11 +177,15 @@ export function applyVisualsToDocument(opts: ApplyVisualsOptions) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
   const body = document.body
-  const meta = THEME_PRESETS.find(t => t.id === opts.theme) ?? THEME_PRESETS[0]
+  const meta = THEME_PRESETS.find(t => t.id === opts.theme)
+    ?? THEME_PRESETS.find(t => t.id === 'strict')!
 
   root.classList.remove(...ALL_THEME_CLASSES, 'dark', 'light')
   body.classList.remove(...ALL_THEME_CLASSES, 'dark', 'light')
+  // Тема дублируется на <body>: иначе старый `.dark`-блок на body остаётся
+  // ближе к контенту и перекрывает --primary жёлтым из прежней палитры
   root.classList.add(`theme-${meta.id}`)
+  body.classList.add(`theme-${meta.id}`)
   if (meta.isDark) {
     root.classList.add('dark')
     body.classList.add('dark')

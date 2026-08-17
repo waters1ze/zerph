@@ -193,7 +193,7 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
               <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400"
+                className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60"
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.max(5, Math.min(100, (1 - minutesLeft / 1440) * 100))}%` }}
                 transition={{ duration: 0.6, delay: index * 0.04 }}
