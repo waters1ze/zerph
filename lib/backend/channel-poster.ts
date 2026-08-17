@@ -201,13 +201,14 @@ export async function closeDailyPollAndNotifyAdmins(channelId = DEFAULT_CHANNEL)
 }
 
 /** 3. Post Morning News Digest (Detailed, Informative, Minimalist B&W with Live Rates & Tech News) */
-export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
+export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<boolean> {
   if (!GROQ_API_KEY) return false
   const { mskDate } = getMskDateTime()
 
   try {
-    if (await isCronAlreadyDoneToday('channel_morning_post', mskDate)) return true
-    await markCronDoneToday('channel_morning_post', mskDate)
+    if (!force) {
+      if (await isCronAlreadyDoneToday('channel_morning_post', mskDate)) return true
+    }
 
     const context = await fetchMorningNewsContext()
     const ratesStr = [
@@ -268,7 +269,7 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
     if (!text) return false
 
     const sanitized = sanitizeTgHtml(text)
-    const tgRes = await callTg('sendMessage', {
+    let tgRes = await callTg('sendMessage', {
       chat_id: channelId,
       text: sanitized,
       parse_mode: 'HTML',
@@ -277,11 +278,15 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
 
     if (!tgRes?.ok) {
       const cleanText = text.replace(/<[^>]*>/g, '')
-      await callTg('sendMessage', {
+      tgRes = await callTg('sendMessage', {
         chat_id: channelId,
         text: cleanText,
         disable_web_page_preview: true,
       })
+    }
+
+    if (tgRes?.ok) {
+      await markCronDoneToday('channel_morning_post', mskDate)
     }
 
     // Duplicate to VK Community Wall
@@ -295,12 +300,13 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL)
 }
 
 /** 4. Post 21:00 MSK Evening News Digest & Reflection (Detailed, Minimalist B&W) */
-export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL): Promise<boolean> {
+export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<boolean> {
   const { mskDate } = getMskDateTime()
 
   try {
-    if (await isCronAlreadyDoneToday('channel_evening_post', mskDate)) return true
-    await markCronDoneToday('channel_evening_post', mskDate)
+    if (!force) {
+      if (await isCronAlreadyDoneToday('channel_evening_post', mskDate)) return true
+    }
 
     const context = await fetchEveningNewsContext()
     
@@ -352,7 +358,7 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL)
     if (!text) return false
 
     const sanitized = sanitizeTgHtml(text)
-    const tgRes = await callTg('sendMessage', {
+    let tgRes = await callTg('sendMessage', {
       chat_id: channelId,
       text: sanitized,
       parse_mode: 'HTML',
@@ -361,11 +367,15 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL)
 
     if (!tgRes?.ok) {
       const cleanText = text.replace(/<[^>]*>/g, '')
-      await callTg('sendMessage', {
+      tgRes = await callTg('sendMessage', {
         chat_id: channelId,
         text: cleanText,
         disable_web_page_preview: true,
       })
+    }
+
+    if (tgRes?.ok) {
+      await markCronDoneToday('channel_evening_post', mskDate)
     }
 
     // Duplicate to VK Community Wall

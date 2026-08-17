@@ -651,9 +651,8 @@ export async function runChannelAndAiCron() {
 
     // 1. Friday 09:00-20:59 MSK: Weekly Poll on Improvements
     if (day === 'fri' && hour >= 9 && hour < 21) {
-      const isDone = await isCronAlreadyDoneToday('channel_friday_poll', todayStr)
+      const isDone = await isCronAlreadyDoneToday('channel_poll', todayStr)
       if (!isDone) {
-        await markCronDoneToday('channel_friday_poll', todayStr)
         await postDailyPollToChannel()
       }
     }
@@ -662,7 +661,6 @@ export async function runChannelAndAiCron() {
     if (day !== 'fri' && hour >= 8 && hour < 14) {
       const isDone = await isCronAlreadyDoneToday('channel_morning_post', todayStr)
       if (!isDone) {
-        await markCronDoneToday('channel_morning_post', todayStr)
         await postDailyMorningPostToChannel()
       }
     }
@@ -671,8 +669,8 @@ export async function runChannelAndAiCron() {
     if (day === 'fri' && hour >= 21) {
       const isDone = await isCronAlreadyDoneToday('channel_close_poll', todayStr)
       if (!isDone) {
-        await markCronDoneToday('channel_close_poll', todayStr)
         await closeDailyPollAndNotifyAdmins()
+        await markCronDoneToday('channel_close_poll', todayStr)
         await sendCommentReportToAdminsTelegram().catch(() => {})
       }
     }
@@ -681,7 +679,6 @@ export async function runChannelAndAiCron() {
     if (hour >= 20) {
       const isDone = await isCronAlreadyDoneToday('channel_evening_post', todayStr)
       if (!isDone) {
-        await markCronDoneToday('channel_evening_post', todayStr)
         await postDailyEveningPostToChannel()
       }
     }
