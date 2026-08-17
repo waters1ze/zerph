@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput, useApp } from 'ink'
-import Spinner from 'ink-spinner'
 import TextInput from 'ink-text-input'
 import {
   fetchUserData,
@@ -8,7 +7,7 @@ import {
   mutateItem,
   ZerfCredentials
 } from '../api.js'
-import { getAllaySpriteLines, getAllayFace, GLYPHS, MascotMood } from '../mascot.js'
+import { GLYPHS, MascotMood } from '../mascot.js'
 
 interface LogEntry {
   id: string
@@ -17,7 +16,14 @@ interface LogEntry {
   details?: string[]
 }
 
-const MENU_ITEMS = [
+interface MenuItem {
+  cmd: string
+  label: string
+  desc: string
+  glyph: string
+}
+
+const BASE_MENU_ITEMS: MenuItem[] = [
   { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
   { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
   { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени', glyph: GLYPHS.taskDone },
@@ -26,50 +32,54 @@ const MENU_ITEMS = [
   { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
   { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
   { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-  { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные проекты', glyph: GLYPHS.friend },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
   { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
   { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
   { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ]
 
-export function Repl() {
+export function Repl({ initialData }: { initialData?: any }) {
   const { exit } = useApp()
   const [creds] = useState<ZerfCredentials>(() => loadCredentials())
-  const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<any>(initialData || null)
   const [inputVal, setInputVal] = useState('')
-  const [mood, setMood] = useState<MascotMood>('idle')
   const [history, setHistory] = useState<LogEntry[]>([])
-  const [cliCount, setCliCount] = useState<number>(0)
+  const [cliCount, setCliCount] = useState<number>(initialData?.limits?.cliUsed || 0)
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [menuForced, setMenuForced] = useState(false)
 
-  // Load user data once on mount
+  // Load user data if not passed initially
   const loadData = async () => {
     try {
-      setLoading(true)
       const res = await fetchUserData(creds)
-      if (res.allowed === false) {
-        setError(res.message || 'Zerf CLI доступен для подписчиков Plus, Pro и Corp.')
-      } else {
+      if (res.allowed !== false) {
         setData(res)
         setCliCount(res.limits?.cliUsed || 0)
       }
-    } catch (err: any) {
-      setError(err.message || 'Ошибка загрузки данных')
-    } finally {
-      setLoading(false)
-    }
+    } catch {}
   }
 
   useEffect(() => {
-    loadData()
-  }, [creds])
+    if (!initialData) {
+      loadData()
+    }
+  }, [])
+
+  // Build dynamic menu including custom user extensions
+  const customExtItems: MenuItem[] = (data?.extensions || []).map((ext: any) => ({
+    cmd: `/ext ${ext.id || ext.name}`,
+    label: `/ext ${ext.name || ext.id}`,
+    desc: `[Расширение] ${ext.description || ext.title || 'Пользовательский модуль'}`,
+    glyph: '🔌',
+  }))
+
+  const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems]
 
   // Compute matching slash commands
-  const isSlash = inputVal.startsWith('/')
+  const isSlash = inputVal.startsWith('/') || menuForced
+  const filterQuery = menuForced ? '' : inputVal.toLowerCase().trim()
   const filteredCommands = isSlash
-    ? MENU_ITEMS.filter(m => m.cmd.toLowerCase().startsWith(inputVal.toLowerCase().trim()))
+    ? allMenuItems.filter(m => !filterQuery || m.cmd.toLowerCase().startsWith(filterQuery))
     : []
 
   // Keep selectedIdx within bounds
@@ -99,13 +109,20 @@ export function Repl() {
         const item = filteredCommands[selectedIdx]
         if (item) {
           setInputVal(item.cmd.trim() + ' ')
+          setMenuForced(false)
         }
         return
       }
       if (key.escape) {
         setInputVal('')
+        setMenuForced(false)
         return
       }
+    }
+
+    if (input === '?' && !inputVal) {
+      setMenuForced(prev => !prev)
+      return
     }
   })
 
@@ -113,12 +130,13 @@ export function Repl() {
     let raw = val.trim()
     if (!raw) return
 
-    // If user is selecting from slash menu with enter on exact slash prefix
-    if (isSlash && filteredCommands.length > 0 && (!raw.includes(' ') || raw === '/')) {
+    // If user is selecting from slash menu with enter on exact slash prefix or menu forced
+    if (isSlash && filteredCommands.length > 0 && (menuForced || !raw.includes(' ') || raw === '/')) {
       const selectedItem = filteredCommands[selectedIdx]
-      if (selectedItem && (raw === '/' || !raw.includes(' '))) {
+      if (selectedItem && (menuForced || raw === '/' || !raw.includes(' '))) {
         if (selectedItem.cmd.endsWith(' ') && !raw.trim().includes(' ')) {
           setInputVal(selectedItem.cmd)
+          setMenuForced(false)
           return
         }
         raw = selectedItem.cmd.trim()
@@ -126,6 +144,7 @@ export function Repl() {
     }
 
     setInputVal('')
+    setMenuForced(false)
 
     // Add user command to history
     setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }])
@@ -137,7 +156,13 @@ export function Repl() {
     }
 
     if (raw === '/clear') {
+      console.clear()
       setHistory([])
+      return
+    }
+
+    if (raw === '/menu') {
+      setMenuForced(true)
       return
     }
 
@@ -149,6 +174,7 @@ export function Repl() {
           type: 'assistant',
           text: '❖ Быстрые команды Zerf CLI:',
           details: [
+            '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
             '/today          — Список задач и привычек на сегодня',
             '/cal            — Недельный календарь и расписание',
             '/chat <текст>   — Чат с коллегой / заметка другу',
@@ -223,13 +249,11 @@ export function Repl() {
           }
         ])
       } else {
-        setMood('celebrate')
         setHistory(h => [
           ...h,
           { id: String(Date.now()), type: 'assistant', text: `◈ Сообщение отправлено Вовчику: «${msg}»` },
           { id: String(Date.now() + 1), type: 'assistant', text: `◈ Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
         ])
-        setTimeout(() => setMood('idle'), 2500)
       }
       return
     }
@@ -275,7 +299,6 @@ export function Repl() {
     if (raw.startsWith('/focus')) {
       const parts = raw.split(' ')
       const mins = parseInt(parts[1] || '25', 10)
-      setMood('focus')
       setHistory(h => [
         ...h,
         { id: String(Date.now()), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
@@ -289,7 +312,6 @@ export function Repl() {
       const match = tasks.find((t: any) => t.status !== 'done' && t.title.toLowerCase().includes(query))
 
       if (match) {
-        setMood('celebrate')
         await mutateItem(creds, { action: 'toggle_task', id: match.id })
         setData((prev: any) => ({
           ...prev,
@@ -299,7 +321,6 @@ export function Repl() {
           ...h,
           { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается ✦` }
         ])
-        setTimeout(() => setMood('idle'), 2500)
       } else {
         setHistory(h => [
           ...h,
@@ -315,17 +336,23 @@ export function Repl() {
         setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст: /note <текст заметки>' }])
         return
       }
-      setMood('thinking')
       await mutateItem(creds, {
         action: 'create',
         item: { title: noteText.slice(0, 50), content: noteText, type: 'note' }
       })
-      setMood('celebrate')
       setHistory(h => [
         ...h,
         { id: String(Date.now()), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
       ])
-      setTimeout(() => setMood('idle'), 2500)
+      return
+    }
+
+    if (raw.startsWith('/ext')) {
+      const extName = raw.replace('/ext', '').trim()
+      setHistory(h => [
+        ...h,
+        { id: String(Date.now()), type: 'assistant', text: `🔌 Расширение «${extName || 'модуль'}» запущено!` }
+      ])
       return
     }
 
@@ -335,7 +362,6 @@ export function Repl() {
         setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст задачи: /add <название>' }])
         return
       }
-      setMood('thinking')
       try {
         await mutateItem(creds, {
           action: 'create',
@@ -346,26 +372,21 @@ export function Repl() {
             rawText: taskText,
           }
         })
-        setMood('celebrate')
         setHistory(h => [
           ...h,
           { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
         ])
         await loadData()
-        setTimeout(() => setMood('idle'), 2500)
       } catch (e: any) {
-        setMood('alert')
         setHistory(h => [
           ...h,
           { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
         ])
-        setTimeout(() => setMood('idle'), 2500)
       }
       return
     }
 
     // Natural language query / AI dispatch
-    setMood('thinking')
     try {
       await mutateItem(creds, {
         action: 'create',
@@ -376,150 +397,68 @@ export function Repl() {
           rawText: raw,
         }
       })
-      setMood('celebrate')
       setHistory(h => [
         ...h,
         { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${raw}» создана и добавлена в расписание` }
       ])
       await loadData()
-      setTimeout(() => setMood('idle'), 2500)
     } catch (e: any) {
-      setMood('alert')
       setHistory(h => [
         ...h,
         { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
       ])
-      setTimeout(() => setMood('idle'), 2500)
     }
   }
 
-  if (loading) {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Box gap={1}>
-          <Text color="cyan"><Spinner type="dots" /></Text>
-          <Text color="gray">Синхронизация Zerf Second Brain...</Text>
-        </Box>
-      </Box>
-    )
-  }
-
-  if (error) {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Text bold color="yellow">❖ Требуется подписка Plus, Pro или Corp</Text>
-        <Text color="gray">{error}</Text>
-        <Box marginTop={1}>
-          <Text color="cyan">Оформить: </Text>
-          <Text underline color="blueBright">https://t.me/Zerph_bot?start=buy</Text>
-        </Box>
-      </Box>
-    )
-  }
-
-  const tasks = data?.tasks || []
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
-  const overdueTasks = tasks.filter((t: any) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr)
-  const spriteLines = getAllaySpriteLines(mood, 0)
   const limits = data?.limits
   const planTag = (data?.user?.plan || 'corp').toUpperCase()
 
   return (
-    <Box flexDirection="column" padding={1} width={88}>
-      {/* ── Boxed Hero Header (Claude Code v2.1.19 style) ─────────────────── */}
-      <Box borderStyle="round" borderColor="cyan" flexDirection="row">
-        {/* Left Column: Cute Minecraft Allay Sprite */}
-        <Box flexDirection="column" width={42} paddingX={1} borderStyle="single" borderColor="gray" borderTop={false} borderBottom={false} borderLeft={false}>
-          <Box justifyContent="center" marginBottom={1}>
-            <Text bold color="white">С возвращением, {data?.user?.name || 'Кирилл'}!</Text>
-          </Box>
-
-          {/* Cute Minecraft Allay Pixel Art Render */}
-          <Box flexDirection="column" alignItems="center" marginY={1}>
-            {spriteLines.map((line, idx) => (
-              <Text key={idx}>{line}</Text>
-            ))}
-          </Box>
-
-          <Box flexDirection="column" alignItems="center" marginTop={1}>
+    <Box flexDirection="column" width={88}>
+      {/* ── Action History Feed ──────────────────────────────────────────── */}
+      {history.map(item => (
+        <Box key={item.id} flexDirection="column" marginBottom={1}>
+          {item.type === 'user' ? (
             <Box gap={1}>
-              <Text bold color="cyanBright">Groq AI</Text>
-              <Text color="gray">·</Text>
-              <Text bold color="greenBright">Zerf {planTag}</Text>
-              {data?.user?.username && <Text color="gray">· @{data.user.username}</Text>}
+              <Text bold color="cyanBright">{'>'}</Text>
+              <Text bold color="white">{item.text}</Text>
             </Box>
-            <Text color="gray" dimColor>~/ZerfNotes/{todayStr}</Text>
-          </Box>
-        </Box>
-
-        {/* Right Column: Tips & Status */}
-        <Box flexDirection="column" width={42} paddingX={1}>
-          <Text bold color="cyanBright">Советы & Шорткаты</Text>
-          <Box flexDirection="column" marginTop={1} gap={0}>
-            <Text color="gray">• <Text color="cyanBright">/</Text> — автокомплит и меню (стрелки ↑/↓)</Text>
-            <Text color="gray">• <Text color="cyanBright">/today</Text> — задачи на сегодня</Text>
-            <Text color="gray">• <Text color="cyanBright">/cal</Text> — открыть календарь</Text>
-            <Text color="gray">• <Text color="cyanBright">/chat</Text> — командный чат</Text>
-          </Box>
-
-          <Box marginY={1}>
-            <Text color="gray" dimColor>───────────────────────────────────</Text>
-          </Box>
-
-          <Text bold color="cyanBright">Активность сегодня</Text>
-          <Box flexDirection="column" marginTop={1}>
-            <Text color="white">
-              ❖ Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
-            </Text>
-            <Text color="cyanBright">✦ Стрик продуктивности: 12 дней</Text>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* ── Dialog / Action History Feed ─────────────────────────────────── */}
-      <Box flexDirection="column" marginY={1}>
-        {history.map(item => (
-          <Box key={item.id} flexDirection="column" marginBottom={1}>
-            {item.type === 'user' ? (
+          ) : item.type === 'error' ? (
+            <Box gap={1} marginLeft={2}>
+              <Text color="red">●</Text>
+              <Text color="red">{item.text}</Text>
+            </Box>
+          ) : (
+            <Box flexDirection="column" marginLeft={2}>
               <Box gap={1}>
-                <Text bold color="cyanBright">{'>'}</Text>
-                <Text bold color="white">{item.text}</Text>
+                <Text color="cyanBright">●</Text>
+                <Text color="white">{item.text}</Text>
               </Box>
-            ) : item.type === 'error' ? (
-              <Box gap={1} marginLeft={2}>
-                <Text color="red">●</Text>
-                <Text color="red">{item.text}</Text>
-              </Box>
-            ) : (
-              <Box flexDirection="column" marginLeft={2}>
-                <Box gap={1}>
-                  <Text color="cyanBright">●</Text>
-                  <Text color="white">{item.text}</Text>
+              {item.details && item.details.map((d, i) => (
+                <Box key={i} marginLeft={2}>
+                  <Text color="gray">{d}</Text>
                 </Box>
-                {item.details && item.details.map((d, i) => (
-                  <Box key={i} marginLeft={2}>
-                    <Text color="gray">{d}</Text>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
-        ))}
-      </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      ))}
 
-      {/* ── Floating Slash Autocomplete / Menu (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
+      {/* ── Interactive /menu Dropdown (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
       {isSlash && filteredCommands.length > 0 && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={0}>
           <Box justifyContent="space-between" marginBottom={0}>
-            <Text bold color="cyanBright">Команды Zerf CLI (навигация ↑/↓, Tab выбор):</Text>
+            <Text bold color="cyanBright">
+              {menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):'}
+            </Text>
+            <Text color="gray">ESC для закрытия</Text>
           </Box>
           {filteredCommands.map((item, idx) => {
             const isSel = idx === selectedIdx
             return (
               <Box key={item.cmd} gap={1}>
                 <Text bold color={isSel ? 'cyanBright' : 'gray'}>
-                  {isSel ? '▶ ' : '  '}{item.label.padEnd(16)}
+                  {isSel ? '▶ ' : '  '}{item.label.padEnd(18)}
                 </Text>
                 <Text color={isSel ? 'white' : 'gray'}>
                   — {item.desc}
@@ -531,7 +470,7 @@ export function Repl() {
       )}
 
       {/* ── Pinned Bottom Prompt Frame (Claude Code style) ────────────────── */}
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={0}>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
         <Box gap={1} marginY={0}>
           <Text bold color="cyanBright">{'>'}</Text>
@@ -539,14 +478,14 @@ export function Repl() {
             value={inputVal}
             onChange={setInputVal}
             onSubmit={executeCommand}
-            placeholder="Напишите задачу, /today, /cal, /chat, ? для справки..."
+            placeholder="Напишите задачу, /menu, /today, /cal, /chat, ? для меню..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
-        {/* Footer info & limits bar (Strict Monochrome & Ethereal Cyan) */}
+        {/* Footer info & limits bar (Claude Code bottom style) */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>Стрелки ↑/↓ навигация по / · Tab выбор · ? справка</Text>
+          <Text color="gray" dimColor>/menu выбор · ↑/↓ навигация · ? справка</Text>
           <Text color="gray" dimColor>
             [{planTag}: {cliCount}/{limits?.maxCli || '∞'} CLI | {Math.floor((limits?.voiceUsedSeconds || 0) / 60)}/{limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)}м голос]
           </Text>

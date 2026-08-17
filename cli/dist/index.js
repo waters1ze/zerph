@@ -20,7 +20,21 @@ program
         console.log(`     \x1b[38;2;148;163;184mДля входа в аккаунт выполните:\x1b[0m \x1b[38;2;56;189;248mzerf login\x1b[0m\n`);
         return;
     }
-    render(React.createElement(Repl));
+    try {
+        const data = await fetchUserData(creds);
+        if (data.allowed === false) {
+            console.log(`\n 👑 \x1b[1m\x1b[38;2;251;191;36mТребуется подписка Plus, Pro или Corp\x1b[0m`);
+            console.log(`    ${data.message}\n`);
+            return;
+        }
+        console.clear();
+        const { printHeroBanner } = await import('./mascot.js');
+        printHeroBanner(data);
+        render(React.createElement(Repl, { initialData: data }));
+    }
+    catch (e) {
+        render(React.createElement(Repl));
+    }
 });
 // zerf login (Device Flow)
 program

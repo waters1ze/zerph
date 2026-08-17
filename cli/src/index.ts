@@ -33,7 +33,22 @@ program
       return
     }
 
-    render(React.createElement(Repl))
+    try {
+      const data = await fetchUserData(creds)
+      if (data.allowed === false) {
+        console.log(`\n 👑 \x1b[1m\x1b[38;2;251;191;36mТребуется подписка Plus, Pro или Corp\x1b[0m`)
+        console.log(`    ${data.message}\n`)
+        return
+      }
+
+      console.clear()
+      const { printHeroBanner } = await import('./mascot.js')
+      printHeroBanner(data)
+
+      render(React.createElement(Repl, { initialData: data }))
+    } catch (e: any) {
+      render(React.createElement(Repl))
+    }
   })
 
 // zerf login (Device Flow)

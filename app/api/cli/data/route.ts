@@ -96,6 +96,21 @@ export async function GET(req: NextRequest) {
     const maxVoice = user.planLimits.voiceSecondsPerDay
     const maxChat = user.planLimits.chatMessagesPerDay
 
+    // Fetch user extensions
+    const extRow = await prisma.config.findUnique({ where: { key: `user_extensions_${user.chatId}` } }).catch(() => null)
+    let extensions: any[] = []
+    try {
+      const extIds = extRow ? JSON.parse(extRow.value) : []
+      if (Array.isArray(extIds) && extIds.length > 0) {
+        const rows = await prisma.config.findMany({
+          where: { key: { in: extIds.map(id => `zerf_ext_${id}`) } }
+        })
+        extensions = rows.map(r => {
+          try { return JSON.parse(r.value) } catch { return null }
+        }).filter(Boolean)
+      }
+    } catch {}
+
     const payload = {
       allowed: true,
       user: {
@@ -121,12 +136,14 @@ export async function GET(req: NextRequest) {
         totalNotes: notes.length,
         totalGoals: goals.length,
         totalHabits: habits.length,
+        totalExtensions: extensions.length,
       },
       tasks,
       notes,
       goals,
       habits,
       friends,
+      extensions,
     }
 
     return safeJsonResponse(payload, 200)

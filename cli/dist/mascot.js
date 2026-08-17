@@ -76,6 +76,27 @@ export function getAllayFace(mood = 'idle') {
             return `${C_WHITE}[ ⯀ ᗣ ⯀ ! ]${RESET}`;
     }
 }
+export function printHeroBanner(data) {
+    const userName = data?.user?.name || 'Кирилл';
+    const plan = (data?.user?.plan || 'corp').toUpperCase();
+    const username = data?.user?.username ? `@${data.user.username}` : '';
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayTasks = (data?.tasks || []).filter((t) => !t.dueDate || t.dueDate.startsWith(todayStr));
+    const overdueTasks = (data?.tasks || []).filter((t) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
+    const sprite = getAllaySpriteLines('idle', 0);
+    console.log(`\n ${C_MAIN}✦${RESET} ${BOLD}Zerf Code v2.0.26${RESET}        ${C_SLATE}${userName}${RESET} · ${C_CYAN}${plan}${RESET} · ${C_SLATE}стрик 12 ✦${RESET}`);
+    console.log(`${C_MUTED}┌────────────────────────────────────────┬────────────────────────────────────────┐${RESET}`);
+    console.log(`${C_MUTED}│${RESET} ${BOLD}С возвращением, ${userName.slice(0, 20).padEnd(20)}${RESET}   ${C_MUTED}│${RESET} ${C_CYAN}Советы & Шорткаты${RESET}                      ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET}                                        ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/menu${RESET}  ${C_SLATE}— интерактивное меню (↑/↓)${RESET}     ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET}   ${sprite[0]}       ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/today${RESET} ${C_SLATE}— задачи на сегодня${RESET}             ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET}   ${sprite[1]}       ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/cal${RESET}   ${C_SLATE}— недельный календарь${RESET}           ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET}   ${sprite[2]}       ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/chat${RESET}  ${C_SLATE}— командный чат${RESET}                 ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET}   ${sprite[3]}       ${C_MUTED}├────────────────────────────────────────┤${RESET}`);
+    console.log(`${C_MUTED}│${RESET}   ${sprite[4]}       ${C_MUTED}│${RESET} ${C_CYAN}Активность сегодня${RESET}                     ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET}                                        ${C_MUTED}│${RESET} ${C_SLATE}❖${RESET} Задач: ${BOLD}${String(todayTasks.length).padEnd(2)}${RESET} ${overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : '             '}    ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}│${RESET} ${C_CYAN}Groq AI${RESET} · ${C_LIGHT}Zerf ${plan}${RESET} ${username ? `· ${username}` : ''}          ${C_MUTED}│${RESET} ${C_CYAN}✦${RESET} Стрик: ${BOLD}12 дней${RESET}                         ${C_MUTED}│${RESET}`);
+    console.log(`${C_MUTED}└────────────────────────────────────────┴────────────────────────────────────────┘${RESET}\n`);
+}
 export function renderAllayBanner(userName, plan, streak = 1) {
     return [
         ` ${C_MAIN}✦${RESET} ${BOLD}Zerf Code v2.0.26${RESET}        ${C_SLATE}${userName}${RESET} · ${C_CYAN}${plan.toUpperCase()}${RESET} · ${C_SLATE}стрик ${streak} ✦${RESET}`,
