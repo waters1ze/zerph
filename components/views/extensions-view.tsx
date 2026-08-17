@@ -701,6 +701,11 @@ export function ExtensionsView() {
       promptUpgradeToPlus('запуска интерактивных виджетов')
       return
     }
+    if (ext.id === 'ext_entropy_search' || ext.title.toLowerCase().includes('entropy')) {
+      dispatch({ type: 'SET_VIEW', view: 'entropy' })
+      window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+      return
+    }
     setActiveWidgetExt(ext)
   }
 

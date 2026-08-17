@@ -27,6 +27,7 @@ import { AdminView } from '@/components/views/admin-view'
 import { ClockView } from '@/components/views/clock-view'
 import { GraphView } from '@/components/views/graph-view'
 import { ExtensionsView } from '@/components/views/extensions-view'
+import { EntropySearchView } from '@/components/views/entropy-search-view'
 import { AuthGateModal } from '@/components/auth-gate-modal'
 import { PullToRefresh } from '@/components/ui/pull-to-refresh'
 import { cn } from '@/lib/utils'
@@ -90,7 +91,7 @@ export function AppShell() {
         setTimeout(() => handleOpenVoice(), 300)
       }
 
-      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'teams', 'projects', 'extensions', 'settings'].includes(view)) {
+      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'teams', 'projects', 'extensions', 'entropy', 'settings'].includes(view)) {
         dispatch({ type: 'SET_VIEW', view: view as any })
       }
     }
@@ -114,6 +115,7 @@ export function AppShell() {
     friends:    <FriendsView />,
     teams:      <TeamsView />,
     extensions: <ExtensionsView />,
+    entropy:    <EntropySearchView />,
     settings:   <SettingsView />,
     projects:   <ProjectsView />,
     admin:      <AdminView />,

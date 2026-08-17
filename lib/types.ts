@@ -18,6 +18,7 @@ export type View =
   | 'friends'
   | 'teams'
   | 'extensions'
+  | 'entropy'
   | 'settings'
   | 'admin'
 

@@ -404,15 +404,19 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                     }
 
                     if (extensionItem) {
-                      const isSelected = currentView === 'extensions'
+                      const isEntropy = itemId === 'ext_entropy_search' || extensionItem.id === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')
+                      const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
+
                       return (
                         <motion.button
                           key={itemId}
                           whileTap={{ scale: 0.97 }}
                           onClick={() => {
-                            dispatch({ type: 'SET_VIEW', view: 'extensions' })
-                            if (itemId === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')) {
+                            if (isEntropy) {
+                              dispatch({ type: 'SET_VIEW', view: 'entropy' })
                               window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+                            } else {
+                              dispatch({ type: 'SET_VIEW', view: 'extensions' })
                             }
                           }}
                           className={cn(
@@ -456,15 +460,19 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
             )}
             <div className="space-y-0.5 mt-0.5">
               {unassignedActiveExts.map(ext => {
-                const isSelected = currentView === 'extensions'
+                const isEntropy = ext.id === 'ext_entropy_search' || ext.title?.toLowerCase().includes('entropy')
+                const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
+
                 return (
                   <motion.button
                     key={ext.id}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => {
-                      dispatch({ type: 'SET_VIEW', view: 'extensions' })
-                      if (ext.id === 'ext_entropy_search' || ext.title?.toLowerCase().includes('entropy')) {
+                      if (isEntropy) {
+                        dispatch({ type: 'SET_VIEW', view: 'entropy' })
                         window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+                      } else {
+                        dispatch({ type: 'SET_VIEW', view: 'extensions' })
                       }
                     }}
                     className={cn(

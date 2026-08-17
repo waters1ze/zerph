@@ -507,7 +507,7 @@ export function InstalledExtensionsSettingsSection() {
                       <button
                         onClick={() => {
                           if (ext.id === 'ext_entropy_search' || ext.title.toLowerCase().includes('entropy')) {
-                            dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                            dispatch({ type: 'SET_VIEW', view: 'entropy' })
                             window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
                           } else {
                             dispatch({ type: 'SET_VIEW', view: 'extensions' })
