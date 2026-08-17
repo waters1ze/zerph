@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Puzzle, Plus, Check, Star, Download, Trash2,
@@ -8,7 +8,7 @@ import {
   Search, Shield, Crown, TrendingUp, AlertCircle, ArrowUpRight,
   BookOpen, HelpCircle, Lightbulb, Code2, ArrowRight,
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
-  Flame, CheckSquare, Play, Clock
+  Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -22,22 +22,82 @@ function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
+/**
+ * Compresses and downscales an image file to a tiny square avatar (80x80 WebP/JPEG)
+ * resulting in minimal storage footprint (< 3 KB).
+ */
+export async function compressExtensionImage(file: File, maxSize = 80, quality = 0.55): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Пожалуйста, выберите файл изображения (PNG, JPG, WebP)'))
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const src = e.target?.result as string
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          const minDim = Math.min(img.width, img.height)
+          const sx = (img.width - minDim) / 2
+          const sy = (img.height - minDim) / 2
+
+          canvas.width = maxSize
+          canvas.height = maxSize
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            resolve(src)
+            return
+          }
+
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, maxSize, maxSize)
+
+          let dataUrl = canvas.toDataURL('image/webp', quality)
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', quality)
+          }
+          resolve(dataUrl)
+        } catch {
+          resolve(src)
+        }
+      }
+      img.onerror = () => reject(new Error('Не удалось обработать изображение'))
+      img.src = src
+    }
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: string; className?: string }) {
-  const isImage = icon && (icon.startsWith('http://') || icon.startsWith('https://') || icon.startsWith('data:') || icon.startsWith('/') || icon.startsWith('blob:'))
+  const isImage = icon && (
+    icon.startsWith('http://') ||
+    icon.startsWith('https://') ||
+    icon.startsWith('data:image') ||
+    icon.startsWith('/') ||
+    icon.startsWith('blob:')
+  )
+
   if (isImage) {
     return (
       <img
         src={icon}
-        alt="Avatar"
-        className={cn('rounded-xl object-cover shrink-0', className)}
+        alt="Extension"
+        className={cn('w-full h-full object-cover rounded-xl shrink-0 select-none pointer-events-none', className)}
         onError={(e) => {
           (e.target as HTMLElement).style.display = 'none'
         }}
+        loading="lazy"
       />
     )
   }
+
   return (
-    <span className={cn('flex items-center justify-center shrink-0 select-none', className)}>
+    <span className={cn('flex items-center justify-center shrink-0 select-none font-sans', className)}>
       {icon || '🧩'}
     </span>
   )
@@ -128,6 +188,8 @@ export function ExtensionsView() {
   const [formPrice, setFormPrice] = useState<number>(0)
   const [formVersion, setFormVersion] = useState('1.0.0')
   const [formCode, setFormCode] = useState('{\n  "workMinutes": 25,\n  "breakMinutes": 5\n}')
+  const [isCompressingImage, setIsCompressingImage] = useState<boolean>(false)
+  const formFileInputRef = useRef<HTMLInputElement | null>(null)
 
   // GitHub Import state
   const [githubUrl, setGithubUrl] = useState('')
@@ -301,6 +363,36 @@ export function ExtensionsView() {
       alert('Ошибка синхронизации')
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const handleFormImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsCompressingImage(true)
+    try {
+      const compressedDataUrl = await compressExtensionImage(file, 80, 0.55)
+      setFormIcon(compressedDataUrl)
+    } catch (err: any) {
+      alert(err.message || 'Ошибка обработки картинки')
+    } finally {
+      setIsCompressingImage(false)
+      if (e.target) e.target.value = ''
+    }
+  }
+
+  const handleGithubImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !parsedManifest) return
+    setIsCompressingImage(true)
+    try {
+      const compressedDataUrl = await compressExtensionImage(file, 80, 0.55)
+      setParsedManifest({ ...parsedManifest, icon: compressedDataUrl })
+    } catch (err: any) {
+      alert(err.message || 'Ошибка обработки картинки')
+    } finally {
+      setIsCompressingImage(false)
+      if (e.target) e.target.value = ''
     }
   }
 
@@ -1216,11 +1308,14 @@ export function ExtensionsView() {
                     </span>
                   </div>
 
-                  {/* Custom Avatar / Icon selector */}
+                  {/* Custom Avatar / Icon selector with tiny WebP compression */}
                   <div className="p-3 rounded-xl bg-card border border-border/70 space-y-2">
                     <label className="font-semibold text-foreground flex items-center justify-between text-[11px]">
-                      <span>Аватарка / Картинка расширения:</span>
-                      <span className="text-[10px] text-muted-foreground">Любое фото или URL</span>
+                      <span className="flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-primary" />
+                        <span>Обложка / Картинка расширения:</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">Авто-сжатие до 80x80 WebP (&lt; 3 KB)</span>
                     </label>
                     <div className="flex items-center gap-2">
                       <input
@@ -1230,27 +1325,22 @@ export function ExtensionsView() {
                         placeholder="Вставьте ссылку на картинку или эмодзи"
                         className="flex-1 h-8 px-2.5 rounded-xl bg-muted/40 border border-border text-[11px] outline-none focus:border-primary font-mono"
                       />
-                      <label className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-[11px] flex items-center gap-1 cursor-pointer shrink-0 transition-colors">
-                        <span>📁 Загрузить фото</span>
+                      <label className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-[11px] flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors">
+                        {isCompressingImage ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        <span>{isCompressingImage ? 'Сжатие...' : 'Загрузить фото'}</span>
                         <input
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={e => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              const reader = new FileReader()
-                              reader.onload = (ev) => {
-                                if (ev.target?.result) {
-                                  setParsedManifest({ ...parsedManifest, icon: String(ev.target.result) })
-                                }
-                              }
-                              reader.readAsDataURL(file)
-                            }
-                          }}
+                          onChange={handleGithubImageUpload}
                         />
                       </label>
                     </div>
+                    {parsedManifest.icon?.startsWith('data:') && (
+                      <span className="text-[9px] font-mono text-emerald-400">
+                        ✓ Сжато: {(parsedManifest.icon.length * 0.75 / 1024).toFixed(1)} KB (WebP 80x80)
+                      </span>
+                    )}
                   </div>
 
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -1615,27 +1705,102 @@ export function ExtensionsView() {
               </div>
 
               <div className="space-y-3.5">
-                {/* 1. Title & Icon */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div className="sm:col-span-3 space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">Название расширения:</label>
-                    <input
-                      type="text"
-                      value={formTitle}
-                      onChange={e => setFormTitle(e.target.value)}
-                      placeholder="Например: Focus Timer Pro"
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                    />
+                {/* 1. Title */}
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground text-[11px] block">Название расширения:</label>
+                  <input
+                    type="text"
+                    value={formTitle}
+                    onChange={e => setFormTitle(e.target.value)}
+                    placeholder="Например: Focus Timer Pro"
+                    className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                  />
+                </div>
+
+                {/* 2. Image / Icon Uploader (Auto-compressed to 80x80 WebP < 3KB) */}
+                <div className="p-3 rounded-2xl bg-muted/30 border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-foreground text-[11px] flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-primary" />
+                      <span>Обложка / Картинка расширения:</span>
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">
+                      Сжатие до 80x80 WebP (&lt; 3 KB)
+                    </span>
                   </div>
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">Иконка:</label>
-                    <input
-                      type="text"
-                      value={formIcon}
-                      onChange={e => setFormIcon(e.target.value)}
-                      placeholder="⏱️"
-                      className="w-full h-9 px-2 text-center rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-sm"
-                    />
+
+                  <div className="flex items-center gap-3">
+                    {/* Live Preview Avatar */}
+                    <div className="w-12 h-12 rounded-2xl bg-card border border-border flex items-center justify-center text-2xl shrink-0 overflow-hidden shadow-2xs">
+                      <ExtensionIcon icon={formIcon} className="w-full h-full text-2xl" />
+                    </div>
+
+                    {/* Controls & Preset Pills */}
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Hidden file input */}
+                        <input
+                          ref={formFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFormImageUpload}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => formFileInputRef.current?.click()}
+                          disabled={isCompressingImage}
+                          className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+                        >
+                          {isCompressingImage ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ImagePlus className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isCompressingImage ? 'Сжатие...' : 'Загрузить картинку / фото'}</span>
+                        </button>
+
+                        {(formIcon.startsWith('data:') || formIcon.startsWith('http')) ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              ✓ {formIcon.startsWith('data:') ? `${(formIcon.length * 0.75 / 1024).toFixed(1)} KB` : 'URL'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setFormIcon('🧩')}
+                              className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                            >
+                              Сбросить
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* URL or Emoji fallback */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={formIcon}
+                          onChange={e => setFormIcon(e.target.value)}
+                          placeholder="Или вставьте URL картинки / эмодзи"
+                          className="flex-1 h-7 px-2 rounded-lg bg-card border border-border text-[11px] outline-none focus:border-primary font-mono text-muted-foreground focus:text-foreground"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          {['🔮', '⏱️', '🚀', '🤖', '📊', '⚡', '🎨', '🛡️'].map(emoji => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => setFormIcon(emoji)}
+                              className="w-6 h-6 rounded-md hover:bg-muted/80 flex items-center justify-center text-xs cursor-pointer transition-all"
+                              title={`Выбрать ${emoji}`}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
