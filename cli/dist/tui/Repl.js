@@ -473,7 +473,7 @@ export function Repl({ initialData }) {
             }
             return;
         }
-        // ── Entropy / Nexus Search AI (Perplexity style Deep Web Search) ──
+        // ── Extension: Entropy AI Search (Perplexity style Deep Web Search) ──
         if (raw.startsWith('/search') || raw.startsWith('/entropy') || raw.startsWith('/энтропия') || raw.startsWith('/серч') || raw.startsWith('/поиск')) {
             const query = raw.replace(/^(\/search|\/entropy|\/энтропия|\/серч|\/поиск)/, '').trim();
             if (!query) {
@@ -482,44 +482,87 @@ export function Repl({ initialData }) {
                     {
                         id: makeUniqueId(),
                         type: 'assistant',
-                        text: '🔮 Entropy AI Search (Perplexity Style)',
+                        text: '🔮 Расширение: Entropy AI Search & Deep Research (v1.0.0)',
                         details: [
-                            'Использование: /search <запрос> или /entropy <запрос>',
-                            'Пример: /search последние тренды в веб-разработке 2026',
-                            'Entropy выполнит глубокий анализ фактов, синтез данных и предоставит структурированный ответ со ссылками на источники [1][2].',
+                            '• Автор: @waters1ze (GitHub: waters1ze/Entropy)',
+                            '• Использование: /search <запрос> или /entropy <запрос>',
+                            '• Пример: /search архитектура MoE vs Dense в LLM 2026',
+                            '• Тихоня выполнит глубокий поиск, верификацию первоисточников и синтез цитат [1][2].',
                         ],
                     },
                 ]);
                 return;
             }
-            setActionProgress({ label: `Entropy AI: Поиск и синтез источников по «${query}»...`, ratio: 0.4 });
+            setActionProgress({ label: `[Entropy AI] Тихоня краулит первоисточники по «${query}»...`, ratio: 0.4 });
             const progTimer = setTimeout(() => {
-                setActionProgress({ label: 'Entropy AI: Анализ цитат и структурирование ответа...', ratio: 0.8 });
+                setActionProgress({ label: '[Entropy AI] Тихоня синтезирует факты и проверяет цитаты...', ratio: 0.8 });
             }, 500);
             try {
-                const searchPrompt = `Ты — ведущий поисково-аналитический движок Nexus Search AI (в стиле Perplexity).
+                let details = [];
+                let answerText = '';
+                try {
+                    const apiBase = (creds.serverUrl || 'https://zeprh.vercel.app').replace(/\/$/, '');
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (creds.token)
+                        headers['x-telegram-auth'] = creds.token;
+                    if (creds.chatId)
+                        headers['x-telegram-chat-id'] = creds.chatId;
+                    const res = await fetch(`${apiBase}/api/entropy/search`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ query, mode: 'web' }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.result) {
+                        const r = data.result;
+                        answerText = `🔮 Entropy AI: «${query}»`;
+                        details.push(`◈ Тихоня: «${r.tikhonyaComment || 'Синтезировал первоисточники [ ˘ ᴗ ˘ ]'}»`);
+                        if (r.sources && r.sources.length > 0) {
+                            details.push('─'.repeat(50));
+                            details.push('📚 Верифицированные первоисточники:');
+                            r.sources.forEach((s) => {
+                                details.push(`  [${s.id}] ${s.title} (${s.domain})`);
+                            });
+                            details.push('─'.repeat(50));
+                        }
+                        details.push('');
+                        r.answer.split('\n').forEach((line) => details.push(line));
+                        if (r.takeaways && r.takeaways.length > 0) {
+                            details.push('');
+                            details.push('💡 Главные выводы:');
+                            r.takeaways.forEach((t) => details.push(`  ◈ ${t}`));
+                        }
+                    }
+                }
+                catch {
+                    // Fallback to local AI synthesis
+                }
+                if (details.length === 0) {
+                    const searchPrompt = `Ты — ведущий исследовательский поисково-аналитический движок Entropy AI (в стиле Perplexity) с маскотом Тихоня.
 Пользователь ищет: "${query}".
 
-Сформируй глубокий, точный и структурированный ответ со следующей структурой:
+Сформируй глубокий структурированный ответ со следующей структурой:
 1. Краткий прямой ответ (Direct Summary).
 2. Подробный разбор с цитатами и фактами. Помечай факты сносками [1], [2], [3].
 3. Список проверенных источников (Sources & References):
    [1] Источник 1 (Название и контекст)
    [2] Источник 2 (Название и контекст)
-4. Связанные follow-up вопросы (Related questions) — 2-3 пункта.
-
-Стиль: строгий, технологичный, ч/б символы (◈, ❖, ▪). Без лишней "воды".`;
-                const res = await sendAiQuery(creds, searchPrompt, 'openai/gpt-oss-120b');
+4. Ключевые выводы (Key takeaways).
+5. Реплика Тихони [ ˘ ᴗ ˘ ].`;
+                    const aiRes = await sendAiQuery(creds, searchPrompt, 'openai/gpt-oss-120b');
+                    answerText = `🔮 Entropy AI Search: «${query}»`;
+                    details = aiRes.message ? aiRes.message.split('\n') : (aiRes.details || []);
+                }
                 clearTimeout(progTimer);
-                setActionProgress({ label: 'Entropy AI: Ответ готов', ratio: 1.0 });
+                setActionProgress({ label: '[Entropy AI] Тихоня завершил поиск', ratio: 1.0 });
                 setTimeout(() => setActionProgress(null), 800);
                 setHistory(h => [
                     ...h,
                     {
                         id: makeUniqueId(),
                         type: 'assistant',
-                        text: `🔮 Entropy AI Search: «${query}»`,
-                        details: res.message ? res.message.split('\n') : (res.details || []),
+                        text: answerText,
+                        details,
                     },
                 ]);
             }
@@ -528,7 +571,7 @@ export function Repl({ initialData }) {
                 setActionProgress(null);
                 setHistory(h => [
                     ...h,
-                    { id: makeUniqueId(), type: 'error', text: `Nexus Search ошибка: ${err.message}` },
+                    { id: makeUniqueId(), type: 'error', text: `Entropy Search ошибка: ${err.message}` },
                 ]);
             }
             return;

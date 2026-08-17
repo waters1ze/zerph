@@ -1,12 +1,70 @@
 /**
  * Next.js API Route — Entropy AI Deep Search & Research Engine (Perplexity Style)
- * POST /api/entropy/search
+ * GET/POST /api/entropy/search
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { callGroqChatCompletion, groqPool, getHuggingFaceTokens, getModelForUserPlan } from '@/lib/backend/groq-pool'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
+
+// ── Role Limits Configuration (Customizable by Extension Creator) ──────────
+export interface EntropyRoleLimits {
+  free: number        // Daily searches for Free tier
+  plus: number        // Daily searches for Zerf Plus (99 ₽)
+  pro: number         // Daily searches for Zerf Pro (299 ₽)
+  corp: number        // Daily searches for Corporate tier
+  creator: number     // Unlimited (-1)
+  admin: number       // Unlimited (-1)
+}
+
+export const ENTROPY_ROLE_LIMITS: EntropyRoleLimits = {
+  free: 15,
+  plus: 100,
+  pro: 500,
+  corp: 2000,
+  creator: -1, // Unlimited
+  admin: -1,   // Unlimited
+}
+
+// ── Specific User Custom Overrides (Chat ID or Username -> Daily Limit) ────
+// Extension creator can manually define exact limits per person here!
+export const ENTROPY_USER_LIMIT_OVERRIDES: Record<string, number> = {
+  '6136950061': -1,   // Creator (Unlimited)
+  '5078516086': -1,   // Co-creator (Unlimited)
+  'waters1ze': -1,    // Developer username (Unlimited)
+  // Example custom limits:
+  // '123456789': 250, // VIP Beta tester
+}
+
+// Daily In-Memory Usage Tracker (key: YYYY-MM-DD:chatId)
+const dailyEntropyUsage: Map<string, number> = new Map()
+
+function getTodayKey(chatId: string): string {
+  const dateStr = new Date().toISOString().split('T')[0]
+  return `${dateStr}:${chatId}`
+}
+
+function getUserLimit(chatId?: string, userPlan: string = 'free'): { limit: number; isUnlimited: boolean } {
+  if (!chatId) return { limit: ENTROPY_ROLE_LIMITS.free, isUnlimited: false }
+
+  // Check specific user override first
+  if (chatId in ENTROPY_USER_LIMIT_OVERRIDES) {
+    const override = ENTROPY_USER_LIMIT_OVERRIDES[chatId]
+    return { limit: override, isUnlimited: override === -1 }
+  }
+
+  // Fallback to role / plan limits
+  const plan = userPlan.toLowerCase()
+  if (plan === 'creator' || plan === 'admin' || chatId === '6136950061' || chatId === '5078516086') {
+    return { limit: -1, isUnlimited: true }
+  }
+
+  if (plan === 'corp') return { limit: ENTROPY_ROLE_LIMITS.corp, isUnlimited: false }
+  if (plan === 'pro') return { limit: ENTROPY_ROLE_LIMITS.pro, isUnlimited: false }
+  if (plan === 'plus') return { limit: ENTROPY_ROLE_LIMITS.plus, isUnlimited: false }
+  return { limit: ENTROPY_ROLE_LIMITS.free, isUnlimited: false }
+}
 
 export interface EntropySource {
   id: number
@@ -25,15 +83,51 @@ export interface EntropySearchResult {
   followUpQuestions: string[]
   tikhonyaComment: string
   createdAt: string
+  usage?: {
+    used: number
+    limit: number
+    remaining: number
+    isUnlimited: boolean
+    plan: string
+  }
+}
+
+// GET: Return user's remaining search limits & usage
+export async function GET(req: NextRequest) {
+  try {
+    const authUser = await getAuthenticatedUser(req)
+    const ownerChatId = authUser?.chatId || 'guest'
+    const limits = ownerChatId !== 'guest' ? await getUserUsageAndLimits(ownerChatId) : null
+    const userPlan = limits?.plan || 'free'
+
+    const { limit, isUnlimited } = getUserLimit(ownerChatId, userPlan)
+    const todayKey = getTodayKey(ownerChatId)
+    const used = dailyEntropyUsage.get(todayKey) || 0
+    const remaining = isUnlimited ? 999999 : Math.max(0, limit - used)
+
+    return NextResponse.json({
+      success: true,
+      usage: {
+        used,
+        limit,
+        remaining,
+        isUnlimited,
+        plan: userPlan,
+        roleLimits: ENTROPY_ROLE_LIMITS,
+      },
+    })
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'Error checking limits' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
-    const ownerChatId = authUser?.chatId
+    const ownerChatId = authUser?.chatId || 'guest'
 
     const body = await req.json()
-    const { query, mode = 'web', focus } = body
+    const { query, mode = 'web', focus, apiKey } = body
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return NextResponse.json({ error: 'Поисковый запрос обязателен' }, { status: 400 })
@@ -41,8 +135,28 @@ export async function POST(req: NextRequest) {
 
     const cleanQuery = query.trim()
 
+    // ── Check Daily Limits ───────────────────────────────────────────────
+    const userLimits = ownerChatId !== 'guest' ? await getUserUsageAndLimits(ownerChatId) : null
+    const userPlan = userLimits?.plan || 'free'
+    const { limit, isUnlimited } = getUserLimit(ownerChatId, userPlan)
+    const todayKey = getTodayKey(ownerChatId)
+    const currentUsed = dailyEntropyUsage.get(todayKey) || 0
+
+    if (!isUnlimited && currentUsed >= limit) {
+      return NextResponse.json(
+        {
+          error: `❌ Дневной лимит запросов Entropy исчерпан (${limit}/${limit} для тарифа ${userPlan.toUpperCase()}). Подключите Zerf Plus или настройте лимиты для продолжения!`,
+          limitReached: true,
+          used: currentUsed,
+          limit,
+          plan: userPlan,
+        },
+        { status: 429 }
+      )
+    }
+
     // Build system prompt for Perplexity style synthesis with citations
-    const prompt = `Ты — поисково-аналитический движок глубоких инсайтов Entropy AI Deep Search в приложении Zerf Note (в стиле Perplexity AI Pro Search) совместно с персонажем-маскотом «Тихоня» [ ˘ ᴗ ˘ ].
+    const prompt = `Ты — ведущий исследовательский ИИ-движок глубоких инсайтов Entropy AI Deep Search (в стиле Perplexity AI Pro Search) совместно с живым маскотом «Тихоня» [ ˘ ᴗ ˘ ].
 
 Пользовательский запрос: "${cleanQuery}"
 Режим поиска: ${mode}
@@ -86,8 +200,7 @@ JSON Схема:
     let llmResult: any = null
 
     try {
-      const limits = ownerChatId ? await getUserUsageAndLimits(ownerChatId) : null
-      const effectiveModel = getModelForUserPlan(limits?.plan, undefined, 'chat')
+      const effectiveModel = getModelForUserPlan(userPlan, undefined, 'chat')
 
       const completion = await callGroqChatCompletion({
         messages: [
@@ -101,6 +214,7 @@ JSON Схема:
           },
         ],
         model: effectiveModel,
+        apiKey: apiKey || undefined,
         response_format: { type: 'json_object' },
       })
 
@@ -122,6 +236,11 @@ JSON Схема:
       llmResult = generateFallbackResearch(cleanQuery, mode)
     }
 
+    // Increment user's daily usage
+    dailyEntropyUsage.set(todayKey, currentUsed + 1)
+    const newUsed = currentUsed + 1
+    const remaining = isUnlimited ? 999999 : Math.max(0, limit - newUsed)
+
     const responsePayload: EntropySearchResult = {
       query: cleanQuery,
       mode,
@@ -131,6 +250,13 @@ JSON Схема:
       followUpQuestions: llmResult.followUpQuestions || [],
       tikhonyaComment: llmResult.tikhonyaComment || 'Тихоня завершил глубокий синтез источников [ ˘ ᴗ ˘ ]',
       createdAt: new Date().toISOString(),
+      usage: {
+        used: newUsed,
+        limit,
+        remaining,
+        isUnlimited,
+        plan: userPlan,
+      },
     }
 
     return NextResponse.json({ success: true, result: responsePayload })

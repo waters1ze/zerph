@@ -7,12 +7,14 @@ import {
   ExternalLink, Copy, Check, Bookmark, CheckSquare, RotateCcw,
   Clock, Share2, Layers, MessageSquare, ChevronRight, CornerDownLeft,
   AlertCircle, ShieldCheck, Terminal, Heart, Eye, ArrowUpRight,
-  FileText, Lightbulb, Compass, Database, Hash
+  FileText, Lightbulb, Compass, Database, Hash, HelpCircle,
+  SlidersHorizontal, Flame, Cpu, GraduationCap
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import type { Note, Task } from '@/lib/types'
 import type { EntropySearchResult, EntropySource } from '@/app/api/entropy/search/route'
+import { TikhonyaMascot, type TikhonyaMood } from '@/components/views/tikhonya-mascot'
 
 const STARTER_TOPICS = [
   {
@@ -60,10 +62,19 @@ const STARTER_TOPICS = [
 export function EntropySearchView() {
   const { state, dispatch } = useApp()
   const [query, setQuery] = useState('')
-  const [activeMode, setActiveMode] = useState<'web' | 'notes' | 'fast' | 'code'>('web')
+  const [activeMode, setActiveMode] = useState<'web' | 'academic' | 'notes' | 'fast' | 'code'>('web')
+  const [isProSearch, setIsProSearch] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [searchStep, setSearchStep] = useState<number>(0)
   const [result, setResult] = useState<EntropySearchResult | null>(null)
+  const [usageInfo, setUsageInfo] = useState<{
+    used: number
+    limit: number
+    remaining: number
+    isUnlimited: boolean
+    plan: string
+  } | null>(null)
+
   const [history, setHistory] = useState<EntropySearchResult[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -74,14 +85,29 @@ export function EntropySearchView() {
     return []
   })
 
-  const [tikhonyaMood, setTikhonyaMood] = useState<'normal' | 'happy' | 'thinking' | 'wink'>('normal')
-  const [tikhonyaQuote, setTikhonyaQuote] = useState('Тихоня готов исследовать любые темы на максимальной глубине [ ˘ ᴗ ˘ ]')
+  const [tikhonyaMood, setTikhonyaMood] = useState<TikhonyaMood>('normal')
+  const [tikhonyaStatus, setTikhonyaStatus] = useState<string>('Тихоня готов исследовать любые темы на максимальной глубине [ ˘ ᴗ ˘ ]')
   const [copiedAnswer, setCopiedAnswer] = useState(false)
   const [savedAsNote, setSavedAsNote] = useState(false)
   const [savedAsTasks, setSavedAsTasks] = useState(false)
   const [activeSourceHover, setActiveSourceHover] = useState<EntropySource | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const followUpInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch initial usage limits on mount
+  useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        const res = await fetch('/api/entropy/search', { headers: getAuthHeaders() })
+        const data = await res.json()
+        if (data.success && data.usage) {
+          setUsageInfo(data.usage)
+        }
+      } catch {}
+    }
+    fetchUsage()
+  }, [])
 
   // Auto-focus search on mount
   useEffect(() => {
@@ -97,20 +123,6 @@ export function EntropySearchView() {
     return () => window.removeEventListener('zerf_open_entropy_search', handleOpen)
   }, [])
 
-  // Tikhonya Mascot Idle Animation
-  useEffect(() => {
-    if (isLoading) {
-      setTikhonyaMood('thinking')
-      setTikhonyaQuote('Тихоня краулит первоисточники и синтезирует данные...')
-      return
-    }
-
-    const timer = setInterval(() => {
-      setTikhonyaMood(prev => (prev === 'normal' ? 'wink' : 'normal'))
-    }, 4000)
-    return () => clearInterval(timer)
-  }, [isLoading])
-
   const handleSearch = async (searchQuery?: string) => {
     const targetQuery = (searchQuery || query).trim()
     if (!targetQuery) return
@@ -119,11 +131,19 @@ export function EntropySearchView() {
     setIsLoading(true)
     setSavedAsNote(false)
     setSavedAsTasks(false)
+    setTikhonyaMood('thinking')
+    setTikhonyaStatus(`Тихоня ищет первоисточники по «${targetQuery}»...`)
     setSearchStep(1)
 
     // Simulate progressive research pipeline steps for delightful UX
-    const stepTimer1 = setTimeout(() => setSearchStep(2), 600)
-    const stepTimer2 = setTimeout(() => setSearchStep(3), 1200)
+    const stepTimer1 = setTimeout(() => {
+      setSearchStep(2)
+      setTikhonyaStatus('Тихоня синтезирует факты и проверяет цитаты 🧠')
+    }, 600)
+    const stepTimer2 = setTimeout(() => {
+      setSearchStep(3)
+      setTikhonyaStatus('Тихоня структурирует аналитический отчет ✧')
+    }, 1200)
 
     try {
       const res = await fetch('/api/entropy/search', {
@@ -143,8 +163,11 @@ export function EntropySearchView() {
 
       if (data.success && data.result) {
         setResult(data.result)
+        if (data.result.usage) {
+          setUsageInfo(data.result.usage)
+        }
         setTikhonyaMood('happy')
-        setTikhonyaQuote(data.result.tikhonyaComment || 'Тихоня успешно синтезировал первоисточники ✧')
+        setTikhonyaStatus(data.result.tikhonyaComment || 'Тихоня успешно синтезировал первоисточники ✧')
 
         // Save to search history
         setHistory(prev => {
@@ -155,10 +178,14 @@ export function EntropySearchView() {
           return next
         })
       } else {
-        alert(data.error || 'Не удалось выполнить поиск. Попробуйте еще раз.')
+        setTikhonyaMood('normal')
+        setTikhonyaStatus(data.error || 'Не удалось выполнить поиск')
+        alert(data.error || 'Не удалось выполнить поиск. Проверьте лимиты или попробуйте еще раз.')
       }
     } catch (e: any) {
       console.error(e)
+      setTikhonyaMood('normal')
+      setTikhonyaStatus('Ошибка связи с поисковым движком')
       alert('Ошибка соединения с поисковым движком Entropy AI')
     } finally {
       clearTimeout(stepTimer1)
@@ -248,158 +275,122 @@ export function EntropySearchView() {
     setQuery(item.query)
     setResult(item)
     setTikhonyaMood('happy')
-    setTikhonyaQuote(item.tikhonyaComment || 'Тихоня открыл сохраненное исследование ✧')
+    setTikhonyaStatus(item.tikhonyaComment || 'Тихоня открыл сохраненное исследование ✧')
   }
 
   const handleResetSearch = () => {
     setQuery('')
     setResult(null)
     setTikhonyaMood('normal')
-    setTikhonyaQuote('Тихоня готов исследовать новые горизонты [ ˘ ᴗ ˘ ]')
+    setTikhonyaStatus('Тихоня готов исследовать новые горизонты [ ˘ ᴗ ˘ ]')
     inputRef.current?.focus()
   }
 
-  // Tikhonya Mascot ASCII Face Render
-  const renderTikhonyaAscii = () => {
-    switch (tikhonyaMood) {
-      case 'thinking':
-        return {
-          top: '◈',
-          face: '[ ◉ ᴗ ◉ ]',
-          arms: '/| ◈ |\\',
-          body: '/ |   | \\',
-          bottom: '~ \'---\' ~',
-        }
-      case 'happy':
-        return {
-          top: '✧',
-          face: '[ ✧ ᴗ ✧ ]',
-          arms: '\\| ◈ |/',
-          body: '/ |   | \\',
-          bottom: '~ \'---\' ~',
-        }
-      case 'wink':
-        return {
-          top: '◈',
-          face: '[ ˘ ᴗ ◉ ]',
-          arms: '/| ◈ |\\',
-          body: '/ |   | \\',
-          bottom: '~ \'---\' ~',
-        }
-      default:
-        return {
-          top: '◈',
-          face: '[ ˘ ᴗ ˘ ]',
-          arms: '/| ◈ |\\',
-          body: '/ |   | \\',
-          bottom: '~ \'---\' ~',
-        }
-    }
-  }
-
-  const mascot = renderTikhonyaAscii()
-
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-6 space-y-6 pb-24 text-foreground font-sans">
-      {/* ── TOP HEADER / HUB ── */}
+      {/* ── TOP HERO HEADER WITH VISUAL TIKHONYA MASCOT ── */}
       <div className="p-5 md:p-6 rounded-3xl bg-card border border-border/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
         {/* Glow Accent */}
         <div className="absolute -right-10 -top-10 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Left: Тихоня ASCII Mascot & Persona */}
-        <div className="flex items-center gap-4.5 min-w-0">
-          {/* Animated Mascot Box */}
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              setTikhonyaMood(prev => (prev === 'normal' ? 'happy' : 'normal'))
-              setTikhonyaQuote('Тихоня взмахнул крыльями и передает вам привет! ✧ ٩(ˊᗜˋ*)و ✧')
-            }}
-            className="font-mono text-[11px] leading-tight text-sky-400 bg-slate-950/90 p-3.5 rounded-2xl border border-sky-500/30 shrink-0 text-center select-none shadow-md cursor-pointer hover:border-sky-400/60 transition-all group"
-            title="Нажмите на Тихоню, чтобы поприветствовать его"
-          >
-            <div className="text-sky-300 group-hover:animate-bounce">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{mascot.top}&nbsp;&nbsp;&nbsp;</div>
-            <div className="text-white font-bold">&nbsp;&nbsp;{mascot.face}</div>
-            <div className="text-indigo-400">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{mascot.arms}</div>
-            <div className="text-sky-400">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{mascot.body}</div>
-            <div className="text-indigo-500">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{mascot.bottom}</div>
-          </motion.div>
+        {/* Left: 3D Visual Mascot & Persona */}
+        <TikhonyaMascot
+          mood={tikhonyaMood}
+          statusText={tikhonyaStatus}
+          size="md"
+          onMascotClick={() => {
+            setTikhonyaMood('celebrate')
+            setTikhonyaStatus('Тихоня взмахнул крыльями и рад вам помочь! ✧ ٩(ˊᗜˋ*)و ✧')
+          }}
+        />
 
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-mono font-bold border border-primary/25">
-                🔮 Entropy AI v1.0.0
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                ◈ Тихоня · Zerf Allay Companion
+        {/* Right: Limits & Controls */}
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {/* Daily Usage Badge */}
+          {usageInfo && (
+            <div
+              className={cn(
+                'px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold flex items-center gap-1.5 shadow-2xs',
+                usageInfo.isUnlimited
+                  ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                  : usageInfo.remaining > 5
+                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+              )}
+              title="Ваши дневные лимиты поисковых запросов Entropy AI"
+            >
+              <Zap className="w-3.5 h-3.5 text-primary" />
+              <span>
+                {usageInfo.isUnlimited
+                  ? '✦ Безлимит (Creator / Pro)'
+                  : `🔋 ${usageInfo.used} / ${usageInfo.limit} сегодня`}
               </span>
             </div>
-            <h1 className="text-base md:text-lg font-bold text-foreground truncate">
-              Глубокий исследовательский поиск инсайтов
-            </h1>
-            <p className="text-xs text-sky-400/90 font-mono flex items-center gap-1.5 truncate">
-              <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="truncate">{tikhonyaQuote}</span>
-            </p>
-          </div>
-        </div>
+          )}
 
-        {/* Right: Quick Action Controls */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {result && (
             <button
               onClick={handleResetSearch}
-              className="px-3 py-1.5 rounded-xl bg-muted/80 hover:bg-muted text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-muted/80 hover:bg-muted text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Новый поиск</span>
             </button>
           )}
-
-          <button
-            onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
-            className="px-3.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground font-medium text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
-            title="Открыть магазин расширений Zerf Note"
-          >
-            <span>🧩 Магазин расширений</span>
-          </button>
         </div>
       </div>
 
-      {/* ── SEARCH BAR & MODE SELECTOR (PERPLEXITY STYLE) ── */}
+      {/* ── SEARCH BAR & FOCUS MODES (PERPLEXITY PRO STYLE) ── */}
       <div className="space-y-3">
-        {/* Modes Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {[
-            { id: 'web', label: '🌐 Deep Web & Факты', icon: Globe },
-            { id: 'notes', label: '📚 Моя база Zerf Note', icon: BookOpen },
-            { id: 'fast', label: '⚡ Быстрый синтез', icon: Zap },
-            { id: 'code', label: '💻 Код & Архитектура', icon: Code },
-          ].map(m => {
-            const Icon = m.icon
-            const active = activeMode === m.id
-            return (
-              <button
-                key={m.id}
-                onClick={() => setActiveMode(m.id as any)}
-                className={cn(
-                  'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all shrink-0 cursor-pointer',
-                  active
-                    ? 'bg-primary/15 border-primary/40 text-primary shadow-xs'
-                    : 'bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{m.label}</span>
-              </button>
-            )
-          })}
+        {/* Focus Modes Pills & Pro Toggle */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {[
+              { id: 'web', label: '🌐 All Web & Факты', icon: Globe },
+              { id: 'academic', label: '🔬 Академический (arXiv)', icon: GraduationCap },
+              { id: 'notes', label: '📚 База Zerf Note', icon: BookOpen },
+              { id: 'code', label: '💻 Код & GitHub', icon: Code },
+              { id: 'fast', label: '⚡ Быстрый факт-чекинг', icon: Zap },
+            ].map(m => {
+              const Icon = m.icon
+              const active = activeMode === m.id
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setActiveMode(m.id as any)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all shrink-0 cursor-pointer',
+                    active
+                      ? 'bg-primary/15 border-primary/40 text-primary shadow-xs'
+                      : 'bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{m.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            onClick={() => setIsProSearch(!isProSearch)}
+            className={cn(
+              'px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-colors cursor-pointer shrink-0',
+              isProSearch
+                ? 'bg-primary/20 border-primary/40 text-primary'
+                : 'bg-muted border-border text-muted-foreground'
+            )}
+            title="Глубокий многоступенчатый анализ первоисточников"
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>Pro Search</span>
+            <span className={cn('w-1.5 h-1.5 rounded-full', isProSearch ? 'bg-primary animate-pulse' : 'bg-muted-foreground')} />
+          </button>
         </div>
 
-        {/* Big Search Input Box */}
-        <div className="p-2 rounded-2xl bg-card border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 shadow-md transition-all flex items-center gap-2">
-          <div className="pl-2.5 text-muted-foreground">
+        {/* Big Perplexity Search Capsule */}
+        <div className="p-2.5 rounded-2xl bg-card border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 shadow-md transition-all flex items-center gap-2">
+          <div className="pl-2 text-muted-foreground">
             <Search className="w-5 h-5 text-primary/80" />
           </div>
 
@@ -410,7 +401,7 @@ export function EntropySearchView() {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            placeholder="Спросите что угодно: сравнение архитектур, поиск фактов, синтез источников..."
+            placeholder="Спросите что угодно: сравнение архитектур, поиск фактов, синтез первоисточников..."
             className="flex-1 h-10 bg-transparent text-sm md:text-base text-foreground placeholder:text-muted-foreground/60 outline-none"
           />
 
@@ -450,7 +441,7 @@ export function EntropySearchView() {
           <div className="flex items-center gap-2">
             <span>Клавиша <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground">Enter</kbd> для запуска</span>
             <span>·</span>
-            <span>CLI команды: <code className="font-mono text-primary font-bold">/search</code>, <code className="font-mono text-primary font-bold">/entropy</code></span>
+            <span>CLI команда: <code className="font-mono text-primary font-bold">/search</code> или <code className="font-mono text-primary font-bold">/entropy</code></span>
           </div>
 
           {history.length > 0 && (
@@ -631,14 +622,14 @@ export function EntropySearchView() {
             )}
           </div>
 
-          {/* 4. FOLLOW-UP QUESTIONS (Уточняющие вопросы Perplexity style) */}
-          {result.followUpQuestions && result.followUpQuestions.length > 0 && (
-            <div className="p-5 rounded-3xl bg-card border border-border/80 shadow-xs space-y-3">
-              <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                <Compass className="w-4 h-4 text-sky-400" />
-                <span>Уточнить или продолжить исследование:</span>
-              </h4>
+          {/* 4. FOLLOW-UP QUESTIONS & ASK NEXT (Perplexity style) */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-4">
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+              <Compass className="w-4 h-4 text-sky-400" />
+              <span>Уточнить или продолжить исследование:</span>
+            </h4>
 
+            {result.followUpQuestions && result.followUpQuestions.length > 0 && (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-wrap">
                 {result.followUpQuestions.map((q, idx) => (
                   <button
@@ -651,8 +642,36 @@ export function EntropySearchView() {
                   </button>
                 ))}
               </div>
+            )}
+
+            {/* Follow-up Question Input Capsule */}
+            <div className="p-2 rounded-2xl bg-muted/40 border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 flex items-center gap-2">
+              <input
+                ref={followUpInputRef}
+                type="text"
+                placeholder="Задайте уточняющий вопрос Тихоне..."
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    handleSearch(e.currentTarget.value)
+                    e.currentTarget.value = ''
+                  }
+                }}
+                className="flex-1 h-9 bg-transparent px-2 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (followUpInputRef.current?.value) {
+                    handleSearch(followUpInputRef.current.value)
+                    followUpInputRef.current.value = ''
+                  }
+                }}
+                className="h-8 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer"
+              >
+                <span>Спросить</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
             </div>
-          )}
+          </div>
         </motion.div>
       )}
 
@@ -711,7 +730,7 @@ export function EntropySearchView() {
                     setHistory([])
                     localStorage.removeItem('zerf_entropy_search_history')
                   }}
-                  className="text-[10px] text-muted-foreground hover:text-rose-400 transition-colors"
+                  className="text-[10px] text-muted-foreground hover:text-rose-400 transition-colors cursor-pointer"
                 >
                   Очистить историю
                 </button>
