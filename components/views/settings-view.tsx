@@ -1914,7 +1914,7 @@ export function SettingsView() {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Интерактивный TUI на React Ink, живой маскот Тихоня, ИИ-генератор расширений и сфера фокуса
+                      Интерактивный TUI на React Ink, живой маскот Зерфик, ИИ-генератор расширений и сфера фокуса
                     </p>
                   </div>
                 </div>
@@ -2123,7 +2123,7 @@ export function SettingsView() {
 
               <div className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
                 <h5 className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                  <span>◈</span> Знакомьтесь: Тихоня (Zerf Allay Mascot)
+                  <span>◈</span> Знакомьтесь: Зерфик (Zerf Spirit Mascot)
                 </h5>
                 <p>
                   Ваш персональный цифровой дух-помощник в терминале. Он анимирован в реальном времени: взмахивает крылышками, помогает держать концентрацию в режиме фокуса, празднует выполнение задач и напоминает о дедлайнах.

@@ -219,9 +219,15 @@ export function EntropySearchView() {
       clearTimeout(stepTimer2)
 
       if (data.success && data.result) {
-        setResult(data.result)
+        const cleanComment = (data.result.tikhonyaComment || 'Зерфик завершил глубокое исследование первоисточников')
+          .replace(/тихоня/gi, 'Зерфик')
+          .replace(/\[\s*[˘ˇ^]\s*[ᴗ◡‿_]\s*[˘ˇ^]\s*\]/g, '')
+          .trim()
+        const sanitizedResult = { ...data.result, tikhonyaComment: cleanComment }
+
+        setResult(sanitizedResult)
         setZerfikMood('happy')
-        setZerfikStatus(data.result.tikhonyaComment || 'Исследование завершено, первоисточники проверены')
+        setZerfikStatus(cleanComment)
 
         if (data.result.usage) {
           setUsageInfo(data.result.usage)
@@ -230,7 +236,7 @@ export function EntropySearchView() {
         // Save to local history
         setHistory(prev => {
           const filtered = prev.filter(h => h.query.toLowerCase() !== targetQuery.toLowerCase())
-          const nextHistory = [data.result, ...filtered].slice(0, 30)
+          const nextHistory = [sanitizedResult, ...filtered].slice(0, 30)
           try {
             localStorage.setItem('zerf_entropy_search_history', JSON.stringify(nextHistory))
           } catch {}
@@ -329,10 +335,14 @@ export function EntropySearchView() {
   }
 
   const handleSelectHistoryItem = (item: EntropySearchResult) => {
+    const cleanComment = (item.tikhonyaComment || 'Открыто сохраненное исследование')
+      .replace(/тихоня/gi, 'Зерфик')
+      .replace(/\[\s*[˘ˇ^]\s*[ᴗ◡‿_]\s*[˘ˇ^]\s*\]/g, '')
+      .trim()
     setQuery(item.query)
-    setResult(item)
+    setResult({ ...item, tikhonyaComment: cleanComment })
     setZerfikMood('happy')
-    setZerfikStatus(item.tikhonyaComment || 'Открыто сохраненное исследование')
+    setZerfikStatus(cleanComment)
   }
 
   const handleResetSearch = () => {

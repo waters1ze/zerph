@@ -52,16 +52,22 @@ export function ZerfikMascot({
   }
 
   const dimensions = {
-    sm: { width: 48, height: 48, aura: 64 },
-    md: { width: 72, height: 72, aura: 96 },
-    lg: { width: 100, height: 100, aura: 130 },
+    sm: { width: 52, height: 52, aura: 68 },
+    md: { width: 78, height: 78, aura: 100 },
+    lg: { width: 106, height: 106, aura: 136 },
   }[size]
 
   const isThinking = currentMood === 'thinking'
 
+  // Clean status text: ensure no old "Тихоня" mentions
+  const displayStatus = (statusText || ZERFIK_QUOTES[quoteIndex])
+    .replace(/тихоня/gi, 'Зерфик')
+    .replace(/\[\s*[˘ˇ^]\s*[ᴗ◡‿_]\s*[˘ˇ^]\s*\]/g, '')
+    .trim()
+
   return (
     <div className={cn('flex items-center gap-3.5 select-none relative', className)}>
-      {/* ── Seamless Organic Mascot Avatar (Blended into UI) ── */}
+      {/* ── Floating Seamless Spirit Figure (No Box, No Background, Pure Transparent Hologram) ── */}
       <div
         className="relative cursor-pointer group shrink-0 flex items-center justify-center"
         onClick={handleClick}
@@ -72,11 +78,11 @@ export function ZerfikMascot({
         {/* Ambient Radial Soft Glow */}
         <motion.div
           animate={{
-            scale: isThinking ? [1, 1.35, 1] : [1, 1.15, 1],
-            opacity: isThinking ? [0.6, 0.95, 0.6] : [0.25, 0.45, 0.25],
+            scale: isThinking ? [1, 1.4, 1] : [1, 1.15, 1],
+            opacity: isThinking ? [0.6, 0.95, 0.6] : [0.2, 0.4, 0.2],
           }}
-          transition={{ duration: isThinking ? 1.4 : 3, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute inset-0 rounded-full bg-radial from-cyan-400/30 via-primary/20 to-transparent blur-xl pointer-events-none"
+          transition={{ duration: isThinking ? 1.2 : 3.5, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute inset-0 rounded-full bg-radial from-cyan-400/35 via-primary/20 to-transparent blur-xl pointer-events-none"
         />
 
         {/* Orbiting Thinking Rings */}
@@ -84,63 +90,62 @@ export function ZerfikMascot({
           <>
             <motion.div
               animate={{ rotate: 360 }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-              className="absolute inset-1 rounded-full border border-dashed border-cyan-400/50 pointer-events-none"
+              transition={{ duration: 2.8, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-1 rounded-full border border-dashed border-cyan-400/60 pointer-events-none"
             />
             <motion.div
               animate={{ rotate: -360 }}
-              transition={{ duration: 4.5, repeat: Infinity, ease: 'linear' }}
-              className="absolute inset-3 rounded-full border border-dotted border-primary/60 pointer-events-none"
+              transition={{ duration: 4.2, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-3 rounded-full border border-dotted border-primary/70 pointer-events-none"
             />
             <motion.div
-              animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.8, 0.3] }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+              animate={{ scale: [0.95, 1.25, 0.95], opacity: [0.2, 0.8, 0.2] }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
               className="absolute inset-0 rounded-full border border-cyan-300/40 pointer-events-none"
             />
           </>
         )}
 
-        {/* Floating Avatar Sphere */}
+        {/* Floating Glowing Spirit Cutout (Seamless Screen Blending) */}
         <motion.div
           animate={{
-            y: isThinking ? [-3, 3, -3] : [0, -4, 0],
-            scale: currentMood === 'celebrate' ? [1, 1.1, 1] : 1,
+            y: isThinking ? [-4, 4, -4] : [-3, 3, -3],
+            rotate: isThinking ? [-2, 2, -2] : [-1.5, 1.5, -1.5],
+            scale: currentMood === 'celebrate' ? [1, 1.15, 1] : 1,
           }}
           transition={{
-            duration: isThinking ? 0.9 : 3.2,
+            duration: isThinking ? 1.0 : 3.4,
             repeat: Infinity,
             ease: 'easeInOut',
           }}
-          className={cn(
-            'relative rounded-full overflow-hidden transition-all p-0.5',
-            'bg-gradient-to-b from-cyan-500/20 via-background/40 to-background/90',
-            'shadow-lg shadow-cyan-500/10 ring-1 ring-cyan-500/30 group-hover:ring-cyan-400/60'
-          )}
-          style={{ width: dimensions.width, height: dimensions.height }}
+          className="relative flex items-center justify-center transition-all pointer-events-auto"
+          style={{
+            width: dimensions.width,
+            height: dimensions.height,
+            filter: isThinking
+              ? 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.85)) drop-shadow(0 0 4px rgba(6, 182, 212, 0.9))'
+              : isHovered
+              ? 'drop-shadow(0 0 14px rgba(34, 211, 238, 0.7))'
+              : 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.45))',
+          }}
         >
-          {/* Internal Image Container with Rounded Avatar */}
-          <div className="relative w-full h-full rounded-full overflow-hidden">
+          {/* Transparent Blended Spirit Hologram */}
+          <div
+            className="relative w-full h-full overflow-hidden select-none"
+            style={{
+              mixBlendMode: 'screen',
+              maskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 80%)',
+              WebkitMaskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 80%)',
+            }}
+          >
             <Image
               src="/tikhonya.jpg"
               alt="Зерфик — Zerf AI Spirit"
               fill
-              sizes="100px"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="120px"
+              className="object-cover transition-transform duration-300 group-hover:scale-110"
               priority
             />
-
-            {/* Glowing Holographic Lens Filter */}
-            <div className="absolute inset-0 bg-radial from-transparent via-cyan-500/10 to-slate-950/40 mix-blend-overlay pointer-events-none" />
-          </div>
-
-          {/* Status Indicator Dot */}
-          <div className="absolute top-1 right-1">
-            <span className="relative flex h-2 w-2">
-              {isThinking && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-              )}
-              <span className={cn('relative inline-flex rounded-full h-2 w-2', isThinking ? 'bg-cyan-400' : 'bg-primary/80')} />
-            </span>
           </div>
         </motion.div>
       </div>
@@ -160,14 +165,14 @@ export function ZerfikMascot({
 
           <AnimatePresence mode="wait">
             <motion.p
-              key={statusText || quoteIndex}
+              key={displayStatus}
               initial={{ opacity: 0, y: 3 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -3 }}
               transition={{ duration: 0.2 }}
               className="text-xs text-foreground/90 font-medium leading-relaxed"
             >
-              {statusText || ZERFIK_QUOTES[quoteIndex]}
+              {displayStatus}
             </motion.p>
           </AnimatePresence>
         </div>

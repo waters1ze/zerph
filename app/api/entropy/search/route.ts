@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Build system prompt for Perplexity style synthesis with citations
-    const prompt = `Ты — ведущий исследовательский ИИ-движок глубоких инсайтов Entropy AI Deep Search (в стиле Perplexity AI Pro Search) совместно с живым маскотом «Тихоня» [ ˘ ᴗ ˘ ].
+    const prompt = `Ты — ведущий исследовательский ИИ-движок глубоких инсайтов Entropy AI Deep Search (в стиле Perplexity AI Pro Search) совместно с живым маскотом «Зерфик».
 
 Пользовательский запрос: "${cleanQuery}"
 Режим поиска: ${mode}
@@ -224,7 +224,7 @@ ${focus ? `Фокус: ${focus}` : ''}
 4. Структурируй "answer" в красивый Markdown (заголовки, жирный шрифт, списки, если уместно — код или таблицы).
 5. Сформулируй 3-4 ключевых вывода ("takeaways").
 6. Предложи 3-4 глубоких уточняющих вопроса ("followUpQuestions").
-7. Сформулируй реплику Тихони ("tikhonyaComment") — умную, добрую, в духе тихого проводника по знаниям.
+7. Сформулируй реплику Зерфика ("tikhonyaComment") — умную, доброжелательную, строго от имени Зерфика (например: "Зерфик проанализировал источники..."). Никогда не используй имя Тихоня.
 
 JSON Схема:
 {
@@ -443,6 +443,6 @@ function generateFallbackResearch(query: string, mode: string, isPro: boolean) {
     answer,
     takeaways,
     followUpQuestions,
-    tikhonyaComment: `Тихоня собрал ${sources.length} первоисточника и структурировал ключевые тезисы для вашей базы знаний [ ˘ ᴗ ˘ ].`,
+    tikhonyaComment: `Зерфик собрал ${sources.length} первоисточников и структурировал ключевые тезисы для вашей базы знаний.`,
   }
 }
