@@ -34,7 +34,18 @@ async function callTg(method: string, payload: Record<string, any>) {
 
 function sanitizeTgHtml(raw: string): string {
   if (!raw) return ''
-  return raw.replace(/&(?!amp;|lt;|gt;|quot;|#\d+;)/g, '&amp;')
+  let text = raw.replace(/&(?!amp;|lt;|gt;|quot;|#\d+;)/g, '&amp;')
+
+  // Auto-close unbalanced Telegram HTML tags (b, i, u, s, code, pre, blockquote, a)
+  const allowedTags = ['b', 'i', 'u', 's', 'code', 'pre', 'blockquote', 'a']
+  for (const tag of allowedTags) {
+    const openCount = (text.match(new RegExp(`<${tag}(?:\\s+[^>]*)?>`, 'gi')) || []).length
+    const closeCount = (text.match(new RegExp(`</${tag}>`, 'gi')) || []).length
+    if (openCount > closeCount) {
+      text += `</${tag}>`.repeat(openCount - closeCount)
+    }
+  }
+  return text
 }
 
 async function getAdminChatIds(): Promise<number[]> {
