@@ -148,6 +148,7 @@ export function InstalledExtensionsSettingsSection() {
   const [loading, setLoading] = useState(true)
   const [catalog, setCatalog] = useState<ExtensionItem[]>([])
   const [installedIds, setInstalledIds] = useState<string[]>([])
+  const [enabledIds, setEnabledIds] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -192,6 +193,7 @@ export function InstalledExtensionsSettingsSection() {
       if (data.success) {
         setCatalog(Array.isArray(data.catalog) ? data.catalog : [])
         setInstalledIds(Array.isArray(data.installedIds) ? data.installedIds : [])
+        setEnabledIds(Array.isArray(data.enabledIds) ? data.enabledIds : (Array.isArray(data.installedIds) ? data.installedIds : []))
       }
     } catch (e) {
       console.error('Failed to fetch extensions', e)
@@ -232,6 +234,39 @@ export function InstalledExtensionsSettingsSection() {
     })
   }
 
+  const handleToggleEnable = async (ext: ExtensionItem) => {
+    try {
+      setActionLoading(`enable_${ext.id}`)
+      const isCurrentlyEnabled = enabledIds.includes(ext.id)
+      const nextState = !isCurrentlyEnabled
+
+      // Optimistic UI update
+      setEnabledIds(prev =>
+        nextState ? [...prev, ext.id] : prev.filter(id => id !== ext.id)
+      )
+
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_enable', extensionId: ext.id, enabled: nextState }),
+      })
+      const data = await res.json()
+      if (data.success && Array.isArray(data.enabledIds)) {
+        setEnabledIds(data.enabledIds)
+      } else if (!data.success) {
+        // Revert on error
+        setEnabledIds(prev =>
+          isCurrentlyEnabled ? [...prev, ext.id] : prev.filter(id => id !== ext.id)
+        )
+        alert(data.error || 'Ошибка изменения статуса расширения')
+      }
+    } catch {
+      alert('Ошибка сети при изменении статуса расширения')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleUninstall = async (ext: ExtensionItem) => {
     const ok = await confirmDialog({
       title: `Удалить «${ext.title}»?`,
@@ -251,7 +286,8 @@ export function InstalledExtensionsSettingsSection() {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds)
+        setInstalledIds(data.installedIds || [])
+        if (data.enabledIds) setEnabledIds(data.enabledIds)
       }
     } catch {
       alert('Ошибка при удалении расширения')
@@ -381,11 +417,21 @@ export function InstalledExtensionsSettingsSection() {
             const settingsSchema = extractSettingsSchema(ext)
             const hasSettings = settingsSchema.length > 0
             const currentConfig = extConfigs[ext.id] || {}
+            const isEnabled = enabledIds.includes(ext.id)
+            const isRunnable = Boolean(
+              ext.isRunnable ||
+              ext.content?.isRunnable === true ||
+              ext.content?.action === 'run' ||
+              ext.id === 'ext_entropy_search'
+            )
 
             return (
               <div
                 key={ext.id}
-                className="rounded-2xl bg-card border border-border shadow-2xs overflow-hidden transition-all hover:border-border/90"
+                className={cn(
+                  "rounded-2xl bg-card border shadow-2xs overflow-hidden transition-all",
+                  isEnabled ? "border-border hover:border-border/90" : "border-border/60 opacity-85 hover:opacity-100"
+                )}
               >
                 {/* Extension Main Header Card */}
                 <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -405,6 +451,15 @@ export function InstalledExtensionsSettingsSection() {
                         <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-bold border border-primary/20">
                           {ext.type === 'widget' ? 'Виджет' : ext.type === 'template' ? 'Шаблон' : ext.type === 'theme' ? 'Тема' : ext.type === 'integration' ? 'Интеграция' : 'Промпт'}
                         </span>
+                        {isEnabled ? (
+                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 text-[9px] font-semibold border border-emerald-500/25">
+                            Активно
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground text-[9px] font-semibold border border-border">
+                            Отключено
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
                         <span>{ext.category}</span>
@@ -422,14 +477,46 @@ export function InstalledExtensionsSettingsSection() {
 
                   {/* Right: Actions and Toggle Settings */}
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    {/* Widget Run button */}
-                    {ext.type === 'widget' && (
+                    {/* Toggle Enable/Disable on Account */}
+                    <button
+                      onClick={() => handleToggleEnable(ext)}
+                      disabled={actionLoading === `enable_${ext.id}`}
+                      className={cn(
+                        'px-2.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs',
+                        isEnabled
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                          : 'bg-muted/80 text-muted-foreground border-border hover:text-foreground hover:bg-muted'
+                      )}
+                      title={isEnabled ? 'Расширение активно. Нажмите, чтобы отключить' : 'Расширение отключено. Нажмите, чтобы включить'}
+                    >
+                      {isEnabled ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+                          <span>Включено</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-muted-foreground/60 shrink-0" />
+                          <span>Включить</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Runnable Widget Launch (ONLY if isRunnable AND isEnabled) */}
+                    {isRunnable && isEnabled && (
                       <button
-                        onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
-                        className="px-2.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border flex items-center gap-1.5 transition-colors cursor-pointer"
-                        title="Открыть виджет"
+                        onClick={() => {
+                          if (ext.id === 'ext_entropy_search' || ext.title.toLowerCase().includes('entropy')) {
+                            dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                            window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+                          } else {
+                            dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs border border-primary flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        title="Запустить интерактивный виджет"
                       >
-                        <Play className="w-3 h-3 text-emerald-400 fill-emerald-400" />
+                        <Play className="w-3 h-3 fill-current" />
                         <span className="hidden sm:inline">Запустить</span>
                       </button>
                     )}

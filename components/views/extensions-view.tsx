@@ -299,6 +299,7 @@ export function ExtensionsView() {
 
   const [catalog, setCatalog] = useState<ExtensionItem[]>(initialCache.catalog)
   const [installedIds, setInstalledIds] = useState<string[]>(initialCache.installedIds)
+  const [enabledIds, setEnabledIds] = useState<string[]>(initialCache.installedIds || [])
   const [likedIds, setLikedIds] = useState<string[]>(initialCache.likedIds)
   const [userPlan, setUserPlan] = useState<string>(initialCache.userPlan)
   const [canCreate, setCanCreate] = useState<boolean>(initialCache.canCreate)
@@ -361,6 +362,7 @@ export function ExtensionsView() {
   const [formPrice, setFormPrice] = useState<number>(0)
   const [formVersion, setFormVersion] = useState('1.0.0')
   const [formIsPublished, setFormIsPublished] = useState<boolean>(false)
+  const [formIsRunnable, setFormIsRunnable] = useState<boolean>(false)
   const [formChangelog, setFormChangelog] = useState<string>('')
   const [formGithubUrl, setFormGithubUrl] = useState<string>('')
   const [formAiInstructions, setFormAiInstructions] = useState<string>('')
@@ -386,6 +388,7 @@ export function ExtensionsView() {
         const loadedCatalog = (Array.isArray(data.catalog) && data.catalog.length > 0) ? data.catalog : DEFAULT_EXTENSIONS
         setCatalog(loadedCatalog)
         setInstalledIds(data.installedIds || [])
+        setEnabledIds(Array.isArray(data.enabledIds) ? data.enabledIds : (Array.isArray(data.installedIds) ? data.installedIds : []))
         setLikedIds(data.likedIds || [])
         setUserPlan(data.userPlan || 'free')
         setCanCreate(Boolean(data.canCreateExtensions))
@@ -397,6 +400,7 @@ export function ExtensionsView() {
           localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify({
             catalog: loadedCatalog,
             installedIds: data.installedIds || [],
+            enabledIds: data.enabledIds || data.installedIds || [],
             likedIds: data.likedIds || [],
             userPlan: data.userPlan || 'free',
             canCreate: Boolean(data.canCreateExtensions),
@@ -839,6 +843,7 @@ export function ExtensionsView() {
     setFormPrice(0)
     setFormVersion('1.0.0')
     setFormIsPublished(false) // Default to unpublished draft
+    setFormIsRunnable(false)
     setFormChangelog('')
     setFormGithubUrl('')
     setFormAiInstructions('')
@@ -862,6 +867,7 @@ export function ExtensionsView() {
     setFormPrice(ext.price || 0)
     setFormVersion(ext.version || '1.0.0')
     setFormIsPublished(ext.isPublished !== false)
+    setFormIsRunnable(Boolean(ext.isRunnable || ext.content?.isRunnable))
     setFormChangelog(ext.changelog || '')
     setFormGithubUrl(ext.githubUrl || '')
     setFormAiInstructions(ext.aiInstructions || ext.content?.aiInstructions || '')
@@ -905,6 +911,7 @@ export function ExtensionsView() {
           githubUrl: formGithubUrl.trim(),
           version: formVersion.trim() || '1.0.0',
           isPublished: formIsPublished,
+          isRunnable: formIsRunnable,
           changelog: formChangelog.trim(),
           price: Number(formPrice) || 0,
           minPlan: formMinPlan,
@@ -929,6 +936,39 @@ export function ExtensionsView() {
     }
   }
 
+  const handleToggleEnable = async (extensionId: string) => {
+    try {
+      setActionLoading(`enable_${extensionId}`)
+      const isCurrentlyEnabled = enabledIds.includes(extensionId)
+      const nextState = !isCurrentlyEnabled
+
+      // Optimistic UI update
+      setEnabledIds(prev =>
+        nextState ? [...prev, extensionId] : prev.filter(id => id !== extensionId)
+      )
+
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_enable', extensionId, enabled: nextState }),
+      })
+      const data = await res.json()
+      if (data.success && Array.isArray(data.enabledIds)) {
+        setEnabledIds(data.enabledIds)
+      } else if (!data.success) {
+        // Revert on error
+        setEnabledIds(prev =>
+          isCurrentlyEnabled ? [...prev, extensionId] : prev.filter(id => id !== extensionId)
+        )
+        alert(data.error || 'Ошибка изменения статуса расширения')
+      }
+    } catch {
+      alert('Ошибка сети при изменении статуса расширения')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleInstall = async (extensionId: string) => {
     if (!isPlusOrHigher) {
       promptUpgradeToPlus('установки расширений')
@@ -936,6 +976,7 @@ export function ExtensionsView() {
     }
     // Instant optimistic update
     setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+    setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
     setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
 
     try {
@@ -947,10 +988,12 @@ export function ExtensionsView() {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds)
+        setInstalledIds(data.installedIds || [])
+        if (data.enabledIds) setEnabledIds(data.enabledIds)
       } else {
         // Rollback
         setInstalledIds(prev => prev.filter(id => id !== extensionId))
+        setEnabledIds(prev => prev.filter(id => id !== extensionId))
         setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
         if (data.requiresPlan === 'plus') {
           promptUpgradeToPlus('установки расширений')
@@ -961,6 +1004,7 @@ export function ExtensionsView() {
     } catch {
       // Rollback
       setInstalledIds(prev => prev.filter(id => id !== extensionId))
+      setEnabledIds(prev => prev.filter(id => id !== extensionId))
       setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
       alert('Ошибка при установке')
     } finally {
@@ -971,6 +1015,7 @@ export function ExtensionsView() {
   const handleUninstall = async (extensionId: string) => {
     // Instant optimistic update
     setInstalledIds(prev => prev.filter(id => id !== extensionId))
+    setEnabledIds(prev => prev.filter(id => id !== extensionId))
     setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
 
     try {
@@ -982,16 +1027,19 @@ export function ExtensionsView() {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds)
+        setInstalledIds(data.installedIds || [])
+        if (data.enabledIds) setEnabledIds(data.enabledIds)
       } else {
         // Rollback
         setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+        setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
         setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
         alert(data.error || 'Ошибка при удалении')
       }
     } catch {
       // Rollback
       setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+      setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
       setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
       alert('Ошибка при удалении')
     } finally {
@@ -1473,47 +1521,85 @@ export function ExtensionsView() {
                         </button>
                       )}
 
-                      {/* Widget interactive play */}
-                      {ext.type === 'widget' && (
-                        <button
-                          onClick={() => handlePlayWidget(ext)}
-                          className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs border border-border transition-all flex items-center justify-center cursor-pointer shrink-0"
-                          title="Интерактивный запуск виджета"
-                        >
-                          <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-                        </button>
-                      )}
+                      {/* Check if extension is runnable (explicitly runnable with interactive UI) */}
+                      {(() => {
+                        const isRunnable = Boolean(
+                          ext.isRunnable ||
+                          ext.content?.isRunnable === true ||
+                          ext.content?.action === 'run' ||
+                          ext.id === 'ext_entropy_search'
+                        )
+                        const isEnabled = enabledIds.includes(ext.id)
 
-                      {isInstalled ? (
-                        <button
-                          onClick={() => handleUninstall(ext.id)}
-                          disabled={actionLoading === ext.id}
-                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-400 hover:text-rose-400 font-semibold text-xs transition-all border border-emerald-500/30 hover:border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer group/btn"
-                        >
-                          <Check className="w-3.5 h-3.5 shrink-0 group-hover/btn:hidden" />
-                          <Trash2 className="w-3.5 h-3.5 shrink-0 hidden group-hover/btn:block" />
-                          <span className="truncate group-hover/btn:hidden">Установлено</span>
-                          <span className="truncate hidden group-hover/btn:inline">Удалить</span>
-                        </button>
-                      ) : isFree ? (
-                        <button
-                          onClick={() => handleInstall(ext.id)}
-                          disabled={actionLoading === ext.id}
-                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                        >
-                          <Download className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">Установить</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleBuy(ext)}
-                          disabled={actionLoading === ext.id}
-                          className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 shrink-0 text-primary-foreground/90" />
-                          <span className="truncate">Купить за {ext.price} ₽</span>
-                        </button>
-                      )}
+                        return (
+                          <>
+                            {/* Runnable Widget Play (ONLY if isRunnable AND isInstalled AND isEnabled) */}
+                            {isRunnable && isInstalled && isEnabled && (
+                              <button
+                                onClick={() => handlePlayWidget(ext)}
+                                className="p-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs border border-primary transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-xs"
+                                title="Запустить интерактивный виджет"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                              </button>
+                            )}
+
+                            {isInstalled ? (
+                              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                <button
+                                  onClick={() => handleToggleEnable(ext.id)}
+                                  disabled={actionLoading === `enable_${ext.id}`}
+                                  className={cn(
+                                    "flex-1 min-w-0 h-8 px-2.5 rounded-xl font-semibold text-xs transition-all border flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs",
+                                    isEnabled
+                                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                                      : "bg-muted/80 text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+                                  )}
+                                  title={isEnabled ? "Расширение активно. Нажмите, чтобы отключить" : "Расширение отключено. Нажмите, чтобы включить"}
+                                >
+                                  {isEnabled ? (
+                                    <>
+                                      <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+                                      <span className="truncate">Включено</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 shrink-0" />
+                                      <span className="truncate">Включить</span>
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleUninstall(ext.id)}
+                                  disabled={actionLoading === ext.id}
+                                  className="p-2 h-8 rounded-xl bg-muted/60 hover:bg-rose-500/15 text-muted-foreground hover:text-rose-400 border border-border transition-all flex items-center justify-center cursor-pointer shrink-0"
+                                  title="Удалить расширение с аккаунта"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : isFree ? (
+                              <button
+                                onClick={() => handleInstall(ext.id)}
+                                disabled={actionLoading === ext.id}
+                                className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">Установить</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleBuy(ext)}
+                                disabled={actionLoading === ext.id}
+                                className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 shrink-0 text-primary-foreground/90" />
+                                <span className="truncate">Купить за {ext.price} ₽</span>
+                              </button>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1581,40 +1667,89 @@ export function ExtensionsView() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    {ext.type === 'template' && (
-                      <button
-                        onClick={() => handleApplyTemplate(ext)}
-                        className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs transition-colors cursor-pointer"
-                        title="Создать задачи в Zerf Note"
-                      >
-                        Применить
-                      </button>
-                    )}
-                    {ext.githubUrl && (
-                      <button
-                        onClick={() => handleSyncGithub(ext.id)}
-                        disabled={actionLoading === ext.id}
-                        className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
-                        title="Подтянуть обновления из GitHub"
-                      >
-                        <RefreshCw className={cn("w-3.5 h-3.5", actionLoading === ext.id && "animate-spin text-primary")} />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setSelectedExt(ext)}
-                      className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-medium cursor-pointer"
-                    >
-                      Манифест
-                    </button>
-                    <button
-                      onClick={() => handleUninstall(ext.id)}
-                      className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                      title="Удалить"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {(() => {
+                    const isRunnable = Boolean(
+                      ext.isRunnable ||
+                      ext.content?.isRunnable === true ||
+                      ext.content?.action === 'run' ||
+                      ext.id === 'ext_entropy_search'
+                    )
+                    const isEnabled = enabledIds.includes(ext.id)
+
+                    return (
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Toggle Enable/Disable Button */}
+                        <button
+                          onClick={() => handleToggleEnable(ext.id)}
+                          disabled={actionLoading === `enable_${ext.id}`}
+                          className={cn(
+                            "px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-all border flex items-center gap-1.5 cursor-pointer shadow-2xs",
+                            isEnabled
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                              : "bg-muted/80 text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+                          )}
+                          title={isEnabled ? "Расширение активно. Нажмите, чтобы отключить" : "Расширение отключено. Нажмите, чтобы включить"}
+                        >
+                          {isEnabled ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400 stroke-[2.5]" />
+                              <span>Включено</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" />
+                              <span>Включить</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Run Button (ONLY IF isRunnable AND isEnabled) */}
+                        {isRunnable && isEnabled && (
+                          <button
+                            onClick={() => handlePlayWidget(ext)}
+                            className="px-2.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs border border-primary transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            title="Запустить интерактивный виджет"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Запустить</span>
+                          </button>
+                        )}
+
+                        {ext.type === 'template' && (
+                          <button
+                            onClick={() => handleApplyTemplate(ext)}
+                            className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs transition-colors cursor-pointer"
+                            title="Создать задачи в Zerf Note"
+                          >
+                            Применить
+                          </button>
+                        )}
+                        {ext.githubUrl && (
+                          <button
+                            onClick={() => handleSyncGithub(ext.id)}
+                            disabled={actionLoading === ext.id}
+                            className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
+                            title="Подтянуть обновления из GitHub"
+                          >
+                            <RefreshCw className={cn("w-3.5 h-3.5", actionLoading === ext.id && "animate-spin text-primary")} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedExt(ext)}
+                          className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-medium cursor-pointer"
+                        >
+                          Манифест
+                        </button>
+                        <button
+                          onClick={() => handleUninstall(ext.id)}
+                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                          title="Удалить"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
@@ -3241,6 +3376,31 @@ export function ExtensionsView() {
                         )}
                       </AnimatePresence>
                     </div>
+                  </div>
+
+                  {/* Runnable toggle */}
+                  <div className="p-3 rounded-2xl bg-muted/30 border border-border flex items-center justify-between gap-3">
+                    <div>
+                      <label className="font-semibold text-foreground text-xs block">Интерактивный запуск (Кнопка «Запустить» в интерфейсе)</label>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Включите, если у расширения есть отдельное открываемое окно или интерактивный виджет (например, как у Entropy AI Search). В остальных случаях пользователи просто включают расширение на аккаунте.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormIsRunnable(!formIsRunnable)}
+                      className={cn(
+                        "w-10 h-6 rounded-full transition-colors relative cursor-pointer shrink-0",
+                        formIsRunnable ? "bg-primary" : "bg-muted border border-border"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform shadow-xs",
+                          formIsRunnable && "translate-x-4"
+                        )}
+                      />
+                    </button>
                   </div>
                 </div>
               )}

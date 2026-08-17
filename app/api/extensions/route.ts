@@ -25,6 +25,7 @@ export interface ExtensionItem {
   minPlan?: 'free' | 'plus' | 'pro' | 'corp'
   isOfficial?: boolean
   isPublished?: boolean // false = Draft/Unpublished, true = Live in Store Catalog
+  isRunnable?: boolean // true if extension has an interactive app/runner window (e.g. Entropy Search)
   changelog?: string // Release notes / changelog
   rating: number
   ratingCount: number
@@ -61,6 +62,7 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     minPlan: 'free',
     isOfficial: true,
     isPublished: true,
+    isRunnable: true,
     changelog: 'Релиз v1.0.0: Глубокий поиск, поддержка ссылок на источники, экспорт в заметки и CLI команды /search и /entropy.',
     rating: 5.0,
     ratingCount: 0,
@@ -178,6 +180,22 @@ export async function getUserInstalledExtensions(chatId: string | number): Promi
   }
 }
 
+export async function getUserEnabledExtensions(chatId: string | number): Promise<string[]> {
+  try {
+    const cid = String(chatId)
+    const row = await prisma.config.findUnique({
+      where: { key: `user_enabled_extensions_${cid}` },
+    })
+    if (row?.value) {
+      return JSON.parse(row.value)
+    }
+    // Default fallback: all installed extensions are active
+    return await getUserInstalledExtensions(cid)
+  } catch {
+    return []
+  }
+}
+
 export async function loadExtensionsCatalog(): Promise<ExtensionItem[]> {
   try {
     const deletedIds = await getDeletedExtensionIds()
@@ -197,21 +215,21 @@ export async function loadExtensionsCatalog(): Promise<ExtensionItem[]> {
 }
 
 /**
- * Compiles AI instructions, custom prompts, and triggers from all extensions
+ * Compiles AI instructions, custom prompts, and triggers from all ENABLED extensions
  * installed by a specific user (for Telegram bot, Siri shortcuts, Web AI chat, Voice, etc.)
  */
 export async function getUserExtensionsAIContext(chatId: string | number): Promise<string> {
   try {
     const cid = String(chatId)
-    const installedIds = await getUserInstalledExtensions(cid)
-    if (!installedIds || installedIds.length === 0) return ''
+    const enabledIds = await getUserEnabledExtensions(cid)
+    if (!enabledIds || enabledIds.length === 0) return ''
 
     const catalog = await loadExtensionsCatalog()
-    const installedExts = catalog.filter(e => installedIds.includes(e.id))
-    if (installedExts.length === 0) return ''
+    const activeExts = catalog.filter(e => enabledIds.includes(e.id))
+    if (activeExts.length === 0) return ''
 
     const instructions: string[] = []
-    for (const ext of installedExts) {
+    for (const ext of activeExts) {
       const rawAi = ext.aiInstructions || ext.content?.aiInstructions || ext.content?.systemPrompt
       const triggers = ext.triggers || ext.content?.triggers || (ext.content?.commands?.map((c: any) => c.cmd) || [])
       
@@ -282,6 +300,7 @@ export async function GET(req: NextRequest) {
     })
 
     let installedIds: string[] = []
+    let enabledIds: string[] = []
     let likedIds: string[] = []
     let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
     let boundCard: any = null
@@ -289,6 +308,7 @@ export async function GET(req: NextRequest) {
 
     if (chatId) {
       installedIds = await getUserInstalledExtensions(chatId)
+      enabledIds = await getUserEnabledExtensions(chatId)
       likedIds = await getUserLikedExtensions(chatId)
       authorStats = await getAuthorBalance(chatId)
       boundCard = await getAuthorPayoutCard(chatId)
@@ -305,6 +325,7 @@ export async function GET(req: NextRequest) {
       success: true,
       catalog,
       installedIds,
+      enabledIds,
       likedIds,
       userPlan,
       canUseExtensions: planAtLeast(userPlan, 'plus'),
@@ -525,6 +546,9 @@ export async function POST(req: NextRequest) {
         isPublished: body.isPublished !== undefined
           ? Boolean(body.isPublished)
           : (existingData?.isPublished !== undefined ? existingData.isPublished : false),
+        isRunnable: body.isRunnable !== undefined
+          ? Boolean(body.isRunnable)
+          : (manifestContent?.isRunnable !== undefined ? Boolean(manifestContent.isRunnable) : (existingData?.isRunnable || false)),
         changelog: body.changelog !== undefined ? body.changelog : (existingData?.changelog || ''),
         price: finalPrice,
         minPlan: finalMinPlan,
@@ -666,12 +690,19 @@ export async function POST(req: NextRequest) {
       }
 
       let installed = await getUserInstalledExtensions(chatId)
+      let enabled = await getUserEnabledExtensions(chatId)
       if (!installed.includes(extensionId)) {
         installed.push(extensionId)
+        if (!enabled.includes(extensionId)) enabled.push(extensionId)
         await prisma.config.upsert({
           where: { key: `user_extensions_${chatId}` },
           update: { value: JSON.stringify(installed) },
           create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
+        })
+        await prisma.config.upsert({
+          where: { key: `user_enabled_extensions_${chatId}` },
+          update: { value: JSON.stringify(enabled) },
+          create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(enabled) },
         })
 
         try {
@@ -687,7 +718,31 @@ export async function POST(req: NextRequest) {
         } catch {}
       }
 
-      return NextResponse.json({ success: true, installedIds: installed })
+      return NextResponse.json({ success: true, installedIds: installed, enabledIds: enabled })
+    }
+
+    // ── ACTION: TOGGLE ENABLE / DISABLE EXTENSION ON ACCOUNT ──
+    if (action === 'toggle_enable') {
+      const { extensionId, enabled } = body
+      if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+
+      let enabledList = await getUserEnabledExtensions(chatId)
+      const isCurrentlyEnabled = enabledList.includes(extensionId)
+      const nextState = typeof enabled === 'boolean' ? enabled : !isCurrentlyEnabled
+
+      if (nextState) {
+        if (!enabledList.includes(extensionId)) enabledList.push(extensionId)
+      } else {
+        enabledList = enabledList.filter(id => id !== extensionId)
+      }
+
+      await prisma.config.upsert({
+        where: { key: `user_enabled_extensions_${chatId}` },
+        update: { value: JSON.stringify(enabledList) },
+        create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(enabledList) },
+      })
+
+      return NextResponse.json({ success: true, enabledIds: enabledList, isEnabled: nextState })
     }
 
     // ── ACTION: UNINSTALL EXTENSION ──
@@ -696,14 +751,22 @@ export async function POST(req: NextRequest) {
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
       let installed = await getUserInstalledExtensions(chatId)
+      let enabled = await getUserEnabledExtensions(chatId)
       installed = installed.filter(id => id !== extensionId)
+      enabled = enabled.filter(id => id !== extensionId)
+
       await prisma.config.upsert({
         where: { key: `user_extensions_${chatId}` },
         update: { value: JSON.stringify(installed) },
         create: { key: `user_extensions_${chatId}`, value: JSON.stringify(installed) },
       })
+      await prisma.config.upsert({
+        where: { key: `user_enabled_extensions_${chatId}` },
+        update: { value: JSON.stringify(enabled) },
+        create: { key: `user_enabled_extensions_${chatId}`, value: JSON.stringify(enabled) },
+      })
 
-      return NextResponse.json({ success: true, installedIds: installed })
+      return NextResponse.json({ success: true, installedIds: installed, enabledIds: enabled })
     }
 
     // ── ACTION: BUY PAID GITHUB EXTENSION (Requires Zerf Plus, 80% Author / 20% Platform) ──
