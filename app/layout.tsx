@@ -4,7 +4,9 @@ import Script from 'next/script'
 import './globals.css'
 import { LanguageProvider } from '@/lib/i18n/LanguageContext'
 
-const inter = Inter({ subsets: ['latin', 'cyrillic'] })
+// CSS-переменная вместо className: стек шрифтов задаётся в globals.css
+// (@theme --font-sans), куда входит и монохромный Noto Emoji для эмодзи
+const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter' })
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
@@ -199,7 +201,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary`}>
+      <body className={`${inter.variable} font-sans min-h-screen bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary`}>
         <LanguageProvider>
           <ConfirmDialogProvider>
             {children}
