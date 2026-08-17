@@ -3,7 +3,11 @@
 import React, { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Terminal, ShieldCheck, CheckCircle2, XCircle, Loader2, Sparkles, Crown, ArrowRight, Laptop } from 'lucide-react'
+import {
+  Terminal, ShieldCheck, CheckCircle2, XCircle, Loader2,
+  Crown, ArrowRight, LogIn, Mail, Lock, Send
+} from 'lucide-react'
+import { getAuthHeaders, getTgChatId } from '@/lib/store'
 
 function CliAuthContent() {
   const searchParams = useSearchParams()
@@ -16,31 +20,85 @@ function CliAuthContent() {
   const [status, setStatus] = useState<'idle' | 'success' | 'rejected' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
-  useEffect(() => {
-    // Check if user is logged in
-    fetch('/api/user/limits')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.chatId) {
+  // Quick Inline Login Form state
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+
+  const checkAuth = async () => {
+    try {
+      setLoading(true)
+      const headers = getAuthHeaders()
+      const res = await fetch('/api/subscription', { headers })
+      if (res.ok) {
+        const data = await res.json()
+        const localChatId = getTgChatId() || data.chatId
+        if (localChatId) {
           setUser({
-            chatId: data.chatId,
-            name: data.name || data.username || `Пользователь #${data.chatId}`,
+            chatId: String(localChatId),
+            name: `Пользователь #${localChatId}`,
             plan: data.plan || 'free',
           })
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      }
+    } catch (e) {
+      console.error('Auth check error:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    checkAuth()
   }, [])
+
+  const handleInlineLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!loginEmail || !loginPassword) return
+    setLoginLoading(true)
+    setLoginError(null)
+
+    try {
+      const res = await fetch('/api/auth/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'login',
+          email: loginEmail,
+          password: loginPassword,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.token) {
+        localStorage.setItem('zerf_auth_token', data.token)
+        if (data.chatId) {
+          localStorage.setItem('zerf_chat_id', String(data.chatId))
+        }
+        document.cookie = `zerf_auth_token=${data.token}; path=/; max-age=31536000; SameSite=Lax`
+        await checkAuth()
+      } else {
+        setLoginError(data.error || 'Неверный email или пароль')
+      }
+    } catch (err: any) {
+      setLoginError(err.message || 'Ошибка входа')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
 
   const handleApprove = async () => {
     if (!code) return
     setSubmitting(true)
     setErrorMsg('')
     try {
+      const headers = {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      }
       const res = await fetch('/api/cli/auth', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ code, action: 'approve' }),
       })
       const data = await res.json()
@@ -64,7 +122,7 @@ function CliAuthContent() {
     try {
       await fetch('/api/cli/auth', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, action: 'reject' }),
       })
       setStatus('rejected')
@@ -131,7 +189,7 @@ function CliAuthContent() {
             <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
             <h3 className="text-sm font-bold text-emerald-400">Успешно авторизовано!</h3>
             <p className="text-xs text-slate-300">
-              Теперь вы можете вернуться в терминал. Сессия Zerf CLI активна и синхронизирована с аккаунтом.
+              Сессия в терминале активирована. Вы можете вернуться в консоль и начать работу с Zerf CLI.
             </p>
           </motion.div>
         ) : status === 'rejected' ? (
@@ -143,7 +201,7 @@ function CliAuthContent() {
         ) : status === 'error' ? (
           <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-2">
             <XCircle className="w-8 h-8 text-amber-400 mx-auto" />
-            <h3 className="text-xs font-bold text-amber-400">Ошибка</h3>
+            <h3 className="text-xs font-bold text-amber-400">Ошибка авторизации</h3>
             <p className="text-xs text-slate-300">{errorMsg}</p>
           </div>
         ) : user ? (
@@ -152,7 +210,7 @@ function CliAuthContent() {
             <div className="p-3.5 rounded-2xl bg-slate-800/40 border border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-sm">
-                  {user.name?.[0]?.toUpperCase() || 'U'}
+                  ❖
                 </div>
                 <div>
                   <div className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -166,6 +224,10 @@ function CliAuthContent() {
                 {user.plan === 'pro' || user.plan === 'corp' ? (
                   <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase border border-amber-500/30 flex items-center gap-1">
                     <Crown className="w-3 h-3" /> {user.plan}
+                  </span>
+                ) : user.plan === 'plus' ? (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase border border-emerald-500/30">
+                    Plus
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-bold uppercase">
@@ -186,7 +248,7 @@ function CliAuthContent() {
                 <span className="text-emerald-400">✔</span> Синхронизация в реальном времени с сайтом и ботом
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-emerald-400">✔</span> Генерация расширений и ИИ-планирование
+                <span className="text-emerald-400">✔</span> Создание персонального PAT-токена (365 дней)
               </div>
             </div>
 
@@ -218,17 +280,69 @@ function CliAuthContent() {
             </div>
           </div>
         ) : (
-          /* Not Logged In */
-          <div className="text-center space-y-4 py-2">
-            <p className="text-xs text-slate-300">
-              Чтобы авторизовать терминал, сначала войдите в свой аккаунт Zerf Note.
-            </p>
+          /* Inline Login Card */
+          <div className="space-y-4 pt-1">
+            <div className="text-center space-y-1">
+              <p className="text-xs text-slate-300 font-medium">
+                Войдите в аккаунт Zerf Note для авторизации терминала:
+              </p>
+            </div>
+
+            {/* Telegram Fast Login Link */}
             <a
-              href={`/?returnTo=${encodeURIComponent(`/cli-auth?code=${code}`)}`}
-              className="inline-flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-all shadow-lg shadow-sky-500/20"
+              href={`https://t.me/Zerph_bot?start=login`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full h-11 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 cursor-pointer"
             >
-              Войти на сайт
+              <Send className="w-4 h-4" /> Войти через Telegram Бота
             </a>
+
+            <div className="flex items-center gap-3 text-slate-600 text-[10px] uppercase font-bold">
+              <div className="flex-1 h-px bg-slate-800" />
+              <span>или Email</span>
+              <div className="flex-1 h-px bg-slate-800" />
+            </div>
+
+            <form onSubmit={handleInlineLogin} className="space-y-2.5">
+              {loginError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs text-center">
+                  {loginError}
+                </div>
+              )}
+
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={e => setLoginEmail(e.target.value)}
+                  placeholder="Ваш Email"
+                  required
+                  className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                />
+              </div>
+
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  placeholder="Пароль"
+                  required
+                  className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Войти по Email'}
+              </button>
+            </form>
           </div>
         )}
       </motion.div>
