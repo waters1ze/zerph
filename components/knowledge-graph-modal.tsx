@@ -17,6 +17,7 @@ interface KnowledgeGraphModalProps {
   isOpen: boolean
   onClose?: () => void
   notes: Note[]
+  tasks?: any[]
   initialFolder?: string | null
   initialNoteId?: string | null
   onSelectNote: (noteId: string) => void
@@ -29,6 +30,7 @@ export function KnowledgeGraphModal({
   isOpen,
   onClose,
   notes,
+  tasks,
   initialFolder = null,
   initialNoteId = null,
   onSelectNote,
@@ -46,6 +48,7 @@ export function KnowledgeGraphModal({
   const [showTags, setShowTags] = useState(true)
   const [showFolders, setShowFolders] = useState(false)
   const [showUnresolved, setShowUnresolved] = useState(true)
+  const [showTasks, setShowTasks] = useState(true)
   const [showArrows, setShowArrows] = useState(true)
 
   // Color Groups State (Obsidian-Style)
@@ -93,12 +96,14 @@ export function KnowledgeGraphModal({
       showTags,
       showFolders,
       showUnresolved,
+      showTasks,
       colorGroups,
       localNoteId,
       localDepth,
       searchQuery,
+      tasks,
     })
-  }, [notes, folderFilter, showTags, showFolders, showUnresolved, colorGroups, localNoteId, localDepth, searchQuery])
+  }, [notes, folderFilter, showTags, showFolders, showUnresolved, showTasks, colorGroups, localNoteId, localDepth, searchQuery, tasks])
 
   // Simulation node positions
   const simNodesRef = useRef<GraphNode[]>([])
@@ -386,20 +391,36 @@ export function KnowledgeGraphModal({
     }
   }, [isOpen, stepPhysics, render])
 
-  // Handle Resize
+  // Handle Resize with ResizeObserver
   useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const rect = canvas.parentElement?.getBoundingClientRect()
-      if (rect) {
-        canvas.width = rect.width
-        canvas.height = rect.height
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const parent = canvas.parentElement
+    if (!parent) return
+
+    const updateSize = () => {
+      const rect = parent.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        const w = Math.floor(rect.width)
+        const h = Math.floor(rect.height)
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w
+          canvas.height = h
+        }
       }
     }
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+
+    updateSize()
+    const ro = new ResizeObserver(() => {
+      updateSize()
+    })
+    ro.observe(parent)
+    window.addEventListener('resize', updateSize)
+
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', updateSize)
+    }
   }, [isOpen])
 
   // Find node under screen coordinates
@@ -593,6 +614,24 @@ export function KnowledgeGraphModal({
     }))
   }
 
+  const handleZoom = (direction: 'in' | 'out') => {
+    const canvas = canvasRef.current
+    const width = canvas?.width || 900
+    const height = canvas?.height || 650
+    const centerX = width / 2
+    const centerY = height / 2
+
+    const factor = direction === 'in' ? 1.25 : 0.8
+    setCamera(prev => {
+      const newZoom = Math.max(0.15, Math.min(3.5, prev.zoom * factor))
+      return {
+        zoom: newZoom,
+        x: centerX - (centerX - prev.x) * (newZoom / prev.zoom),
+        y: centerY - (centerY - prev.y) * (newZoom / prev.zoom),
+      }
+    })
+  }
+
   const handleResetCamera = () => {
     setCamera({ x: 0, y: 0, zoom: 1 })
   }
@@ -755,17 +794,46 @@ export function KnowledgeGraphModal({
             className="w-full h-full cursor-grab active:cursor-grabbing block select-none touch-none"
           />
 
+          {/* Empty State Overlay when there are no nodes */}
+          {graphData.nodes.length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 pointer-events-none">
+              <div className="p-6 max-w-md rounded-3xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-4 pointer-events-auto">
+                <div className="w-12 h-12 rounded-2xl bg-primary/20 text-primary border border-primary/30 flex items-center justify-center mx-auto shadow-inner">
+                  <Network className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Граф знаний пока пуст</h3>
+                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                    Создавайте заметки со ссылками в формате <code className="px-1.5 py-0.5 rounded bg-muted text-primary font-mono text-[11px]">[[Название заметки]]</code> и тегами <code className="px-1.5 py-0.5 rounded bg-muted text-purple-400 font-mono text-[11px]">#тег</code>, чтобы между ними строилась визуальная паутина связей.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      if (onCreateNoteWithTitle) {
+                        onCreateNoteWithTitle('Главная страница')
+                      }
+                    }}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 shadow-sm transition-all cursor-pointer"
+                  >
+                    + Создать первую заметку
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Floating Zoom & Physics Control Bar */}
           <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 flex items-center gap-1 p-1 rounded-2xl bg-card/90 border border-border shadow-2xl backdrop-blur-md z-20">
             <button
-              onClick={() => setCamera(prev => ({ ...prev, zoom: Math.min(3.5, prev.zoom * 1.2) }))}
+              onClick={() => handleZoom('in')}
               className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Приблизить"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setCamera(prev => ({ ...prev, zoom: Math.max(0.15, prev.zoom * 0.8) }))}
+              onClick={() => handleZoom('out')}
               className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Отдалить"
             >
@@ -820,6 +888,19 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showTags}
                       onChange={e => setShowTags(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between cursor-pointer select-none">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <FileText className="w-3 h-3 text-sky-400" />
+                      <span>Узлы задач (Задачи)</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={showTasks}
+                      onChange={e => setShowTasks(e.target.checked)}
                       className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>

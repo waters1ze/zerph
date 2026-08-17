@@ -6,7 +6,7 @@ import type { Note } from '@/lib/types'
 
 export function GraphView() {
   const { state, dispatch } = useApp()
-  const { notes } = state
+  const { notes, tasks } = state
 
   const handleSelectNote = (noteId: string) => {
     dispatch({ type: 'SET_VIEW', view: 'notes' })
@@ -16,10 +16,10 @@ export function GraphView() {
     const newNote: Note = {
       id: `n-${Date.now()}`,
       title,
-      content: `# ${title}\n\nСоздано из графа знаний`,
+      content: `# ${title}\n\nСоздано из графа знаний\n\nСмотрите также: [[Планы]], [[Проекты]]\n#заметки`,
       type: 'note',
       folder: 'Общее',
-      tags: [],
+      tags: ['заметки'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -36,6 +36,7 @@ export function GraphView() {
       <KnowledgeGraphModal
         isOpen={true}
         notes={notes}
+        tasks={tasks}
         onSelectNote={handleSelectNote}
         onCreateNoteWithTitle={handleCreateNoteWithTitle}
         onDeleteNote={handleDeleteNote}

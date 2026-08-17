@@ -1018,6 +1018,7 @@ ${activeNote.content}"
         isOpen={isGraphModalOpen}
         onClose={() => setIsGraphModalOpen(false)}
         notes={notes}
+        tasks={state.tasks}
         initialFolder={graphFolderFilter}
         initialNoteId={activeNote?.id}
         onSelectNote={(noteId) => {

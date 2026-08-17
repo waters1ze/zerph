@@ -153,6 +153,22 @@ export async function POST(req: NextRequest) {
         },
       }).catch(() => {})
 
+      // Store payment record for analytics
+      await prisma.config.create({
+        data: {
+          key: `payment_record_${operation_id}`,
+          value: JSON.stringify({
+            operationId: operation_id,
+            amount: amtNum,
+            plan: product.plan,
+            days: product.days,
+            chatId: buyerChatId,
+            isGift: true,
+            createdAt: datetime || new Date().toISOString(),
+          }),
+        },
+      }).catch(() => {})
+
       await sendTgNotification(
         buyerChatId,
         `🎁 *Подарочная подписка Zerf ${planName} (${periodName}) оформлена!*\n\n` +
@@ -170,6 +186,22 @@ export async function POST(req: NextRequest) {
     const success = await activateUserSubscription(actualChatId, product.days, product.plan as 'plus' | 'pro' | 'corp')
 
     if (success) {
+      // Store payment record for analytics
+      await prisma.config.create({
+        data: {
+          key: `payment_record_${operation_id}`,
+          value: JSON.stringify({
+            operationId: operation_id,
+            amount: amtNum,
+            plan: product.plan,
+            days: product.days,
+            chatId: actualChatId,
+            isGift: false,
+            createdAt: datetime || new Date().toISOString(),
+          }),
+        },
+      }).catch(() => {})
+
       await sendTgNotification(
         actualChatId,
         `🎉 *Подписка Zerf ${planName} успешно активирована на ${periodName}!* ⭐\n\n` +

@@ -51,7 +51,42 @@ export async function GET(req: NextRequest) {
       totalNotes = Number(counts[0]?.notes) || 0
     } catch {}
 
+    // ─── Real Payments & Transactions from Config ────────────────────────────
+    let totalRevenue = 0
+    const paymentRecords: any[] = []
+    const realPaidChatIds = new Set<string>()
+
+    try {
+      const dbPaymentConfigs = await prisma.config.findMany({
+        where: {
+          key: { startsWith: 'payment_record_' },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+      })
+
+      for (const item of dbPaymentConfigs) {
+        try {
+          const parsed = JSON.parse(item.value)
+          totalRevenue += Number(parsed.amount) || 0
+          if (parsed.chatId) realPaidChatIds.add(String(parsed.chatId))
+          paymentRecords.push({
+            id: item.key.replace('payment_record_', ''),
+            amount: Number(parsed.amount) || 0,
+            plan: parsed.plan || 'plus',
+            days: parsed.days || 30,
+            chatId: parsed.chatId || '',
+            isGift: Boolean(parsed.isGift),
+            createdAt: parsed.createdAt || item.updatedAt.toISOString(),
+          })
+        } catch {}
+      }
+    } catch {}
+
     // ─── Active subscriptions ────────────────────────────────────────────────
+    const nonRootUsers = users.filter(u => !ROOT_ADMIN_IDS.includes(u.chatId.toString()))
+    const totalNonRoot = nonRootUsers.length
+
     const activePremiumUsers = users.filter(u => {
       const chatIdStr = u.chatId.toString()
       if (ROOT_ADMIN_IDS.includes(chatIdStr)) return true
@@ -61,13 +96,27 @@ export async function GET(req: NextRequest) {
     })
     const activePremiumCount = activePremiumUsers.length
 
-    // ─── MRR Calculation ─────────────────────────────────────────────────────
+    // Real paying subscribers (users who have paid transactions or active paid plan)
+    const realPayingSubscribers = nonRootUsers.filter(u => {
+      if (!planAtLeast(u.plan, 'plus')) return false
+      if (u.subscriptionExpiry && new Date(u.subscriptionExpiry) < now) return false
+      return realPaidChatIds.has(u.chatId.toString())
+    })
+    const paidSubscribersCount = realPayingSubscribers.length
+
+    // ─── Real MRR Calculation ────────────────────────────────────────────────
     let mrr = 0
-    for (const u of activePremiumUsers) {
-      const chatIdStr = u.chatId.toString()
-      if (ROOT_ADMIN_IDS.includes(chatIdStr)) continue // owner excluded
+    for (const u of realPayingSubscribers) {
       const plan = normalizePlan(u.plan)
       mrr += PLAN_MONTHLY_PRICE[plan] || 0
+    }
+
+    // ─── Plan Breakdown ──────────────────────────────────────────────────────
+    const planBreakdown = {
+      free: nonRootUsers.filter(u => !u.plan || u.plan === 'free' || (u.subscriptionExpiry && new Date(u.subscriptionExpiry) < now)).length,
+      plus: nonRootUsers.filter(u => u.plan === 'plus' && (!u.subscriptionExpiry || new Date(u.subscriptionExpiry) >= now)).length,
+      pro: nonRootUsers.filter(u => u.plan === 'pro' && (!u.subscriptionExpiry || new Date(u.subscriptionExpiry) >= now)).length,
+      corp: nonRootUsers.filter(u => u.plan === 'corp' && (!u.subscriptionExpiry || new Date(u.subscriptionExpiry) >= now)).length,
     }
 
     // ─── DAU / WAU ───────────────────────────────────────────────────────────
@@ -107,9 +156,8 @@ export async function GET(req: NextRequest) {
       : null
 
     // ─── Conversion free → paid ──────────────────────────────────────────────
-    const totalNonRoot = users.filter(u => !ROOT_ADMIN_IDS.includes(u.chatId.toString())).length
     const conversionPct = totalNonRoot > 0
-      ? Math.round(activePremiumCount / totalNonRoot * 100)
+      ? Math.min(100, Math.round(paidSubscribersCount / totalNonRoot * 100))
       : 0
 
     // ─── Registrations by day (last 30 days) for chart ───────────────────────
@@ -202,6 +250,10 @@ export async function GET(req: NextRequest) {
         dau: dauCount,
         wau: wauCount,
         mrr,
+        totalRevenue,
+        paidSubscribersCount,
+        planBreakdown,
+        paymentRecords,
         retentionD1: retD1,
         retentionD7: retD7,
         conversionPct,

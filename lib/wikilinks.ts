@@ -88,10 +88,12 @@ export interface GraphFilterOptions {
   showTags?: boolean
   showFolders?: boolean
   showUnresolved?: boolean
+  showTasks?: boolean
   searchQuery?: string
   colorGroups?: ColorGroup[]
   localNoteId?: string | null
   localDepth?: number // default 1 or 2
+  tasks?: Array<{ id: string; title: string; tags?: string[]; folder?: string; status?: string }>
 }
 
 export interface GraphNode {
@@ -184,9 +186,11 @@ export function buildGraphData(
     showTags = true,
     showFolders = false,
     showUnresolved = true,
+    showTasks = true,
     colorGroups = [],
     localNoteId = null,
     localDepth = 1,
+    tasks = [],
   } = options
 
   // 1. Initial filter by folder
@@ -266,6 +270,37 @@ export function buildGraphData(
     existingNodeIds.add(n.id)
   })
 
+  // 3b. Add Task Nodes if showTasks is true (or if there are no notes)
+  if (showTasks && tasks && tasks.length > 0) {
+    tasks.filter(t => t.status !== 'draft').forEach(t => {
+      if (folderFilter && !(t.folder || 'Задачи').startsWith(folderFilter)) return
+      const taskId = `task_${t.id}`
+      if (!existingNodeIds.has(taskId)) {
+        existingNodeIds.add(taskId)
+        titleToNodeId.set(t.title.toLowerCase().trim(), taskId)
+        const customColor = matchColorGroup({
+          id: taskId,
+          title: t.title,
+          type: 'note',
+          folder: t.folder || 'Задачи',
+          color: '',
+          connectionCount: 0,
+          tags: t.tags,
+        }, colorGroups)
+
+        nodes.push({
+          id: taskId,
+          title: `✓ ${t.title}`,
+          type: 'note',
+          folder: t.folder || 'Задачи',
+          color: customColor || '#38bdf8', // Sky blue for tasks
+          connectionCount: 0,
+          tags: t.tags || [],
+        })
+      }
+    })
+  }
+
   // 4. Build Wikilink Edges & Ghost / Unresolved Nodes
   candidateNotes.forEach(sourceNote => {
     const links = extractWikilinks(sourceNote.content || '')
@@ -315,8 +350,13 @@ export function buildGraphData(
   // 5. Add Tags as Graph Nodes
   if (showTags) {
     const tagToNodeId = new Map<string, string>()
-    candidateNotes.forEach(note => {
-      (note.tags || []).forEach(tag => {
+    const tagSources: Array<{ id: string; tags?: string[] }> = [...candidateNotes]
+    if (showTasks && tasks) {
+      tagSources.push(...tasks.filter(t => t.status !== 'draft').map(t => ({ id: `task_${t.id}`, tags: t.tags })))
+    }
+
+    tagSources.forEach(item => {
+      (item.tags || []).forEach(tag => {
         const cleanTag = tag.trim().replace(/^#/, '')
         if (!cleanTag) return
         const tagNodeId = `tag_${cleanTag.toLowerCase()}`
@@ -340,12 +380,12 @@ export function buildGraphData(
           })
         }
 
-        const edgeKey = [note.id, tagNodeId].sort().join(':::')
+        const edgeKey = [item.id, tagNodeId].sort().join(':::')
         if (!edgeSet.has(edgeKey)) {
           edgeSet.add(edgeKey)
           edges.push({
-            id: `edge_${note.id}_${tagNodeId}`,
-            source: note.id,
+            id: `edge_${item.id}_${tagNodeId}`,
+            source: item.id,
             target: tagNodeId,
             type: 'tag',
           })

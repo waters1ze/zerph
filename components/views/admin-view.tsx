@@ -50,6 +50,18 @@ interface AdminMetrics {
   dau: number
   wau: number
   mrr: number
+  totalRevenue?: number
+  paidSubscribersCount?: number
+  planBreakdown?: { free: number; plus: number; pro: number; corp: number }
+  paymentRecords?: Array<{
+    id: string
+    amount: number
+    plan: string
+    days: number
+    chatId: string
+    isGift: boolean
+    createdAt: string
+  }>
   retentionD1: number | null
   retentionD7: number | null
   conversionPct: number
@@ -1501,7 +1513,50 @@ export function AdminView() {
             </div>
           ) : (
             <>
-              {/* Row 1: Core KPI cards */}
+              {/* Row 1: Real Financial & Subscription KPI cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Выручка (Всего)</span>
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-emerald-400">
+                    {(metrics.totalRevenue || 0).toLocaleString('ru')} ₽
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">фактические оплаты</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Реальный MRR</span>
+                    <TrendingUp className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <span className="text-2xl font-bold text-amber-500">{metrics.mrr.toLocaleString('ru')} ₽</span>
+                  <span className="text-[11px] text-muted-foreground">регулярная выручка/мес</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Платные подписки</span>
+                    <UserCheck className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-purple-400">
+                    {metrics.paidSubscribersCount || 0}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">платящих клиентов</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                    <span>Конверсия</span>
+                    <Activity className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-sky-400">{metrics.conversionPct}%</span>
+                  <span className="text-[11px] text-muted-foreground">free → paid (реальные)</span>
+                </div>
+              </div>
+
+              {/* Row 2: Audience & Activity */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
                   <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
@@ -1523,53 +1578,6 @@ export function AdminView() {
 
                 <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
                   <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                    <span>MRR</span>
-                    <DollarSign className="w-4 h-4 text-amber-500" />
-                  </div>
-                  <span className="text-2xl font-bold text-amber-500">{metrics.mrr.toLocaleString('ru')} ₽</span>
-                  <span className="text-[11px] text-muted-foreground">выручка в месяц</span>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                    <span>Конверсия</span>
-                    <UserCheck className="w-4 h-4 text-purple-500" />
-                  </div>
-                  <span className="text-2xl font-bold text-purple-500">{metrics.conversionPct}%</span>
-                  <span className="text-[11px] text-muted-foreground">free → paid</span>
-                </div>
-              </div>
-
-              {/* Row 2: Retention + New users */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                    <span>Retention D1</span>
-                    {metrics.retentionD1 !== null && metrics.retentionD1 >= 40
-                      ? <TrendingUp className="w-4 h-4 text-emerald-500" />
-                      : <TrendingDown className="w-4 h-4 text-rose-400" />}
-                  </div>
-                  <span className={`text-2xl font-bold ${metrics.retentionD1 === null ? 'text-muted-foreground' : metrics.retentionD1 >= 40 ? 'text-emerald-500' : 'text-rose-400'}`}>
-                    {metrics.retentionD1 !== null ? `${metrics.retentionD1}%` : '—'}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">вернулись на 2-й день</span>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                    <span>Retention D7</span>
-                    {metrics.retentionD7 !== null && metrics.retentionD7 >= 20
-                      ? <TrendingUp className="w-4 h-4 text-emerald-500" />
-                      : <TrendingDown className="w-4 h-4 text-rose-400" />}
-                  </div>
-                  <span className={`text-2xl font-bold ${metrics.retentionD7 === null ? 'text-muted-foreground' : metrics.retentionD7 >= 20 ? 'text-emerald-500' : 'text-rose-400'}`}>
-                    {metrics.retentionD7 !== null ? `${metrics.retentionD7}%` : '—'}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">вернулись на 7-й день</span>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
                     <span>Новых за 7 дн</span>
                     <Users className="w-4 h-4 text-blue-400" />
                   </div>
@@ -1584,6 +1592,72 @@ export function AdminView() {
                   </div>
                   <span className="text-2xl font-bold text-primary">+{metrics.newUsersMonth}</span>
                   <span className="text-[11px] text-muted-foreground">регистраций</span>
+                </div>
+              </div>
+
+              {/* Row 3: Plan Breakdown & Retention */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Plan breakdown */}
+                <div className="p-5 rounded-2xl bg-card border border-border shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <Users className="w-4 h-4 text-primary" />
+                      <span>Распределение пользователей по тарифам</span>
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <div className="p-3 rounded-xl bg-muted/40 border border-border/60 text-center">
+                      <p className="text-[11px] font-semibold text-muted-foreground">Free</p>
+                      <p className="text-xl font-bold text-foreground mt-0.5">{metrics.planBreakdown?.free ?? 0}</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-center">
+                      <p className="text-[11px] font-semibold text-blue-400">Plus (99 ₽)</p>
+                      <p className="text-xl font-bold text-blue-400 mt-0.5">{metrics.planBreakdown?.plus ?? 0}</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
+                      <p className="text-[11px] font-semibold text-purple-400">Pro (299 ₽)</p>
+                      <p className="text-xl font-bold text-purple-400 mt-0.5">{metrics.planBreakdown?.pro ?? 0}</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+                      <p className="text-[11px] font-semibold text-amber-400">Corp</p>
+                      <p className="text-xl font-bold text-amber-400 mt-0.5">{metrics.planBreakdown?.corp ?? 0}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Retention */}
+                <div className="p-5 rounded-2xl bg-card border border-border shadow-sm space-y-3">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                    <span>Удержание аудитории (Retention)</span>
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="p-3 rounded-xl bg-muted/40 border border-border/60 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Retention D1</span>
+                        {metrics.retentionD1 !== null && metrics.retentionD1 >= 40
+                          ? <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                          : <TrendingDown className="w-3.5 h-3.5 text-rose-400" />}
+                      </div>
+                      <span className={`text-xl font-bold mt-1 ${metrics.retentionD1 === null ? 'text-muted-foreground' : metrics.retentionD1 >= 40 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                        {metrics.retentionD1 !== null ? `${metrics.retentionD1}%` : '—'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">возврат на 2-й день</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-muted/40 border border-border/60 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Retention D7</span>
+                        {metrics.retentionD7 !== null && metrics.retentionD7 >= 20
+                          ? <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                          : <TrendingDown className="w-3.5 h-3.5 text-rose-400" />}
+                      </div>
+                      <span className={`text-xl font-bold mt-1 ${metrics.retentionD7 === null ? 'text-muted-foreground' : metrics.retentionD7 >= 20 ? 'text-emerald-500' : 'text-rose-400'}`}>
+                        {metrics.retentionD7 !== null ? `${metrics.retentionD7}%` : '—'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">возврат на 7-й день</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1624,6 +1698,78 @@ export function AdminView() {
                     </div>
                   )
                 })()}
+              </div>
+
+              {/* Real Payments & Transactions History */}
+              <div className="p-5 rounded-2xl bg-card border border-border shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-sm font-bold text-foreground">История реальных платежей и покупок</h3>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Всего транзакций: <strong>{metrics.paymentRecords?.length || 0}</strong>
+                  </span>
+                </div>
+
+                {metrics.paymentRecords && metrics.paymentRecords.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border/80 text-muted-foreground font-semibold">
+                          <th className="py-2.5 px-3">Дата</th>
+                          <th className="py-2.5 px-3">Сумма</th>
+                          <th className="py-2.5 px-3">Тариф</th>
+                          <th className="py-2.5 px-3">Срок</th>
+                          <th className="py-2.5 px-3">Тип</th>
+                          <th className="py-2.5 px-3">Пользователь</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {metrics.paymentRecords.map((p) => (
+                          <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-2.5 px-3 font-mono text-muted-foreground">
+                              {new Date(p.createdAt).toLocaleDateString('ru-RU', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-emerald-400">
+                              +{p.amount} ₽
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[10px] uppercase">
+                                {p.plan}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-muted-foreground">
+                              {p.days === 365 ? '1 год' : '30 дней'}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {p.isGift ? (
+                                <span className="text-purple-400 font-semibold text-[11px]">🎁 Подарок</span>
+                              ) : (
+                                <span className="text-muted-foreground text-[11px]">Личная</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-muted-foreground">
+                              {p.chatId}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-muted/30 border border-border/50 text-center space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Пока нет оплаченных транзакций</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Как только пользователи начнут совершать покупки через ЮMoney / банковские карты, каждый платёж и общая сумма будут фиксироваться здесь в реальном времени.
+                    </p>
+                  </div>
+                )}
               </div>
             </>
           )}
