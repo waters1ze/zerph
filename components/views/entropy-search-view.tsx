@@ -73,6 +73,13 @@ export function EntropySearchView() {
     remaining: number
     isUnlimited: boolean
     plan: string
+    pro?: {
+      used: number
+      limit: number
+      remaining: number
+      isAllowed: boolean
+      isUnlimited: boolean
+    }
   } | null>(null)
 
   const [history, setHistory] = useState<EntropySearchResult[]>(() => {
@@ -155,6 +162,7 @@ export function EntropySearchView() {
         body: JSON.stringify({
           query: targetQuery,
           mode: activeMode,
+          isPro: isProSearch,
           focus: activeMode === 'notes' ? 'knowledge_base' : undefined,
         }),
       })
@@ -310,8 +318,12 @@ export function EntropySearchView() {
           {usageInfo && (
             <div
               className={cn(
-                'px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold flex items-center gap-1.5 shadow-2xs',
-                usageInfo.isUnlimited
+                'px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold flex items-center gap-1.5 shadow-2xs transition-all',
+                isProSearch
+                  ? usageInfo.pro?.isUnlimited
+                    ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                    : 'bg-primary/15 text-primary border-primary/30'
+                  : usageInfo.isUnlimited
                   ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
                   : usageInfo.remaining > 5
                   ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
@@ -321,7 +333,11 @@ export function EntropySearchView() {
             >
               <Zap className="w-3.5 h-3.5 text-primary" />
               <span>
-                {usageInfo.isUnlimited
+                {isProSearch
+                  ? usageInfo.pro?.isUnlimited
+                    ? '✦ Pro Search: Безлимит'
+                    : `⚡ Pro: ${usageInfo.pro?.used ?? 0} / ${usageInfo.pro?.limit ?? 0} сегодня`
+                  : usageInfo.isUnlimited
                   ? '✦ Безлимит (Creator / Pro)'
                   : `🔋 ${usageInfo.used} / ${usageInfo.limit} сегодня`}
               </span>
@@ -373,7 +389,13 @@ export function EntropySearchView() {
           </div>
 
           <button
-            onClick={() => setIsProSearch(!isProSearch)}
+            onClick={() => {
+              if (!isProSearch && usageInfo?.pro && !usageInfo.pro.isAllowed) {
+                alert('🔒 Режим Pro Search доступен с тарифом Zerf Plus (3 Pro-поиска в день), Zerf Pro (20 Pro-поисков в день) или Corp (100/день). Перейдите в Настройки для оформления подписки!')
+                return
+              }
+              setIsProSearch(!isProSearch)
+            }}
             className={cn(
               'px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-colors cursor-pointer shrink-0',
               isProSearch
