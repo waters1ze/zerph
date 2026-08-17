@@ -1,0 +1,101 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+const ZERF_DIR = path.join(os.homedir(), '.zerf');
+const EXT_DIR = path.join(ZERF_DIR, 'extensions');
+const REGISTRY_CACHE_FILE = path.join(ZERF_DIR, 'ext-registry.json');
+export const OFFICIAL_CATALOG = [
+    { name: 'zerf-github', version: '1.0.0', description: 'GitHub Issues и PR синхронизация с задачами Zerf', author: 'Zerf Team' },
+    { name: 'zerf-jira', version: '1.2.0', description: 'Jira Sprint & Backlog импорт в задачи и заметки', author: 'Zerf Team' },
+    { name: 'zerf-notion', version: '0.9.1', description: 'Экспорт заметок Zerf Note в базы данных Notion', author: 'Community' },
+    { name: 'zerf-cal', version: '2.1.0', description: 'Двусторонняя синхронизация Google Calendar', author: 'Zerf Team' },
+    { name: 'zerf-ai-coach', version: '1.0.0', description: 'Персональный AI-коуч по привычкам и фокусу', author: 'Zerf Team' },
+    { name: 'zerf-slack', version: '1.1.0', description: 'Slack уведомления и превращение тредов в задачи', author: 'Community' },
+];
+export function getInstalledExtensions() {
+    try {
+        if (!fs.existsSync(EXT_DIR)) {
+            fs.mkdirSync(EXT_DIR, { recursive: true });
+            return [];
+        }
+        const dirs = fs.readdirSync(EXT_DIR);
+        const result = [];
+        for (const d of dirs) {
+            const manifestPath = path.join(EXT_DIR, d, 'zerf.manifest.json');
+            if (fs.existsSync(manifestPath)) {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                result.push({
+                    name: manifest.name || d,
+                    version: manifest.version || '1.0.0',
+                    description: manifest.description || 'Пользовательское расширение',
+                    author: manifest.author || 'local',
+                    installed: true,
+                });
+            }
+        }
+        return result;
+    }
+    catch {
+        return [];
+    }
+}
+export function scaffoldExtension(name, desc) {
+    const cleanName = name.startsWith('zerf-') ? name : `zerf-${name}`;
+    const targetDir = path.join(EXT_DIR, cleanName);
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const manifest = {
+        name: cleanName,
+        version: '1.0.0',
+        description: desc || 'Модуль расширения Zerf CLI',
+        author: os.userInfo().username || 'developer',
+        commands: [{ cmd: `/${cleanName.replace('zerf-', '')}`, description: desc || 'Команда расширения' }],
+        permissions: ['tasks:read', 'tasks:write', 'notes:read'],
+        entrypoint: 'index.js',
+    };
+    const manifestPath = path.join(targetDir, 'zerf.manifest.json');
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    const sampleCode = `// ${cleanName} Extension Entrypoint
+export default {
+  async onLoad(ctx) {
+    ctx.log.info('Расширение ${cleanName} загружено');
+  },
+  async onCommand(cmd, args, ctx) {
+    ctx.log.success('Команда ' + cmd + ' выполнена с аргументами: ' + args.join(' '));
+  }
+};
+`;
+    fs.writeFileSync(path.join(targetDir, 'index.js'), sampleCode, 'utf-8');
+    return { dir: targetDir, manifestPath };
+}
+export async function installExtensionPackage(name) {
+    const cleanName = name.startsWith('zerf-') ? name : `zerf-${name}`;
+    return new Promise((resolve, reject) => {
+        const isWin = os.platform() === 'win32';
+        const npmCmd = isWin ? 'npm.cmd' : 'npm';
+        const targetDir = path.join(EXT_DIR, cleanName);
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+        // Scaffold initial installed manifest
+        const manifest = {
+            name: cleanName,
+            version: '1.0.0',
+            description: `Установленное расширение ${cleanName}`,
+            author: 'registry',
+            commands: [{ cmd: `/${cleanName.replace('zerf-', '')}`, description: `Команда ${cleanName}` }],
+            entrypoint: 'index.js',
+        };
+        fs.writeFileSync(path.join(targetDir, 'zerf.manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+        fs.writeFileSync(path.join(targetDir, 'index.js'), 'export default {};', 'utf-8');
+        resolve();
+    });
+}
+export async function removeExtensionPackage(name) {
+    const cleanName = name.startsWith('zerf-') ? name : `zerf-${name}`;
+    const targetDir = path.join(EXT_DIR, cleanName);
+    if (fs.existsSync(targetDir)) {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+    }
+}

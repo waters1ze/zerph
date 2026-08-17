@@ -1,92 +1,85 @@
-/**
- * Zerf Mascot: «Тихоня» (Minecraft Allay Spirit)
- * Strict monochrome + ethereal cyan palette matching the Zerf brand guidelines.
- */
+import chalk from 'chalk'
+import { GLYPH } from './tui/theme.js'
 
 export type MascotMood = 'idle' | 'thinking' | 'celebrate' | 'focus' | 'alert'
 
-// Strict Brand Palette (Platinum White, Ethereal Sky, Slate Gray)
-const C_LIGHT = '\x1b[38;2;186;230;253m'  // #bae6fd Light wings & highlights
-const C_CYAN  = '\x1b[38;2;125;211;252m'  // #7dd3fc Sky 300
-const C_MAIN  = '\x1b[38;2;56;189;248m'   // #38bdf8 Sky 400
-const C_DARK  = '\x1b[38;2;14;165;233m'   // #0ea5e9 Sky 500
-const C_INDIGO= '\x1b[38;2;99;102;241m'   // #6366f1 Indigo 500
-const C_WHITE = '\x1b[38;2;248;250;252m'  // #f8fafc Platinum White
-const C_SLATE = '\x1b[38;2;148;163;184m'  // #94a3b8 Slate 400
-const C_MUTED = '\x1b[38;2;100;116;139m'  // #64748b Slate 500
-const RESET   = '\x1b[0m'
-const BOLD    = '\x1b[1m'
-
-/**
- * Custom Monochrome & Cyber Glyphs (Zerf Spirit Square Mascot)
- */
-export const GLYPHS = {
-  spirit: '◈',      // Zerf Spirit Icon (square voxel spirit)
-  wings: '🪽',      // Spirit Wings
-  task: '❖',        // Task Glyph
-  taskDone: '✔',    // Done
-  taskTodo: '○',    // Incomplete
-  calendar: '◫',    // Calendar
-  chat: '◈',        // Chat
-  note: '≡',        // Note
-  focus: '⊘',       // Focus
-  limits: '⚡',      // Limits
-  streak: '🔥',     // Streak
-  friend: '🪽',     // Friend
-  bullet: '●',      // Bullet
-  pointer: '▶',     // Pointer
+export const MASCOT_GLYPHS = {
+  logo: GLYPH.logo,
+  bullet: GLYPH.bullet,
+  ok: GLYPH.ok,
+  cancel: GLYPH.cancel,
+  arrow: GLYPH.arrow,
+  todo: GLYPH.todo,
+  taskTodo: GLYPH.taskTodo,
+  taskDone: GLYPH.taskDone,
+  thinking: GLYPH.thinking,
+  mascotIdle: GLYPH.mascotIdle,
+  mascotFocus: GLYPH.mascotFocus,
+  mascotAlert: GLYPH.mascotAlert,
+  mascotJoy: GLYPH.mascotJoy,
+  barFilled: GLYPH.barFilled,
+  barEmpty: GLYPH.barEmpty,
+  divider: GLYPH.divider,
 } as const
 
-/**
- * Cute, Boxy Minecraft Allay (Тихоня) Voxel Pixel Art (5 lines)
- */
+// Legacy alias for compatibility
+export const GLYPHS = {
+  spirit: GLYPH.logo,
+  wings: GLYPH.arrow,
+  task: GLYPH.logo,
+  taskDone: GLYPH.ok,
+  taskTodo: GLYPH.todo,
+  calendar: '◫',
+  chat: GLYPH.logo,
+  note: '≡',
+  focus: GLYPH.bullet,
+  limits: GLYPH.bullet,
+  streak: GLYPH.arrow,
+  friend: GLYPH.arrow,
+  bullet: GLYPH.bullet,
+  pointer: GLYPH.arrow,
+} as const
+
 export function getAllaySpriteLines(mood: MascotMood = 'idle', wingFrame = 0): string[] {
   const isWingUp = wingFrame % 2 === 0
-  const wTopL = isWingUp ? `${C_LIGHT}▄▀` : `${C_LIGHT}  `
-  const wTopR = isWingUp ? `${C_LIGHT}▀▄` : `${C_LIGHT}  `
-  const wMidL = isWingUp ? `${C_LIGHT}█ ` : `${C_LIGHT}▄▀`
-  const wMidR = isWingUp ? `${C_LIGHT} █` : `${C_LIGHT}▀▄`
-  const wBotL = isWingUp ? `${C_LIGHT}▀▄` : `${C_LIGHT}  `
-  const wBotR = isWingUp ? `${C_LIGHT}▄▀` : `${C_LIGHT}  `
+  const wTopL = isWingUp ? chalk.gray('▄▀') : chalk.gray('  ')
+  const wTopR = isWingUp ? chalk.gray('▀▄') : chalk.gray('  ')
+  const wMidL = isWingUp ? chalk.gray('█ ') : chalk.gray('▄▀')
+  const wMidR = isWingUp ? chalk.gray(' █') : chalk.gray('▀▄')
+  const wBotL = isWingUp ? chalk.gray('▀▄') : chalk.gray('  ')
+  const wBotR = isWingUp ? chalk.gray('▄▀') : chalk.gray('  ')
 
-  let eyes = `${C_WHITE}■${C_MAIN}██${C_WHITE}■`
+  let eyes = chalk.white('■') + chalk.gray('██') + chalk.white('■')
   if (mood === 'thinking') {
-    eyes = `${C_CYAN}◫${C_MAIN}██${C_CYAN}◫`
+    eyes = chalk.gray('⬡') + chalk.white('██') + chalk.gray('⬡')
   } else if (mood === 'celebrate') {
-    eyes = `${C_WHITE}◈${C_MAIN}██${C_WHITE}◈`
+    eyes = chalk.bold.white('✧') + chalk.gray('██') + chalk.bold.white('✧')
   } else if (mood === 'focus') {
-    eyes = `${C_INDIGO}▄${C_MAIN}██${C_INDIGO}▄`
+    eyes = chalk.gray('˘') + chalk.white('ᴗ') + chalk.gray('˘') + chalk.gray(' ')
   } else if (mood === 'alert') {
-    eyes = `${C_WHITE}■${C_MAIN}██${C_WHITE}■`
+    eyes = chalk.yellow('⊙') + chalk.gray('██') + chalk.yellow('⊙')
   }
 
   return [
-    ` ${wTopL} ${C_CYAN}▄████▄${RESET} ${wTopR}`,
-    `${wMidL}${C_MAIN}█${eyes}${C_MAIN}█${RESET}${wMidR}`,
-    ` ${wBotL} ${C_DARK}▀████▀${RESET} ${wBotR}`,
-    `    ${C_INDIGO}▄██▄${RESET}   `,
-    `     ${C_CYAN}▀▀${RESET}    `,
+    ` ${wTopL} ${chalk.gray('▄████▄')} ${wTopR}`,
+    `${wMidL}${chalk.gray('█')}${eyes}${chalk.gray('█')}${wMidR}`,
+    ` ${wBotL} ${chalk.gray('▀████▀')} ${wBotR}`,
+    `    ${chalk.gray('▄██▄')}   `,
+    `     ${chalk.gray('▀▀')}    `,
   ]
 }
 
 export function getAllayFace(mood: MascotMood = 'idle'): string {
   switch (mood) {
     case 'idle':
-      return `${C_CYAN}[ ■ ◡ ■ ]${RESET}`
+      return chalk.gray('[ ') + chalk.white(GLYPH.mascotIdle + ' _ ' + GLYPH.mascotIdle) + chalk.gray(' ]')
     case 'thinking':
-      return `${C_CYAN}[ ◫ ⚬ ◫ ]${RESET}`
+      return chalk.gray('[ ') + chalk.white(GLYPH.thinking + ' _ ' + GLYPH.thinking) + chalk.gray(' ]')
     case 'celebrate':
-      return `${C_WHITE}[ ◈ ᗜ ◈ ]${RESET}`
+      return chalk.bold.white('[ ') + chalk.bold.white(GLYPH.mascotJoy) + chalk.bold.white(' ]')
     case 'focus':
-      return `${C_INDIGO}[ ─ ‿ ─ ☕ ]${RESET}`
+      return chalk.gray('[ ') + chalk.white(GLYPH.mascotFocus) + chalk.gray(' ]')
     case 'alert':
-      return `${C_WHITE}[ ⯀ ᗣ ⯀ ! ]${RESET}`
+      return chalk.yellow('[ ') + chalk.yellow(GLYPH.mascotAlert) + chalk.yellow(' ]')
   }
-}
-
-export function renderAllayBanner(userName: string, plan: string, streak = 1): string {
-  return [
-    ` ${C_MAIN}◈${RESET} ${BOLD}Zerf CLI v2.0.26${RESET}        ${C_SLATE}${userName}${RESET} · ${C_CYAN}${plan.toUpperCase()}${RESET} · ${C_SLATE}стрик ${streak} 🔥${RESET}`,
-    `${C_MUTED}────────────────────────────────────────────────────────────────────────────${RESET}`,
-  ].join('\n')
 }

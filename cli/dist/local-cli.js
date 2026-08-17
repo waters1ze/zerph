@@ -2,33 +2,34 @@ import { execSync, spawn } from 'child_process';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+export const ALLOWED_CLIS = ['claude', 'agy', 'opencode', 'gh', 'ollama'];
 const SUPPORTED_LOCAL_CLIS = [
-    { id: 'cli:agy', name: '🌌 Antigravity CLI (agy)', command: 'agy', desc: 'Автономный агент Google Antigravity (код, файлы, bash)', type: 'local_cli' },
-    { id: 'cli:claude', name: '🪽 Claude Code CLI (claude)', command: 'claude', desc: 'Терминальный агент Anthropic Claude с редактированием файлов', type: 'local_cli' },
-    { id: 'cli:gemini', name: '✨ Gemini CLI (gemini)', command: 'gemini', desc: 'Google Gemini CLI терминальный агент', type: 'local_cli' },
-    { id: 'cli:ollama', name: '🦙 Ollama Local (ollama)', command: 'ollama', desc: 'Локальные модели на ПК (localhost:11434)', type: 'local_llm' },
-    { id: 'cli:gh', name: '🐙 GitHub Copilot CLI (gh)', command: 'gh', desc: 'GitHub Copilot терминальный помощник', type: 'local_cli' },
+    { command: 'claude', name: 'claude', desc: 'Anthropic Claude Code терминальный агент', type: 'local_cli' },
+    { command: 'agy', name: 'agy', desc: 'Antigravity CLI автономный агент', type: 'local_cli' },
+    { command: 'opencode', name: 'opencode', desc: 'OpenCode terminal agent', type: 'local_cli' },
+    { command: 'gh', name: 'gh', desc: 'GitHub Copilot CLI помощник', type: 'local_cli' },
+    { command: 'ollama', name: 'ollama', desc: 'Локальные LLaMA/Qwen модели (localhost:11434)', type: 'local_llm' },
 ];
 export function checkCliInstalled(cmd) {
     const isWin = os.platform() === 'win32';
     try {
         const checkCmd = isWin ? `where.exe ${cmd}` : `which ${cmd}`;
-        execSync(checkCmd, { stdio: 'pipe', timeout: 1000 });
-        return { installed: true, version: 'готов к работе' };
+        const out = execSync(checkCmd, { stdio: 'pipe', timeout: 1000 }).toString().trim();
+        const resolvedPath = out.split('\n')[0]?.trim();
+        return { installed: true, path: resolvedPath, version: 'готов к работе' };
     }
     catch {
-        // Check common global npm paths on Windows
         if (isWin) {
             const appData = process.env.APPDATA || '';
             const localAppData = process.env.LOCALAPPDATA || '';
             const candidates = [
                 path.join(appData, 'npm', `${cmd}.cmd`),
-                path.join(appData, 'npm', `${cmd}.ps1`),
+                path.join(appData, 'npm', `${cmd}.exe`),
                 path.join(localAppData, 'Programs', cmd, `${cmd}.exe`),
             ];
             for (const p of candidates) {
                 if (fs.existsSync(p)) {
-                    return { installed: true, version: 'готов к работе' };
+                    return { installed: true, path: p, version: 'готов к работе' };
                 }
             }
         }
@@ -39,44 +40,75 @@ export function detectInstalledClis() {
     return SUPPORTED_LOCAL_CLIS.map(cli => {
         const status = checkCliInstalled(cli.command);
         return {
-            ...cli,
+            id: `cli:${cli.command}`,
+            name: cli.name,
+            command: cli.command,
+            path: status.path,
             installed: status.installed,
             version: status.version,
+            desc: cli.desc,
+            type: cli.type,
         };
     });
 }
-export async function runLocalCliBridge(cliCommand, prompt, onData) {
+export async function runLocalCliBridge(cliName, userPrompt, onData) {
+    const cleanName = cliName.replace(/^cli:/, '');
+    if (!ALLOWED_CLIS.includes(cleanName)) {
+        throw new Error(`CLI «${cleanName}» не поддерживается. Разрешены: ${ALLOWED_CLIS.join(', ')}`);
+    }
+    const detectedList = detectInstalledClis();
+    const cliInfo = detectedList.find(c => c.command === cleanName);
+    if (!cliInfo || !cliInfo.installed || !cliInfo.path) {
+        throw new Error(`CLI «${cleanName}» не установлен или не найден в PATH.`);
+    }
     return new Promise((resolve, reject) => {
         const isWin = os.platform() === 'win32';
-        const cleanCmd = cliCommand.replace('cli:', '');
-        const shell = isWin ? 'powershell.exe' : '/bin/sh';
-        const args = isWin
-            ? ['-NoProfile', '-Command', `${cleanCmd} "${prompt.replace(/"/g, '`"')}"`]
-            : ['-c', `${cleanCmd} "${prompt.replace(/"/g, '\\"')}"`];
+        const exePath = cliInfo.path;
+        const args = [userPrompt];
         let fullOutput = '';
-        try {
-            const proc = spawn(shell, args, { stdio: ['inherit', 'pipe', 'pipe'] });
-            proc.stdout?.on('data', data => {
-                const text = data.toString();
-                fullOutput += text;
-                if (onData)
-                    onData(text);
-            });
-            proc.stderr?.on('data', data => {
-                const text = data.toString();
-                fullOutput += text;
-                if (onData)
-                    onData(text);
-            });
-            proc.on('close', () => {
-                resolve(fullOutput.trim() || 'Команда выполнена локальным CLI агентом.');
-            });
-            proc.on('error', err => {
-                reject(err);
-            });
-        }
-        catch (e) {
-            reject(e);
-        }
+        let isSettled = false;
+        const proc = spawn(exePath, args, {
+            shell: false,
+            stdio: ['inherit', 'pipe', 'pipe'],
+            timeout: 120_000,
+        });
+        const timeoutTimer = setTimeout(() => {
+            if (!isSettled) {
+                isSettled = true;
+                proc.kill();
+                reject(new Error('Таймаут 120с при вызове локального CLI.'));
+            }
+        }, 120_000);
+        proc.stdout?.on('data', data => {
+            const text = data.toString();
+            fullOutput += text;
+            if (onData)
+                onData(text);
+        });
+        proc.stderr?.on('data', data => {
+            const text = data.toString();
+            fullOutput += text;
+            if (onData)
+                onData(text);
+        });
+        proc.on('close', code => {
+            clearTimeout(timeoutTimer);
+            if (isSettled)
+                return;
+            isSettled = true;
+            if (code === 0 || fullOutput.trim()) {
+                resolve(fullOutput.trim() || `Команда выполнена через ${cleanName}.`);
+            }
+            else {
+                reject(new Error(`CLI ${cleanName} завершился с кодом ${code}`));
+            }
+        });
+        proc.on('error', err => {
+            clearTimeout(timeoutTimer);
+            if (isSettled)
+                return;
+            isSettled = true;
+            reject(err);
+        });
     });
 }
