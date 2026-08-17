@@ -16,7 +16,18 @@ export async function GET(req: NextRequest) {
     const ownerChatId = authUser.chatId
     
     const usage = await getUserUsageAndLimits(ownerChatId)
-    return NextResponse.json(usage)
+    const chat = await prisma.telegramChat.findUnique({
+      where: { chatId: BigInt(ownerChatId) },
+      select: { firstName: true, lastName: true, username: true, email: true }
+    })
+    const displayName = [chat?.firstName, chat?.lastName].filter(Boolean).join(' ') || chat?.username || chat?.email?.split('@')[0] || `Пользователь #${ownerChatId}`
+
+    return NextResponse.json({
+      ...usage,
+      chatId: String(ownerChatId),
+      name: displayName,
+      username: chat?.username || null,
+    })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

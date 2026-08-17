@@ -1,19 +1,17 @@
 'use client'
 
 import React, { useState, useEffect, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   Terminal, ShieldCheck, CheckCircle2, XCircle, Loader2,
-  Crown, ArrowRight, LogIn, Mail, Lock, Send
+  Crown, ArrowRight, LogIn, Mail, Lock, Send, Edit3
 } from 'lucide-react'
 import { getAuthHeaders, getTgChatId } from '@/lib/store'
 
 function CliAuthContent() {
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const code = searchParams.get('code')?.trim().toUpperCase() || ''
-
+  const [code, setCode] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [user, setUser] = useState<{ chatId: string; name?: string; plan?: string } | null>(null)
@@ -26,6 +24,18 @@ function CliAuthContent() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
 
+  // Extract code safely on mount from searchParams OR window.location.search
+  useEffect(() => {
+    let c = searchParams.get('code') || searchParams.get('c') || ''
+    if (!c && typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      c = sp.get('code') || sp.get('c') || ''
+    }
+    if (c) {
+      setCode(c.trim().toUpperCase())
+    }
+  }, [searchParams])
+
   const checkAuth = async () => {
     try {
       setLoading(true)
@@ -33,11 +43,10 @@ function CliAuthContent() {
       const res = await fetch('/api/subscription', { headers })
       if (res.ok) {
         const data = await res.json()
-        const localChatId = getTgChatId() || data.chatId
-        if (localChatId) {
+        if (data.chatId) {
           setUser({
-            chatId: String(localChatId),
-            name: `Пользователь #${localChatId}`,
+            chatId: String(data.chatId),
+            name: data.name || `Пользователь #${data.chatId}`,
             plan: data.plan || 'free',
           })
         }
@@ -88,7 +97,12 @@ function CliAuthContent() {
   }
 
   const handleApprove = async () => {
-    if (!code) return
+    const cleanCode = code.trim().toUpperCase()
+    if (!cleanCode) {
+      setErrorMsg('Пожалуйста, укажите код подтверждения из терминала')
+      setStatus('error')
+      return
+    }
     setSubmitting(true)
     setErrorMsg('')
     try {
@@ -99,7 +113,7 @@ function CliAuthContent() {
       const res = await fetch('/api/cli/auth', {
         method: 'PUT',
         headers,
-        body: JSON.stringify({ code, action: 'approve' }),
+        body: JSON.stringify({ code: cleanCode, action: 'approve' }),
       })
       const data = await res.json()
       if (res.ok && data.success) {
@@ -117,13 +131,14 @@ function CliAuthContent() {
   }
 
   const handleReject = async () => {
-    if (!code) return
+    const cleanCode = code.trim().toUpperCase()
+    if (!cleanCode) return
     setSubmitting(true)
     try {
       await fetch('/api/cli/auth', {
         method: 'PUT',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, action: 'reject' }),
+        body: JSON.stringify({ code: cleanCode, action: 'reject' }),
       })
       setStatus('rejected')
     } catch {}
@@ -169,14 +184,19 @@ function CliAuthContent() {
           </div>
         </div>
 
-        {/* Code Badge */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 text-center space-y-1">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
+        {/* Code Input / Badge */}
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 text-center space-y-2">
+          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 flex items-center justify-center gap-1">
             Код подтверждения из терминала
           </span>
-          <div className="text-2xl font-mono font-extrabold tracking-widest text-sky-400">
-            {code || 'НЕ УКАЗАН'}
-          </div>
+          <input
+            type="text"
+            value={code}
+            onChange={e => setCode(e.target.value.toUpperCase())}
+            placeholder="XXXX-XXXX"
+            maxLength={12}
+            className="w-full text-center text-2xl font-mono font-extrabold tracking-widest text-sky-400 bg-transparent border-b border-dashed border-slate-700 focus:border-sky-400 focus:outline-none py-1 uppercase transition-colors placeholder:text-slate-700"
+          />
         </div>
 
         {/* Status Views */}
@@ -201,8 +221,15 @@ function CliAuthContent() {
         ) : status === 'error' ? (
           <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-2">
             <XCircle className="w-8 h-8 text-amber-400 mx-auto" />
-            <h3 className="text-xs font-bold text-amber-400">Ошибка авторизации</h3>
+            <h3 className="text-xs font-bold text-amber-400">Ошибка</h3>
             <p className="text-xs text-slate-300">{errorMsg}</p>
+            <button
+              type="button"
+              onClick={() => setStatus('idle')}
+              className="text-[11px] text-sky-400 underline cursor-pointer mt-1 block mx-auto"
+            >
+              Попробовать снова
+            </button>
           </div>
         ) : user ? (
           /* User Profile & Actions */
@@ -265,7 +292,7 @@ function CliAuthContent() {
               <button
                 type="button"
                 onClick={handleApprove}
-                disabled={submitting || !code}
+                disabled={submitting || !code.trim()}
                 className="flex-2 h-11 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:opacity-95 text-white text-xs font-bold transition-all shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
