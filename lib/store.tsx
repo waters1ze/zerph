@@ -827,19 +827,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
-    // Fast live sync while app is visible, so voice/Telegram tasks appear quickly.
-    // 6s (not 3.5s): each sync fires 2-3 DB-backed requests and Supabase's
-    // transaction pooler chokes when several tabs hammer it in parallel.
+    // Background fallback sync (every 10 minutes). Primary sync is event-driven (focus, visibility, actions)
     const syncInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         syncBackendData(false)
       }
-    }, 6000)
+    }, 10 * 60 * 1000)
 
-    // Check Telegram reminders every 15 seconds
+    // Check reminders periodically (every 10 minutes)
     const reminderInterval = setInterval(() => {
       fetch('/api/reminders/check').catch(() => {})
-    }, 15000)
+    }, 10 * 60 * 1000)
     fetch('/api/reminders/check').catch(() => {})
 
     // Hydrate currentView safely on client mount

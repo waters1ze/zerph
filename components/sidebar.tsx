@@ -194,7 +194,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchInstalledExts()
 
-    const interval = setInterval(fetchPendingTeamRequests, 20000)
+    const interval = setInterval(fetchPendingTeamRequests, 10 * 60 * 1000)
     return () => clearInterval(interval)
   }, [dispatch])
 
