@@ -212,6 +212,13 @@ export interface UserSettings {
     aiApiKey?: string
     aiModel: string
     groqApiKey?: string
+    aiTaskModels?: {
+      chat?: string
+      parser?: string
+      goals?: string
+      reschedule?: string
+      analytics?: string
+    }
   }
   weekStartsOn: 0 | 1
   focusModeEnabled: boolean

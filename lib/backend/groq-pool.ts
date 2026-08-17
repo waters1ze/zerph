@@ -16,19 +16,50 @@
 import { GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
 import { normalizePlan } from '@/lib/plans'
 
+export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice'
+
+export const FREE_ALLOWED_MODELS = [
+  'meta-llama/Llama-3.1-8B-Instruct',
+  'Qwen/Qwen2.5-7B-Instruct',
+]
+
+export const PLUS_ALLOWED_MODELS = [
+  'qwen/qwen3.6-27b',
+  'meta-llama/Llama-3.1-8B-Instruct',
+  'Qwen/Qwen2.5-7B-Instruct',
+]
+
 /**
  * Model allocation based on subscription tier:
- * - Free: 8B Lightweight Model (meta-llama/Llama-3.1-8B-Instruct / groq/compound-mini)
- * - Plus (99 ₽): Qwen 27B (qwen/qwen3.6-27b)
- * - Pro (299-300 ₽) & Corp: Flagship GPT-OSS 120B (openai/gpt-oss-120b)
+ * - Free: 1 of 2 lightweight models (Llama 3.1 8B or Qwen 2.5 7B) for all tasks
+ * - Plus (99 ₽): 1 of 3 models (Qwen 3.6 27B, Llama 3.1 8B, Qwen 2.5 7B) for all tasks
+ * - Pro (299-300 ₽) & Corp: Full customization, can set ANY model for EACH individual task
  */
-export function getModelForUserPlan(plan?: string | null): string {
+export function getModelForUserPlan(
+  plan?: string | null,
+  requestedModel?: string | null,
+  taskKind?: AiTaskKind
+): string {
   const norm = normalizePlan(plan)
+  const req = requestedModel?.trim()
+
+  // Pro & Corp: full freedom to use ANY model for each task
   if (norm === 'pro' || norm === 'corp') {
+    if (req) return req
     return 'openai/gpt-oss-120b'
   }
+
+  // Plus: 1 of 3 models for all tasks
   if (norm === 'plus') {
+    if (req && PLUS_ALLOWED_MODELS.includes(req)) {
+      return req
+    }
     return 'qwen/qwen3.6-27b'
+  }
+
+  // Free: 1 of 2 models for all tasks
+  if (req && FREE_ALLOWED_MODELS.includes(req)) {
+    return req
   }
   return 'meta-llama/Llama-3.1-8B-Instruct'
 }

@@ -10,14 +10,15 @@ import {
   User, Users, Mail, Palette, Save, Check, MessageSquare,
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
-  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle
+  Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
-import { PLAN_CATALOG } from '@/lib/plans'
+import { PLAN_CATALOG, normalizePlan } from '@/lib/plans'
 import { GiftSection } from '@/components/settings/gift-section'
 import { ImportExportSection } from '@/components/settings/import-export-section'
 import { TeamsSection } from '@/components/settings/teams-section'
+import { AiModelsSection } from '@/components/settings/ai-models-section'
 import {
   THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
   normalizeTheme, type ThemePresetId, type TextScaleStep,
@@ -75,7 +76,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
   { value: 3,  label: 'A' },
 ]
 
-type SettingsTab = 'account' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'subscription' | 'data' | 'teams'
+type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'pwa' | 'data'
 
 export function SettingsView() {
   const { state, dispatch } = useApp()
@@ -428,6 +429,7 @@ export function SettingsView() {
       items: [
         { id: 'account' as SettingsTab, label: 'Профиль & Вход', icon: User, desc: 'Имя, часовой пояс, Email, Telegram, VK' },
         { id: 'subscription' as SettingsTab, label: 'Тарифные планы & Подарки', icon: Sparkles, desc: 'Подписка Free, Plus, Pro, Corp, подарки' },
+        { id: 'ai' as SettingsTab, label: 'ИИ & Нейросети', icon: Brain, desc: 'Выбор моделей для задач, чата, перепланирования' },
         { id: 'teams' as SettingsTab, label: 'Команды & Проекты', icon: Users, desc: 'Совместная работа, роли участников, приглашения' },
       ],
     },
@@ -1809,6 +1811,20 @@ export function SettingsView() {
 
           {/* Gift Subscription Section */}
           <GiftSection />
+        </div>
+      )}
+
+      {/* ── TAB: AI & LLM Models Selection ────────────────────────────── */}
+      {activeTab === 'ai' && (
+        <div className="space-y-6">
+          <Section title="Настройки ИИ и моделей">
+            <div className="p-5">
+              <AiModelsSection
+                userPlan={normalizePlan(profileData.plan)}
+                onUpgradeClick={() => setActiveTab('subscription')}
+              />
+            </div>
+          </Section>
         </div>
       )}
 

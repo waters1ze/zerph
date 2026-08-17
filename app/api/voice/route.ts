@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
 
     const userPlan = ownerChatId ? (await getUserUsageAndLimits(ownerChatId)).plan : 'free'
-    const effectiveModel = getModelForUserPlan(userPlan)
+    const effectiveModel = getModelForUserPlan(userPlan, undefined, 'voice')
 
     const parsedItems = await parseIntentWithGroq(transcript, apiKey, effectiveModel, context, friendsContext)
     const results = []

@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       systemContent += `\n\n## User Workspace Context:\n${JSON.stringify(clientContext, null, 2)}`
     }
 
-    const effectiveModel = body.model || getModelForUserPlan(limits.plan)
+    const effectiveModel = getModelForUserPlan(limits.plan, body.model, 'chat')
 
     const result = await callGroqChatCompletion({
       messages: [{ role: 'system', content: systemContent }, ...messages],

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const limits = ownerChatId ? await getUserUsageAndLimits(ownerChatId) : null
-    const effectiveModel = model || getModelForUserPlan(limits?.plan)
+    const effectiveModel = getModelForUserPlan(limits?.plan, model, 'parser')
 
     const context = ownerChatId ? await getExistingItemsContext(ownerChatId) : undefined
     const friends = ownerChatId ? await getFriends(ownerChatId) : []
