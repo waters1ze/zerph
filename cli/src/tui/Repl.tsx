@@ -5,9 +5,13 @@ import {
   fetchUserData,
   loadCredentials,
   mutateItem,
-  ZerfCredentials
+  sendAiQuery,
+  loadConfig,
+  saveConfig,
+  ZerfCredentials,
+  ZerfConfig
 } from '../api.js'
-import { GLYPHS, MascotMood } from '../mascot.js'
+import { GLYPHS } from '../mascot.js'
 
 interface LogEntry {
   id: string
@@ -23,16 +27,26 @@ interface MenuItem {
   glyph: string
 }
 
+const AVAILABLE_MODELS = [
+  { id: 'groq/llama-3.3-70b', name: '⚡ Groq Llama 3.3 70B', desc: 'Молниеносный отклик (120–200 мс)' },
+  { id: 'deepseek/deepseek-r1', name: '🧠 DeepSeek R1 Reasoning', desc: 'Глубокое рассуждение и аналитика' },
+  { id: 'openai/gpt-4o-mini', name: '✨ OpenAI GPT-4o Mini', desc: 'Сбалансированная точность' },
+  { id: 'anthropic/claude-3.5-haiku', name: '🪽 Claude 3.5 Haiku', desc: 'Креативность и структурирование' },
+]
+
 const BASE_MENU_ITEMS: MenuItem[] = [
   { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
-  { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
-  { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени', glyph: GLYPHS.taskDone },
   { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
   { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
+  { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
+  { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
   { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
   { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
+  { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и распознавание речи', glyph: '🎙' },
+  { cmd: '/model', label: '/model', desc: 'Выбор активной нейросети (LLM)', glyph: '🤖' },
+  { cmd: '/settings', label: '/settings', desc: 'Окно настроек и параметров', glyph: '⚙' },
   { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-  { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и статус', glyph: GLYPHS.friend },
   { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
   { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
   { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
@@ -41,12 +55,15 @@ const BASE_MENU_ITEMS: MenuItem[] = [
 export function Repl({ initialData }: { initialData?: any }) {
   const { exit } = useApp()
   const [creds] = useState<ZerfCredentials>(() => loadCredentials())
+  const [config, setConfig] = useState<ZerfConfig>(() => loadConfig())
   const [data, setData] = useState<any>(initialData || null)
   const [inputVal, setInputVal] = useState('')
   const [history, setHistory] = useState<LogEntry[]>([])
   const [cliCount, setCliCount] = useState<number>(initialData?.limits?.cliUsed || 0)
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [menuForced, setMenuForced] = useState(false)
+  const [pickingModel, setPickingModel] = useState(false)
+  const [selectedModelIdx, setSelectedModelIdx] = useState(0)
 
   // Load user data if not passed initially
   const loadData = async () => {
@@ -76,7 +93,7 @@ export function Repl({ initialData }: { initialData?: any }) {
   const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems]
 
   // Compute matching slash commands
-  const isSlash = inputVal.startsWith('/') || menuForced
+  const isSlash = (inputVal.startsWith('/') || menuForced) && !pickingModel
   const filterQuery = menuForced ? '' : inputVal.toLowerCase().trim()
   const filteredCommands = isSlash
     ? allMenuItems.filter(m => !filterQuery || m.cmd.toLowerCase().startsWith(filterQuery))
@@ -89,13 +106,48 @@ export function Repl({ initialData }: { initialData?: any }) {
     }
   }, [filteredCommands.length, selectedIdx])
 
-  // Keyboard navigation for menu and suggestions
+  // Keyboard navigation
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       exit()
       return
     }
 
+    // Model selection navigation
+    if (pickingModel) {
+      if (key.upArrow) {
+        setSelectedModelIdx(prev => (prev > 0 ? prev - 1 : AVAILABLE_MODELS.length - 1))
+        return
+      }
+      if (key.downArrow) {
+        setSelectedModelIdx(prev => (prev < AVAILABLE_MODELS.length - 1 ? prev + 1 : 0))
+        return
+      }
+      if (key.return) {
+        const chosen = AVAILABLE_MODELS[selectedModelIdx]
+        if (chosen) {
+          const updated = saveConfig({ model: chosen.id })
+          setConfig(updated)
+          setHistory(h => [
+            ...h,
+            {
+              id: String(Date.now()),
+              type: 'assistant',
+              text: `🤖 Активная модель переключена на: ${chosen.name}`,
+              details: [chosen.desc, 'Все последующие запросы и голосовой парсинг будут выполняться этой нейросетью.']
+            }
+          ])
+        }
+        setPickingModel(false)
+        return
+      }
+      if (key.escape) {
+        setPickingModel(false)
+        return
+      }
+    }
+
+    // Slash menu navigation
     if (isSlash && filteredCommands.length > 0) {
       if (key.upArrow) {
         setSelectedIdx(prev => (prev > 0 ? prev - 1 : filteredCommands.length - 1))
@@ -118,6 +170,13 @@ export function Repl({ initialData }: { initialData?: any }) {
         setMenuForced(false)
         return
       }
+    }
+
+    // Backspace / Delete safety: if deleting the only character, close menu immediately
+    if ((key.backspace || key.delete) && inputVal.length <= 1) {
+      setInputVal('')
+      setMenuForced(false)
+      return
     }
 
     if (input === '?' && !inputVal) {
@@ -166,6 +225,50 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
+    if (raw === '/model' || raw === '/ai' || raw === '/нейросеть') {
+      setPickingModel(true)
+      return
+    }
+
+    if (raw === '/voice' || raw === '/голос') {
+      setHistory(h => [
+        ...h,
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: '🎙 Голосовой ввод Zerf Voice:',
+          details: [
+            '1. Telegram: отправьте голосовое сообщение боту @Zerph_bot',
+            '2. iOS: используйте Siri / Action Button для мгновенного ввода',
+            '3. Web: нажмите микрофон в приложении https://zeprh.vercel.app',
+            `Движок распознавания: ${config.voiceEngine || 'Whisper Large v3 (Groq LPU)'}`,
+          ]
+        }
+      ])
+      return
+    }
+
+    if (raw === '/settings' || raw === '/настройки') {
+      const currentModelObj = AVAILABLE_MODELS.find(m => m.id === config.model) || AVAILABLE_MODELS[0]
+      setHistory(h => [
+        ...h,
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: '⚙ Настройки Zerf CLI:',
+          details: [
+            `• Активная модель ИИ:   ${currentModelObj?.name} (сменить: /model)`,
+            `• Тема оформления:      ${config.theme === 'strict' ? 'Strict Cyan (Монохром)' : 'Стандартная'}`,
+            `• Автосинхронизация:    ${config.autoSync ? 'Включена (каждые 30 сек)' : 'Выключена'}`,
+            `• Telegram Бот:         Подключен (@Zerph_bot)`,
+            `• Текущий тариф:        ${(data?.user?.plan || 'corp').toUpperCase()}`,
+            '💡 Для смены модели нейросети введите: /model',
+          ]
+        }
+      ])
+      return
+    }
+
     if (raw === '/help' || raw === '?') {
       setHistory(h => [
         ...h,
@@ -175,6 +278,9 @@ export function Repl({ initialData }: { initialData?: any }) {
           text: '❖ Быстрые команды Zerf CLI:',
           details: [
             '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
+            '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, GPT-4o, Claude)',
+            '/settings       — Окно параметров и настроек',
+            '/voice          — Голосовой ввод и распознавание',
             '/today          — Список задач и привычек на сегодня',
             '/cal            — Недельный календарь и расписание',
             '/chat <текст>   — Чат с коллегой / заметка другу',
@@ -386,20 +492,17 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    // Natural language query / AI dispatch
+    // ── Natural Language AI Processing (Intent Parser & Smart Chat) ──────────
     try {
-      await mutateItem(creds, {
-        action: 'create',
-        item: {
-          title: raw,
-          type: 'task',
-          priority: 'medium',
-          rawText: raw,
-        }
-      })
+      const res = await sendAiQuery(creds, raw, config.model)
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${raw}» создана и добавлена в расписание` }
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: res.message,
+          details: res.details,
+        }
       ])
       await loadData()
     } catch (e: any) {
@@ -444,8 +547,32 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       ))}
 
+      {/* ── Interactive Model Picker Modal (/model) ─────────────────────── */}
+      {pickingModel && (
+        <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={0}>
+          <Box justifyContent="space-between" marginBottom={0}>
+            <Text bold color="cyanBright">🤖 Выберите нейросеть для Zerf CLI (↑/↓, Enter для выбора):</Text>
+            <Text color="gray">ESC для закрытия</Text>
+          </Box>
+          {AVAILABLE_MODELS.map((m, idx) => {
+            const isSel = idx === selectedModelIdx
+            const isCurrent = config.model === m.id
+            return (
+              <Box key={m.id} gap={1}>
+                <Text bold color={isSel ? 'cyanBright' : 'gray'}>
+                  {isSel ? '▶ ' : '  '}{m.name.padEnd(28)}
+                </Text>
+                <Text color={isSel ? 'white' : 'gray'}>
+                  — {m.desc} {isCurrent ? '(Текущая)' : ''}
+                </Text>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+
       {/* ── Interactive /menu Dropdown (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
-      {isSlash && filteredCommands.length > 0 && (
+      {isSlash && filteredCommands.length > 0 && !pickingModel && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={0}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">
@@ -476,16 +603,19 @@ export function Repl({ initialData }: { initialData?: any }) {
           <Text bold color="cyanBright">{'>'}</Text>
           <TextInput
             value={inputVal}
-            onChange={setInputVal}
+            onChange={(val) => {
+              setInputVal(val)
+              if (!val) setMenuForced(false)
+            }}
             onSubmit={executeCommand}
-            placeholder="Напишите задачу, /menu, /today, /cal, /chat, ? для меню..."
+            placeholder="Напишите задачу, вопрос ИИ, /menu, /model, /settings..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
         {/* Footer info & limits bar (Claude Code bottom style) */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>/menu выбор · ↑/↓ навигация · ? справка</Text>
+          <Text color="gray" dimColor>/menu меню · /model ИИ · /settings · ? справка</Text>
           <Text color="gray" dimColor>
             [{planTag}: {cliCount}/{limits?.maxCli || '∞'} CLI | {Math.floor((limits?.voiceUsedSeconds || 0) / 60)}/{limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)}м голос]
           </Text>

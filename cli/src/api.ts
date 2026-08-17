@@ -16,6 +16,8 @@ export interface ZerfConfig {
   editor?: string
   sound?: boolean
   autoSync?: boolean
+  model?: string
+  voiceEngine?: string
 }
 
 const ZERF_DIR = path.join(os.homedir(), '.zerf')
@@ -62,7 +64,13 @@ export function loadConfig(): ZerfConfig {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'))
     }
   } catch {}
-  return { theme: 'strict', sound: true, autoSync: true }
+  return {
+    theme: 'strict',
+    sound: true,
+    autoSync: true,
+    model: 'groq/llama-3.3-70b',
+    voiceEngine: 'whisper-large-v3',
+  }
 }
 
 export function saveConfig(cfg: Partial<ZerfConfig>): ZerfConfig {
@@ -152,4 +160,75 @@ export async function mutateItem(creds: ZerfCredentials, payload: any): Promise<
     throw new Error(`Mutate error (HTTP ${res.status}): ${await res.text()}`)
   }
   return res.json()
+}
+
+// AI Smart Intent Parser & Conversational Engine
+export async function sendAiQuery(
+  creds: ZerfCredentials,
+  text: string,
+  model = 'groq/llama-3.3-70b'
+): Promise<{ type: 'created' | 'answer'; message: string; details?: string[] }> {
+  if (!creds.token) throw new Error('Not logged in')
+  const serverUrl = creds.serverUrl || DEFAULT_SERVER_URL
+
+  // 1. Try Intent Parsing via Groq / Backend AI
+  try {
+    const res = await fetch(`${serverUrl}/api/groq`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${creds.token}`,
+        'Content-Type': 'application/json',
+        'x-auth-token': creds.token,
+      },
+      body: JSON.stringify({ text, model }),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      if (data.success && data.items && data.items.length > 0) {
+        const item = data.items[0]
+        if (item.type === 'answer' || item.type === 'reply') {
+          return { type: 'answer', message: item.summary || item.title }
+        }
+        const title = item.title || item.rawText || text
+        const time = item.dueTime ? ` в ${item.dueTime}` : ''
+        const date = item.dueDate ? ` на ${item.dueDate}` : ''
+        return {
+          type: 'created',
+          message: `✔ ${item.type === 'note' ? 'Заметка' : item.type === 'goal' ? 'Цель' : 'Задача'} «${title}» создана${date}${time}`,
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Fallback to General AI Chat
+  try {
+    const res = await fetch(`${serverUrl}/api/chat`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${creds.token}`,
+        'Content-Type': 'application/json',
+        'x-auth-token': creds.token,
+      },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: text }],
+        model,
+      }),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      const answer = data.content || data.reply || data.message
+      if (answer) {
+        return { type: 'answer', message: answer }
+      }
+    }
+  } catch {}
+
+  // 3. Fallback to basic task creation
+  await mutateItem(creds, {
+    action: 'create',
+    item: { title: text, type: 'task', priority: 'medium', rawText: text },
+  })
+  return { type: 'created', message: `✔ Задача «${text}» добавлена в расписание` }
 }

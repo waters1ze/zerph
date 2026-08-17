@@ -2,18 +2,27 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
-import { fetchUserData, loadCredentials, mutateItem } from '../api.js';
+import { fetchUserData, loadCredentials, mutateItem, sendAiQuery, loadConfig, saveConfig } from '../api.js';
 import { GLYPHS } from '../mascot.js';
+const AVAILABLE_MODELS = [
+    { id: 'groq/llama-3.3-70b', name: '⚡ Groq Llama 3.3 70B', desc: 'Молниеносный отклик (120–200 мс)' },
+    { id: 'deepseek/deepseek-r1', name: '🧠 DeepSeek R1 Reasoning', desc: 'Глубокое рассуждение и аналитика' },
+    { id: 'openai/gpt-4o-mini', name: '✨ OpenAI GPT-4o Mini', desc: 'Сбалансированная точность' },
+    { id: 'anthropic/claude-3.5-haiku', name: '🪽 Claude 3.5 Haiku', desc: 'Креативность и структурирование' },
+];
 const BASE_MENU_ITEMS = [
     { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
-    { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
-    { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по имени', glyph: GLYPHS.taskDone },
     { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
     { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
+    { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
+    { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
     { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
     { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
+    { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и распознавание речи', glyph: '🎙' },
+    { cmd: '/model', label: '/model', desc: 'Выбор активной нейросети (LLM)', glyph: '🤖' },
+    { cmd: '/settings', label: '/settings', desc: 'Окно настроек и параметров', glyph: '⚙' },
     { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-    { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
+    { cmd: '/friends', label: '/friends', desc: 'Список друзей и статус', glyph: GLYPHS.friend },
     { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
     { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
     { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
@@ -21,12 +30,15 @@ const BASE_MENU_ITEMS = [
 export function Repl({ initialData }) {
     const { exit } = useApp();
     const [creds] = useState(() => loadCredentials());
+    const [config, setConfig] = useState(() => loadConfig());
     const [data, setData] = useState(initialData || null);
     const [inputVal, setInputVal] = useState('');
     const [history, setHistory] = useState([]);
     const [cliCount, setCliCount] = useState(initialData?.limits?.cliUsed || 0);
     const [selectedIdx, setSelectedIdx] = useState(0);
     const [menuForced, setMenuForced] = useState(false);
+    const [pickingModel, setPickingModel] = useState(false);
+    const [selectedModelIdx, setSelectedModelIdx] = useState(0);
     // Load user data if not passed initially
     const loadData = async () => {
         try {
@@ -52,7 +64,7 @@ export function Repl({ initialData }) {
     }));
     const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems];
     // Compute matching slash commands
-    const isSlash = inputVal.startsWith('/') || menuForced;
+    const isSlash = (inputVal.startsWith('/') || menuForced) && !pickingModel;
     const filterQuery = menuForced ? '' : inputVal.toLowerCase().trim();
     const filteredCommands = isSlash
         ? allMenuItems.filter(m => !filterQuery || m.cmd.toLowerCase().startsWith(filterQuery))
@@ -63,12 +75,46 @@ export function Repl({ initialData }) {
             setSelectedIdx(0);
         }
     }, [filteredCommands.length, selectedIdx]);
-    // Keyboard navigation for menu and suggestions
+    // Keyboard navigation
     useInput((input, key) => {
         if (key.ctrl && input === 'c') {
             exit();
             return;
         }
+        // Model selection navigation
+        if (pickingModel) {
+            if (key.upArrow) {
+                setSelectedModelIdx(prev => (prev > 0 ? prev - 1 : AVAILABLE_MODELS.length - 1));
+                return;
+            }
+            if (key.downArrow) {
+                setSelectedModelIdx(prev => (prev < AVAILABLE_MODELS.length - 1 ? prev + 1 : 0));
+                return;
+            }
+            if (key.return) {
+                const chosen = AVAILABLE_MODELS[selectedModelIdx];
+                if (chosen) {
+                    const updated = saveConfig({ model: chosen.id });
+                    setConfig(updated);
+                    setHistory(h => [
+                        ...h,
+                        {
+                            id: String(Date.now()),
+                            type: 'assistant',
+                            text: `🤖 Активная модель переключена на: ${chosen.name}`,
+                            details: [chosen.desc, 'Все последующие запросы и голосовой парсинг будут выполняться этой нейросетью.']
+                        }
+                    ]);
+                }
+                setPickingModel(false);
+                return;
+            }
+            if (key.escape) {
+                setPickingModel(false);
+                return;
+            }
+        }
+        // Slash menu navigation
         if (isSlash && filteredCommands.length > 0) {
             if (key.upArrow) {
                 setSelectedIdx(prev => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
@@ -91,6 +137,12 @@ export function Repl({ initialData }) {
                 setMenuForced(false);
                 return;
             }
+        }
+        // Backspace / Delete safety: if deleting the only character, close menu immediately
+        if ((key.backspace || key.delete) && inputVal.length <= 1) {
+            setInputVal('');
+            setMenuForced(false);
+            return;
         }
         if (input === '?' && !inputVal) {
             setMenuForced(prev => !prev);
@@ -131,6 +183,47 @@ export function Repl({ initialData }) {
             setMenuForced(true);
             return;
         }
+        if (raw === '/model' || raw === '/ai' || raw === '/нейросеть') {
+            setPickingModel(true);
+            return;
+        }
+        if (raw === '/voice' || raw === '/голос') {
+            setHistory(h => [
+                ...h,
+                {
+                    id: String(Date.now()),
+                    type: 'assistant',
+                    text: '🎙 Голосовой ввод Zerf Voice:',
+                    details: [
+                        '1. Telegram: отправьте голосовое сообщение боту @Zerph_bot',
+                        '2. iOS: используйте Siri / Action Button для мгновенного ввода',
+                        '3. Web: нажмите микрофон в приложении https://zeprh.vercel.app',
+                        `Движок распознавания: ${config.voiceEngine || 'Whisper Large v3 (Groq LPU)'}`,
+                    ]
+                }
+            ]);
+            return;
+        }
+        if (raw === '/settings' || raw === '/настройки') {
+            const currentModelObj = AVAILABLE_MODELS.find(m => m.id === config.model) || AVAILABLE_MODELS[0];
+            setHistory(h => [
+                ...h,
+                {
+                    id: String(Date.now()),
+                    type: 'assistant',
+                    text: '⚙ Настройки Zerf CLI:',
+                    details: [
+                        `• Активная модель ИИ:   ${currentModelObj?.name} (сменить: /model)`,
+                        `• Тема оформления:      ${config.theme === 'strict' ? 'Strict Cyan (Монохром)' : 'Стандартная'}`,
+                        `• Автосинхронизация:    ${config.autoSync ? 'Включена (каждые 30 сек)' : 'Выключена'}`,
+                        `• Telegram Бот:         Подключен (@Zerph_bot)`,
+                        `• Текущий тариф:        ${(data?.user?.plan || 'corp').toUpperCase()}`,
+                        '💡 Для смены модели нейросети введите: /model',
+                    ]
+                }
+            ]);
+            return;
+        }
         if (raw === '/help' || raw === '?') {
             setHistory(h => [
                 ...h,
@@ -140,6 +233,9 @@ export function Repl({ initialData }) {
                     text: '❖ Быстрые команды Zerf CLI:',
                     details: [
                         '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
+                        '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, GPT-4o, Claude)',
+                        '/settings       — Окно параметров и настроек',
+                        '/voice          — Голосовой ввод и распознавание',
                         '/today          — Список задач и привычек на сегодня',
                         '/cal            — Недельный календарь и расписание',
                         '/chat <текст>   — Чат с коллегой / заметка другу',
@@ -343,20 +439,17 @@ export function Repl({ initialData }) {
             }
             return;
         }
-        // Natural language query / AI dispatch
+        // ── Natural Language AI Processing (Intent Parser & Smart Chat) ──────────
         try {
-            await mutateItem(creds, {
-                action: 'create',
-                item: {
-                    title: raw,
-                    type: 'task',
-                    priority: 'medium',
-                    rawText: raw,
-                }
-            });
+            const res = await sendAiQuery(creds, raw, config.model);
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${raw}» создана и добавлена в расписание` }
+                {
+                    id: String(Date.now()),
+                    type: 'assistant',
+                    text: res.message,
+                    details: res.details,
+                }
             ]);
             await loadData();
         }
@@ -369,8 +462,16 @@ export function Repl({ initialData }) {
     };
     const limits = data?.limits;
     const planTag = (data?.user?.plan || 'corp').toUpperCase();
-    return (_jsxs(Box, { flexDirection: "column", width: 88, children: [history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))), isSlash && filteredCommands.length > 0 && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
+    return (_jsxs(Box, { flexDirection: "column", width: 88, children: [history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))), pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "double", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\uD83E\uDD16 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u0435\u0439\u0440\u043E\u0441\u0435\u0442\u044C \u0434\u043B\u044F Zerf CLI (\u2191/\u2193, Enter \u0434\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430):" }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), AVAILABLE_MODELS.map((m, idx) => {
+                        const isSel = idx === selectedModelIdx;
+                        const isCurrent = config.model === m.id;
+                        return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', m.name.padEnd(28)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", m.desc, " ", isCurrent ? '(Текущая)' : ''] })] }, m.id));
+                    })] })), isSlash && filteredCommands.length > 0 && !pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
                         const isSel = idx === selectedIdx;
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', item.label.padEnd(18)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, item.cmd));
-                    })] })), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: setInputVal, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, /menu, /today, /cal, /chat, ? \u0434\u043B\u044F \u043C\u0435\u043D\u044E..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "/menu \u0432\u044B\u0431\u043E\u0440 \u00B7 \u2191/\u2193 \u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u044F \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
+                    })] })), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
+                                    setInputVal(val);
+                                    if (!val)
+                                        setMenuForced(false);
+                                }, onSubmit: executeCommand, placeholder: "\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443, \u0432\u043E\u043F\u0440\u043E\u0441 \u0418\u0418, /menu, /model, /settings..." })] }), _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { justifyContent: "space-between", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "/menu \u043C\u0435\u043D\u044E \u00B7 /model \u0418\u0418 \u00B7 /settings \u00B7 ? \u0441\u043F\u0440\u0430\u0432\u043A\u0430" }), _jsxs(Text, { color: "gray", dimColor: true, children: ["[", planTag, ": ", cliCount, "/", limits?.maxCli || '∞', " CLI | ", Math.floor((limits?.voiceUsedSeconds || 0) / 60), "/", limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60), "\u043C \u0433\u043E\u043B\u043E\u0441]"] })] })] })] }));
 }
