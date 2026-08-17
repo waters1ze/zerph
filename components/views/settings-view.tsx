@@ -2125,6 +2125,64 @@ export function SettingsView() {
               </select>
             </Row>
           </Section>
+
+          {/* Section: Custom Theme Extensions */}
+          <Section title="Расширения тем оформления">
+            <div className="p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
+                <div>
+                  <div className="text-[13px] font-medium text-foreground">Кастомные темы сообщества</div>
+                  <p className="text-[12px] text-muted-foreground">Темы оформления от создателей или ваши собственные стили</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const extTheme = {
+                      theme: settings.theme,
+                      accentColor: settings.accentColor,
+                      density: settings.density,
+                      borderRadius: settings.borderRadius,
+                      textScale: settings.textScale,
+                    }
+                    const payload = JSON.stringify(extTheme, null, 2)
+                    navigator.clipboard.writeText(payload)
+                    alert('✓ Конфигурация текущей темы скопирована в буфер обмена! Вы можете вставить её в Студии создания расширений.')
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Экспорт стиля в расширение</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <div
+                  onClick={() => update({ theme: 'strict', accentColor: 'emerald', density: 'compact', borderRadius: 'rounded' })}
+                  className="p-3.5 rounded-2xl border border-border/80 bg-muted/20 hover:border-primary/40 cursor-pointer transition-all space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                      <span>🌌</span> Cyberpunk Neon Emerald
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-mono">Theme Plugin</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Изумрудный строгий неон для максимальной концентрации в темноте.</p>
+                </div>
+
+                <div
+                  onClick={() => update({ theme: 'warm', accentColor: 'gold', density: 'comfortable', borderRadius: 'default' })}
+                  className="p-3.5 rounded-2xl border border-border/80 bg-muted/20 hover:border-primary/40 cursor-pointer transition-all space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                      <span>👑</span> Royal Gold Luxe
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-mono">Theme Plugin</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Тёплый бархатный чёрный с элементами шампанского золота.</p>
+                </div>
+              </div>
+            </div>
+          </Section>
         </div>
       )}
 

@@ -7,7 +7,8 @@ import {
   Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Network,
   UserCheck, Building2, Puzzle, Eye, EyeOff, Folder, Plus, Trash2,
   RotateCcw, Check, Sparkles, FolderPlus, ArrowUp, ArrowDown, Move,
-  ChevronDown, ChevronRight, Edit2, Save, X, ExternalLink
+  ChevronDown, ChevronRight, Edit2, Save, X, ExternalLink,
+  Share2, Download, Upload, Copy, CheckCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/store'
@@ -78,6 +79,84 @@ export const DEFAULT_SIDEBAR_FOLDERS: SidebarFolder[] = [
   },
 ]
 
+export interface LayoutPreset {
+  id: string
+  title: string
+  description: string
+  icon: string
+  author: string
+  config: SidebarConfig
+  recommendedExts?: string[]
+}
+
+export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
+  {
+    id: 'preset_founder',
+    title: 'Startup Founder & Product Lead',
+    description: 'Оптимизировано для создания продуктов: Проекты, Задачи, Таймер фокуса и Расширения на первом плане.',
+    icon: '🚀',
+    author: 'Zerf Official',
+    config: {
+      hiddenItems: ['friends', 'teams'],
+      folders: [
+        { id: 'focus', title: '⚡ Быстрый фокус', itemIds: ['today', 'tasks', 'clock'] },
+        { id: 'dev', title: '🚀 Продукт & SaaS', itemIds: ['projects', 'goals', 'notes', 'extensions'] },
+        { id: 'insights', title: '📊 Метрики', itemIds: ['stats', 'graph', 'calendar'] },
+        { id: 'sys', title: '⚙️ Настройки', itemIds: ['settings'] },
+      ],
+    },
+    recommendedExts: ['ext_pomodoro_widget', 'ext_startup_checklist'],
+  },
+  {
+    id: 'preset_ai_researcher',
+    title: 'AI Power User & Entropy Search',
+    description: 'Интеллектуальная раскладка: ИИ-поиск Entropy, Граф связей, Заметки и Планирование.',
+    icon: '🔮',
+    author: 'waters1ze',
+    config: {
+      hiddenItems: ['friends', 'teams'],
+      folders: [
+        { id: 'ai_hub', title: '🔮 AI & Исследования', itemIds: ['ext_entropy_search', 'graph', 'notes'] },
+        { id: 'workflow', title: '📋 Поток работы', itemIds: ['today', 'tasks', 'calendar'] },
+        { id: 'strategy', title: '🎯 Стратегия', itemIds: ['goals', 'projects', 'stats'] },
+        { id: 'system', title: '⚙️ Система', itemIds: ['extensions', 'settings'] },
+      ],
+    },
+    recommendedExts: ['ext_entropy_search', 'ext_nexus_search'],
+  },
+  {
+    id: 'preset_minimal_zen',
+    title: 'Minimal Zen Workspace',
+    description: 'Абсолютный минимализм: только самое важное на день, всё лишнее аккуратно скрыто.',
+    icon: '🧘',
+    author: 'Zen Master',
+    config: {
+      hiddenItems: ['graph', 'friends', 'teams', 'stats', 'projects', 'goals'],
+      folders: [
+        { id: 'today_focus', title: '✨ Сегодня', itemIds: ['today', 'inbox', 'clock'] },
+        { id: 'thoughts', title: '📝 Мысли', itemIds: ['notes', 'calendar', 'tasks'] },
+        { id: 'settings_min', title: '⚙️ Опции', itemIds: ['extensions', 'settings'] },
+      ],
+    },
+  },
+  {
+    id: 'preset_team_collab',
+    title: 'Team Collaboration & Agile',
+    description: 'Для командной работы: Команды, Друзья, Проекты и Задачи выведены в топ.',
+    icon: '👥',
+    author: 'Agile Team',
+    config: {
+      hiddenItems: [],
+      folders: [
+        { id: 'collab', title: '👥 Команда & Спринты', itemIds: ['teams', 'tasks', 'projects', 'friends'] },
+        { id: 'schedule', title: '📅 Расписание', itemIds: ['calendar', 'today', 'inbox'] },
+        { id: 'knowledge', title: '📚 База знаний', itemIds: ['notes', 'graph', 'goals'] },
+        { id: 'sys_team', title: '⚙️ Настройки', itemIds: ['stats', 'extensions', 'settings'] },
+      ],
+    },
+  },
+]
+
 export function getInitialSidebarConfig(): SidebarConfig {
   if (typeof window !== 'undefined') {
     try {
@@ -103,6 +182,9 @@ export function SidebarCustomizerSection() {
   const [savedBadge, setSavedBadge] = useState(false)
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editingFolderTitle, setEditingFolderTitle] = useState('')
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importJsonText, setImportJsonText] = useState('')
+  const [copiedPreset, setCopiedPreset] = useState(false)
 
   // Load installed extensions from GitHub catalog to allow dragging them
   useEffect(() => {
@@ -128,6 +210,43 @@ export function SidebarCustomizerSection() {
       setSavedBadge(true)
       setTimeout(() => setSavedBadge(false), 2000)
     } catch {}
+  }
+
+  const applyLayoutPreset = (preset: LayoutPreset) => {
+    if (!confirm(`Применить пресет раскладки «${preset.title}»?`)) return
+    saveConfig(preset.config)
+  }
+
+  const handleExportMyPreset = () => {
+    const payload = {
+      title: 'Моя раскладка Zerf Note',
+      createdAt: new Date().toISOString(),
+      config,
+    }
+    navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    setCopiedPreset(true)
+    setTimeout(() => setCopiedPreset(false), 2500)
+  }
+
+  const handleImportPresetSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const parsed = JSON.parse(importJsonText.trim())
+      const targetConfig = parsed.config || parsed
+      if (Array.isArray(targetConfig.folders) && targetConfig.folders.length > 0) {
+        saveConfig({
+          hiddenItems: Array.isArray(targetConfig.hiddenItems) ? targetConfig.hiddenItems : [],
+          folders: targetConfig.folders,
+        })
+        setShowImportModal(false)
+        setImportJsonText('')
+        alert('🎉 Пресет раскладки успешно загружен и применен!')
+      } else {
+        alert('Некорректная структура пресета. Убедитесь, что JSON содержит массив folders.')
+      }
+    } catch {
+      alert('Ошибка синтаксиса JSON. Проверьте правильность вставленного кода пресета.')
+    }
   }
 
   // All known item metadata (built-in + installed extensions)
@@ -292,6 +411,81 @@ export function SidebarCustomizerSection() {
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Сбросить по умолчанию</span>
           </button>
+        </div>
+      </div>
+
+      {/* Community Layout Presets & Share/Import */}
+      <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
+          <div>
+            <h4 className="font-bold text-foreground flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span>Пресеты раскладки и расширений</span>
+            </h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Готовые шаблоны расположения папок и расширений или обмен кастомными пресетами
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Импорт пресета</span>
+            </button>
+            <button
+              onClick={handleExportMyPreset}
+              className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              {copiedPreset ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+              <span>{copiedPreset ? 'Скопировано в буфер!' : 'Поделиться моей раскладкой'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Presets Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {COMMUNITY_LAYOUT_PRESETS.map(preset => (
+            <div
+              key={preset.id}
+              className="p-3.5 rounded-xl bg-muted/20 border border-border/80 hover:border-primary/40 transition-all flex flex-col justify-between gap-3"
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                    <span>{preset.icon}</span>
+                    <span>{preset.title}</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {preset.description}
+                </p>
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {preset.config.folders.map(f => (
+                    <span key={f.id} className="text-[9px] px-2 py-0.5 rounded-md bg-card border border-border text-foreground/80 font-medium">
+                      📁 {f.title} ({f.itemIds.length})
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-border/40 flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">
+                  {preset.config.folders.length} папок • {preset.config.hiddenItems.length} скрыто
+                </span>
+                <button
+                  onClick={() => applyLayoutPreset(preset)}
+                  className="px-3 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Check className="w-3 h-3" />
+                  <span>Применить пресет</span>
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -528,6 +722,69 @@ export function SidebarCustomizerSection() {
           )
         })}
       </div>
+
+      {/* Import Preset Modal */}
+      <AnimatePresence>
+        {showImportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Download className="w-4 h-4 text-primary" />
+                  <span>Импорт раскладки и пресета папок</span>
+                </h3>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="text-muted-foreground hover:text-foreground text-xs p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleImportPresetSubmit} className="space-y-3 text-xs">
+                <div>
+                  <label className="font-semibold text-foreground block mb-1">
+                    Вставьте конфигурацию пресета (JSON):
+                  </label>
+                  <textarea
+                    value={importJsonText}
+                    onChange={e => setImportJsonText(e.target.value)}
+                    placeholder='{"title": "...", "config": { "folders": [...] }}'
+                    rows={8}
+                    className="w-full p-3 rounded-2xl bg-muted/40 border border-border text-foreground font-mono text-[11px] outline-none focus:border-primary resize-none"
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Вы можете вставить код пресета, которым с вами поделился другой пользователь Zerf Note.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowImportModal(false)}
+                    className="px-3.5 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Применить пресет</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
