@@ -37,6 +37,37 @@ export interface ExtensionItem {
 // Built-in official creator extensions loaded from open-source GitHub specifications
 const STARTER_EXTENSIONS: ExtensionItem[] = [
   {
+    id: 'ext_entropy_search',
+    title: 'Entropy AI Search & Deep Research',
+    version: '1.0.0',
+    description: 'Интеллектуальный поисково-аналитический движок инсайтов в стиле Perplexity: глубокий синтез фактов, цитаты со ссылками на проверенные источники [1][2] и авто-экспорт в заметки.',
+    type: 'widget',
+    category: 'ИИ & Промпты',
+    icon: '🔮',
+    githubUrl: 'https://github.com/waters1ze/Entropy',
+    authorChatId: '6136950061',
+    authorName: 'waters1ze',
+    authorGithub: 'waters1ze',
+    price: 0,
+    minPlan: 'free',
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 12,
+    likesCount: 28,
+    installCount: 54,
+    content: {
+      engine: 'entropy_deep_search',
+      commands: [
+        { cmd: '/search', description: 'Entropy AI — Глубокий поиск и синтез источников' },
+        { cmd: '/entropy', description: 'Entropy AI — Запуск поисковой аналитики инсайтов' },
+      ],
+      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
+      maxSources: 5,
+    },
+    createdAt: '2026-08-17T20:00:00Z',
+    updatedAt: '2026-08-17T22:00:00Z',
+  },
+  {
     id: 'ext_nexus_search',
     title: 'Nexus AI Search & Deep Research Engine',
     version: '1.5.0',

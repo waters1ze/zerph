@@ -119,32 +119,160 @@ const SAMPLE_MANIFEST = `{
   }
 }`
 
+export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
+  {
+    id: 'ext_entropy_search',
+    title: 'Entropy AI Search & Deep Research',
+    version: '1.0.0',
+    description: 'Интеллектуальный поисково-аналитический движок инсайтов в стиле Perplexity: глубокий синтез фактов, цитаты со ссылками на проверенные источники [1][2] и авто-экспорт в заметки.',
+    type: 'widget',
+    category: 'ИИ & Промпты',
+    icon: '🔮',
+    githubUrl: 'https://github.com/waters1ze/Entropy',
+    authorChatId: '6136950061',
+    authorName: 'waters1ze',
+    authorGithub: 'waters1ze',
+    price: 0,
+    minPlan: 'free',
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 12,
+    likesCount: 28,
+    installCount: 54,
+    content: {
+      engine: 'entropy_deep_search',
+      commands: [
+        { cmd: '/search', description: 'Entropy AI — Глубокий поиск и синтез источников' },
+        { cmd: '/entropy', description: 'Entropy AI — Запуск поисковой аналитики инсайтов' },
+      ],
+      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
+      maxSources: 5,
+    },
+    createdAt: '2026-08-17T20:00:00Z',
+    updatedAt: '2026-08-17T22:00:00Z',
+  },
+  {
+    id: 'ext_nexus_search',
+    title: 'Nexus AI Search & Deep Research Engine',
+    version: '1.5.0',
+    description: 'Интеллектуальный поиск в стиле Perplexity: глубокий анализ фактов, сноски на источники [1][2], генерация сводки и сохранение инсайтов в заметки или задачи.',
+    type: 'widget',
+    category: 'ИИ & Промпты',
+    icon: '🔮',
+    githubUrl: 'https://github.com/nexus-search/zerf-nexus-ai',
+    authorChatId: '6136950061',
+    authorName: 'Nexus Labs',
+    authorGithub: 'nexus-search',
+    price: 0,
+    minPlan: 'free',
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 18,
+    likesCount: 34,
+    installCount: 89,
+    content: {
+      engine: 'nexus_deep_search',
+      commands: [
+        { cmd: '/search', description: 'Nexus AI — Глубокий ИИ-поиск и синтез источников' },
+      ],
+      features: ['web_synthesis', 'citations', 'direct_answers', 'auto_note_export'],
+      maxSources: 5,
+    },
+    createdAt: '2026-08-10T10:00:00Z',
+    updatedAt: '2026-08-17T20:00:00Z',
+  },
+  {
+    id: 'ext_pomodoro_widget',
+    title: 'Smart Pomodoro & Interval Focus Widget',
+    version: '1.2.0',
+    description: 'Интерактивный Pomodoro таймер с гибкой настройкой рабочих спринтов, звуковыми уведомлениями и трекингом глубокой концентрации.',
+    type: 'widget',
+    category: 'Виджеты & Фокус',
+    icon: '⏱️',
+    githubUrl: 'https://github.com/zerf-note/pomodoro-focus-widget',
+    authorChatId: '6136950061',
+    authorName: 'Создатель',
+    authorGithub: 'zerf-note',
+    price: 0,
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 1,
+    content: {
+      workDuration: 25,
+      breakDuration: 5,
+      longBreakDuration: 15,
+      cyclesBeforeLongBreak: 4,
+      soundTheme: 'gentle_bell',
+      autoStartBreak: true,
+    },
+    createdAt: '2026-08-01T10:00:00Z',
+    updatedAt: '2026-08-01T10:00:00Z',
+  },
+  {
+    id: 'ext_startup_checklist',
+    title: 'SaaS Launch Checklist: 45 Шагов к $1k MRR',
+    version: '2.0.1',
+    description: 'Открытый репозиторий с пошаговым чек-листом запуска цифровых продуктов: валидация, MVP, юридические требования и первые продажи.',
+    type: 'template',
+    category: 'Бизнес & Стартапы',
+    icon: '🚀',
+    githubUrl: 'https://github.com/alex-dev/zerf-saas-launch-template',
+    authorChatId: '6136950061',
+    authorName: 'Создатель',
+    authorGithub: 'zerf-note',
+    price: 79,
+    isOfficial: true,
+    rating: 5.0,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 1,
+    content: {
+      templateType: 'project',
+      tasksCount: 45,
+      tasks: [
+        'Интервью с 10 потенциальными клиентами (CustDev)',
+        'Формирование ценностного предложения (Lean Canvas)',
+        'Создание кликабельного прототипа в Figma',
+        'Разработка MVP функционала за 14 дней',
+        'Подключение платежного шлюза и оферты',
+        'Запуск первых 3 рекламных каналов',
+      ],
+    },
+    createdAt: '2026-08-05T12:00:00Z',
+    updatedAt: '2026-08-05T12:00:00Z',
+  },
+]
+
 const getInitialExtensionsData = () => {
   if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('zerf_ext_catalog_cache')
       if (cached) {
         const parsed = JSON.parse(cached)
-        return {
-          catalog: parsed.catalog || [],
-          installedIds: parsed.installedIds || [],
-          likedIds: parsed.likedIds || [],
-          userPlan: parsed.userPlan || 'free',
-          canCreate: Boolean(parsed.canCreate),
-          authorStats: parsed.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 },
-          hasCache: Array.isArray(parsed.catalog) && parsed.catalog.length > 0
+        if (Array.isArray(parsed.catalog) && parsed.catalog.length > 0) {
+          return {
+            catalog: parsed.catalog,
+            installedIds: parsed.installedIds || [],
+            likedIds: parsed.likedIds || [],
+            userPlan: parsed.userPlan || 'free',
+            canCreate: Boolean(parsed.canCreate),
+            authorStats: parsed.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 },
+            hasCache: true
+          }
         }
       }
     } catch {}
   }
   return {
-    catalog: [],
+    catalog: DEFAULT_EXTENSIONS,
     installedIds: [],
     likedIds: [],
     userPlan: 'free',
     canCreate: false,
     authorStats: { balance: 0, totalEarned: 0, salesCount: 0 },
-    hasCache: false
+    hasCache: true
   }
 }
 
@@ -158,7 +286,7 @@ export function ExtensionsView() {
   const [userPlan, setUserPlan] = useState<string>(initialCache.userPlan)
   const [canCreate, setCanCreate] = useState<boolean>(initialCache.canCreate)
   const [authorStats, setAuthorStats] = useState(initialCache.authorStats)
-  const [loading, setLoading] = useState<boolean>(!initialCache.hasCache)
+  const [loading, setLoading] = useState<boolean>(false)
 
   const [activeTab, setActiveTab] = useState<'store' | 'installed' | 'my' | 'earnings'>('store')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -205,7 +333,8 @@ export function ExtensionsView() {
       const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
-        setCatalog(data.catalog || [])
+        const loadedCatalog = (Array.isArray(data.catalog) && data.catalog.length > 0) ? data.catalog : DEFAULT_EXTENSIONS
+        setCatalog(loadedCatalog)
         setInstalledIds(data.installedIds || [])
         setLikedIds(data.likedIds || [])
         setUserPlan(data.userPlan || 'free')
@@ -214,7 +343,7 @@ export function ExtensionsView() {
 
         try {
           localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify({
-            catalog: data.catalog || [],
+            catalog: loadedCatalog,
             installedIds: data.installedIds || [],
             likedIds: data.likedIds || [],
             userPlan: data.userPlan || 'free',
