@@ -5,13 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Puzzle, Plus, Check, Star, Download, Trash2,
   DollarSign, Sparkles, Layout, Palette, Zap, Eye,
-  Search, Shield, Crown, TrendingUp, AlertCircle, ArrowUpRight
+  Search, Shield, Crown, TrendingUp, AlertCircle, ArrowUpRight,
+  BookOpen, HelpCircle, Lightbulb, Code2, ArrowRight
 } from 'lucide-react'
-import { getAuthHeaders } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { ExtensionItem } from '@/app/api/extensions/route'
 
 export function ExtensionsView() {
+  const { dispatch } = useApp()
   const [catalog, setCatalog] = useState<ExtensionItem[]>([])
   const [installedIds, setInstalledIds] = useState<string[]>([])
   const [userPlan, setUserPlan] = useState<string>('free')
@@ -26,6 +28,7 @@ export function ExtensionsView() {
   // Modals
   const [selectedExt, setSelectedExt] = useState<ExtensionItem | null>(null)
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false)
+  const [showGuideModal, setShowGuideModal] = useState<boolean>(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showPayoutModal, setShowPayoutModal] = useState<boolean>(false)
   const [payoutCard, setPayoutCard] = useState<string>('')
@@ -175,6 +178,24 @@ export function ExtensionsView() {
     }
   }
 
+  const handleInsertPreset = () => {
+    if (formType === 'prompt') {
+      setFormTitle('AI Коуч по тайм-менеджменту & OKR')
+      setFormDesc('Умный ассистент для декомпозиции сложных проектов на спринты и выявления скрытых блокеров.')
+      setFormCategory('AI & Продуктивность')
+      setFormIcon('🧠')
+      setFormPrompt('Ты — ведущий эксперт по продуктивности и методологии Getting Things Done (GTD). Твоя цель — структурировать входящие задачи пользователя, расставлять приоритеты по матрице Эйзенхауэра и формулировать четкие следующие шаги.')
+      setFormPrice(49)
+    } else if (formType === 'template') {
+      setFormTitle('Шаблон: Запуск Telegram-канала с нуля')
+      setFormDesc('Пошаговый план из 25 задач: позиционирование, контент-план, оформление и первые 1000 подписчиков.')
+      setFormCategory('Маркетинг & Контент')
+      setFormIcon('🚀')
+      setFormPrompt('1. Анализ ЦА и конкурентов\n2. Оформление аватара и описания\n3. Составление контент-плана на 14 дней\n4. Публикация первых 5 постов\n5. Взаимный пиар и посевы')
+      setFormPrice(39)
+    }
+  }
+
   const handleDeleteMyExt = async (extensionId: string) => {
     if (!confirm('Вы уверены, что хотите удалить это расширение из каталога?')) return
     try {
@@ -230,6 +251,14 @@ export function ExtensionsView() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGuideModal(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-all cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-primary" />
+            <span>Инструкция</span>
+          </button>
+
           {canCreate ? (
             <button
               onClick={() => setShowCreateModal(true)}
@@ -239,10 +268,13 @@ export function ExtensionsView() {
               <span>Создать расширение</span>
             </button>
           ) : (
-            <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-400 font-semibold flex items-center gap-1.5">
+            <button
+              onClick={() => setShowGuideModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-[11px] text-amber-400 font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
               <Crown className="w-3.5 h-3.5" />
-              <span>Создание доступно на тарифе Plus</span>
-            </div>
+              <span>Создание (Тариф Plus)</span>
+            </button>
           )}
         </div>
       </div>
@@ -483,29 +515,43 @@ export function ExtensionsView() {
       {activeTab === 'my' && (
         <div className="space-y-4">
           {!canCreate ? (
-            <div className="p-6 rounded-2xl bg-card border border-border text-center space-y-3">
-              <Crown className="w-8 h-8 text-amber-400 mx-auto" />
-              <h3 className="text-sm font-bold text-foreground">Создание расширений доступно на тарифе Plus</h3>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                Создавайте кастомные промпты, шаблоны и темы, делитесь ими с сообществом или продавайте за реальные рубли, получая 80% от каждой оплаты.
-              </p>
-              <a
-                href="#settings"
-                onClick={() => {
-                  window.location.hash = 'settings'
-                }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow-xs"
-              >
-                Оформить Zerf Plus (99 ₽)
-              </a>
+            <div className="p-8 rounded-3xl bg-card border border-border text-center space-y-4 max-w-xl mx-auto shadow-sm">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
+                <Crown className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Создание расширений доступно на тарифе Plus</h3>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Создавайте кастомные AI-промпты, готовые чек-листы и темы оформления. Делитесь ими бесплатно или продавайте с комиссией <b>80% автору</b>!
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+                <button
+                  onClick={() => setShowGuideModal(true)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold cursor-pointer"
+                >
+                  📖 Читать инструкцию
+                </button>
+                <button
+                  onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  <span>Оформить Zerf Plus (99 ₽)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-foreground">Ваши опубликованные плагины</h3>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Ваши опубликованные плагины</h3>
+                  <p className="text-[11px] text-muted-foreground">Управляйте своими расширениями и отслеживайте статистику установок</p>
+                </div>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Создать плагин</span>
@@ -513,11 +559,21 @@ export function ExtensionsView() {
               </div>
 
               {myExtensions.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-card border border-border text-center space-y-2">
+                <div className="p-8 rounded-2xl bg-card border border-border text-center space-y-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mx-auto text-xl">
+                    ✨
+                  </div>
                   <p className="text-xs font-bold text-foreground">Вы пока не опубликовали ни одного расширения</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Нажмите кнопку выше, чтобы добавить свой первый промпт, тему или шаблон.
+                  <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                    Нажмите «+ Создать плагин», чтобы добавить свой первый AI-промпт, шаблон задач или тему оформления.
                   </p>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Создать первое расширение</span>
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -526,25 +582,34 @@ export function ExtensionsView() {
                       key={ext.id}
                       className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3 shadow-xs"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-xl shrink-0">
                           {ext.icon}
                         </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-foreground">{ext.title}</h4>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-foreground truncate">{ext.title}</h4>
                           <p className="text-[10px] text-muted-foreground">
-                            {ext.price === 0 ? 'Бесплатный' : `${ext.price} ₽`} • {ext.installCount} установок
+                            {ext.price === 0 ? 'Бесплатный' : `${ext.price} ₽`} • {ext.installCount} установок • ⭐ {ext.rating.toFixed(1)}
                           </p>
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleDeleteMyExt(ext.id)}
-                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                        title="Удалить из магазина"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => setSelectedExt(ext)}
+                          className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs transition-colors cursor-pointer"
+                          title="Просмотр"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMyExt(ext.id)}
+                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                          title="Удалить из магазина"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -614,6 +679,90 @@ export function ExtensionsView() {
         </div>
       )}
 
+      {/* MODAL: STEP-BY-STEP GUIDE */}
+      <AnimatePresence>
+        {showGuideModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto text-xs"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  <span>Как создавать и продавать расширения в Zerf AI</span>
+                </h3>
+                <button
+                  onClick={() => setShowGuideModal(false)}
+                  className="text-muted-foreground hover:text-foreground text-xs p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 leading-relaxed text-muted-foreground">
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-1.5">
+                  <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                    <span>1.</span> Выберите тип расширения
+                  </h4>
+                  <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
+                    <li><b>🤖 AI Промпты:</b> персональные системные промпты для роли коуча, ревьюера или маркетолога.</li>
+                    <li><b>🎯 Шаблоны:</b> готовые списки задач, OKR-цели и чек-листы для мгновенного импорта.</li>
+                    <li><b>🌌 Темы & Виджеты:</b> кастомная цветовая палитра и интерактивные трекеры.</li>
+                  </ul>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-1.5">
+                  <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                    <span>2.</span> Настройка и публикация
+                  </h4>
+                  <p className="text-[11px]">
+                    Заполните понятное название, выберите иконку (Emoji), опишите пользу для пользователя и укажите системный промпт или шаблон.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-2xl space-y-1.5">
+                  <h4 className="font-bold flex items-center gap-1.5 text-xs text-foreground">
+                    <span>3.</span> Монетизация и вывод средств (80/20)
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Вы можете сделать расширение бесплатным (0 ₽) либо платным (от 10 до 5000 ₽). <b>80% от каждой продажи</b> сразу поступает на ваш авторский баланс. Вывод доступен на любую карту РФ или кошелек ЮMoney.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between">
+                {!canCreate ? (
+                  <button
+                    onClick={() => {
+                      setShowGuideModal(false)
+                      dispatch({ type: 'SET_VIEW', view: 'settings' })
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <span>Оформить Plus для создания расширений</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setShowGuideModal(false)
+                      setShowCreateModal(true)
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <span>Перейти к созданию расширения</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* MODAL: CREATE EXTENSION */}
       <AnimatePresence>
         {showCreateModal && (
@@ -626,7 +775,7 @@ export function ExtensionsView() {
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <span>🧩</span> Создание нового расширения
+                  <span>🧩</span> Студия создания расширения
                 </h3>
                 <button
                   onClick={() => setShowCreateModal(false)}
@@ -644,13 +793,25 @@ export function ExtensionsView() {
               )}
 
               <form onSubmit={handlePublish} className="space-y-3.5 text-xs">
+                <div className="flex items-center justify-between pb-1">
+                  <span className="text-[11px] text-muted-foreground">Заполните данные для каталога:</span>
+                  <button
+                    type="button"
+                    onClick={handleInsertPreset}
+                    className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Lightbulb className="w-3.5 h-3.5" />
+                    <span>Вставить готовый пример</span>
+                  </button>
+                </div>
+
                 <div>
                   <label className="font-semibold text-foreground block mb-1">Название плагина:</label>
                   <input
                     type="text"
                     value={formTitle}
                     onChange={e => setFormTitle(e.target.value)}
-                    placeholder="Например: AI Карьерный Коуч"
+                    placeholder="Например: Senior Code Reviewer AI"
                     className="w-full h-9 px-3 rounded-xl bg-muted/50 border border-border text-foreground outline-none focus:border-primary"
                     required
                   />
@@ -701,6 +862,20 @@ export function ExtensionsView() {
                       value={formPrompt}
                       onChange={e => setFormPrompt(e.target.value)}
                       placeholder="Ты — эксперт по... Твоя роль анализировать..."
+                      rows={4}
+                      className="w-full p-3 rounded-xl bg-muted/50 border border-border text-foreground font-mono text-[11px] outline-none focus:border-primary"
+                      required
+                    />
+                  </div>
+                )}
+
+                {formType === 'template' && (
+                  <div>
+                    <label className="font-semibold text-foreground block mb-1">Шаблон задач (по одной на строку):</label>
+                    <textarea
+                      value={formPrompt}
+                      onChange={e => setFormPrompt(e.target.value)}
+                      placeholder="1. Анализ требований\n2. Настройка окружения\n3. Запуск тестирования"
                       rows={4}
                       className="w-full p-3 rounded-xl bg-muted/50 border border-border text-foreground font-mono text-[11px] outline-none focus:border-primary"
                       required
