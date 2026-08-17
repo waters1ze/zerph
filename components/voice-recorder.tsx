@@ -300,7 +300,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                     <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center">
                       <Loader2 className="w-7 h-7 text-primary animate-spin" />
                     </div>
-                    <p className="text-[13px] font-medium">Zerf AI is thinking…</p>
+                    <p className="text-[13px] font-medium">Zerf Note is thinking…</p>
                     <p className="text-[11px] text-muted-foreground text-center">Transcribing · Classifying · Structuring</p>
                   </div>
                 )}

@@ -459,7 +459,7 @@ export function AdminView() {
     const targetLabel = broadcastTarget === 'all' ? 'Всем пользователям' : broadcastTarget === 'premium' ? 'Только Premium' : 'Только Free'
     const ok = await confirm({
       title: 'Отправить рассылку в Telegram?',
-      description: `Получатели: ${targetLabel}. Сообщение будет разослано через бота Zerf AI.`,
+      description: `Получатели: ${targetLabel}. Сообщение будет разослано через бота Zerf Note.`,
       confirmText: 'Отправить рассылку',
       variant: 'primary',
     })
@@ -545,7 +545,7 @@ export function AdminView() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Админ-панель Zerf AI</h1>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Админ-панель Zerf Note</h1>
               <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-semibold tracking-wide uppercase border border-amber-500/30">
                 PRO CONTROL
               </span>
@@ -1827,7 +1827,7 @@ export function AdminView() {
                 <label className="text-xs font-medium text-muted-foreground">Текст рассылки (Markdown):</label>
                 <textarea
                   rows={5}
-                  placeholder="Привет! Рады сообщить о выходе нового обновления Zerf AI..."
+                  placeholder="Привет! Рады сообщить о выходе нового обновления Zerf Note..."
                   value={broadcastText}
                   onChange={e => setBroadcastText(e.target.value)}
                   className="w-full p-3 text-xs rounded-xl bg-muted/50 border border-border outline-none focus:border-primary text-foreground resize-none"

@@ -32,7 +32,7 @@ export function ClockView() {
     if (granted) {
       playAlarmChime('complete')
       showWebNotification('✅ Уведомления включены!', {
-        body: 'Zerf AI будет присылать звуковые сигналы и напоминания о задачах и таймерах.'
+        body: 'Zerf Note будет присылать звуковые сигналы и напоминания о задачах и таймерах.'
       })
     }
   }

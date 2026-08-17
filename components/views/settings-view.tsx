@@ -1358,7 +1358,7 @@ export function SettingsView() {
                     if (typeof window !== 'undefined' && 'Notification' in window) {
                       const perm = await Notification.requestPermission()
                       if (perm === 'granted') {
-                        new Notification('🔔 Тестовое уведомление Zerf AI', {
+                        new Notification('🔔 Тестовое уведомление Zerf Note', {
                           body: 'Проверка работы уведомлений на сайте выполнена успешно!',
                           icon: '/icon.png'
                         })

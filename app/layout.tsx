@@ -89,6 +89,11 @@ export const metadata: Metadata = {
   alternates: {
     canonical: APP_URL,
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Zerf Note',
+  },
   icons: {
     icon: [
       { url: '/logo.png', sizes: '32x32', type: 'image/png' },

@@ -691,7 +691,7 @@ export function TeamsView() {
               </button>
 
               <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(teamDetail.inviteUrl)}&text=${encodeURIComponent(`Присоединяйся к команде «${teamDetail.name}» в Zerf AI:`)}`}
+                href={`https://t.me/share/url?url=${encodeURIComponent(teamDetail.inviteUrl)}&text=${encodeURIComponent(`Присоединяйся к команде «${teamDetail.name}» в Zerf Note:`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-semibold border border-border transition-all"

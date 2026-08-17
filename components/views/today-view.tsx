@@ -695,7 +695,7 @@ export function TodayView() {
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[12px] font-bold text-foreground">Совет от Zerf AI</p>
+            <p className="text-[12px] font-bold text-foreground">Совет от Zerf Note</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
               Закрывайте задачи со статусом «Срочно» в первой половине дня. Это освободит до 40% энергии для творческих дел.
             </p>

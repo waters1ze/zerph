@@ -5,13 +5,21 @@ import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
+function escapeHtml(str: string): string {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 async function getChatId(req: NextRequest): Promise<bigint | null> {
   const authUser = await getAuthenticatedUser(req)
   if (!authUser) return null
   try { return BigInt(authUser.chatId) } catch { return null }
 }
 
-async function sendTgMessage(chatId: string | number | bigint, text: string, replyMarkup?: object) {
+async function sendTgMessage(chatId: string | number | bigint, htmlText: string, replyMarkup?: object) {
   if (!BOT_TOKEN) return
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -19,12 +27,14 @@ async function sendTgMessage(chatId: string | number | bigint, text: string, rep
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: String(chatId),
-        text,
-        parse_mode: 'Markdown',
+        text: htmlText,
+        parse_mode: 'HTML',
         ...(replyMarkup ? { reply_markup: replyMarkup } : {})
       }),
     })
-  } catch {}
+  } catch (e) {
+    console.error('sendTgMessage error:', e)
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -128,8 +138,8 @@ export async function POST(req: NextRequest) {
     // Send Telegram Push Notification to the target user with 1-click accept/decline buttons
     await sendTgMessage(
       targetChatId,
-      `🤝 *Новое приглашение в команду Zerf AI!*\n\n` +
-      `Пользователь *${senderName}* ${senderUname ? `(${senderUname})` : ''} хочет добавить вас в команду для совместной работы над задачами!\n\n` +
+      `🤝 <b>Новое приглашение в друзья в Zerf Note!</b>\n\n` +
+      `Пользователь <b>${escapeHtml(senderName)}</b> ${senderUname ? `(${escapeHtml(senderUname)})` : ''} хочет добавить вас в друзья для совместной работы над задачами и напоминаниями!\n\n` +
       `Нажмите кнопку ниже, чтобы принять:`,
       {
         inline_keyboard: [
@@ -186,7 +196,7 @@ export async function PUT(req: NextRequest) {
       // Notify inviter
       const myProfile = await prisma.telegramChat.findUnique({ where: { chatId } })
       const myName = [myProfile?.firstName, myProfile?.lastName].filter(Boolean).join(' ') || 'Ваш коллега'
-      await sendTgMessage(senderCid, `🎉 *${myName} принял ваше приглашение в команду Zerf AI!* Теперь вы можете совместно работать над задачами.`)
+      await sendTgMessage(senderCid, `🎉 <b>${escapeHtml(myName)} принял ваше приглашение в друзья в Zerf Note!</b> Теперь вы можете совместно работать над задачами.`)
 
       return NextResponse.json({ success: true, message: 'Приглашение принято!' })
     } else {

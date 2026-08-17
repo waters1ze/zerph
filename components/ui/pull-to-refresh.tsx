@@ -11,8 +11,8 @@ interface PullToRefreshProps {
   className?: string
 }
 
-const PULL_THRESHOLD = 65
-const MAX_PULL = 95
+const PULL_THRESHOLD = 70
+const MAX_PULL = 90
 
 export function PullToRefresh({ onRefresh, children, className }: PullToRefreshProps) {
   const [pullDistance, setPullDistance] = useState(0)
@@ -24,8 +24,9 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isRefreshing) return
     const container = containerRef.current
-    // Only allow pull-down if container or window is at the top
-    if (container && container.scrollTop === 0) {
+    const scrollY = typeof window !== 'undefined' ? window.scrollY : 0
+    // Only allow pull-down if strictly at the very top of both container and window
+    if ((!container || container.scrollTop === 0) && scrollY === 0) {
       startYRef.current = e.touches[0].clientY
       isPullingRef.current = true
     }
@@ -36,13 +37,12 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
     const currentY = e.touches[0].clientY
     const diff = currentY - startYRef.current
 
-    if (diff > 0) {
-      // Apply elastic resistance
-      const distance = Math.min(MAX_PULL, Math.pow(diff, 0.82))
+    // Require positive pull-down with clear intent (> 10px)
+    if (diff > 10) {
+      const distance = Math.min(MAX_PULL, Math.pow(diff - 10, 0.8))
       setPullDistance(distance)
     } else {
       setPullDistance(0)
-      isPullingRef.current = false
     }
   }
 
@@ -77,11 +77,16 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={() => {
+        isPullingRef.current = false
+        startYRef.current = null
+        setPullDistance(0)
+      }}
       className={cn('relative w-full h-full flex flex-col', className)}
     >
       {/* Pull Indicator Floating Pill */}
       <AnimatePresence>
-        {(pullDistance > 5 || isRefreshing) && (
+        {(pullDistance > 25 || isRefreshing) && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{

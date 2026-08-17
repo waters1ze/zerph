@@ -368,9 +368,12 @@ export async function POST(req: NextRequest) {
       }, { headers: NO_CACHE_HEADERS })
     }
 
-    // 2. Parse and save task/goal/note
+    // 2. Select ultra-fast optimized neural model based on user plan:
+    // Paid (Plus, Pro, Corp): openai/gpt-oss-20b (~150-200ms ultra low-latency)
+    // Free: meta-llama/Llama-3.1-8B-Instruct
+    const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'meta-llama/Llama-3.1-8B-Instruct'
     const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
-    const items = await parseIntentWithGroq(inputText, key, undefined, context, friendsContext)
+    const items = await parseIntentWithGroq(inputText, key, siriModel, context, friendsContext)
 
     if (!items || items.length === 0) {
       const failText = 'Не удалось распознать задачу. Попробуйте сказать иначе.'
@@ -547,8 +550,9 @@ export async function GET(req: NextRequest) {
     return new NextResponse(spokenResponse, { headers: NO_CACHE_HEADERS })
   }
 
+  const siriModel = limits.isPaid ? 'openai/gpt-oss-20b' : 'meta-llama/Llama-3.1-8B-Instruct'
   const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
-  const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext)
+  const items = await parseIntentWithGroq(text, key, siriModel, context, friendsContext)
 
   const { spokenText, tgMsg: delegationTgMsg } = await processShortcutsItems(items, chatId, text, friends)
 
