@@ -193,8 +193,15 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchInstalledExts()
 
+    window.addEventListener('zerf_sidebar_config_changed', fetchInstalledExts)
+    window.addEventListener('zerf_sync', fetchInstalledExts)
+
     const interval = setInterval(fetchPendingTeamRequests, 10 * 60 * 1000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('zerf_sidebar_config_changed', fetchInstalledExts)
+      window.removeEventListener('zerf_sync', fetchInstalledExts)
+    }
   }, [dispatch])
 
   const todayCount = tasks.filter(t => {
@@ -212,9 +219,16 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     ? `${tgUser.username} · Подключено`
     : (isConnected ? 'Telegram Подключён' : 'Telegram Не подключён')
 
-  // Map of extensions for quick lookup
+  // Map of extensions for quick lookup with fallback for Entropy AI Search
   const extensionsMap = useMemo(() => {
-    const map = new Map<string, ExtensionItem>()
+    const map = new Map<string, Partial<ExtensionItem>>()
+    map.set('ext_entropy_search', {
+      id: 'ext_entropy_search',
+      title: 'Entropy AI Search',
+      icon: '🔮',
+      type: 'widget',
+      category: 'ИИ & Промпты',
+    })
     installedExts.forEach(e => map.set(e.id, e))
     return map
   }, [installedExts])

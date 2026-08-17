@@ -8,11 +8,12 @@ import {
   UserCheck, Building2, Puzzle, Eye, EyeOff, Folder, Plus, Trash2,
   RotateCcw, Check, Sparkles, FolderPlus, ArrowUp, ArrowDown, Move,
   ChevronDown, ChevronRight, Edit2, Save, X, ExternalLink,
-  Share2, Download, Upload, Copy, CheckCheck
+  Share2, Download, Upload, Copy, CheckCheck, Heart, Crown
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getAuthHeaders } from '@/lib/store'
+import { useApp, getAuthHeaders } from '@/lib/store'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
+import { planAtLeast, normalizePlan } from '@/lib/plans'
 import type { ExtensionItem } from '@/app/api/extensions/route'
 import { ExtensionIcon } from '@/components/views/extensions-view'
 
@@ -35,21 +36,21 @@ export interface MenuItemMeta {
   isExtension?: boolean
 }
 
-export const DEFAULT_MENU_ITEMS: Record<string, { title: string; icon: any }> = {
-  today:      { title: 'Сегодня',        icon: Sun },
-  inbox:      { title: 'Входящие',       icon: Inbox },
-  tasks:      { title: 'Задачи',         icon: CheckSquare },
-  clock:      { title: 'Часы и Таймеры', icon: Clock },
-  notes:      { title: 'Заметки',        icon: FileText },
-  graph:      { title: 'Граф знаний',    icon: Network },
-  calendar:   { title: 'Календарь',      icon: Calendar },
-  goals:      { title: 'Цели',           icon: Target },
-  projects:   { title: 'Проекты',        icon: FolderOpen },
-  extensions: { title: 'Расширения',     icon: Puzzle },
-  stats:      { title: 'Аналитика',      icon: BarChart2 },
-  friends:    { title: 'Друзья',         icon: UserCheck },
-  teams:      { title: 'Команды',        icon: Building2 },
-  settings:   { title: 'Настройки',      icon: Settings },
+export const DEFAULT_MENU_ITEMS: Record<string, { title: string; icon: any; isExt?: boolean }> = {
+  today:              { title: 'Сегодня',              icon: Sun },
+  inbox:              { title: 'Входящие',             icon: Inbox },
+  tasks:              { title: 'Задачи',               icon: CheckSquare },
+  clock:              { title: 'Часы и Таймеры',       icon: Clock },
+  notes:              { title: 'Заметки',              icon: FileText },
+  graph:              { title: 'Граф знаний',          icon: Network },
+  calendar:           { title: 'Календарь',            icon: Calendar },
+  goals:              { title: 'Цели',                 icon: Target },
+  projects:           { title: 'Проекты',              icon: FolderOpen },
+  ext_entropy_search: { title: 'Entropy AI Search',    icon: '🔮', isExt: true },
+  stats:              { title: 'Аналитика',            icon: BarChart2 },
+  friends:            { title: 'Друзья',               icon: UserCheck },
+  teams:              { title: 'Команды',              icon: Building2 },
+  settings:           { title: 'Настройки',            icon: Settings },
 }
 
 export const DEFAULT_SIDEBAR_FOLDERS: SidebarFolder[] = [
@@ -86,6 +87,8 @@ export interface LayoutPreset {
   description: string
   icon: string
   author: string
+  minPlan: 'free' | 'plus' | 'pro' | 'corp'
+  likesCount: number
   config: SidebarConfig
   recommendedExts?: string[]
 }
@@ -94,19 +97,20 @@ export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
   {
     id: 'preset_founder',
     title: 'Startup Founder & Product Lead',
-    description: 'Оптимизировано для создания продуктов: Проекты, Задачи, Таймер фокуса и Расширения на первом плане.',
+    description: 'Оптимизировано для создания продуктов: Проекты, Задачи, Таймер фокуса и Аналитика на первом плане.',
     icon: '🚀',
     author: 'Zerf Official',
+    minPlan: 'free',
+    likesCount: 0,
     config: {
       hiddenItems: ['friends', 'teams'],
       folders: [
         { id: 'focus', title: '⚡ Быстрый фокус', itemIds: ['today', 'tasks', 'clock'] },
-        { id: 'dev', title: '🚀 Продукт & SaaS', itemIds: ['projects', 'goals', 'notes', 'extensions'] },
+        { id: 'dev', title: '🚀 Продукт & SaaS', itemIds: ['projects', 'goals', 'notes'] },
         { id: 'insights', title: '📊 Метрики', itemIds: ['stats', 'graph', 'calendar'] },
         { id: 'sys', title: '⚙️ Настройки', itemIds: ['settings'] },
       ],
     },
-    recommendedExts: ['ext_pomodoro_widget', 'ext_startup_checklist'],
   },
   {
     id: 'preset_ai_researcher',
@@ -114,16 +118,18 @@ export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
     description: 'Интеллектуальная раскладка: ИИ-поиск Entropy, Граф связей, Заметки и Планирование.',
     icon: '🔮',
     author: 'waters1ze',
+    minPlan: 'plus',
+    likesCount: 0,
+    recommendedExts: ['ext_entropy_search'],
     config: {
       hiddenItems: ['friends', 'teams'],
       folders: [
         { id: 'ai_hub', title: '🔮 AI & Исследования', itemIds: ['ext_entropy_search', 'graph', 'notes'] },
         { id: 'workflow', title: '📋 Поток работы', itemIds: ['today', 'tasks', 'calendar'] },
         { id: 'strategy', title: '🎯 Стратегия', itemIds: ['goals', 'projects', 'stats'] },
-        { id: 'system', title: '⚙️ Система', itemIds: ['extensions', 'settings'] },
+        { id: 'system', title: '⚙️ Настройки', itemIds: ['settings'] },
       ],
     },
-    recommendedExts: ['ext_entropy_search', 'ext_nexus_search'],
   },
   {
     id: 'preset_minimal_zen',
@@ -131,12 +137,14 @@ export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
     description: 'Абсолютный минимализм: только самое важное на день, всё лишнее аккуратно скрыто.',
     icon: '🧘',
     author: 'Zen Master',
+    minPlan: 'free',
+    likesCount: 0,
     config: {
       hiddenItems: ['graph', 'friends', 'teams', 'stats', 'projects', 'goals'],
       folders: [
         { id: 'today_focus', title: '✨ Сегодня', itemIds: ['today', 'inbox', 'clock'] },
         { id: 'thoughts', title: '📝 Мысли', itemIds: ['notes', 'calendar', 'tasks'] },
-        { id: 'settings_min', title: '⚙️ Опции', itemIds: ['extensions', 'settings'] },
+        { id: 'settings_min', title: '⚙️ Настройки', itemIds: ['settings'] },
       ],
     },
   },
@@ -146,13 +154,15 @@ export const COMMUNITY_LAYOUT_PRESETS: LayoutPreset[] = [
     description: 'Для командной работы: Команды, Друзья, Проекты и Задачи выведены в топ.',
     icon: '👥',
     author: 'Agile Team',
+    minPlan: 'plus',
+    likesCount: 0,
     config: {
       hiddenItems: [],
       folders: [
         { id: 'collab', title: '👥 Команда & Спринты', itemIds: ['teams', 'tasks', 'projects', 'friends'] },
         { id: 'schedule', title: '📅 Расписание', itemIds: ['calendar', 'today', 'inbox'] },
         { id: 'knowledge', title: '📚 База знаний', itemIds: ['notes', 'graph', 'goals'] },
-        { id: 'sys_team', title: '⚙️ Настройки', itemIds: ['stats', 'extensions', 'settings'] },
+        { id: 'sys_team', title: '⚙️ Настройки', itemIds: ['stats', 'settings'] },
       ],
     },
   },
@@ -181,9 +191,11 @@ export function getInitialSidebarConfig(): SidebarConfig {
 }
 
 export function SidebarCustomizerSection() {
+  const { state } = useApp()
   const confirmDialog = useConfirmDialog()
   const [config, setConfig] = useState<SidebarConfig>(getInitialSidebarConfig)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
+  const [userPlan, setUserPlan] = useState<string>('free')
   const [newFolderName, setNewFolderName] = useState('')
   const [savedBadge, setSavedBadge] = useState(false)
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
@@ -191,6 +203,68 @@ export function SidebarCustomizerSection() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [importJsonText, setImportJsonText] = useState('')
   const [copiedPreset, setCopiedPreset] = useState(false)
+
+  // Load user subscription plan for preset gating
+  useEffect(() => {
+    const fetchPlan = async () => {
+      try {
+        const res = await fetch('/api/subscription', { headers: getAuthHeaders() })
+        const data = await res.json()
+        if (data.plan) setUserPlan(normalizePlan(data.plan))
+      } catch {}
+    }
+    fetchPlan()
+  }, [])
+
+  // Liked presets state persisted in localStorage
+  const [likedPresetIds, setLikedPresetIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('zerf_liked_presets')
+        return saved ? new Set(JSON.parse(saved)) : new Set()
+      } catch {}
+    }
+    return new Set()
+  })
+
+  const toggleLikePreset = (presetId: string) => {
+    setLikedPresetIds(prev => {
+      const next = new Set(prev)
+      if (next.has(presetId)) {
+        next.delete(presetId)
+      } else {
+        next.add(presetId)
+      }
+      try {
+        localStorage.setItem('zerf_liked_presets', JSON.stringify(Array.from(next)))
+      } catch {}
+      return next
+    })
+  }
+
+  // Sanitize config on mount to remove any legacy 'extensions' itemId
+  useEffect(() => {
+    setConfig(prev => {
+      let changed = false
+      const cleanedFolders = prev.folders.map(f => {
+        if (f.itemIds.includes('extensions')) {
+          changed = true
+          return { ...f, itemIds: f.itemIds.filter(id => id !== 'extensions') }
+        }
+        return f
+      })
+      if (changed) {
+        const next = { ...prev, folders: cleanedFolders }
+        try {
+          localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(next))
+          localStorage.setItem('zerf_sidebar_config', JSON.stringify(next))
+          window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+        } catch {}
+        return next
+      }
+      return prev
+    })
+  }, [])
 
   // Load installed extensions from GitHub catalog to allow dragging them
   useEffect(() => {
@@ -219,15 +293,46 @@ export function SidebarCustomizerSection() {
   }
 
   const applyLayoutPreset = async (preset: LayoutPreset) => {
-    const ok = await confirmDialog({
-      title: `Применить пресет «${preset.title}»?`,
-      description: 'Текущее расположение папок и пунктов меню будет заменено выбранным шаблоном.',
-      confirmText: 'Применить пресет',
-      cancelText: 'Отмена',
-      variant: 'primary',
-    })
-    if (!ok) return
+    const isPaidRequired = preset.minPlan && preset.minPlan !== 'free'
+    const hasPlan = planAtLeast(userPlan, preset.minPlan || 'free')
+
+    if (isPaidRequired && !hasPlan) {
+      const planName = preset.minPlan === 'plus' ? 'Zerf Plus (99 ₽)' : 'Zerf Pro (299 ₽)'
+      const ok = await confirmDialog({
+        title: `Пресет «${preset.title}»`,
+        description: `Для полного функционирования этого пресета (включая виджеты и ИИ-поиск) требуется подписка ${planName}. Хотите применить эту раскладку папок?`,
+        confirmText: 'Применить раскладку',
+        cancelText: 'Отмена',
+        variant: 'primary',
+      })
+      if (!ok) return
+    } else {
+      const ok = await confirmDialog({
+        title: `Применить пресет «${preset.title}»?`,
+        description: 'Текущее расположение папок и пунктов меню будет заменено выбранным шаблоном.',
+        confirmText: 'Применить пресет',
+        cancelText: 'Отмена',
+        variant: 'primary',
+      })
+      if (!ok) return
+    }
+
+    // Auto-install recommended extensions in background if user has access
+    if (preset.recommendedExts && preset.recommendedExts.length > 0) {
+      for (const extId of preset.recommendedExts) {
+        try {
+          await fetch('/api/extensions', {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'install', extensionId: extId }),
+          })
+        } catch {}
+      }
+    }
+
     saveConfig(preset.config)
+    window.dispatchEvent(new CustomEvent('zerf_sync'))
+    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
   }
 
   const handleExportMyPreset = () => {
@@ -475,45 +580,80 @@ export function SidebarCustomizerSection() {
 
         {/* Presets Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {COMMUNITY_LAYOUT_PRESETS.map(preset => (
-            <div
-              key={preset.id}
-              className="p-3.5 rounded-xl bg-muted/20 border border-border/80 hover:border-primary/40 transition-all flex flex-col justify-between gap-3"
-            >
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-foreground text-xs flex items-center gap-1.5">
-                    <span>{preset.icon}</span>
-                    <span>{preset.title}</span>
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {preset.description}
-                </p>
-                <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                  {preset.config.folders.map(f => (
-                    <span key={f.id} className="text-[9px] px-2 py-0.5 rounded-md bg-card border border-border text-foreground/80 font-medium">
-                      📁 {f.title} ({f.itemIds.length})
-                    </span>
-                  ))}
-                </div>
-              </div>
+          {COMMUNITY_LAYOUT_PRESETS.map(preset => {
+            const isLiked = likedPresetIds.has(preset.id)
+            const currentLikes = (preset.likesCount || 0) + (isLiked ? 1 : 0)
 
-              <div className="pt-2 border-t border-border/40 flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">
-                  {preset.config.folders.length} папок • {preset.config.hiddenItems.length} скрыто
-                </span>
-                <button
-                  onClick={() => applyLayoutPreset(preset)}
-                  className="px-3 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Check className="w-3 h-3" />
-                  <span>Применить пресет</span>
-                </button>
+            return (
+              <div
+                key={preset.id}
+                className="p-4 rounded-2xl bg-card border border-border hover:border-primary/40 shadow-2xs transition-all flex flex-col justify-between gap-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-foreground text-xs flex items-center gap-1.5 truncate">
+                      <span>{preset.icon}</span>
+                      <span className="truncate">{preset.title}</span>
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {preset.minPlan === 'free' ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-bold border border-emerald-500/30">
+                          FREE
+                        </span>
+                      ) : preset.minPlan === 'plus' ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[9px] font-bold border border-amber-500/30 flex items-center gap-1">
+                          <Crown className="w-2.5 h-2.5" /> Zerf Plus (99 ₽)
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-400 text-[9px] font-bold border border-purple-500/30 flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5" /> Zerf Pro (299 ₽)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {preset.description}
+                  </p>
+
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    {preset.config.folders.map(f => (
+                      <span key={f.id} className="text-[9px] px-2 py-0.5 rounded-md bg-muted/60 border border-border text-foreground/80 font-medium">
+                        📁 {f.title} ({f.itemIds.length})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-border/40 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleLikePreset(preset.id)}
+                      className={cn(
+                        'px-2 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer',
+                        isLiked
+                          ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                          : 'bg-muted/50 text-muted-foreground hover:text-foreground border-border'
+                      )}
+                      title="Поставить лайк пресету"
+                    >
+                      <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
+                      <span>{currentLikes}</span>
+                    </button>
+                    <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
+                  </div>
+
+                  <button
+                    onClick={() => applyLayoutPreset(preset)}
+                    className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Применить пресет</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

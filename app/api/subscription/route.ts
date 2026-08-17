@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
-
+import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { PAYMENT_PRODUCTS, PLAN_CATALOG } from '@/lib/backend/plans'
 

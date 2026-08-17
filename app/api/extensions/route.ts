@@ -56,9 +56,9 @@ const STARTER_EXTENSIONS: ExtensionItem[] = [
     isPublished: true,
     changelog: 'Релиз v1.0.0: Глубокий поиск, поддержка ссылок на источники, экспорт в заметки и CLI команды /search и /entropy.',
     rating: 5.0,
-    ratingCount: 12,
-    likesCount: 28,
-    installCount: 54,
+    ratingCount: 0,
+    likesCount: 0,
+    installCount: 0,
     content: {
       engine: 'entropy_deep_search',
       commands: [

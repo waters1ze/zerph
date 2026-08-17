@@ -244,9 +244,9 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     minPlan: 'free',
     isOfficial: true,
     rating: 5.0,
-    ratingCount: 12,
-    likesCount: 28,
-    installCount: 54,
+    ratingCount: 0,
+    likesCount: 0,
+    installCount: 0,
     content: {
       engine: 'entropy_deep_search',
       commands: [
