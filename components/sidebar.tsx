@@ -53,6 +53,22 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
 
+  // User Avatar Emoji State
+  const [userAvatarEmoji, setUserAvatarEmoji] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('zerf_avatar_emoji') || '👤'
+    }
+    return '👤'
+  })
+
+  useEffect(() => {
+    const handleAvatarChange = (e: any) => {
+      if (e?.detail) setUserAvatarEmoji(e.detail)
+    }
+    window.addEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
+    return () => window.removeEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
+  }, [])
+
   // Local collapse state if not provided externally
   const [localCollapsed, setLocalCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -520,18 +536,35 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         )}
       </nav>
 
-      {/* Bottom Status bar */}
-      {!isCollapsed && (
-        <div className="px-3 pb-3 pt-2 border-t border-border bg-card">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground font-sans">{todayCount} задач осталось</span>
-            <div className="flex items-center gap-1.5">
-              <Circle className="w-1.5 h-1.5 fill-[var(--status-done)] text-[var(--status-done)]" />
-              <span className="text-[10px] text-muted-foreground font-medium font-sans">В сети</span>
-            </div>
+      {/* Bottom Profile / Status bar */}
+      <div className={cn('border-t border-border bg-card/60 transition-all', isCollapsed ? 'p-2 flex justify-center' : 'p-2.5')}>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+          className={cn(
+            'w-full flex items-center rounded-2xl hover:bg-muted/60 transition-all cursor-pointer group',
+            isCollapsed ? 'justify-center p-1' : 'gap-2.5 px-2 py-1.5'
+          )}
+          title="Настройки профиля и аватар"
+        >
+          <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-base shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+            <span>{userAvatarEmoji}</span>
           </div>
-        </div>
-      )}
+
+          {!isCollapsed && (
+            <div className="flex-1 text-left min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground truncate">{tgUser?.name || 'Мой профиль'}</span>
+                <div className="flex items-center gap-1">
+                  <Circle className="w-1.5 h-1.5 fill-[var(--status-done)] text-[var(--status-done)]" />
+                  <span className="text-[10px] text-muted-foreground font-medium">Онлайн</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground truncate">{todayCount} задач на сегодня</p>
+            </div>
+          )}
+        </motion.button>
+      </div>
     </aside>
   )
 }

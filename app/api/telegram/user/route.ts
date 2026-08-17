@@ -41,6 +41,12 @@ export async function GET(req: NextRequest) {
             if (cityConf?.value) city = cityConf.value
           } catch {}
 
+          let avatarEmoji = '👤'
+          try {
+            const emojiConf = await prisma.config.findUnique({ where: { key: `user_emoji_${cid}` } })
+            if (emojiConf?.value) avatarEmoji = emojiConf.value
+          } catch {}
+
           const siriKey = getSiriUserKey(chat.chatId)
 
           return NextResponse.json({
@@ -51,6 +57,7 @@ export async function GET(req: NextRequest) {
             lastName: chat.lastName,
             username: chat.username ? `@${chat.username.replace(/^@/, '')}` : null,
             email: chat.email || null,
+            avatarEmoji,
             hasPassword: Boolean(chat.passwordHash),
             vkId: chat.vkId || null,
             googleEmail: chat.googleEmail || null,
@@ -96,11 +103,20 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled, avatarEmoji } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
 
     const updateData: any = {}
+
+    if (avatarEmoji !== undefined) {
+      const cleanEmoji = String(avatarEmoji).trim()
+      await prisma.config.upsert({
+        where: { key: `user_emoji_${cid}` },
+        update: { value: cleanEmoji || '👤' },
+        create: { key: `user_emoji_${cid}`, value: cleanEmoji || '👤' },
+      }).catch(() => {})
+    }
 
     if (city !== undefined) {
       const cleanCity = String(city).trim()

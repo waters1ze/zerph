@@ -22,6 +22,7 @@ import { TeamsSection } from '@/components/settings/teams-section'
 import { AiModelsSection } from '@/components/settings/ai-models-section'
 import { SidebarCustomizerSection } from '@/components/settings/sidebar-customizer-section'
 import { InstalledExtensionsSettingsSection } from '@/components/settings/installed-extensions-section'
+import { EmojiPickerModal } from '@/components/ui/emoji-picker-modal'
 import {
   THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
   normalizeTheme, type ThemePresetId, type TextScaleStep,
@@ -105,6 +106,7 @@ export function SettingsView() {
     googleEmail?: string | null
     username?: string | null
     name?: string
+    avatarEmoji?: string | null
     plan?: string
     isPremium?: boolean
     newsDisabled?: boolean
@@ -122,9 +124,12 @@ export function SettingsView() {
   const [linkPassword, setLinkPassword] = useState('')
   const [showVkLinkModal, setShowVkLinkModal] = useState(false)
   const [vkInput, setVkInput] = useState('')
+  const [vkInputPhone, setVkInputPhone] = useState('')
+  const [vkLoading, setVkLoading] = useState(false)
   const [showGoogleLinkModal, setShowGoogleLinkModal] = useState(false)
   const [googleInput, setGoogleInput] = useState('')
-
+  const [googleEmailInput, setGoogleEmailInput] = useState('')
+  const [googleLoading, setGoogleLoading] = useState(false)
   const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
   const [usage, setUsage] = useState<any>(cachedUsage ? JSON.parse(cachedUsage) : null)
   const [loadingPay, setLoadingPay] = useState(false)
@@ -143,6 +148,32 @@ export function SettingsView() {
   const [citySavedStatus, setCitySavedStatus] = useState<boolean>(false)
   const citySaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
+
+  // Avatar / Profile Emoji State (Telegram-style 1000+ emojis)
+  const cachedAvatarEmoji = typeof window !== 'undefined' ? localStorage.getItem('zerf_avatar_emoji') || '👤' : '👤'
+  const [userAvatarEmoji, setUserAvatarEmoji] = useState(profileData.avatarEmoji || cachedAvatarEmoji)
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false)
+  const [avatarSavedStatus, setAvatarSavedStatus] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (profileData.avatarEmoji) {
+      setUserAvatarEmoji(profileData.avatarEmoji)
+      try { localStorage.setItem('zerf_avatar_emoji', profileData.avatarEmoji) } catch {}
+    }
+  }, [profileData.avatarEmoji])
+
+  const handleSelectAvatarEmoji = (emoji: string) => {
+    setUserAvatarEmoji(emoji)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('zerf_avatar_emoji', emoji)
+        window.dispatchEvent(new CustomEvent('zerf_avatar_changed', { detail: emoji }))
+      } catch {}
+    }
+    syncPreferenceToServer({ avatarEmoji: emoji })
+    setAvatarSavedStatus(true)
+    setTimeout(() => setAvatarSavedStatus(false), 2000)
+  }
 
   // Developer Mode State
   const [isDeveloperMode, setIsDeveloperMode] = useState<boolean>(() => {
@@ -726,6 +757,71 @@ export function SettingsView() {
       {activeTab === 'account' && (
         <div className="space-y-6">
           <Section title="Ваш Профиль">
+            {/* Avatar / Emoji Selector Row (Telegram-style 1000+ emojis) */}
+            <Row
+              label={
+                <span className="flex items-center gap-1.5 font-bold">
+                  <span className="mono-emoji">🎭</span>
+                  <span>Аватар / Эмодзи профиля</span>
+                  <span className="px-1.5 py-0.2 rounded-md bg-primary/15 text-primary font-mono text-[9px] font-bold">
+                    1000+ эмодзи
+                  </span>
+                </span>
+              }
+              description="Ваш персональный статус и эмодзи, как в Telegram. Отображается в профиле, друзьях, командах и задачах."
+            >
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Main Avatar Bubble */}
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(true)}
+                  className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center text-2xl shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none"
+                  title="Нажмите, чтобы открыть каталог из 1000+ эмодзи"
+                >
+                  <span>{userAvatarEmoji}</span>
+                  <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-primary text-primary-foreground text-[9px] shadow-xs group-hover:scale-110 transition-transform">
+                    <Sparkles className="w-2.5 h-2.5" />
+                  </span>
+                </button>
+
+                {/* Quick Pick Chips */}
+                <div className="flex items-center gap-1 overflow-x-auto max-w-[200px] sm:max-w-none">
+                  {['🤖', '⚡', '🧠', '🔮', '✨', '💻', '🔥', '👑', '🚀', '👾'].map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => handleSelectAvatarEmoji(emoji)}
+                      className={cn(
+                        'w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all cursor-pointer select-none',
+                        userAvatarEmoji === emoji
+                          ? 'bg-primary/20 border border-primary/50 scale-110 shadow-2xs font-bold'
+                          : 'bg-muted/40 hover:bg-muted border border-border/60 hover:scale-105'
+                      )}
+                      title={`Выбрать ${emoji}`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(true)}
+                  className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Выбрать эмодзи (1000+)</span>
+                </button>
+
+                {avatarSavedStatus && (
+                  <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 shrink-0 animate-in fade-in">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Сохранено</span>
+                  </span>
+                )}
+              </div>
+            </Row>
+
             <Row label="Имя пользователя" description="Отображается в команде, совместных проектах, задачах и чате">
               <div className="flex items-center gap-2">
                 <input
@@ -2875,6 +2971,15 @@ export function SettingsView() {
 
         </div>
       </div>
+
+      {/* Telegram-style 1000+ Emoji Picker Modal */}
+      <EmojiPickerModal
+        isOpen={showEmojiPicker}
+        currentEmoji={userAvatarEmoji}
+        onSelect={handleSelectAvatarEmoji}
+        onClose={() => setShowEmojiPicker(false)}
+        title="Выберите аватар / эмодзи профиля"
+      />
     </div>
   )
 }
