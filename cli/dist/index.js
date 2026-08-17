@@ -28,8 +28,6 @@ program
             return;
         }
         console.clear();
-        const { printHeroBanner } = await import('./mascot.js');
-        printHeroBanner(data);
         render(React.createElement(Repl, { initialData: data }));
     }
     catch (e) {

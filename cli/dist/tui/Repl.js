@@ -4,8 +4,7 @@ import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import { fetchUserData, loadCredentials, mutateItem, sendAiQuery, loadConfig, saveConfig } from '../api.js';
 import { detectInstalledClis, runLocalCliBridge } from '../local-cli.js';
-import { GLYPHS } from '../mascot.js';
-// Officially supported active cloud models on Groq / Zerf Cloud
+import { getAllaySpriteLines, GLYPHS } from '../mascot.js';
 const CLOUD_MODELS = [
     { id: 'openai/gpt-oss-120b', name: '🚀 OpenAI GPT-OSS 120B', desc: 'Флагман нового поколения, максимальный интеллект', type: 'cloud' },
     { id: 'openai/gpt-oss-20b', name: '⚡ OpenAI GPT-OSS 20B', desc: 'Быстрый и точный отклик (120 мс)', type: 'cloud' },
@@ -14,22 +13,62 @@ const CLOUD_MODELS = [
     { id: 'meta-llama/Llama-3.1-8B-Instruct', name: '⚡ Llama 3.1 8B Instruct', desc: 'Легкая модель для быстрых задач', type: 'cloud' },
 ];
 const BASE_MENU_ITEMS = [
-    { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
-    { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
-    { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
+    { cmd: '/today', label: '/today', desc: 'Задачи с обратным отсчетом и прогрессом', glyph: GLYPHS.task },
+    { cmd: '/cal', label: '/cal', desc: '7-дневный интерактивный календарь', glyph: GLYPHS.calendar },
+    { cmd: '/chat ', label: '/chat <текст>', desc: 'Чат с друзьями и командные заметки', glyph: GLYPHS.chat },
     { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
     { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
     { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
     { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
     { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI (agy/claude)', glyph: '🤖' },
-    { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и нейросетей', glyph: '⚙' },
-    { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и распознавание речи', glyph: '🎙' },
+    { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и параметры', glyph: '⚙' },
+    { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и Whisper', glyph: '🎙' },
+    { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: GLYPHS.friend },
     { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-    { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
     { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
     { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
     { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ];
+function makeUniqueId() {
+    return `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+function getCountdownText(dueTime, status) {
+    if (status === 'done')
+        return '✔ Выполнено';
+    if (!dueTime)
+        return 'Без точного времени';
+    const [dueHours, dueMinutes] = dueTime.split(':').map(Number);
+    if (isNaN(dueHours) || isNaN(dueMinutes))
+        return dueTime;
+    const now = new Date();
+    const target = new Date();
+    target.setHours(dueHours, dueMinutes, 0, 0);
+    const diffMs = target.getTime() - now.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    if (diffMins > 60) {
+        const h = Math.floor(diffMins / 60);
+        const m = diffMins % 60;
+        return `⏳ через ${h} ч ${m > 0 ? `${m} мин` : ''}`;
+    }
+    else if (diffMins > 0) {
+        return `🔥 осталось ${diffMins} мин`;
+    }
+    else if (diffMins === 0) {
+        return `⏰ прямо сейчас!`;
+    }
+    else {
+        const passed = Math.abs(diffMins);
+        const h = Math.floor(passed / 60);
+        const m = passed % 60;
+        return `⚠️ просрочено на ${h > 0 ? `${h} ч ` : ''}${m} мин`;
+    }
+}
+function renderProgressBar(ratio, length = 12) {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    const filled = Math.round(clamped * length);
+    const empty = length - filled;
+    return `[${'█'.repeat(filled)}${'░'.repeat(empty)}]`;
+}
 export function Repl({ initialData }) {
     const { exit } = useApp();
     const [creds] = useState(() => loadCredentials());
@@ -123,13 +162,13 @@ export function Repl({ initialData }) {
                     setHistory(h => [
                         ...h,
                         {
-                            id: String(Date.now()),
+                            id: makeUniqueId(),
                             type: 'assistant',
                             text: `🤖 Активная нейросеть / CLI агент: ${chosen.name}`,
                             details: [
                                 chosen.desc,
                                 isLocal
-                                    ? '⚡ Все запросы кода и команды будут выполняться через ваш локальный CLI инструмент с полным доступом к файлам!'
+                                    ? '⚡ Запросы кода и команды будут выполняться через ваш локальный CLI инструмент с полным доступом к файлам!'
                                     : '☁ Запросы обрабатываются в облаке Zerf (планирование, вопросы, база знаний).'
                             ]
                         }
@@ -197,7 +236,7 @@ export function Repl({ initialData }) {
         setInputVal('');
         setMenuForced(false);
         // Add user command to history
-        setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }]);
+        setHistory(h => [...h, { id: makeUniqueId(), type: 'user', text: raw }]);
         setCliCount(c => c + 1);
         if (raw === '/exit' || raw === '/quit') {
             exit();
@@ -220,7 +259,7 @@ export function Repl({ initialData }) {
             setHistory(h => [
                 ...h,
                 {
-                    id: String(Date.now()),
+                    id: makeUniqueId(),
                     type: 'assistant',
                     text: '🎙 Голосовой ввод Zerf Voice:',
                     details: [
@@ -239,7 +278,7 @@ export function Repl({ initialData }) {
             setHistory(h => [
                 ...h,
                 {
-                    id: String(Date.now()),
+                    id: makeUniqueId(),
                     type: 'assistant',
                     text: '⚙ Настройки Zerf CLI:',
                     details: [
@@ -259,22 +298,22 @@ export function Repl({ initialData }) {
             setHistory(h => [
                 ...h,
                 {
-                    id: String(Date.now()),
+                    id: makeUniqueId(),
                     type: 'assistant',
                     text: '❖ Быстрые команды Zerf CLI:',
                     details: [
                         '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
-                        '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, agy, claude)',
+                        '/model          — Выбор нейросети (GPT-OSS, Qwen, agy, claude)',
                         '/settings       — Окно параметров и настроек',
-                        '/today          — Список задач и привычек на сегодня',
-                        '/cal            — Недельный календарь и расписание',
-                        '/chat <текст>   — Чат с коллегой / заметка другу',
+                        '/today          — Список задач с обратным отсчетом и шкалой',
+                        '/cal            — 7-дневный календарь расписания',
+                        '/chat <текст>   — Чат с друзьями / заметка контакту',
+                        '/friends        — Список друзей и персональная ссылка',
                         '/add <текст>    — Создать задачу с распознаванием даты',
                         '/done <имя>     — Завершить задачу по названию',
                         '/focus [минуты] — Запустить сферу концентрации',
                         '/note <текст>   — Сохранить заметку в базу',
                         '/limits         — Статус использования лимитов',
-                        '/friends        — Список друзей и их статус',
                         '/clear          — Очистить историю диалога',
                         '/exit           — Выйти из CLI',
                     ]
@@ -286,36 +325,73 @@ export function Repl({ initialData }) {
             const tasks = data?.tasks || [];
             const todayStr = new Date().toISOString().slice(0, 10);
             const todayTasks = tasks.filter((t) => !t.dueDate || t.dueDate.startsWith(todayStr));
+            const doneCount = todayTasks.filter((t) => t.status === 'done').length;
+            const progressRatio = todayTasks.length > 0 ? doneCount / todayTasks.length : 0;
+            const progressBar = renderProgressBar(progressRatio, 10);
             if (todayTasks.length === 0) {
-                setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }]);
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }]);
             }
             else {
                 const lines = todayTasks.map((t) => {
-                    const check = t.status === 'done' ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `;
-                    const time = t.dueTime ? ` (${t.dueTime})` : '';
+                    const isDone = t.status === 'done';
+                    const check = isDone ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `;
+                    const countdown = getCountdownText(t.dueTime, t.status);
+                    const timeStr = t.dueTime ? ` [${t.dueTime}]` : '';
+                    const prio = t.priority === 'urgent' ? ' [⚡ Срочно]' : t.priority === 'high' ? ' [Высокий]' : '';
                     const team = t.isShared ? ' [Команда]' : '';
-                    return `${check} ${t.title}${time}${team}`;
+                    return `${check} ${t.title}${timeStr}${prio}${team}  →  ${countdown}`;
                 });
-                setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `❖ Задачи на сегодня (${todayTasks.length}):`, details: lines }]);
+                setHistory(h => [
+                    ...h,
+                    {
+                        id: makeUniqueId(),
+                        type: 'assistant',
+                        text: `❖ Задачи на сегодня (${doneCount}/${todayTasks.length}) ${progressBar} ${Math.round(progressRatio * 100)}%:`,
+                        details: lines
+                    }
+                ]);
             }
             return;
         }
         if (raw === '/cal' || raw === '/календарь') {
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const today = new Date();
+            const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
             const tasks = data?.tasks || [];
-            const todayTasks = tasks.filter((t) => !t.dueDate || t.dueDate.startsWith(todayStr));
+            // Generate next 7 days
+            const days = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date();
+                d.setDate(today.getDate() + i);
+                const dateStr = d.toISOString().slice(0, 10);
+                const dayLabel = dayNames[d.getDay()];
+                const dayTasks = tasks.filter((t) => t.dueDate && t.dueDate.startsWith(dateStr));
+                days.push({
+                    dateStr,
+                    header: `${dayLabel} ${d.getDate()}`,
+                    tasks: dayTasks,
+                    isToday: i === 0,
+                });
+            }
+            const gridHeader = days.map(d => d.isToday ? `[${d.header}]`.padEnd(9) : d.header.padEnd(9)).join('│ ');
+            const gridCounts = days.map(d => {
+                const c = d.tasks.length;
+                return (c > 0 ? ` ${c} дел `.padEnd(9) : '   —    '.padEnd(9));
+            }).join('│ ');
+            const scheduledTasks = tasks.filter((t) => t.dueDate && t.status !== 'done').slice(0, 5);
+            const scheduledLines = scheduledTasks.map((t) => `• ${t.dueDate}${t.dueTime ? ` в ${t.dueTime}` : ''}: «${t.title}»`);
             setHistory(h => [
                 ...h,
                 {
-                    id: String(Date.now()),
+                    id: makeUniqueId(),
                     type: 'assistant',
-                    text: `◫ Календарь недели (${todayStr}):`,
+                    text: `◫ Календарь на 7 дней (${today.toISOString().slice(0, 10)}):`,
                     details: [
-                        '  Пн        Вт        Ср        Чт        Пт        Сб        Вс',
+                        gridHeader,
                         '─────────────────────────────────────────────────────────────────',
-                        ` ${todayTasks.length} дел      —         —         —         —         —         —`,
+                        gridCounts,
                         '─────────────────────────────────────────────────────────────────',
-                        '✦ Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
+                        ...(scheduledLines.length > 0 ? ['Ближайшие запланированные дела:', ...scheduledLines] : ['Нет запланированных дел на неделю.']),
+                        '💡 Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
                     ]
                 }
             ]);
@@ -323,57 +399,96 @@ export function Repl({ initialData }) {
         }
         if (raw.startsWith('/chat')) {
             const msg = raw.replace('/chat', '').trim();
-            if (!msg) {
+            const friends = data?.friends || [];
+            const chatId = data?.user?.chatId || '';
+            if (friends.length === 0) {
                 setHistory(h => [
                     ...h,
                     {
-                        id: String(Date.now()),
+                        id: makeUniqueId(),
                         type: 'assistant',
-                        text: '◈ Командный чат:',
+                        text: '◈ Командный чат & Друзья:',
                         details: [
-                            '[17:40] Вовчик: Привет! По проекту всё готово к релизу?',
-                            '[17:42] Вы: Да, собираю финальный билд CLI терминала.',
-                            'Отправка сообщения: /chat <текст сообщения>',
+                            'У вас пока нет добавленных друзей для личных сообщений.',
+                            `🔗 Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
+                            'Отправьте ссылку другу или коллеге, чтобы начать совместную работу!'
                         ]
                     }
                 ]);
             }
             else {
-                setHistory(h => [
-                    ...h,
-                    { id: String(Date.now()), type: 'assistant', text: `◈ Сообщение отправлено Вовчику: «${msg}»` },
-                    { id: String(Date.now() + 1), type: 'assistant', text: `◈ Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
-                ]);
+                if (!msg) {
+                    const friendNames = friends.map((f) => `• ${f.name} (@${f.username || 'user'})`).join(', ');
+                    setHistory(h => [
+                        ...h,
+                        {
+                            id: makeUniqueId(),
+                            type: 'assistant',
+                            text: '◈ Командный чат:',
+                            details: [
+                                `Доступные друзья: ${friendNames}`,
+                                'Отправка сообщения: /chat <текст сообщения>',
+                            ]
+                        }
+                    ]);
+                }
+                else {
+                    setHistory(h => [
+                        ...h,
+                        { id: makeUniqueId(), type: 'assistant', text: `◈ Сообщение отправлено друзьям: «${msg}»` }
+                    ]);
+                }
             }
             return;
         }
         if (raw === '/friends' || raw === '/друзья') {
-            setHistory(h => [
-                ...h,
-                {
-                    id: String(Date.now()),
-                    type: 'assistant',
-                    text: '🪽 Список друзей и команды:',
-                    details: [
-                        '• Вовчик (@vovchik)  — [Онлайн] Доступ к задачам открыт',
-                        '• Лера (@lera)       — [Был(а) недавно]',
-                        '💡 Чтобы отправить сообщение: /chat <сообщение>',
-                    ]
-                }
-            ]);
+            const friends = data?.friends || [];
+            const chatId = data?.user?.chatId || '';
+            if (friends.length === 0) {
+                setHistory(h => [
+                    ...h,
+                    {
+                        id: makeUniqueId(),
+                        type: 'assistant',
+                        text: '🪽 Список друзей и команды (0):',
+                        details: [
+                            'У вас пока нет добавленных друзей.',
+                            `🔗 Ссылка для приглашения: https://t.me/Zerph_bot?start=invite_${chatId}`,
+                            '💡 Отправьте эту ссылку коллеге или другу в Telegram для связи!'
+                        ]
+                    }
+                ]);
+            }
+            else {
+                const friendLines = friends.map((f) => `• ${f.name} (@${f.username || 'нет юзернейма'}) — [Подключен]`);
+                setHistory(h => [
+                    ...h,
+                    {
+                        id: makeUniqueId(),
+                        type: 'assistant',
+                        text: `🪽 Список друзей (${friends.length}):`,
+                        details: [
+                            ...friendLines,
+                            `🔗 Ссылка-приглашение: https://t.me/Zerph_bot?start=invite_${chatId}`,
+                        ]
+                    }
+                ]);
+            }
             return;
         }
         if (raw === '/limits' || raw === '/лимиты' || raw === '/usage') {
             const l = data?.limits;
             const planName = (data?.user?.plan || 'corp').toUpperCase();
+            const maxCli = typeof l?.maxCli === 'number' ? l.maxCli : 8000;
+            const cliBar = renderProgressBar(cliCount / maxCli, 10);
             setHistory(h => [
                 ...h,
                 {
-                    id: String(Date.now()),
+                    id: makeUniqueId(),
                     type: 'assistant',
                     text: `⚡ Статус лимитов на сегодня (${planName}):`,
                     details: [
-                        `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} [██░░░░░░░░]`,
+                        `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} ${cliBar}`,
                         `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
                         `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
                         `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
@@ -388,7 +503,7 @@ export function Repl({ initialData }) {
             const mins = parseInt(parts[1] || '25', 10);
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
+                { id: makeUniqueId(), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
             ]);
             return;
         }
@@ -404,13 +519,13 @@ export function Repl({ initialData }) {
                 }));
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается ✦` }
+                    { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается 🔥` }
                 ]);
             }
             else {
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'error', text: `Задача не найдена по запросу: "${query}"` }
+                    { id: makeUniqueId(), type: 'error', text: `Задача не найдена по запросу: "${query}"` }
                 ]);
             }
             return;
@@ -418,7 +533,7 @@ export function Repl({ initialData }) {
         if (raw.startsWith('/note')) {
             const noteText = raw.replace('/note', '').trim();
             if (!noteText) {
-                setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст: /note <текст заметки>' }]);
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: 'Укажите текст: /note <текст заметки>' }]);
                 return;
             }
             await mutateItem(creds, {
@@ -427,7 +542,7 @@ export function Repl({ initialData }) {
             });
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
+                { id: makeUniqueId(), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
             ]);
             return;
         }
@@ -435,14 +550,14 @@ export function Repl({ initialData }) {
             const extName = raw.replace('/ext', '').trim();
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'assistant', text: `🔌 Расширение «${extName || 'модуль'}» запущено!` }
+                { id: makeUniqueId(), type: 'assistant', text: `🔌 Расширение «${extName || 'модуль'}» запущено!` }
             ]);
             return;
         }
         if (raw.startsWith('/add')) {
             const taskText = raw.replace('/add', '').trim();
             if (!taskText) {
-                setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст задачи: /add <название>' }]);
+                setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: 'Укажите текст задачи: /add <название>' }]);
                 return;
             }
             try {
@@ -457,30 +572,29 @@ export function Repl({ initialData }) {
                 });
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
+                    { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
                 ]);
                 await loadData();
             }
             catch (e) {
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
+                    { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }
                 ]);
             }
             return;
         }
         // ── Local CLI Bridge OR Cloud AI Routing ────────────────────────────────
-        const activeModel = config.model || 'llama-3.3-70b-versatile';
+        const activeModel = config.model || 'openai/gpt-oss-120b';
         if (activeModel.startsWith('cli:')) {
-            // Route query to local CLI agent (agy, claude, gemini, ollama)
             try {
                 const cliOutput = await runLocalCliBridge(activeModel, raw);
                 setHistory(h => [
                     ...h,
                     {
-                        id: String(Date.now()),
+                        id: makeUniqueId(),
                         type: 'assistant',
-                        text: `[${activeModel.replace('cli:', '').toUpperCase()}] Результат выполнения:`,
+                        text: `[${activeModel.replace('cli:', '').toUpperCase()}] Результат:`,
                         details: cliOutput.split('\n').slice(0, 20),
                     }
                 ]);
@@ -488,7 +602,7 @@ export function Repl({ initialData }) {
             catch (err) {
                 setHistory(h => [
                     ...h,
-                    { id: String(Date.now()), type: 'error', text: `Ошибка запуска ${activeModel}: ${err.message}` }
+                    { id: makeUniqueId(), type: 'error', text: `Ошибка запуска ${activeModel}: ${err.message}` }
                 ]);
             }
             return;
@@ -499,7 +613,7 @@ export function Repl({ initialData }) {
             setHistory(h => [
                 ...h,
                 {
-                    id: String(Date.now()),
+                    id: makeUniqueId(),
                     type: 'assistant',
                     text: res.message,
                     details: res.details,
@@ -510,21 +624,28 @@ export function Repl({ initialData }) {
         catch (e) {
             setHistory(h => [
                 ...h,
-                { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
+                { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }
             ]);
         }
     };
     const limits = data?.limits;
     const planTag = (data?.user?.plan || 'corp').toUpperCase();
-    return (_jsxs(Box, { flexDirection: "column", width: 88, children: [history.map(item => (_jsx(Box, { flexDirection: "column", marginBottom: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))), pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "double", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\uD83E\uDD16 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u0435\u0439\u0440\u043E\u0441\u0435\u0442\u044C \u0438\u043B\u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 CLI \u0430\u0433\u0435\u043D\u0442 (\u2191/\u2193, Enter):" }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), allAvailableModels.map((m, idx) => {
+    const userName = data?.user?.name || 'Кирилл Перекатнов';
+    const username = data?.user?.username ? `@${data.user.username}` : '';
+    const tasks = data?.tasks || [];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayTasks = tasks.filter((t) => !t.dueDate || t.dueDate.startsWith(todayStr));
+    const overdueTasks = tasks.filter((t) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr);
+    const spriteLines = getAllaySpriteLines('idle', 0);
+    return (_jsxs(Box, { flexDirection: "column", width: 86, children: [_jsxs(Box, { justifyContent: "space-between", paddingX: 1, marginBottom: 0, children: [_jsx(Box, { gap: 1, children: _jsx(Text, { bold: true, color: "cyanBright", children: "\u25C8 Zerf CLI v2.0.26" }) }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "gray", children: userName }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { bold: true, color: "cyanBright", children: planTag }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsx(Text, { color: "yellow", children: "\u0441\u0442\u0440\u0438\u043A 12 \uD83D\uDD25" })] })] }), _jsxs(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "row", width: 86, marginY: 0, children: [_jsxs(Box, { flexDirection: "column", width: 40, paddingX: 1, borderStyle: "single", borderColor: "gray", borderTop: false, borderBottom: false, borderLeft: false, children: [_jsxs(Text, { bold: true, color: "white", children: ["\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ", userName] }), _jsx(Box, { flexDirection: "column", alignItems: "center", marginY: 1, children: spriteLines.map((line, idx) => (_jsx(Text, { children: line }, idx))) }), _jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "Groq AI" }), _jsx(Text, { color: "gray", children: "\u00B7" }), _jsxs(Text, { bold: true, color: "greenBright", children: ["Zerf ", planTag] }), username && _jsxs(Text, { color: "gray", children: ["\u00B7 ", username] })] })] }), _jsxs(Box, { flexDirection: "column", width: 42, paddingX: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\u0421\u043E\u0432\u0435\u0442\u044B & \u0428\u043E\u0440\u0442\u043A\u0430\u0442\u044B" }), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/menu" }), " \u2014 \u0438\u043D\u0442\u0435\u0440\u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0435 \u043C\u0435\u043D\u044E (\u2191/\u2193)"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/today" }), " \u2014 \u0437\u0430\u0434\u0430\u0447\u0438 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/cal" }), " \u2014 \u043D\u0435\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"] }), _jsxs(Text, { color: "gray", children: ["\u2022 ", _jsx(Text, { color: "cyanBright", children: "/chat" }), " \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u043D\u044B\u0439 \u0447\u0430\u0442"] })] }), _jsx(Box, { marginY: 0, children: _jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }) }), _jsx(Text, { bold: true, color: "cyanBright", children: "\u0410\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F" }), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsxs(Text, { color: "white", children: ["\u2756 \u0417\u0430\u0434\u0430\u0447: ", todayTasks.length, " ", overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''] }), _jsx(Text, { color: "yellow", children: "\uD83D\uDD25 \u0421\u0442\u0440\u0438\u043A: 12 \u0434\u043D\u0435\u0439" })] })] })] }), history.map(item => (_jsx(Box, { flexDirection: "column", marginY: 0, marginTop: 1, children: item.type === 'user' ? (_jsxs(Box, { gap: 1, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(Text, { bold: true, color: "white", children: item.text })] })) : item.type === 'error' ? (_jsxs(Box, { gap: 1, marginLeft: 2, children: [_jsx(Text, { color: "red", children: "\u25CF" }), _jsx(Text, { color: "red", children: item.text })] })) : (_jsxs(Box, { flexDirection: "column", marginLeft: 2, children: [_jsxs(Box, { gap: 1, children: [_jsx(Text, { color: "cyanBright", children: "\u25CF" }), _jsx(Text, { color: "white", children: item.text })] }), item.details && item.details.map((d, i) => (_jsx(Box, { marginLeft: 2, children: _jsx(Text, { color: "gray", children: d }) }, i)))] })) }, item.id))), pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "double", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: "\uD83E\uDD16 \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u0435\u0439\u0440\u043E\u0441\u0435\u0442\u044C \u0438\u043B\u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 CLI \u0430\u0433\u0435\u043D\u0442 (\u2191/\u2193, Enter):" }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), allAvailableModels.map((m, idx) => {
                         const isSel = idx === selectedModelIdx;
                         const isCurrent = config.model === m.id;
                         const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]';
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', m.name.padEnd(30)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", tag, " ", m.desc, " ", isCurrent ? '(Текущий)' : ''] })] }, m.id));
-                    })] })), isSlash && filteredCommands.length > 0 && !pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 0, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
+                    })] })), isSlash && filteredCommands.length > 0 && !pickingModel && (_jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyanBright", paddingX: 1, marginY: 1, children: [_jsxs(Box, { justifyContent: "space-between", marginBottom: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):' }), _jsx(Text, { color: "gray", children: "ESC \u0434\u043B\u044F \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F" })] }), filteredCommands.map((item, idx) => {
                         const isSel = idx === selectedIdx;
                         return (_jsxs(Box, { gap: 1, children: [_jsxs(Text, { bold: true, color: isSel ? 'cyanBright' : 'gray', children: [isSel ? '▶ ' : '  ', item.label.padEnd(18)] }), _jsxs(Text, { color: isSel ? 'white' : 'gray', children: ["\u2014 ", item.desc] })] }, item.cmd));
-                    })] })), _jsxs(Box, { flexDirection: "column", marginTop: 0, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
+                    })] })), _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [_jsx(Text, { color: "gray", dimColor: true, children: "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" }), _jsxs(Box, { gap: 1, marginY: 0, children: [_jsx(Text, { bold: true, color: "cyanBright", children: '>' }), _jsx(TextInput, { value: inputVal, onChange: (val) => {
                                     setInputVal(val);
                                     if (!val)
                                         setMenuForced(false);

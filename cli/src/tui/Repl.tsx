@@ -12,7 +12,7 @@ import {
   ZerfConfig
 } from '../api.js'
 import { detectInstalledClis, runLocalCliBridge, DetectedCli } from '../local-cli.js'
-import { GLYPHS } from '../mascot.js'
+import { getAllaySpriteLines, GLYPHS } from '../mascot.js'
 
 interface LogEntry {
   id: string
@@ -36,7 +36,6 @@ interface AiModelOption {
   status?: string
 }
 
-// Officially supported active cloud models on Groq / Zerf Cloud
 const CLOUD_MODELS: AiModelOption[] = [
   { id: 'openai/gpt-oss-120b', name: '🚀 OpenAI GPT-OSS 120B', desc: 'Флагман нового поколения, максимальный интеллект', type: 'cloud' },
   { id: 'openai/gpt-oss-20b', name: '⚡ OpenAI GPT-OSS 20B', desc: 'Быстрый и точный отклик (120 мс)', type: 'cloud' },
@@ -46,22 +45,63 @@ const CLOUD_MODELS: AiModelOption[] = [
 ]
 
 const BASE_MENU_ITEMS: MenuItem[] = [
-  { cmd: '/today', label: '/today', desc: 'Задачи и привычки на сегодня', glyph: GLYPHS.task },
-  { cmd: '/cal', label: '/cal', desc: 'Календарь недели и расписание', glyph: GLYPHS.calendar },
-  { cmd: '/chat ', label: '/chat <текст>', desc: 'Командный чат / заметка другу', glyph: GLYPHS.chat },
+  { cmd: '/today', label: '/today', desc: 'Задачи с обратным отсчетом и прогрессом', glyph: GLYPHS.task },
+  { cmd: '/cal', label: '/cal', desc: '7-дневный интерактивный календарь', glyph: GLYPHS.calendar },
+  { cmd: '/chat ', label: '/chat <текст>', desc: 'Чат с друзьями и командные заметки', glyph: GLYPHS.chat },
   { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с распознаванием даты', glyph: GLYPHS.task },
   { cmd: '/done ', label: '/done <название>', desc: 'Завершить задачу по названию', glyph: GLYPHS.taskDone },
   { cmd: '/note ', label: '/note <текст>', desc: 'Сохранить заметку в базу знаний', glyph: GLYPHS.note },
   { cmd: '/focus 25', label: '/focus [мин]', desc: 'Сфера концентрации Тихони', glyph: GLYPHS.focus },
   { cmd: '/model', label: '/model', desc: 'Выбор нейросети или локального CLI (agy/claude)', glyph: '🤖' },
-  { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и нейросетей', glyph: '⚙' },
-  { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и распознавание речи', glyph: '🎙' },
+  { cmd: '/settings', label: '/settings', desc: 'Настройки, статус CLI и параметры', glyph: '⚙' },
+  { cmd: '/voice', label: '/voice', desc: 'Голосовой ввод и Whisper', glyph: '🎙' },
+  { cmd: '/friends', label: '/friends', desc: 'Список друзей и ссылка-приглашение', glyph: GLYPHS.friend },
   { cmd: '/limits', label: '/limits', desc: 'Статус использования лимитов', glyph: GLYPHS.limits },
-  { cmd: '/friends', label: '/friends', desc: 'Список друзей и совместные дела', glyph: GLYPHS.friend },
   { cmd: '/clear', label: '/clear', desc: 'Очистить экран терминала', glyph: '🧹' },
   { cmd: '/help', label: '/help', desc: 'Справка и горячие клавиши', glyph: '?' },
   { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
 ]
+
+function makeUniqueId(): string {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+}
+
+function getCountdownText(dueTime?: string | null, status?: string): string {
+  if (status === 'done') return '✔ Выполнено'
+  if (!dueTime) return 'Без точного времени'
+
+  const [dueHours, dueMinutes] = dueTime.split(':').map(Number)
+  if (isNaN(dueHours) || isNaN(dueMinutes)) return dueTime
+
+  const now = new Date()
+  const target = new Date()
+  target.setHours(dueHours, dueMinutes, 0, 0)
+
+  const diffMs = target.getTime() - now.getTime()
+  const diffMins = Math.round(diffMs / 60000)
+
+  if (diffMins > 60) {
+    const h = Math.floor(diffMins / 60)
+    const m = diffMins % 60
+    return `⏳ через ${h} ч ${m > 0 ? `${m} мин` : ''}`
+  } else if (diffMins > 0) {
+    return `🔥 осталось ${diffMins} мин`
+  } else if (diffMins === 0) {
+    return `⏰ прямо сейчас!`
+  } else {
+    const passed = Math.abs(diffMins)
+    const h = Math.floor(passed / 60)
+    const m = passed % 60
+    return `⚠️ просрочено на ${h > 0 ? `${h} ч ` : ''}${m} мин`
+  }
+}
+
+function renderProgressBar(ratio: number, length = 12): string {
+  const clamped = Math.max(0, Math.min(1, ratio))
+  const filled = Math.round(clamped * length)
+  const empty = length - filled
+  return `[${'█'.repeat(filled)}${'░'.repeat(empty)}]`
+}
 
 export function Repl({ initialData }: { initialData?: any }) {
   const { exit } = useApp()
@@ -164,13 +204,13 @@ export function Repl({ initialData }: { initialData?: any }) {
           setHistory(h => [
             ...h,
             {
-              id: String(Date.now()),
+              id: makeUniqueId(),
               type: 'assistant',
               text: `🤖 Активная нейросеть / CLI агент: ${chosen.name}`,
               details: [
                 chosen.desc,
                 isLocal
-                  ? '⚡ Все запросы кода и команды будут выполняться через ваш локальный CLI инструмент с полным доступом к файлам!'
+                  ? '⚡ Запросы кода и команды будут выполняться через ваш локальный CLI инструмент с полным доступом к файлам!'
                   : '☁ Запросы обрабатываются в облаке Zerf (планирование, вопросы, база знаний).'
               ]
             }
@@ -244,7 +284,7 @@ export function Repl({ initialData }: { initialData?: any }) {
     setMenuForced(false)
 
     // Add user command to history
-    setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }])
+    setHistory(h => [...h, { id: makeUniqueId(), type: 'user', text: raw }])
     setCliCount(c => c + 1)
 
     if (raw === '/exit' || raw === '/quit') {
@@ -272,7 +312,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       setHistory(h => [
         ...h,
         {
-          id: String(Date.now()),
+          id: makeUniqueId(),
           type: 'assistant',
           text: '🎙 Голосовой ввод Zerf Voice:',
           details: [
@@ -292,7 +332,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       setHistory(h => [
         ...h,
         {
-          id: String(Date.now()),
+          id: makeUniqueId(),
           type: 'assistant',
           text: '⚙ Настройки Zerf CLI:',
           details: [
@@ -313,22 +353,22 @@ export function Repl({ initialData }: { initialData?: any }) {
       setHistory(h => [
         ...h,
         {
-          id: String(Date.now()),
+          id: makeUniqueId(),
           type: 'assistant',
           text: '❖ Быстрые команды Zerf CLI:',
           details: [
             '/menu           — Интерактивное меню с выбором (стрелки ↑/↓)',
-            '/model          — Выбор нейросети (Llama 3.3, DeepSeek R1, agy, claude)',
+            '/model          — Выбор нейросети (GPT-OSS, Qwen, agy, claude)',
             '/settings       — Окно параметров и настроек',
-            '/today          — Список задач и привычек на сегодня',
-            '/cal            — Недельный календарь и расписание',
-            '/chat <текст>   — Чат с коллегой / заметка другу',
+            '/today          — Список задач с обратным отсчетом и шкалой',
+            '/cal            — 7-дневный календарь расписания',
+            '/chat <текст>   — Чат с друзьями / заметка контакту',
+            '/friends        — Список друзей и персональная ссылка',
             '/add <текст>    — Создать задачу с распознаванием даты',
             '/done <имя>     — Завершить задачу по названию',
             '/focus [минуты] — Запустить сферу концентрации',
             '/note <текст>   — Сохранить заметку в базу',
             '/limits         — Статус использования лимитов',
-            '/friends        — Список друзей и их статус',
             '/clear          — Очистить историю диалога',
             '/exit           — Выйти из CLI',
           ]
@@ -341,36 +381,78 @@ export function Repl({ initialData }: { initialData?: any }) {
       const tasks = data?.tasks || []
       const todayStr = new Date().toISOString().slice(0, 10)
       const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
+      const doneCount = todayTasks.filter((t: any) => t.status === 'done').length
+      const progressRatio = todayTasks.length > 0 ? doneCount / todayTasks.length : 0
+      const progressBar = renderProgressBar(progressRatio, 10)
+
       if (todayTasks.length === 0) {
-        setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }])
+        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }])
       } else {
         const lines = todayTasks.map((t: any) => {
-          const check = t.status === 'done' ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `
-          const time = t.dueTime ? ` (${t.dueTime})` : ''
+          const isDone = t.status === 'done'
+          const check = isDone ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `
+          const countdown = getCountdownText(t.dueTime, t.status)
+          const timeStr = t.dueTime ? ` [${t.dueTime}]` : ''
+          const prio = t.priority === 'urgent' ? ' [⚡ Срочно]' : t.priority === 'high' ? ' [Высокий]' : ''
           const team = t.isShared ? ' [Команда]' : ''
-          return `${check} ${t.title}${time}${team}`
+          return `${check} ${t.title}${timeStr}${prio}${team}  →  ${countdown}`
         })
-        setHistory(h => [...h, { id: String(Date.now()), type: 'assistant', text: `❖ Задачи на сегодня (${todayTasks.length}):`, details: lines }])
+        setHistory(h => [
+          ...h,
+          {
+            id: makeUniqueId(),
+            type: 'assistant',
+            text: `❖ Задачи на сегодня (${doneCount}/${todayTasks.length}) ${progressBar} ${Math.round(progressRatio * 100)}%:`,
+            details: lines
+          }
+        ])
       }
       return
     }
 
     if (raw === '/cal' || raw === '/календарь') {
-      const todayStr = new Date().toISOString().slice(0, 10)
+      const today = new Date()
+      const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
       const tasks = data?.tasks || []
-      const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
+
+      // Generate next 7 days
+      const days = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date()
+        d.setDate(today.getDate() + i)
+        const dateStr = d.toISOString().slice(0, 10)
+        const dayLabel = dayNames[d.getDay()]
+        const dayTasks = tasks.filter((t: any) => t.dueDate && t.dueDate.startsWith(dateStr))
+        days.push({
+          dateStr,
+          header: `${dayLabel} ${d.getDate()}`,
+          tasks: dayTasks,
+          isToday: i === 0,
+        })
+      }
+
+      const gridHeader = days.map(d => d.isToday ? `[${d.header}]`.padEnd(9) : d.header.padEnd(9)).join('│ ')
+      const gridCounts = days.map(d => {
+        const c = d.tasks.length
+        return (c > 0 ? ` ${c} дел `.padEnd(9) : '   —    '.padEnd(9))
+      }).join('│ ')
+
+      const scheduledTasks = tasks.filter((t: any) => t.dueDate && t.status !== 'done').slice(0, 5)
+      const scheduledLines = scheduledTasks.map((t: any) => `• ${t.dueDate}${t.dueTime ? ` в ${t.dueTime}` : ''}: «${t.title}»`)
+
       setHistory(h => [
         ...h,
         {
-          id: String(Date.now()),
+          id: makeUniqueId(),
           type: 'assistant',
-          text: `◫ Календарь недели (${todayStr}):`,
+          text: `◫ Календарь на 7 дней (${today.toISOString().slice(0, 10)}):`,
           details: [
-            '  Пн        Вт        Ср        Чт        Пт        Сб        Вс',
+            gridHeader,
             '─────────────────────────────────────────────────────────────────',
-            ` ${todayTasks.length} дел      —         —         —         —         —         —`,
+            gridCounts,
             '─────────────────────────────────────────────────────────────────',
-            '✦ Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
+            ...(scheduledLines.length > 0 ? ['Ближайшие запланированные дела:', ...scheduledLines] : ['Нет запланированных дел на неделю.']),
+            '💡 Чтобы добавить встречу: "Встреча с командой в пятницу в 15:00"',
           ]
         }
       ])
@@ -379,58 +461,97 @@ export function Repl({ initialData }: { initialData?: any }) {
 
     if (raw.startsWith('/chat')) {
       const msg = raw.replace('/chat', '').trim()
-      if (!msg) {
+      const friends = data?.friends || []
+      const chatId = data?.user?.chatId || ''
+
+      if (friends.length === 0) {
         setHistory(h => [
           ...h,
           {
-            id: String(Date.now()),
+            id: makeUniqueId(),
             type: 'assistant',
-            text: '◈ Командный чат:',
+            text: '◈ Командный чат & Друзья:',
             details: [
-              '[17:40] Вовчик: Привет! По проекту всё готово к релизу?',
-              '[17:42] Вы: Да, собираю финальный билд CLI терминала.',
-              'Отправка сообщения: /chat <текст сообщения>',
+              'У вас пока нет добавленных друзей для личных сообщений.',
+              `🔗 Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
+              'Отправьте ссылку другу или коллеге, чтобы начать совместную работу!'
             ]
           }
         ])
       } else {
-        setHistory(h => [
-          ...h,
-          { id: String(Date.now()), type: 'assistant', text: `◈ Сообщение отправлено Вовчику: «${msg}»` },
-          { id: String(Date.now() + 1), type: 'assistant', text: `◈ Вовчик: Принято: «${msg}». Сейчас гляну! 👍` }
-        ])
+        if (!msg) {
+          const friendNames = friends.map((f: any) => `• ${f.name} (@${f.username || 'user'})`).join(', ')
+          setHistory(h => [
+            ...h,
+            {
+              id: makeUniqueId(),
+              type: 'assistant',
+              text: '◈ Командный чат:',
+              details: [
+                `Доступные друзья: ${friendNames}`,
+                'Отправка сообщения: /chat <текст сообщения>',
+              ]
+            }
+          ])
+        } else {
+          setHistory(h => [
+            ...h,
+            { id: makeUniqueId(), type: 'assistant', text: `◈ Сообщение отправлено друзьям: «${msg}»` }
+          ])
+        }
       }
       return
     }
 
     if (raw === '/friends' || raw === '/друзья') {
-      setHistory(h => [
-        ...h,
-        {
-          id: String(Date.now()),
-          type: 'assistant',
-          text: '🪽 Список друзей и команды:',
-          details: [
-            '• Вовчик (@vovchik)  — [Онлайн] Доступ к задачам открыт',
-            '• Лера (@lera)       — [Был(а) недавно]',
-            '💡 Чтобы отправить сообщение: /chat <сообщение>',
-          ]
-        }
-      ])
+      const friends = data?.friends || []
+      const chatId = data?.user?.chatId || ''
+
+      if (friends.length === 0) {
+        setHistory(h => [
+          ...h,
+          {
+            id: makeUniqueId(),
+            type: 'assistant',
+            text: '🪽 Список друзей и команды (0):',
+            details: [
+              'У вас пока нет добавленных друзей.',
+              `🔗 Ссылка для приглашения: https://t.me/Zerph_bot?start=invite_${chatId}`,
+              '💡 Отправьте эту ссылку коллеге или другу в Telegram для связи!'
+            ]
+          }
+        ])
+      } else {
+        const friendLines = friends.map((f: any) => `• ${f.name} (@${f.username || 'нет юзернейма'}) — [Подключен]`)
+        setHistory(h => [
+          ...h,
+          {
+            id: makeUniqueId(),
+            type: 'assistant',
+            text: `🪽 Список друзей (${friends.length}):`,
+            details: [
+              ...friendLines,
+              `🔗 Ссылка-приглашение: https://t.me/Zerph_bot?start=invite_${chatId}`,
+            ]
+          }
+        ])
+      }
       return
     }
 
     if (raw === '/limits' || raw === '/лимиты' || raw === '/usage') {
       const l = data?.limits
       const planName = (data?.user?.plan || 'corp').toUpperCase()
+      const maxCli = typeof l?.maxCli === 'number' ? l.maxCli : 8000
+      const cliBar = renderProgressBar(cliCount / maxCli, 10)
       setHistory(h => [
         ...h,
         {
-          id: String(Date.now()),
+          id: makeUniqueId(),
           type: 'assistant',
           text: `⚡ Статус лимитов на сегодня (${planName}):`,
           details: [
-            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} [██░░░░░░░░]`,
+            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} ${cliBar}`,
             `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
             `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
             `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
@@ -446,7 +567,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       const mins = parseInt(parts[1] || '25', 10)
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
+        { id: makeUniqueId(), type: 'assistant', text: `⊘ Сфера концентрации Тихони запущена на ${mins} мин.` }
       ])
       return
     }
@@ -464,12 +585,12 @@ export function Repl({ initialData }: { initialData?: any }) {
         }))
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается ✦` }
+          { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${match.title}» закрыта! Стрик продолжается 🔥` }
         ])
       } else {
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'error', text: `Задача не найдена по запросу: "${query}"` }
+          { id: makeUniqueId(), type: 'error', text: `Задача не найдена по запросу: "${query}"` }
         ])
       }
       return
@@ -478,7 +599,7 @@ export function Repl({ initialData }: { initialData?: any }) {
     if (raw.startsWith('/note')) {
       const noteText = raw.replace('/note', '').trim()
       if (!noteText) {
-        setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст: /note <текст заметки>' }])
+        setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: 'Укажите текст: /note <текст заметки>' }])
         return
       }
       await mutateItem(creds, {
@@ -487,7 +608,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       })
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
+        { id: makeUniqueId(), type: 'assistant', text: `≡ Заметка «${noteText.slice(0, 40)}...» сохранена в базе знаний` }
       ])
       return
     }
@@ -496,7 +617,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       const extName = raw.replace('/ext', '').trim()
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'assistant', text: `🔌 Расширение «${extName || 'модуль'}» запущено!` }
+        { id: makeUniqueId(), type: 'assistant', text: `🔌 Расширение «${extName || 'модуль'}» запущено!` }
       ])
       return
     }
@@ -504,7 +625,7 @@ export function Repl({ initialData }: { initialData?: any }) {
     if (raw.startsWith('/add')) {
       const taskText = raw.replace('/add', '').trim()
       if (!taskText) {
-        setHistory(h => [...h, { id: String(Date.now()), type: 'error', text: 'Укажите текст задачи: /add <название>' }])
+        setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: 'Укажите текст задачи: /add <название>' }])
         return
       }
       try {
@@ -519,38 +640,37 @@ export function Repl({ initialData }: { initialData?: any }) {
         })
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
+          { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${taskText}» создана и добавлена в расписание` }
         ])
         await loadData()
       } catch (e: any) {
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
+          { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }
         ])
       }
       return
     }
 
     // ── Local CLI Bridge OR Cloud AI Routing ────────────────────────────────
-    const activeModel = config.model || 'llama-3.3-70b-versatile'
+    const activeModel = config.model || 'openai/gpt-oss-120b'
 
     if (activeModel.startsWith('cli:')) {
-      // Route query to local CLI agent (agy, claude, gemini, ollama)
       try {
         const cliOutput = await runLocalCliBridge(activeModel, raw)
         setHistory(h => [
           ...h,
           {
-            id: String(Date.now()),
+            id: makeUniqueId(),
             type: 'assistant',
-            text: `[${activeModel.replace('cli:', '').toUpperCase()}] Результат выполнения:`,
+            text: `[${activeModel.replace('cli:', '').toUpperCase()}] Результат:`,
             details: cliOutput.split('\n').slice(0, 20),
           }
         ])
       } catch (err: any) {
         setHistory(h => [
           ...h,
-          { id: String(Date.now()), type: 'error', text: `Ошибка запуска ${activeModel}: ${err.message}` }
+          { id: makeUniqueId(), type: 'error', text: `Ошибка запуска ${activeModel}: ${err.message}` }
         ])
       }
       return
@@ -562,7 +682,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       setHistory(h => [
         ...h,
         {
-          id: String(Date.now()),
+          id: makeUniqueId(),
           type: 'assistant',
           text: res.message,
           details: res.details,
@@ -572,19 +692,82 @@ export function Repl({ initialData }: { initialData?: any }) {
     } catch (e: any) {
       setHistory(h => [
         ...h,
-        { id: String(Date.now()), type: 'error', text: `Ошибка: ${e.message}` }
+        { id: makeUniqueId(), type: 'error', text: `Ошибка: ${e.message}` }
       ])
     }
   }
 
   const limits = data?.limits
   const planTag = (data?.user?.plan || 'corp').toUpperCase()
+  const userName = data?.user?.name || 'Кирилл Перекатнов'
+  const username = data?.user?.username ? `@${data.user.username}` : ''
+  const tasks = data?.tasks || []
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
+  const overdueTasks = tasks.filter((t: any) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr)
+  const spriteLines = getAllaySpriteLines('idle', 0)
 
   return (
-    <Box flexDirection="column" width={88}>
+    <Box flexDirection="column" width={86}>
+      {/* ── Top Bar: Zerf CLI v2.0.26 & User info ────────────────────────── */}
+      <Box justifyContent="space-between" paddingX={1} marginBottom={0}>
+        <Box gap={1}>
+          <Text bold color="cyanBright">◈ Zerf CLI v2.0.26</Text>
+        </Box>
+        <Box gap={1}>
+          <Text color="gray">{userName}</Text>
+          <Text color="gray">·</Text>
+          <Text bold color="cyanBright">{planTag}</Text>
+          <Text color="gray">·</Text>
+          <Text color="yellow">стрик 12 🔥</Text>
+        </Box>
+      </Box>
+
+      {/* ── Pixel-Perfect Hero Box (Built with native Ink rounded borders) ── */}
+      <Box borderStyle="round" borderColor="cyan" flexDirection="row" width={86} marginY={0}>
+        {/* Left Column: Mascot Render */}
+        <Box flexDirection="column" width={40} paddingX={1} borderStyle="single" borderColor="gray" borderTop={false} borderBottom={false} borderLeft={false}>
+          <Text bold color="white">С возвращением, {userName}</Text>
+          <Box flexDirection="column" alignItems="center" marginY={1}>
+            {spriteLines.map((line, idx) => (
+              <Text key={idx}>{line}</Text>
+            ))}
+          </Box>
+          <Box gap={1}>
+            <Text bold color="cyanBright">Groq AI</Text>
+            <Text color="gray">·</Text>
+            <Text bold color="greenBright">Zerf {planTag}</Text>
+            {username && <Text color="gray">· {username}</Text>}
+          </Box>
+        </Box>
+
+        {/* Right Column: Tips & Stats */}
+        <Box flexDirection="column" width={42} paddingX={1}>
+          <Text bold color="cyanBright">Советы & Шорткаты</Text>
+          <Box flexDirection="column" marginTop={0}>
+            <Text color="gray">• <Text color="cyanBright">/menu</Text> — интерактивное меню (↑/↓)</Text>
+            <Text color="gray">• <Text color="cyanBright">/today</Text> — задачи на сегодня</Text>
+            <Text color="gray">• <Text color="cyanBright">/cal</Text> — недельный календарь</Text>
+            <Text color="gray">• <Text color="cyanBright">/chat</Text> — командный чат</Text>
+          </Box>
+
+          <Box marginY={0}>
+            <Text color="gray" dimColor>───────────────────────────────────</Text>
+          </Box>
+
+          <Text bold color="cyanBright">Активность сегодня</Text>
+          <Box flexDirection="column" marginTop={0}>
+            <Text color="white">
+              ❖ Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
+            </Text>
+            <Text color="yellow">🔥 Стрик: 12 дней</Text>
+          </Box>
+        </Box>
+      </Box>
+
       {/* ── Action History Feed ──────────────────────────────────────────── */}
       {history.map(item => (
-        <Box key={item.id} flexDirection="column" marginBottom={1}>
+        <Box key={item.id} flexDirection="column" marginY={0} marginTop={1}>
           {item.type === 'user' ? (
             <Box gap={1}>
               <Text bold color="cyanBright">{'>'}</Text>
@@ -613,7 +796,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
       {/* ── Interactive Model Picker Modal (/model) ─────────────────────── */}
       {pickingModel && (
-        <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={0}>
+        <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">🤖 Выберите нейросеть или локальный CLI агент (↑/↓, Enter):</Text>
             <Text color="gray">ESC для закрытия</Text>
@@ -638,7 +821,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
       {/* ── Interactive /menu Dropdown (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
       {isSlash && filteredCommands.length > 0 && !pickingModel && (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={0}>
+        <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">
               {menuForced ? '❖ Меню команд Zerf CLI (навигация ↑/↓, Enter для выбора):' : 'Команды Zerf CLI (навигация ↑/↓, Tab выбор):'}
@@ -662,7 +845,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       )}
 
       {/* ── Pinned Bottom Prompt Frame (Claude Code style) ────────────────── */}
-      <Box flexDirection="column" marginTop={0}>
+      <Box flexDirection="column" marginTop={1}>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
         <Box gap={1} marginY={0}>
           <Text bold color="cyanBright">{'>'}</Text>

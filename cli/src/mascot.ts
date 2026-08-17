@@ -18,21 +18,23 @@ const RESET   = '\x1b[0m'
 const BOLD    = '\x1b[1m'
 
 /**
- * Custom Monochrome & Cyber Glyphs (Replacing generic OS emojis)
+ * Custom Monochrome & Cyber Glyphs (Zerf Spirit Square Mascot)
  */
 export const GLYPHS = {
-  task: '❖',
-  taskDone: '✔',
-  taskTodo: '○',
-  calendar: '◫',
-  chat: '◈',
-  note: '≡',
-  focus: '⊘',
-  limits: '⚡',
-  streak: '✦',
-  friend: '🪽',
-  bullet: '●',
-  pointer: '▶',
+  spirit: '◈',      // Zerf Spirit Icon (square voxel spirit)
+  wings: '🪽',      // Spirit Wings
+  task: '❖',        // Task Glyph
+  taskDone: '✔',    // Done
+  taskTodo: '○',    // Incomplete
+  calendar: '◫',    // Calendar
+  chat: '◈',        // Chat
+  note: '≡',        // Note
+  focus: '⊘',       // Focus
+  limits: '⚡',      // Limits
+  streak: '🔥',     // Streak
+  friend: '🪽',     // Friend
+  bullet: '●',      // Bullet
+  pointer: '▶',     // Pointer
 } as const
 
 /**
@@ -51,7 +53,7 @@ export function getAllaySpriteLines(mood: MascotMood = 'idle', wingFrame = 0): s
   if (mood === 'thinking') {
     eyes = `${C_CYAN}◫${C_MAIN}██${C_CYAN}◫`
   } else if (mood === 'celebrate') {
-    eyes = `${C_WHITE}✦${C_MAIN}██${C_WHITE}✦`
+    eyes = `${C_WHITE}◈${C_MAIN}██${C_WHITE}◈`
   } else if (mood === 'focus') {
     eyes = `${C_INDIGO}▄${C_MAIN}██${C_INDIGO}▄`
   } else if (mood === 'alert') {
@@ -74,7 +76,7 @@ export function getAllayFace(mood: MascotMood = 'idle'): string {
     case 'thinking':
       return `${C_CYAN}[ ◫ ⚬ ◫ ]${RESET}`
     case 'celebrate':
-      return `${C_WHITE}[ ✦ ᗜ ✦ ]${RESET}`
+      return `${C_WHITE}[ ◈ ᗜ ◈ ]${RESET}`
     case 'focus':
       return `${C_INDIGO}[ ─ ‿ ─ ☕ ]${RESET}`
     case 'alert':
@@ -82,32 +84,9 @@ export function getAllayFace(mood: MascotMood = 'idle'): string {
   }
 }
 
-export function printHeroBanner(data: any): void {
-  const userName = data?.user?.name || 'Кирилл'
-  const plan = (data?.user?.plan || 'corp').toUpperCase()
-  const username = data?.user?.username ? `@${data.user.username}` : ''
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayTasks = (data?.tasks || []).filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
-  const overdueTasks = (data?.tasks || []).filter((t: any) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr)
-  const sprite = getAllaySpriteLines('idle', 0)
-
-  console.log(`\n ${C_MAIN}✦${RESET} ${BOLD}Zerf Code v2.0.26${RESET}        ${C_SLATE}${userName}${RESET} · ${C_CYAN}${plan}${RESET} · ${C_SLATE}стрик 12 ✦${RESET}`)
-  console.log(`${C_MUTED}┌────────────────────────────────────────┬────────────────────────────────────────┐${RESET}`)
-  console.log(`${C_MUTED}│${RESET} ${BOLD}С возвращением, ${userName.slice(0, 20).padEnd(20)}${RESET}   ${C_MUTED}│${RESET} ${C_CYAN}Советы & Шорткаты${RESET}                      ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET}                                        ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/menu${RESET}  ${C_SLATE}— интерактивное меню (↑/↓)${RESET}     ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET}   ${sprite[0]}       ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/today${RESET} ${C_SLATE}— задачи на сегодня${RESET}             ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET}   ${sprite[1]}       ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/cal${RESET}   ${C_SLATE}— недельный календарь${RESET}           ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET}   ${sprite[2]}       ${C_MUTED}│${RESET} ${C_SLATE}•${RESET} ${C_CYAN}/chat${RESET}  ${C_SLATE}— командный чат${RESET}                 ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET}   ${sprite[3]}       ${C_MUTED}├────────────────────────────────────────┤${RESET}`)
-  console.log(`${C_MUTED}│${RESET}   ${sprite[4]}       ${C_MUTED}│${RESET} ${C_CYAN}Активность сегодня${RESET}                     ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET}                                        ${C_MUTED}│${RESET} ${C_SLATE}❖${RESET} Задач: ${BOLD}${String(todayTasks.length).padEnd(2)}${RESET} ${overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : '             '}    ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}│${RESET} ${C_CYAN}Groq AI${RESET} · ${C_LIGHT}Zerf ${plan}${RESET} ${username ? `· ${username}` : ''}          ${C_MUTED}│${RESET} ${C_CYAN}✦${RESET} Стрик: ${BOLD}12 дней${RESET}                         ${C_MUTED}│${RESET}`)
-  console.log(`${C_MUTED}└────────────────────────────────────────┴────────────────────────────────────────┘${RESET}\n`)
-}
-
 export function renderAllayBanner(userName: string, plan: string, streak = 1): string {
   return [
-    ` ${C_MAIN}✦${RESET} ${BOLD}Zerf Code v2.0.26${RESET}        ${C_SLATE}${userName}${RESET} · ${C_CYAN}${plan.toUpperCase()}${RESET} · ${C_SLATE}стрик ${streak} ✦${RESET}`,
+    ` ${C_MAIN}◈${RESET} ${BOLD}Zerf CLI v2.0.26${RESET}        ${C_SLATE}${userName}${RESET} · ${C_CYAN}${plan.toUpperCase()}${RESET} · ${C_SLATE}стрик ${streak} 🔥${RESET}`,
     `${C_MUTED}────────────────────────────────────────────────────────────────────────────${RESET}`,
   ].join('\n')
 }
