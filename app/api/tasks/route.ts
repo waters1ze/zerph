@@ -15,6 +15,7 @@ import {
   touchUserLastActive, createHabit, updateHabit, deleteHabit, isBirthdayOrHolidayTask,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
+import { runAllCronTasks } from '@/lib/backend/cron-runner'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 
@@ -53,6 +54,8 @@ export async function GET(req: NextRequest) {
     try {
       await touchUserLastActive(ownerChatId)
       await syncFriendBirthdays(ownerChatId)
+      // Trigger evening review / daily crons asynchronously in background
+      runAllCronTasks().catch(e => console.error('[Background Cron Error]:', e))
       const [tasks, goals, notes, friends, habits] = await Promise.all([
         getAllTasks(ownerChatId),
         getAllGoals(ownerChatId),
