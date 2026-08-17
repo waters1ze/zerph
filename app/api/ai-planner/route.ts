@@ -18,6 +18,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const chatId = authUser.chatId
+    const user = await prisma.telegramChat.findUnique({
+      where: { chatId: BigInt(chatId) },
+      select: { plan: true, isAdmin: true }
+    })
+    const isPro = user?.isAdmin || planAtLeast(user?.plan, 'pro')
+    if (!isPro) {
+      return NextResponse.json({
+        error: 'Функция Smart Reschedule и AI-автопланирования дня доступна на тарифах Zerf Pro и Corp. Оформите Pro в Настройках!',
+        requiresPro: true,
+      }, { status: 403 })
+    }
 
     const body = await req.json().catch(() => ({}))
     const todayStr: string = body.date || new Date().toISOString().slice(0, 10)
