@@ -22,6 +22,27 @@ function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
+export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: string; className?: string }) {
+  const isImage = icon && (icon.startsWith('http://') || icon.startsWith('https://') || icon.startsWith('data:') || icon.startsWith('/') || icon.startsWith('blob:'))
+  if (isImage) {
+    return (
+      <img
+        src={icon}
+        alt="Avatar"
+        className={cn('rounded-xl object-cover shrink-0', className)}
+        onError={(e) => {
+          (e.target as HTMLElement).style.display = 'none'
+        }}
+      />
+    )
+  }
+  return (
+    <span className={cn('flex items-center justify-center shrink-0 select-none', className)}>
+      {icon || '🧩'}
+    </span>
+  )
+}
+
 const SAMPLE_MANIFEST = `{
   "name": "Pomodoro Focus Master",
   "version": "1.0.0",
@@ -559,8 +580,8 @@ export function ExtensionsView() {
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-10 h-10 rounded-2xl bg-muted/60 border border-border flex items-center justify-center text-xl shrink-0">
-                          {ext.icon}
+                        <div className="w-10 h-10 rounded-2xl bg-muted/60 border border-border flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                          <ExtensionIcon icon={ext.icon} className="w-full h-full text-xl" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -735,8 +756,8 @@ export function ExtensionsView() {
                   className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3 shadow-xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-xl shrink-0">
-                      {ext.icon}
+                    <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                      <ExtensionIcon icon={ext.icon} className="w-full h-full text-xl" />
                     </div>
                     <div className="min-w-0">
                       <h4 className="text-xs font-bold text-foreground truncate">{ext.title}</h4>
@@ -877,8 +898,8 @@ export function ExtensionsView() {
                       className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3 shadow-xs"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-xl shrink-0">
-                          {ext.icon}
+                        <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                          <ExtensionIcon icon={ext.icon} className="w-full h-full text-xl" />
                         </div>
                         <div className="min-w-0">
                           <h4 className="text-xs font-bold text-foreground truncate">{ext.title}</h4>
@@ -1045,17 +1066,56 @@ export function ExtensionsView() {
 
               {parsedManifest && (
                 <div className="p-4 rounded-2xl bg-muted/40 border border-border/80 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{parsedManifest.icon}</span>
+                  <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-muted/60 border border-border flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                        <ExtensionIcon icon={parsedManifest.icon} className="w-full h-full text-2xl" />
+                      </div>
                       <div>
-                        <h4 className="font-bold text-foreground">{parsedManifest.title}</h4>
+                        <h4 className="font-bold text-foreground text-sm">{parsedManifest.title}</h4>
                         <span className="text-[10px] text-muted-foreground font-mono">v{parsedManifest.version} • {parsedManifest.type}</span>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/20 text-primary border border-primary/30">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-primary/20 text-primary border border-primary/30">
                       {parsedManifest.price === 0 ? 'Бесплатный' : `${parsedManifest.price} ₽`}
                     </span>
+                  </div>
+
+                  {/* Custom Avatar / Icon selector */}
+                  <div className="p-3 rounded-xl bg-card border border-border/70 space-y-2">
+                    <label className="font-semibold text-foreground flex items-center justify-between text-[11px]">
+                      <span>Аватарка / Картинка расширения:</span>
+                      <span className="text-[10px] text-muted-foreground">Любое фото или URL</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={parsedManifest.icon || ''}
+                        onChange={e => setParsedManifest({ ...parsedManifest, icon: e.target.value })}
+                        placeholder="Вставьте ссылку на картинку или эмодзи"
+                        className="flex-1 h-8 px-2.5 rounded-xl bg-muted/40 border border-border text-[11px] outline-none focus:border-primary font-mono"
+                      />
+                      <label className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-[11px] flex items-center gap-1 cursor-pointer shrink-0 transition-colors">
+                        <span>📁 Загрузить фото</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (ev) => {
+                                if (ev.target?.result) {
+                                  setParsedManifest({ ...parsedManifest, icon: String(ev.target.result) })
+                                }
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
 
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -1248,8 +1308,8 @@ export function ExtensionsView() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-muted/60 border border-border flex items-center justify-center text-xl shrink-0">
-                    {selectedExt.icon}
+                  <div className="w-10 h-10 rounded-2xl bg-muted/60 border border-border flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                    <ExtensionIcon icon={selectedExt.icon} className="w-full h-full text-xl" />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-foreground">{selectedExt.title}</h3>

@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/store'
 import type { ExtensionItem } from '@/app/api/extensions/route'
+import { ExtensionIcon } from '@/components/views/extensions-view'
 
 export interface SidebarFolder {
   id: string
@@ -456,8 +457,8 @@ export function SidebarCustomizerSection() {
                         )}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center text-sm shrink-0">
-                            {IconComp ? <IconComp className="w-3.5 h-3.5 text-primary" /> : <span>{meta.icon}</span>}
+                          <div className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center text-sm shrink-0 overflow-hidden">
+                            {IconComp ? <IconComp className="w-3.5 h-3.5 text-primary" /> : <ExtensionIcon icon={meta.icon} className="w-full h-full text-xs" />}
                           </div>
                           <div className="min-w-0">
                             <p className={cn('font-bold truncate text-[11px]', isHidden ? 'line-through text-muted-foreground' : 'text-foreground')}>

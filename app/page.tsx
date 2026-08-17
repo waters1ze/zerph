@@ -119,7 +119,7 @@ export function AppShell() {
     admin:      <AdminView />,
   }
 
-  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings' || state.currentView === 'extensions'
+  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings'
 
   return (
     <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]">

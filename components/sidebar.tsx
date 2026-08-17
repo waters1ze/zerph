@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, type SidebarFolder } from '@/components/settings/sidebar-customizer-section'
 import type { ExtensionItem } from '@/app/api/extensions/route'
+import { ExtensionIcon } from '@/components/views/extensions-view'
 
 export interface NavItem {
   id: View
@@ -381,7 +382,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                           )}
                           title={extensionItem.title}
                         >
-                          <span className="text-sm shrink-0">{extensionItem.icon || '🧩'}</span>
+                          <ExtensionIcon icon={extensionItem.icon} className="w-4 h-4 text-xs shrink-0" />
                           {!isCollapsed && (
                             <span className="flex-1 text-left line-clamp-1 truncate text-xs">
                               {extensionItem.title}
