@@ -32,13 +32,14 @@ async function getChatIdAndPlan(req: NextRequest) {
     }
   })
 
+  const isPlusOrHigher = plan === 'plus' || plan === 'pro' || plan === 'corp'
   return {
     chatId: cid,
     chatIdNum: Number(authUser.chatId),
     name: [chat?.firstName, chat?.lastName].filter(Boolean).join(' ') || chat?.username || `User #${authUser.chatId}`,
     username: chat?.username || null,
     plan,
-    isProOrCorp: plan === 'pro' || plan === 'corp',
+    isPlusOrHigher,
   }
 }
 
@@ -50,15 +51,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     }
 
-    // Check Pro / Corp Tier requirement
-    if (!user.isProOrCorp) {
+    // Check Plus+ Tier requirement
+    if (!user.isPlusOrHigher) {
       return NextResponse.json({
         allowed: false,
         plan: user.plan,
         name: user.name,
         chatId: String(user.chatId),
         upgradeUrl: 'https://t.me/Zerph_bot?start=buy',
-        message: 'Zerf CLI доступен для подписчиков тарифов Pro и Corp. Оформите подписку в боте или на сайте, чтобы разблокировать терминальный клиент!',
+        message: 'Zerf CLI доступен для подписчиков тарифов Plus, Pro и Corp. Оформите подписку в боте или на сайте, чтобы разблокировать терминальный клиент!',
       }, { status: 403 })
     }
 
@@ -106,9 +107,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     }
 
-    if (!user.isProOrCorp) {
+    if (!user.isPlusOrHigher) {
       return NextResponse.json({
-        error: 'Forbidden: Pro or Corp tier required for CLI operations.',
+        error: 'Forbidden: Plus, Pro or Corp tier required for CLI operations.',
         upgradeUrl: 'https://t.me/Zerph_bot?start=buy',
       }, { status: 403 })
     }

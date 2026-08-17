@@ -1,67 +1,93 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-const CONFIG_DIR = path.join(os.homedir(), '.zerf');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-export const DEFAULT_API_URL = process.env.ZERF_API_URL || 'https://zeprh.vercel.app';
-export function loadConfig() {
+const ZERF_DIR = path.join(os.homedir(), '.zerf');
+const CREDENTIALS_FILE = path.join(ZERF_DIR, 'credentials.json');
+const CONFIG_FILE = path.join(ZERF_DIR, 'config.json');
+export const DEFAULT_SERVER_URL = process.env.ZERF_API_URL || 'https://zeprh.vercel.app';
+export function loadCredentials() {
     try {
-        if (fs.existsSync(CONFIG_FILE)) {
-            const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-            return JSON.parse(raw);
+        if (fs.existsSync(CREDENTIALS_FILE)) {
+            return JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf-8'));
         }
     }
     catch { }
-    return { apiUrl: DEFAULT_API_URL };
+    return { serverUrl: DEFAULT_SERVER_URL };
 }
-export function saveConfig(config) {
+export function saveCredentials(creds) {
     try {
-        if (!fs.existsSync(CONFIG_DIR)) {
-            fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        if (!fs.existsSync(ZERF_DIR)) {
+            fs.mkdirSync(ZERF_DIR, { recursive: true });
         }
-        const current = loadConfig();
-        const merged = { ...current, ...config };
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        const current = loadCredentials();
+        const merged = { ...current, ...creds };
+        fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
         return merged;
     }
     catch (e) {
-        console.error('Failed to save Zerf config:', e);
-        return { apiUrl: DEFAULT_API_URL, ...config };
+        console.error('Failed to save Zerf credentials:', e);
+        return { serverUrl: DEFAULT_SERVER_URL, ...creds };
     }
 }
-export function clearConfig() {
+export function clearCredentials() {
     try {
-        if (fs.existsSync(CONFIG_FILE)) {
-            fs.unlinkSync(CONFIG_FILE);
+        if (fs.existsSync(CREDENTIALS_FILE)) {
+            fs.unlinkSync(CREDENTIALS_FILE);
         }
     }
     catch { }
 }
-export async function requestAuthCode(apiUrl = DEFAULT_API_URL) {
-    const res = await fetch(`${apiUrl}/api/cli/auth`, {
+export function loadConfig() {
+    try {
+        if (fs.existsSync(CONFIG_FILE)) {
+            return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+        }
+    }
+    catch { }
+    return { theme: 'strict', sound: true, autoSync: true };
+}
+export function saveConfig(cfg) {
+    try {
+        if (!fs.existsSync(ZERF_DIR)) {
+            fs.mkdirSync(ZERF_DIR, { recursive: true });
+        }
+        const current = loadConfig();
+        const merged = { ...current, ...cfg };
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        return merged;
+    }
+    catch {
+        return { theme: 'strict', sound: true, autoSync: true, ...cfg };
+    }
+}
+// Device Flow Start
+export async function startDeviceAuth(serverUrl = DEFAULT_SERVER_URL) {
+    const res = await fetch(`${serverUrl}/api/cli/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceName: `Zerf CLI on ${os.hostname()} (${os.platform()})` }),
     });
     if (!res.ok) {
-        throw new Error(`Failed to request auth code (HTTP ${res.status}): ${await res.text()}`);
+        throw new Error(`Device auth start error (HTTP ${res.status}): ${await res.text()}`);
     }
     return res.json();
 }
-export async function pollAuthStatus(code, apiUrl = DEFAULT_API_URL) {
-    const res = await fetch(`${apiUrl}/api/cli/auth?code=${encodeURIComponent(code)}`);
+// Device Flow Poll
+export async function pollDeviceAuth(code, serverUrl = DEFAULT_SERVER_URL) {
+    const res = await fetch(`${serverUrl}/api/cli/auth?code=${encodeURIComponent(code)}`);
     if (!res.ok) {
-        throw new Error(`Poll error (HTTP ${res.status})`);
+        throw new Error(`Device auth poll error (HTTP ${res.status})`);
     }
     return res.json();
 }
-export async function fetchUserData(config) {
-    if (!config.token) {
+// Fetch Full Snapshot
+export async function fetchUserData(creds) {
+    if (!creds.token) {
         throw new Error('Not logged in. Please run `zerf login` to authenticate.');
     }
-    const res = await fetch(`${config.apiUrl || DEFAULT_API_URL}/api/cli/data`, {
+    const res = await fetch(`${creds.serverUrl || DEFAULT_SERVER_URL}/api/cli/data`, {
         headers: {
-            Authorization: `Bearer ${config.token}`,
+            Authorization: `Bearer ${creds.token}`,
             'Content-Type': 'application/json',
         },
     });
@@ -73,7 +99,7 @@ export async function fetchUserData(config) {
         return {
             allowed: false,
             plan: errData.plan || 'free',
-            message: errData.message || 'Zerf CLI доступен только для тарифов Pro и Corp.',
+            message: errData.message || 'Zerf CLI доступен для подписчиков тарифов Plus, Pro и Corp.',
             upgradeUrl: errData.upgradeUrl || 'https://t.me/Zerph_bot?start=buy',
         };
     }
@@ -82,35 +108,20 @@ export async function fetchUserData(config) {
     }
     return res.json();
 }
-export async function mutateItem(config, payload) {
-    if (!config.token)
+// Mutate items (task done, delete, add)
+export async function mutateItem(creds, payload) {
+    if (!creds.token)
         throw new Error('Not logged in');
-    const res = await fetch(`${config.apiUrl || DEFAULT_API_URL}/api/cli/data`, {
+    const res = await fetch(`${creds.serverUrl || DEFAULT_SERVER_URL}/api/cli/data`, {
         method: 'POST',
         headers: {
-            Authorization: `Bearer ${config.token}`,
+            Authorization: `Bearer ${creds.token}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
     });
     if (!res.ok) {
         throw new Error(`Mutate error (HTTP ${res.status}): ${await res.text()}`);
-    }
-    return res.json();
-}
-export async function generateExtensionViaAi(config, prompt, name) {
-    if (!config.token)
-        throw new Error('Not logged in');
-    const res = await fetch(`${config.apiUrl || DEFAULT_API_URL}/api/cli/extension`, {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${config.token}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt, name }),
-    });
-    if (!res.ok) {
-        throw new Error(`Extension generator error (HTTP ${res.status}): ${await res.text()}`);
     }
     return res.json();
 }

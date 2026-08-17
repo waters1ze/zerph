@@ -1,90 +1,81 @@
 /**
- * Zerf Allay Mascot — The Blue Spirit Companion for Zerf CLI
- * Inspired by the friendly Minecraft Allay spirit that gathers items and dances.
+ * Zerf CLI Mascot: «Зеф» (Zef)
+ * Minimalist digital sprite companion for Zerf Second Brain CLI.
+ * Strict monochrome theme with clean white/slate/cyan accents.
  */
 
-export type MascotMood = 'idle' | 'thinking' | 'celebrate' | 'focus' | 'alert' | 'dance'
+export type MascotMood = 'idle' | 'thinking' | 'celebrate' | 'focus' | 'alert'
 
-export interface MascotRenderOptions {
-  mood?: MascotMood
-  wingFrame?: number
-  withDialogue?: string
-}
-
-// ANSI 256 / RGB Colors
+// Strict Monochrome ANSI palette
+const WHITE = '\x1b[38;2;255;255;255m'
+const SLATE = '\x1b[38;2;148;163;184m'
+const MUTED = '\x1b[38;2;100;116;139m'
 const CYAN = '\x1b[38;2;56;189;248m'
-const AZURE = '\x1b[38;2;129;140;248m'
-const INDIGO = '\x1b[38;2;99;102;241m'
-const AMBER = '\x1b[38;2;251;191;36m'
 const EMERALD = '\x1b[38;2;52;211;153m'
+const AMBER = '\x1b[38;2;251;191;36m'
 const ROSE = '\x1b[38;2;244;63;94m'
-const WHITE = '\x1b[38;2;248;250;252m'
-const MUTED = '\x1b[38;2;148;163;184m'
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
 
-export function getAllayAscii(mood: MascotMood = 'idle', wingFrame = 0): string[] {
-  const isWingUp = wingFrame % 2 === 0
+export function isUnicodeSupported(): boolean {
+  if (process.platform !== 'win32') {
+    return process.env.TERM !== 'linux'
+  }
+  return (
+    Boolean(process.env.WT_SESSION) || // Windows Terminal
+    Boolean(process.env.TERMINUS_SUBLIME) ||
+    process.env.ConEmuTask === '{cmd::Cmder}' ||
+    process.env.TERM_PROGRAM === 'vscode' ||
+    process.env.TERM === 'xterm-256color' ||
+    process.env.TERM === 'alacritty'
+  )
+}
 
-  let eyes = '[ ✦ _ ✦ ]'
-  let halo = `${CYAN}   ✦   ${RESET}`
-  let accessory = `${AZURE}/|  ✦  |\\${RESET}`
-
+export function getZefFace(mood: MascotMood = 'idle'): string {
+  if (!isUnicodeSupported()) {
+    return '❖'
+  }
   switch (mood) {
+    case 'idle':
+      return `${WHITE}${BOLD}✦ _ ✦${RESET}`
     case 'thinking':
-      eyes = `[ ${AMBER}⬡ . ⬡${WHITE} ]`
-      halo = `${AMBER}   ⬡   ${RESET}`
-      accessory = `${AMBER}/|  ⬡  |\\${RESET}`
-      break
+      return `${CYAN}${BOLD}⬡ . ⬡${RESET}`
     case 'celebrate':
-      eyes = `[ ${EMERALD}✧ ᴗ ✧${WHITE} ]`
-      halo = `${EMERALD}  ✨*✨  ${RESET}`
-      accessory = `${EMERALD}/|  🎉  |\\${RESET}`
-      break
+      return `${EMERALD}${BOLD}✧ ᴗ ✧${RESET}`
     case 'focus':
-      eyes = `[ ${AZURE}˘ ᴗ ˘${WHITE} ]`
-      halo = `${AZURE}   ☕   ${RESET}`
-      accessory = `${AZURE}/|  ☕  |\\${RESET}`
-      break
+      return `${WHITE}${BOLD}˘ ᴗ ˘ ${SLATE}☕${RESET}`
     case 'alert':
-      eyes = `[ ${ROSE}⊙ _ ⊙${WHITE} ]`
-      halo = `${ROSE}   !   ${RESET}`
-      accessory = `${ROSE}/|  ⚡  |\\${RESET}`
-      break
-    case 'dance':
-      eyes = `[ ${CYAN}♪ ᴗ ♪${WHITE} ]`
-      halo = `${CYAN}  ♫ ♫  ${RESET}`
-      accessory = `${CYAN}/|  🎵  |\\${RESET}`
-      break
+      return `${ROSE}${BOLD}⊙ _ ⊙ !${RESET}`
+  }
+}
+
+export function getZefAsciiArt(mood: MascotMood = 'idle'): string[] {
+  if (!isUnicodeSupported()) {
+    return [
+      `  ❖ Zerf Sprite [${mood}]`,
+    ]
   }
 
-  const wingLeft = isWingUp ? `${CYAN}🪽 ` : `${INDIGO} ~`
-  const wingRight = isWingUp ? `${CYAN} 🪽` : `${INDIGO}~ `
-
+  const face = getZefFace(mood)
   return [
-    `     ${halo}`,
-    `   ${wingLeft}${WHITE}${BOLD}${eyes}${RESET}${wingRight}`,
-    `      ${accessory}`,
-    `      ${CYAN}/ |     | \\${RESET}`,
-    `      ${INDIGO}~  '---'  ~${RESET}`,
-    `        ${CYAN}✨   ✨${RESET}`,
+    `       ${MUTED}.---.${RESET}`,
+    `     ${MUTED}.'${WHITE}  _  ${MUTED}'.${RESET}      ${CYAN}🪽${RESET} [ ${face} ] ${CYAN}🪽${RESET}`,
+    `    ${MUTED}/   ${CYAN}(o)${MUTED}   \\${RESET}        ${MUTED}/|  ${CYAN}✦${MUTED}  |\\${RESET}`,
+    `   ${MUTED}|  ${WHITE}(  _  )${MUTED}  |${RESET}       ${MUTED}/ |     | \\${RESET}`,
+    `    ${MUTED}\\  ${MUTED}'---'${MUTED}  /${RESET}        ${MUTED}~  '---'  ~${RESET}`,
+    `     ${MUTED}'..___..'${RESET}        ${CYAN}✨   *   ✨${RESET}`,
+    `       ${MUTED}/   \\${RESET}`,
+    `      ${MUTED}~     ~${RESET}`,
   ]
 }
 
-export function renderMascotWithBubble(text: string, mood: MascotMood = 'idle', wingFrame = 0): string {
-  const ascii = getAllayAscii(mood, wingFrame)
-  const bubbleLine1 = ` ┌─ ${CYAN}Zerf Allay${RESET} ─────────────────────────────────┐`
-  const bubbleLine2 = ` │ ${WHITE}${text.padEnd(45).slice(0, 45)}${RESET} │`
-  const bubbleLine3 = ` └──────────────────────────────────────────────┘`
+export function renderZefBanner(userName: string, plan: string, streak = 1): string {
+  const symbol = isUnicodeSupported() ? '❖' : '*'
+  const planColor = plan.toLowerCase() === 'corp' ? AMBER : plan.toLowerCase() === 'pro' ? CYAN : EMERALD
+  const fire = isUnicodeSupported() ? '🔥' : '^'
 
-  const lines = [
-    `${ascii[0]}   ${bubbleLine1}`,
-    `${ascii[1]}   ${bubbleLine2}`,
-    `${ascii[2]}   ${bubbleLine3}`,
-    `${ascii[3]}`,
-    `${ascii[4]}`,
-    `${ascii[5]}`,
-  ]
-
-  return lines.join('\n')
+  return [
+    ` ${CYAN}${symbol}${RESET} ${BOLD}${WHITE}Zerf — второй мозг${RESET}        ${SLATE}${userName}${RESET} · ${planColor}${plan.toUpperCase()}${RESET} · ${SLATE}стрик ${streak} ${fire}${RESET}`,
+    `${MUTED}──────────────────────────────────────────────────────────${RESET}`,
+  ].join('\n')
 }
