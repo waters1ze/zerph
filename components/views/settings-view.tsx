@@ -11,7 +11,7 @@ import {
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
-  Mic, Crown, RefreshCw, FileText, Clock, Target
+  Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -78,7 +78,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
   { value: 3,  label: 'A' },
 ]
 
-type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
+type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'cli' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
 
 export function SettingsView() {
   const { state, dispatch, syncData } = useApp()
@@ -564,6 +564,7 @@ export function SettingsView() {
         { id: 'notifications' as SettingsTab, label: 'Уведомления & Каналы', icon: Bell, desc: 'Telegram, VK, Web Push, звуки, повторы' },
         { id: 'focus' as SettingsTab, label: 'Фокус & Таймеры', icon: Timer, desc: 'Pomodoro, перерывы, автоперенос задач' },
         { id: 'automation' as SettingsTab, label: 'Голос & Siri', icon: Zap, desc: 'iOS Shortcuts, быстрые команды, виджеты' },
+        { id: 'cli' as SettingsTab, label: '💻 Zerf CLI (Терминал)', icon: Terminal, desc: 'Терминальный ассистент в стиле Claude Code, TUI, Эллей' },
       ],
     },
     {
@@ -1689,6 +1690,191 @@ export function SettingsView() {
               <div className="p-3 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground">
                 ✨ Теперь по нажатию виджета сразу открывается микрофон: надиктовали задачу или вопрос — бот озвучит ответ и сохранит всё в ваш аккаунт!
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: Zerf CLI (Terminal Assistant) ───────────────────────── */}
+      {activeTab === 'cli' && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="p-6 rounded-3xl bg-gradient-to-tr from-slate-900 via-slate-900/90 to-sky-950/40 border border-sky-500/30 shadow-xl relative overflow-hidden space-y-4">
+            <div className="absolute -right-12 -top-12 w-48 h-48 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 shrink-0">
+                  <Terminal className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-foreground">Zerf CLI — Терминальный ассистент</h3>
+                    <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-[10px] font-bold uppercase border border-sky-500/30">
+                      Claude Code Style
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Интерактивный TUI на React Ink, живой маскот Эллей, ИИ-генератор расширений и фокус-режим
+                  </p>
+                </div>
+              </div>
+
+              {profileData.plan === 'pro' || profileData.plan === 'corp' ? (
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 w-fit">
+                  <CheckCircle2 className="w-4 h-4" /> Доступ разблокирован ({profileData.plan.toUpperCase()})
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('subscription')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md hover:bg-amber-400 transition-all cursor-pointer w-fit"
+                >
+                  <Crown className="w-4 h-4" /> Доступно в тарифе Pro (299 ₽)
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Install & Run Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. Installation */}
+            <div className="p-5 rounded-2xl bg-card border border-border space-y-3 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <span>📦</span> Установка через npm / npx
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground">Node.js 18+</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Установите глобально или запускайте мгновенно без установки в любом терминале:
+                </p>
+                
+                <div className="space-y-2">
+                  <div className="p-2.5 rounded-xl bg-muted/80 border border-border flex items-center justify-between font-mono text-xs text-sky-400">
+                    <code>npm i -g zerf</code>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText('npm i -g zerf')}
+                      title="Копировать"
+                      className="p-1 hover:text-foreground text-muted-foreground transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-muted/80 border border-border flex items-center justify-between font-mono text-xs text-indigo-400">
+                    <code>npx zerf@latest</code>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText('npx zerf@latest')}
+                      title="Копировать"
+                      className="p-1 hover:text-foreground text-muted-foreground transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground border-t border-border/60 pt-2.5">
+                💡 Поддерживает Windows Terminal, macOS Terminal/iTerm2 и Linux.
+              </div>
+            </div>
+
+            {/* 2. Login & Pairing */}
+            <div className="p-5 rounded-2xl bg-card border border-border space-y-3 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <span>🔑</span> Вход и синхронизация
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    1-Click Web Auth
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Авторизуйте терминал с вашим профилем Zerf Note в одну команду:
+                </p>
+
+                <div className="p-2.5 rounded-xl bg-muted/80 border border-border flex items-center justify-between font-mono text-xs text-emerald-400">
+                  <code>zerf login</code>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText('zerf login')}
+                    title="Копировать"
+                    className="p-1 hover:text-foreground text-muted-foreground transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal list-inside pl-0.5">
+                  <li>Запустите <code>zerf login</code> в терминале.</li>
+                  <li>Браузер откроет страницу подтверждения.</li>
+                  <li>Нажмите <b>«Разрешить доступ»</b> — терминал подключен!</li>
+                </ol>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground border-t border-border/60 pt-2.5">
+                Токен сохраняется в <code>~/.zerf/config.json</code> и действует 365 дней.
+              </div>
+            </div>
+          </div>
+
+          {/* Commands Reference Table */}
+          <div className="p-5 rounded-2xl bg-card border border-border space-y-4">
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+              <span>⚡</span> Шпаргалка по командам Zerf CLI
+            </h4>
+
+            <div className="divide-y divide-border text-xs">
+              <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <code className="text-sky-400 font-mono font-bold">zerf</code>
+                <span className="text-muted-foreground">Запустить интерактивный TUI-дашборд с вкладками и маскотом Эллеем</span>
+              </div>
+              <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <code className="text-sky-400 font-mono font-bold">zerf today</code>
+                <span className="text-muted-foreground">Показать дела на сегодня с интерактивными чекбоксами прямо в терминале</span>
+              </div>
+              <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <code className="text-sky-400 font-mono font-bold">zerf add "Купить хлеб в 19:00"</code>
+                <span className="text-muted-foreground">Быстро создать задачу с автоматическим извлечением времени и даты</span>
+              </div>
+              <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <code className="text-sky-400 font-mono font-bold">zerf habit</code>
+                <span className="text-muted-foreground">Показать активные привычки, стрики и прогресс</span>
+              </div>
+              <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <code className="text-sky-400 font-mono font-bold">zerf extension "Калькулятор калорий"</code>
+                <span className="text-muted-foreground">Сгенерировать готовое расширение с кодом и стилями через нейросеть</span>
+              </div>
+              <div className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <code className="text-sky-400 font-mono font-bold">zerf whoami</code>
+                <span className="text-muted-foreground">Показать информацию о текущем пользователе, Chat ID и статусе тарифа</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Allay Mascot Showcase */}
+          <div className="p-5 rounded-2xl bg-sky-950/20 border border-sky-500/20 flex flex-col sm:flex-row items-center gap-5">
+            <div className="font-mono text-[11px] leading-tight text-sky-400 bg-slate-950/80 p-4 rounded-xl border border-sky-500/30 shrink-0 text-center select-none shadow-inner">
+              <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;</div>
+              <div className="text-white font-bold">&nbsp;&nbsp;🪽 [ ✦ _ ✦ ] 🪽</div>
+              <div className="text-indigo-400">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/|&nbsp;&nbsp;✦&nbsp;&nbsp;|\</div>
+              <div className="text-sky-400">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| \</div>
+              <div className="text-indigo-500">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;~&nbsp;&nbsp;'---'&nbsp;&nbsp;~</div>
+              <div className="text-sky-300">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;✨&nbsp;&nbsp;&nbsp;✨</div>
+            </div>
+
+            <div className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
+              <h5 className="font-bold text-foreground text-sm flex items-center gap-1.5">
+                <span>🪽</span> Знакомьтесь: Зёрф-Эллей (Zerf Allay)
+              </h5>
+              <p>
+                Ваш персональный цифровой дух-помощник в терминале. Он анимирован в реальном времени: взмахивает крыльями при ожидании, собирает задачи в фокус-сферу, празднует выполнение ваших целей и предупреждает о дедлайнах.
+              </p>
             </div>
           </div>
         </div>
