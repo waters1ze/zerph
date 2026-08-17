@@ -180,14 +180,18 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchPendingTeamRequests()
 
-    // Fetch installed extensions for sidebar
+    // Fetch installed and enabled extensions for sidebar
     const fetchInstalledExts = async () => {
       try {
         const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
         const data = await res.json()
-        if (data.success && Array.isArray(data.catalog) && Array.isArray(data.installedIds)) {
-          const installed = data.catalog.filter((e: ExtensionItem) => data.installedIds.includes(e.id))
-          setInstalledExts(installed)
+        if (data.success && Array.isArray(data.catalog)) {
+          const installedIds = Array.isArray(data.installedIds) ? data.installedIds : []
+          const enabledIds = Array.isArray(data.enabledIds) ? data.enabledIds : installedIds
+          const activeExts = data.catalog.filter((e: ExtensionItem) =>
+            enabledIds.includes(e.id) || (e.id === 'ext_entropy_search' && installedIds.includes(e.id))
+          )
+          setInstalledExts(activeExts)
         }
       } catch {}
     }
@@ -236,6 +240,23 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const activeFolders = useMemo(() => {
     return (sidebarConfig.folders || DEFAULT_SIDEBAR_FOLDERS).filter(f => !f.hidden)
   }, [sidebarConfig])
+
+  // Track itemIds assigned to visible folders
+  const assignedItemIds = useMemo(() => {
+    const set = new Set<string>()
+    activeFolders.forEach(f => {
+      (f.itemIds || []).forEach(id => set.add(id))
+    })
+    return set
+  }, [activeFolders])
+
+  // Active extensions that are enabled but not yet inside any folder
+  const unassignedActiveExts = useMemo(() => {
+    return installedExts.filter(ext =>
+      !assignedItemIds.has(ext.id) &&
+      !sidebarConfig.hiddenItems?.includes(ext.id)
+    )
+  }, [installedExts, assignedItemIds, sidebarConfig.hiddenItems])
 
   return (
     <aside className={cn(
@@ -383,23 +404,34 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                     }
 
                     if (extensionItem) {
+                      const isSelected = currentView === 'extensions'
                       return (
                         <motion.button
                           key={itemId}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+                          onClick={() => {
+                            dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                            if (itemId === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')) {
+                              window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+                            }
+                          }}
                           className={cn(
                             'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
                             isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
-                            'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
+                            isSelected
+                              ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
+                              : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
                           )}
                           title={extensionItem.title}
                         >
                           <ExtensionIcon icon={extensionItem.icon} className="w-4 h-4 text-xs shrink-0" />
                           {!isCollapsed && (
-                            <span className="flex-1 text-left line-clamp-1 truncate text-xs">
-                              {extensionItem.title}
-                            </span>
+                            <>
+                              <span className="flex-1 text-left line-clamp-1 truncate text-xs">
+                                {extensionItem.title}
+                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Активно" />
+                            </>
                           )}
                         </motion.button>
                       )
@@ -412,6 +444,53 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
             </div>
           )
         })}
+
+        {/* Dynamic active extensions that are not in any folder yet */}
+        {unassignedActiveExts.length > 0 && (
+          <div className="mb-1.5 pt-1">
+            {!isCollapsed && (
+              <div className="w-full px-2 py-1 flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80 font-sans">
+                <span className="truncate">Расширения</span>
+                <span className="text-emerald-400 font-mono text-[9px] font-semibold">{unassignedActiveExts.length}</span>
+              </div>
+            )}
+            <div className="space-y-0.5 mt-0.5">
+              {unassignedActiveExts.map(ext => {
+                const isSelected = currentView === 'extensions'
+                return (
+                  <motion.button
+                    key={ext.id}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                      if (ext.id === 'ext_entropy_search' || ext.title?.toLowerCase().includes('entropy')) {
+                        window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+                      }
+                    }}
+                    className={cn(
+                      'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
+                      isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
+                      isSelected
+                        ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
+                        : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
+                    )}
+                    title={ext.title}
+                  >
+                    <ExtensionIcon icon={ext.icon} className="w-4 h-4 text-xs shrink-0" />
+                    {!isCollapsed && (
+                      <>
+                        <span className="flex-1 text-left line-clamp-1 truncate text-xs">
+                          {ext.title}
+                        </span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Включено" />
+                      </>
+                    )}
+                  </motion.button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Admin panel link at bottom for admins if not placed in folders */}
         {isAdmin && !sidebarConfig.hiddenItems?.includes('admin') && (

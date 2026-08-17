@@ -307,7 +307,7 @@ export function ExtensionsView() {
   const [loading, setLoading] = useState<boolean>(false)
 
   const [activeTab, setActiveTab] = useState<'store' | 'installed' | 'my' | 'earnings'>('store')
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('core')
   const [sortBy, setSortBy] = useState<'top_likes' | 'popular' | 'newest'>('top_likes')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
@@ -1140,8 +1140,12 @@ export function ExtensionsView() {
         ext.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (ext.githubUrl && ext.githubUrl.toLowerCase().includes(searchQuery.toLowerCase()))
       
+      if (selectedCategory === 'core') {
+        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.authorChatId === '6136950061' || ext.id === 'ext_entropy_search' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy')
+        return matchesSearch && isCore
+      }
       if (selectedCategory === 'all') return matchesSearch
-      return matchesSearch && ext.type === selectedCategory
+      return matchesSearch && (ext.type === selectedCategory || ext.category?.toLowerCase().includes(selectedCategory.toLowerCase()))
     })
 
     if (sortBy === 'top_likes') {
@@ -1270,11 +1274,13 @@ export function ExtensionsView() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
               {[
+                { id: 'core', label: '🌟 Основное' },
                 { id: 'all', label: 'Все категории' },
                 { id: 'widget', label: '⏱️ Виджеты' },
                 { id: 'template', label: '🎯 Шаблоны' },
                 { id: 'theme', label: '🌌 Темы' },
                 { id: 'integration', label: '🔌 Интеграции' },
+                { id: 'prompt', label: '🔮 ИИ & Промпты' },
               ].map(cat => (
                 <button
                   key={cat.id}
