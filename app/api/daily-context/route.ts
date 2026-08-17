@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_CHAT_MODEL } from '@/lib/config'
-import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
+import { callGroqChatCompletion, stripThinkingTags } from '@/lib/backend/groq-pool'
 
 const RU_MONTHS = [
   'января','февраля','марта','апреля','мая','июня',
@@ -48,38 +48,97 @@ const WEATHER_DESCRIPTIONS: Record<number, string> = {
   95: 'Гроза',
 }
 
+const KNOWN_COORDINATES: Record<string, { lat: number; lon: number; name: string }> = {
+  'москва': { lat: 55.7558, lon: 37.6173, name: 'Москва' },
+  'санкт-петербург': { lat: 59.9343, lon: 30.3351, name: 'Санкт-Петербург' },
+  'спб': { lat: 59.9343, lon: 30.3351, name: 'Санкт-Петербург' },
+  'екатеринбург': { lat: 56.8389, lon: 60.6057, name: 'Екатеринбург' },
+  'новосибирск': { lat: 55.0084, lon: 82.9357, name: 'Новосибирск' },
+  'казань': { lat: 55.7887, lon: 49.1221, name: 'Казань' },
+  'нижний новгород': { lat: 56.3269, lon: 44.0059, name: 'Нижний Новгород' },
+  'сочи': { lat: 43.5855, lon: 39.7231, name: 'Сочи' },
+  'краснодар': { lat: 45.0355, lon: 38.9754, name: 'Краснодар' },
+  'самара': { lat: 53.1959, lon: 50.1002, name: 'Самара' },
+  'уфа': { lat: 54.7388, lon: 55.9721, name: 'Уфа' },
+  'челябинск': { lat: 55.1644, lon: 61.4368, name: 'Челябинск' },
+  'ростов-на-дону': { lat: 47.2357, lon: 39.7015, name: 'Ростов-на-Дону' },
+  'красноярск': { lat: 56.0153, lon: 92.8932, name: 'Красноярск' },
+  'воронеж': { lat: 51.6608, lon: 39.2003, name: 'Воронеж' },
+  'пермь': { lat: 58.0105, lon: 56.2502, name: 'Пермь' },
+  'волгоград': { lat: 48.7080, lon: 44.5133, name: 'Волгоград' },
+  'тюмень': { lat: 57.1522, lon: 65.5272, name: 'Тюмень' },
+  'минск': { lat: 53.9006, lon: 27.5590, name: 'Минск' },
+  'алматы': { lat: 43.2220, lon: 76.8512, name: 'Алматы' },
+  'астана': { lat: 51.1694, lon: 71.4491, name: 'Астана' },
+  'ереван': { lat: 40.1792, lon: 44.4991, name: 'Ереван' },
+  'тбилиси': { lat: 41.7151, lon: 44.8271, name: 'Тбилиси' },
+  'баку': { lat: 40.4093, lon: 49.8671, name: 'Баку' },
+  'ташкент': { lat: 41.2995, lon: 69.2401, name: 'Ташкент' },
+}
+
 // In-memory cache for personalized daily tips to minimize LLM token usage (1 call per user per day)
 const userTipCache = new Map<string, { date: string; tip: string }>()
 
-async function getRealWeather(): Promise<string> {
-  try {
-    const res = await fetch(
-      'https://api.open-meteo.com/v1/forecast?latitude=55.7558&longitude=37.6173&current=temperature_2m,weather_code&timezone=Europe/Moscow',
-      { next: { revalidate: 1800 }, signal: AbortSignal.timeout(3000) }
-    )
-    if (res.ok) {
-      const data = await res.json()
-      const temp = Math.round(data.current?.temperature_2m ?? 15)
-      const code = data.current?.weather_code ?? 0
-      const desc = WEATHER_DESCRIPTIONS[code] || 'Облачно'
-      const tempSign = temp > 0 ? '+' : ''
-      return `Москва: ${desc} ${tempSign}${temp}°C`
-    }
-  } catch {}
+async function getRealWeather(requestedCity: string = 'Москва'): Promise<string> {
+  const cleanCity = (requestedCity || 'Москва').trim()
+  const normKey = cleanCity.toLowerCase()
+  const known = KNOWN_COORDINATES[normKey]
 
-  // Fallback to wttr.in with metric Celsius flag
+  let lat = known?.lat
+  let lon = known?.lon
+  let displayName = known?.name || cleanCity
+
+  // If not in known list, use Open-Meteo geocoding to find lat/lon
+  if (lat === undefined || lon === undefined) {
+    try {
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanCity)}&count=1&language=ru&format=json`,
+        { signal: AbortSignal.timeout(2500) }
+      )
+      if (geoRes.ok) {
+        const geoData = await geoRes.json()
+        if (geoData.results && geoData.results.length > 0) {
+          lat = geoData.results[0].latitude
+          lon = geoData.results[0].longitude
+          displayName = geoData.results[0].name || cleanCity
+        }
+      }
+    } catch {}
+  }
+
+  // If coordinates found, fetch from Open-Meteo
+  if (lat !== undefined && lon !== undefined) {
+    try {
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`,
+        { next: { revalidate: 1800 }, signal: AbortSignal.timeout(3000) }
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const temp = Math.round(data.current?.temperature_2m ?? 15)
+        const code = data.current?.weather_code ?? 0
+        const desc = WEATHER_DESCRIPTIONS[code] || 'Облачно'
+        const tempSign = temp > 0 ? '+' : ''
+        return `${displayName}: ${desc} ${tempSign}${temp}°C`
+      }
+    } catch {}
+  }
+
+  // Fallback to wttr.in
   try {
     const fallbackRes = await fetch(
-      'https://wttr.in/Moscow?format=%C+%t&m&lang=ru',
+      `https://wttr.in/${encodeURIComponent(cleanCity)}?format=%C+%t&m&lang=ru`,
       { next: { revalidate: 1800 }, signal: AbortSignal.timeout(3000) }
     )
     if (fallbackRes.ok) {
       const text = await fallbackRes.text()
-      return `Москва: ${text.trim()}`
+      if (text && !text.includes('Unknown location')) {
+        return `${displayName}: ${text.trim()}`
+      }
     }
   } catch {}
 
-  return 'Москва: Переменная облачность +15°C'
+  return `${displayName}: Переменная облачность +18°C`
 }
 
 async function getPersonalizedDailyTip(chatId: string | null, todayISO: string): Promise<string> {
@@ -126,16 +185,20 @@ async function getPersonalizedDailyTip(chatId: string | null, todayISO: string):
       noteList.length ? `Заметки: ${noteList.join(', ')}` : '',
     ].filter(Boolean).join(' | ')
 
-    const prompt = `Ты — умный персональный ИИ-наставник по продуктивности Zerf AI. Имя пользователя: ${userName}. Его фокус на сегодня: ${contextText}. Сформулируй ОДИН ультра-точный, вдохновляющий и практичный совет на сегодня под эти дела. Правила: ровно 1 предложение, максимум 12-16 слов, только на русском языке, без кавычек и вводных фраз.`
+    const prompt = `Ты — умный персональный ИИ-наставник по продуктивности Zerf AI. Имя пользователя: ${userName}. Его фокус на сегодня: ${contextText}. Сформулируй ОДИН ультра-точный, вдохновляющий и практичный совет на сегодня под эти дела. Правила: ровно 1 предложение, максимум 12-16 слов, только на русском языке, без кавычек и вводных фраз. СТРОГО без рассуждений, тегов <think> и пояснений, верни только текст совета.`
 
     const result = await callGroqChatCompletion({
       messages: [{ role: 'user', content: prompt }],
       model: GROQ_CHAT_MODEL,
       temperature: 0.4,
-      max_tokens: 60,
+      max_tokens: 70,
     })
 
-    const generated = result.content?.trim()?.replace(/^["«]|["»]$/g, '')
+    const generated = stripThinkingTags(result.content || '')
+      .replace(/^["«]|["»]$/g, '')
+      .replace(/^Совет:\s*/i, '')
+      .trim()
+
     if (generated && generated.length > 10) {
       userTipCache.set(chatId, { date: todayISO, tip: generated })
       return generated
@@ -151,6 +214,8 @@ async function getPersonalizedDailyTip(chatId: string | null, todayISO: string):
 export async function GET(req: NextRequest) {
   try {
     const now = new Date()
+    const { searchParams } = new URL(req.url)
+    const cityParam = searchParams.get('city') || ''
 
     // Moscow time via Intl
     const mskFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -182,8 +247,20 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req)
     const chatId = authUser?.chatId || null
 
+    let userCity = cityParam
+    if (!userCity && chatId) {
+      try {
+        const cityConfig = await prisma.config.findUnique({
+          where: { key: `user_city_${chatId}` }
+        })
+        if (cityConfig?.value) {
+          userCity = cityConfig.value
+        }
+      } catch {}
+    }
+
     const [weather, tip] = await Promise.all([
-      getRealWeather(),
+      getRealWeather(userCity || 'Москва'),
       getPersonalizedDailyTip(chatId, todayISO)
     ])
 

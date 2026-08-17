@@ -171,7 +171,9 @@ export function TodayView() {
 
   // Fetch updated daily context in background without delaying initial render
   useEffect(() => {
-    fetch('/api/daily-context', { headers: getAuthHeaders() })
+    const savedCity = typeof window !== 'undefined' ? localStorage.getItem('zerf_city') || '' : ''
+    const cityParam = savedCity ? `?city=${encodeURIComponent(savedCity)}` : ''
+    fetch(`/api/daily-context${cityParam}`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(d => {
         if (d.formattedDate) {

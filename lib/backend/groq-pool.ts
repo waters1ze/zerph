@@ -82,7 +82,10 @@ function cleanTokenString(raw: string): string[] {
 
 export function stripThinkingTags(raw: string): string {
   if (!raw) return ''
-  return raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+  return raw
+    .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+    .replace(/^<\/think>/i, '')
+    .trim()
 }
 
 const KNOWN_GROQ_CHAT_MODELS = new Set([

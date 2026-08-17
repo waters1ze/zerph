@@ -107,6 +107,8 @@ export function SettingsView() {
     newsDisabled?: boolean
     ttsEnabled?: boolean
     timezone?: string
+    city?: string
+    siriKey?: string
     reminderIntervalMinutes?: number
     reminderRepeatCount?: number
   }>({})
@@ -131,6 +133,10 @@ export function SettingsView() {
   const [birthdaySavedStatus, setBirthdaySavedStatus] = useState<boolean>(false)
   const cachedTimezone = typeof window !== 'undefined' ? localStorage.getItem('zerf_timezone') || 'Europe/Moscow' : 'Europe/Moscow'
   const [userTimezone, setUserTimezone] = useState(cachedTimezone)
+  const cachedCity = typeof window !== 'undefined' ? localStorage.getItem('zerf_city') || 'Москва' : 'Москва'
+  const [userCity, setUserCity] = useState(cachedCity)
+  const [citySavedStatus, setCitySavedStatus] = useState<boolean>(false)
+  const citySaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
 
   // Subscriptions & Promo Code States
@@ -145,7 +151,8 @@ export function SettingsView() {
 
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
-  const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}&text=`
+  const siriKeyParam = profileData.siriKey ? `&key=${profileData.siriKey}` : ''
+  const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
   const [nameSavedStatus, setNameSavedStatus] = useState<boolean>(false)
   const [settingsSavedBadge, setSettingsSavedBadge] = useState<boolean>(false)
   const nameSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -214,6 +221,8 @@ export function SettingsView() {
               newsDisabled: d.newsDisabled,
               ttsEnabled: d.ttsEnabled,
               timezone: d.timezone,
+              city: d.city,
+              siriKey: d.siriKey,
               reminderIntervalMinutes: d.reminderIntervalMinutes,
               reminderRepeatCount: d.reminderRepeatCount,
             })
@@ -224,6 +233,10 @@ export function SettingsView() {
             if (d.timezone) {
               setUserTimezone(d.timezone)
               try { localStorage.setItem('zerf_timezone', d.timezone) } catch {}
+            }
+            if (d.city) {
+              setUserCity(d.city)
+              try { localStorage.setItem('zerf_city', d.city) } catch {}
             }
           }
           if (d.birthday) {
@@ -723,6 +736,62 @@ export function SettingsView() {
                 <option value="America/New_York">Нью-Йорк (UTC-5)</option>
                 <option value="America/Los_Angeles">Лос-Анджелес (UTC-8)</option>
               </select>
+            </Row>
+
+            <Row
+              label={<span className="flex items-center gap-1.5"><span className="mono-emoji">⛅</span> Город для погоды</span>}
+              description="Используется для точного прогноза погоды в шапке и утренней сводке (по умолчанию Москва)"
+            >
+              <div className="flex flex-col gap-2 items-end">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={userCity}
+                    onChange={e => {
+                      const val = e.target.value
+                      setUserCity(val)
+                      try { localStorage.setItem('zerf_city', val) } catch {}
+                      if (citySaveTimerRef.current) clearTimeout(citySaveTimerRef.current)
+                      citySaveTimerRef.current = setTimeout(() => {
+                        syncPreferenceToServer({ city: val })
+                        setCitySavedStatus(true)
+                        setTimeout(() => setCitySavedStatus(false), 2000)
+                      }, 700)
+                    }}
+                    placeholder="Москва, СПб, Сочи, Алматы..."
+                    className="h-9 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground outline-none focus:border-primary transition-colors w-48"
+                  />
+                  {citySavedStatus && (
+                    <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 shrink-0 animate-in fade-in">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Сохранено</span>
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1 justify-end max-w-xs">
+                  {['Москва', 'Санкт-Петербург', 'Екатеринбург', 'Новосибирск', 'Казань', 'Сочи', 'Краснодар', 'Минск', 'Алматы'].map(city => (
+                    <button
+                      key={city}
+                      type="button"
+                      onClick={() => {
+                        setUserCity(city)
+                        try { localStorage.setItem('zerf_city', city) } catch {}
+                        syncPreferenceToServer({ city })
+                        setCitySavedStatus(true)
+                        setTimeout(() => setCitySavedStatus(false), 2000)
+                      }}
+                      className={cn(
+                        'px-2 py-0.5 rounded-lg text-[10px] font-medium border transition-colors cursor-pointer',
+                        userCity.toLowerCase() === city.toLowerCase()
+                          ? 'bg-primary/15 border-primary/40 text-primary font-bold'
+                          : 'bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                      )}
+                    >
+                      {city}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </Row>
           </Section>
 

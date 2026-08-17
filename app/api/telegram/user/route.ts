@@ -8,6 +8,7 @@ import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { hashPassword, verifyPassword } from '@/lib/backend/passwords'
 import { normalizePlan, isNewsDisabled, planAtLeast } from '@/lib/backend/plans'
+import { getSiriUserKey } from '@/app/api/shortcuts/route'
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,6 +35,14 @@ export async function GET(req: NextRequest) {
 
           const fullName = [chat.firstName, chat.lastName].filter(Boolean).join(' ') || chat.firstName || 'Пользователь Zerf'
 
+          let city = 'Москва'
+          try {
+            const cityConf = await prisma.config.findUnique({ where: { key: `user_city_${cid}` } })
+            if (cityConf?.value) city = cityConf.value
+          } catch {}
+
+          const siriKey = getSiriUserKey(chat.chatId)
+
           return NextResponse.json({
             connected: true,
             chatId: Number(chat.chatId),
@@ -47,6 +56,8 @@ export async function GET(req: NextRequest) {
             googleEmail: chat.googleEmail || null,
             authProvider: chat.authProvider || 'telegram',
             birthday: chat.birthday || null,
+            city,
+            siriKey,
             timezone: chat.timezone || 'Europe/Moscow',
             reminderIntervalMinutes: chat.reminderIntervalMinutes ?? 5,
             reminderRepeatCount: chat.reminderRepeatCount ?? 3,
@@ -61,21 +72,14 @@ export async function GET(req: NextRequest) {
       }
     } catch (dbErr) {
       console.error('DB query error in /api/telegram/user:', dbErr)
-      // 503 (NOT a fake 200 with plan:'free'): a transient DB blip must not
-      // make the client rewrite the user's name/plan, which caused the UI to
-      // flicker between user and guest states. Clients ignore non-connected
-      // responses and keep their last known state.
       return NextResponse.json(
         { connected: false, transient: true, error: 'DB temporarily unavailable' },
         { status: 503 }
       )
     }
 
-    // Authenticated but no TelegramChat row (e.g. VK-only user) — not an error
     return NextResponse.json({ connected: false })
   } catch (err: unknown) {
-    // getAuthenticatedUser rethrows DB failures — surface them as 5xx so the
-    // client keeps its cached state instead of treating the user as logged out
     if (err instanceof Error && (err.message.includes('db') || err.message.includes('Prisma') || (err as any)?.code)) {
       return NextResponse.json({ connected: false, transient: true }, { status: 503 })
     }
@@ -92,11 +96,20 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
 
     const updateData: any = {}
+
+    if (city !== undefined) {
+      const cleanCity = String(city).trim()
+      await prisma.config.upsert({
+        where: { key: `user_city_${cid}` },
+        update: { value: cleanCity || 'Москва' },
+        create: { key: `user_city_${cid}`, value: cleanCity || 'Москва' },
+      }).catch(() => {})
+    }
 
     if (birthday !== undefined) {
       const parsed = parseBirthday(birthday)

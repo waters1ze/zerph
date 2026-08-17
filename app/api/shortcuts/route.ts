@@ -63,8 +63,7 @@ export function cleanShortcutsInput(raw: string): string {
 }
 
 export function getSiriUserKey(chatId: number | string | bigint): string {
-  const secret = process.env.TELEGRAM_BOT_TOKEN
-  if (!secret) return ''
+  const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.JWT_SECRET || 'zerf_siri_secret_key_salt_2026'
   return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
 }
 
