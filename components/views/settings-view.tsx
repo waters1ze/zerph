@@ -21,6 +21,7 @@ import { ImportExportSection } from '@/components/settings/import-export-section
 import { TeamsSection } from '@/components/settings/teams-section'
 import { AiModelsSection } from '@/components/settings/ai-models-section'
 import { SidebarCustomizerSection } from '@/components/settings/sidebar-customizer-section'
+import { InstalledExtensionsSettingsSection } from '@/components/settings/installed-extensions-section'
 import {
   THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
   normalizeTheme, type ThemePresetId, type TextScaleStep,
@@ -2759,39 +2760,44 @@ export function SettingsView() {
 
       {/* ── TAB 11: Extensions & GitHub Store Jump ───────────────────────────── */}
       {activeTab === 'extensions' && (
-        <div className="space-y-4 text-xs">
+        <div className="space-y-6 text-xs">
           <Section title="Расширения и открытые плагины">
-            <div className="p-6 rounded-2xl bg-card border border-border shadow-xs space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl">
-                  🧩
+            <div className="space-y-4">
+              <div className="p-6 rounded-2xl bg-card border border-border shadow-xs space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl">
+                    🧩
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-foreground text-sm">Магазин расширений Zerf Note</h4>
+                    <p className="text-[11px] text-muted-foreground">Подключение виджетов, кастомных тем и шаблонов из GitHub</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-foreground text-sm">Магазин расширений Zerf Note</h4>
-                  <p className="text-[11px] text-muted-foreground">Подключение виджетов, кастомных тем и шаблонов из GitHub</p>
+                <p className="text-muted-foreground leading-relaxed text-[11px]">
+                  Zerf Note поддерживает открытые расширения из репозиториев GitHub. Создавайте свои виджеты и манифесты, публикуйте их для сообщества и получайте 80% с каждой продажи.
+                </p>
+                <div className="pt-2 flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Puzzle className="w-3.5 h-3.5" />
+                    <span>Открыть магазин расширений</span>
+                  </button>
+                  <a
+                    href="https://github.com/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Создать репозиторий на GitHub</span>
+                  </a>
                 </div>
               </div>
-              <p className="text-muted-foreground leading-relaxed text-[11px]">
-                Zerf Note поддерживает открытые расширения из репозиториев GitHub. Создавайте свои виджеты и манифесты, публикуйте их для сообщества и получайте 80% с каждой продажи.
-              </p>
-              <div className="pt-2 flex items-center gap-2">
-                <button
-                  onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Puzzle className="w-3.5 h-3.5" />
-                  <span>Открыть магазин расширений</span>
-                </button>
-                <a
-                  href="https://github.com/new"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Создать репозиторий на GitHub</span>
-                </a>
-              </div>
+
+              {/* Downloaded / Installed Extensions with Search & Collapsible Settings */}
+              <InstalledExtensionsSettingsSection />
             </div>
           </Section>
         </div>
