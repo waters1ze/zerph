@@ -346,6 +346,12 @@ export function ExtensionsView() {
   } | null>(null)
   const [payoutSuccess, setPayoutSuccess] = useState<boolean>(false)
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false)
+  const [hasReadDocs, setHasReadDocs] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('zerf_has_read_docs') === 'true'
+    }
+    return false
+  })
 
   // Custom Extension Editor / Studio Modal
   const [showEditorModal, setShowEditorModal] = useState<boolean>(false)
@@ -530,6 +536,10 @@ export function ExtensionsView() {
 
   const handlePublishFromGithub = async () => {
     if (!parsedManifest) return
+    if (!hasReadDocs) {
+      alert('Пожалуйста, ознакомьтесь с документацией разработчика SDK и подтвердите чекбокс перед публикацией расширения.')
+      return
+    }
     try {
       setActionLoading('publish_gh')
       const res = await fetch('/api/extensions', {
@@ -2196,7 +2206,7 @@ export function ExtensionsView() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                   <GithubIcon className="w-4 h-4" />
-                  <span>Импорт манифеста из GitHub</span>
+                  <span>Импорт и публикация манифеста из GitHub</span>
                 </h3>
                 <button
                   onClick={() => setShowGithubModal(false)}
@@ -2204,6 +2214,56 @@ export function ExtensionsView() {
                 >
                   ✕
                 </button>
+              </div>
+
+              {/* Mandatory Documentation & Universal Template Onboarding Banner */}
+              <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-xl bg-purple-500/20 text-purple-400 shrink-0">
+                      <BookOpen className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h4 className="font-bold text-foreground text-xs">Документация и требования к расширениям</h4>
+                      <p className="text-[10px] text-muted-foreground">Перед созданием и публикацией ознакомьтесь со спецификацией SDK и правилами безопасности</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                  <a
+                    href="/developer?tab=docs"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-semibold text-xs flex items-center gap-1.5 border border-purple-500/40 transition-colors"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Документация SDK</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+
+                  <a
+                    href="/zerf-extension.universal.json"
+                    download="zerf-extension.universal.json"
+                    className="px-3 py-1.5 rounded-xl bg-muted/80 hover:bg-muted text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5 text-primary" />
+                    <span>Универсальный JSON-шаблон</span>
+                  </a>
+                </div>
+
+                <label className="flex items-center gap-2 pt-1 text-[11px] text-foreground font-medium cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasReadDocs}
+                    onChange={e => {
+                      setHasReadDocs(e.target.checked)
+                      try { localStorage.setItem('zerf_has_read_docs', String(e.target.checked)) } catch {}
+                    }}
+                    className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                  />
+                  <span>Я ознакомился с документацией разработчика и проверил свой манифест</span>
+                </label>
               </div>
 
               {parseError && (

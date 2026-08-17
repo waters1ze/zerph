@@ -244,6 +244,23 @@ Rules:
     setTimeout(() => setCopiedSkill(false), 2000)
   }
 
+  const handleLoadUniversalTemplate = () => {
+    setMName('zerf-plugin-universal-template')
+    setMTitle('Универсальный шаблон расширения Zerf Note')
+    setMVersion('1.0.0')
+    setMDescription('Полнофункциональный шаблон со всеми возможными полями, вебхуками, настройками и правами для создания любого расширения.')
+    setMCategory('ИИ & Промпты')
+    setMType('widget')
+    setMIcon('🔮')
+    setMAuthor('developer')
+    setMPrice(0)
+    setMMinPlan('free')
+    setMIsRunnable(true)
+    setMAiInstructions('Когда пользователь активирует это расширение, выступай в роли интеллектуального ассистента. Структурируй ответы, предлагай полезные инсайты и автоматически декомпозируй задачи в Zerf Note при необходимости.')
+    setMTriggers('/universal, /template, универсальный помощник, запусти расширение')
+    setMEndpoint('https://api.yourdomain.com/v1/zerf-webhook')
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
       {/* Topbar */}
@@ -314,16 +331,49 @@ Rules:
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 md:p-8 space-y-6">
         {/* ── TAB 1: MANIFEST BUILDER ── */}
         {activeTab === 'manifest' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Form Builder */}
-            <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <h3 className="font-bold text-sm flex items-center gap-2">
-                  <FolderPlus className="w-4 h-4 text-primary" />
-                  <span>Параметры расширения</span>
-                </h3>
-                <span className="text-[10px] text-muted-foreground font-mono">zerf-extension.json</span>
+          <div className="space-y-4">
+            {/* Documentation Requirement Banner */}
+            <div className="p-4 rounded-3xl bg-purple-500/10 border border-purple-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-2xl bg-purple-500/20 text-purple-400 shrink-0">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-foreground text-xs md:text-sm">Перед созданием расширения изучите документацию</h4>
+                  <p className="text-[11px] text-muted-foreground">Узнайте все доступные permissions, Webhook API, схему настроек и правила безопасности</p>
+                </div>
               </div>
+
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <button
+                  onClick={() => setActiveTab('docs')}
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-semibold text-xs flex items-center gap-1.5 border border-purple-500/40 transition-colors cursor-pointer"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Открыть документацию SDK</span>
+                </button>
+
+                <button
+                  onClick={handleLoadUniversalTemplate}
+                  className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+                  title="Заполнить форму всеми полями универсального шаблона"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  <span>Загрузить универсальный шаблон</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Form Builder */}
+              <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <h3 className="font-bold text-sm flex items-center gap-2">
+                    <FolderPlus className="w-4 h-4 text-primary" />
+                    <span>Параметры расширения</span>
+                  </h3>
+                  <span className="text-[10px] text-muted-foreground font-mono">zerf-extension.json</span>
+                </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -487,7 +537,8 @@ Rules:
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* ── TAB 2: AI ENDPOINT SANDBOX ── */}
         {activeTab === 'tester' && (

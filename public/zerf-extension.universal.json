@@ -1,0 +1,115 @@
+{
+  "$schema": "https://zeprh.vercel.app/schemas/zerf-extension-v2.json",
+  "name": "zerf-plugin-universal-template",
+  "title": "Универсальный шаблон расширения Zerf Note",
+  "version": "1.0.0",
+  "description": "Полнофункциональный шаблон со всеми возможными полями, вебхуками, настройками и правами для создания любого расширения.",
+  "type": "widget",
+  "category": "ИИ & Промпты",
+  "icon": "🔮",
+  "author": "your_nickname",
+  "authorUrl": "https://github.com/your_nickname",
+  "repository": "https://github.com/your_nickname/zerf-plugin-universal",
+  "license": "MIT",
+  "minPlan": "free",
+  "price": 0,
+  "isRunnable": true,
+  "aiInstructions": "Когда пользователь активирует это расширение, выступай в роли интеллектуального ассистента. Структурируй ответы, предлагай полезные инсайты и автоматически декомпозируй задачи в Zerf Note при необходимости.",
+  "triggers": [
+    "/universal",
+    "/template",
+    "универсальный помощник",
+    "запусти расширение"
+  ],
+  "content": {
+    "aiEndpoint": "https://api.yourdomain.com/v1/zerf-webhook",
+    "aiEndpointSecret": "your_secure_pre_shared_token_here",
+    "features": [
+      "auto_notes_creation",
+      "task_decomposition",
+      "external_api_sync",
+      "tui_cli_support",
+      "siri_shortcuts_compatible"
+    ],
+    "commands": [
+      {
+        "cmd": "/universal",
+        "description": "Главная команда для запуска анализа и синхронизации",
+        "usage": "/universal [запрос или тема]",
+        "params": [
+          {
+            "name": "query",
+            "type": "string",
+            "required": true,
+            "description": "Тема или команда для обработки"
+          }
+        ]
+      },
+      {
+        "cmd": "/universal-status",
+        "description": "Проверить статус внешнего сервера и квоту запросов"
+      }
+    ],
+    "settingsSchema": [
+      {
+        "key": "apiKey",
+        "label": "Секретный API-ключ сервиса",
+        "description": "Ваш персональный токен для доступа к внешнему API",
+        "type": "secret",
+        "placeholder": "sk-proj-...",
+        "required": true
+      },
+      {
+        "key": "endpointUrl",
+        "label": "Пользовательский URL сервера",
+        "description": "HTTPS адрес вашего собственного бекенда (если используется self-hosted)",
+        "type": "string",
+        "defaultValue": "https://api.yourdomain.com/v1",
+        "placeholder": "https://..."
+      },
+      {
+        "key": "autoCreateTasks",
+        "label": "Автосоздание задач в Zerf",
+        "description": "Автоматически добавлять сгенерированные пункты в список задач",
+        "type": "boolean",
+        "defaultValue": true
+      },
+      {
+        "key": "maxResults",
+        "label": "Лимит результатов",
+        "description": "Максимальное количество возвращаемых элементов (от 1 до 20)",
+        "type": "number",
+        "defaultValue": 5,
+        "min": 1,
+        "max": 20
+      },
+      {
+        "key": "themeColor",
+        "label": "Цвет акцента виджета",
+        "description": "Цветовая схема карточек и кнопок расширения",
+        "type": "color",
+        "defaultValue": "#8B5CF6"
+      },
+      {
+        "key": "processingMode",
+        "label": "Режим обработки",
+        "description": "Скорость и детальность синтеза данных",
+        "type": "select",
+        "defaultValue": "balanced",
+        "options": [
+          { "label": "⚡ Быстрый (Fast Fact-Check)", "value": "fast" },
+          { "label": "⚖️ Сбалансированный (Balanced)", "value": "balanced" },
+          { "label": "🔬 Глубокий академический (Deep Research)", "value": "deep" }
+        ]
+      }
+    ]
+  },
+  "permissions": [
+    "tasks:read",
+    "tasks:write",
+    "notes:read",
+    "notes:write",
+    "reminders:write",
+    "ai:proxy"
+  ]
+}
