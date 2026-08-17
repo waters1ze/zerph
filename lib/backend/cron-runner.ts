@@ -252,12 +252,14 @@ export async function runMorningGreeting() {
     const hour = parseInt(getPart('hour'), 10)
     const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 
-    if (hour < 8 || hour >= 13) return
+    if (hour < 8 || hour >= 14) return
 
     // Global lock check
     const isDone = await isCronAlreadyDoneToday('morning_greeting_global', todayStr)
     if (isDone) return
 
+    // Mark AFTER we know we will actually start sending (not before, to avoid silent failures)
+    // We mark it optimistically here to prevent concurrent runs, but catch errors per-user
     await markCronDoneToday('morning_greeting_global', todayStr)
 
     let chats: any[] = []
@@ -298,10 +300,11 @@ export async function runMorningGreeting() {
         if (await isUserCronDoneToday('morning_greeting', chatId, todayStr)) {
           continue
         }
-        await markUserCronDoneToday('morning_greeting', chatId, todayStr)
 
         // Plus+ users can disable news digests
         if (await isNewsDisabled(chatId) && planAtLeast(chat.plan, 'plus')) {
+          // Mark as done so we don't retry, but don't send
+          await markUserCronDoneToday('morning_greeting', chatId, todayStr)
           continue
         }
 
@@ -329,10 +332,21 @@ export async function runMorningGreeting() {
         ).catch(() => null)
 
         if (greeting) {
-          await sendTelegramMessage(chatId, greeting)
+          const sent = await sendTelegramMessage(chatId, greeting)
+          // Mark as done ONLY after successful delivery
+          await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+        } else {
+          // Groq failed — build fallback immediately and still deliver
+          const fallbackGreeting = `✦ *Доброе утро, ${firstName}!*\n\n` +
+            (userPending.length
+              ? `📋 *На сегодня (${userPending.length}):*\n` + userPending.slice(0, 5).map(t => `▪ ${t}`).join('\n') + `\n\n`
+              : ``) +
+            `_Продуктивного дня! ✦_`
+          await sendTelegramMessage(chatId, fallbackGreeting)
+          await markUserCronDoneToday('morning_greeting', chatId, todayStr)
         }
 
-        await new Promise(r => setTimeout(r, 250))
+        await new Promise(r => setTimeout(r, 300))
       } catch (userErr) {
         console.error('Morning greeting error for user:', userErr)
       }
@@ -682,6 +696,110 @@ export async function runChannelAndAiCron() {
     }
   } catch (err) {
     console.error('Channel cron error:', err)
+  }
+}
+
+/**
+ * Force-send morning greeting to all users regardless of time window or lock state.
+ * Used by admin via ?action=force_morning_greeting to recover from missed sends.
+ */
+export async function runForceMorningGreeting() {
+  try {
+    const now = new Date()
+    const mskFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+    const parts = mskFormatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+
+    // Reset global lock so runMorningGreeting won't early-exit
+    // We do this by directly clearing the DB record
+    try {
+      await prisma.config.deleteMany({
+        where: { key: { startsWith: 'cron_last_morning_greeting_global' } }
+      })
+    } catch {}
+
+    // Clear per-user locks for today so everyone gets the greeting
+    try {
+      await prisma.config.deleteMany({
+        where: { key: { startsWith: 'cron_morning_greeting_u_' } }
+      })
+    } catch {}
+
+    // Clear in-memory lock set for morning_greeting keys
+    const globalState = globalThis as unknown as { __cronSentKeys?: Set<string> }
+    if (globalState.__cronSentKeys) {
+      for (const key of Array.from(globalState.__cronSentKeys)) {
+        if (key.includes('morning_greeting')) {
+          globalState.__cronSentKeys.delete(key)
+        }
+      }
+    }
+
+    console.log(`[Zerf Cron] Force morning greeting triggered for ${todayStr}`)
+
+    // Now fetch all users and send
+    let chats: any[] = []
+    try { chats = await prisma.telegramChat.findMany() } catch {}
+    if (!chats.length) return
+
+    const allTasks = await getAllTasks()
+    const allNotes = await getAllNotes()
+
+    const recentNoteTitles = allNotes
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5).map(n => n.title)
+
+    const seenChatIds = new Set<string>()
+    for (const chat of chats) {
+      try {
+        const idStr = String(chat.chatId)
+        if (idStr.startsWith('-') || Number(chat.chatId) < 0) continue
+        if (seenChatIds.has(idStr)) continue
+        seenChatIds.add(idStr)
+
+        const chatId = Number(chat.chatId)
+        const firstName = (chat as any).firstName || 'друг'
+
+        const userTasks = allTasks.filter(t => {
+          const ownerId = (t as any).ownerChatId
+          return !ownerId || Number(ownerId) === chatId
+        })
+        const userPending = userTasks
+          .filter(t => t.status !== 'done' && t.dueDate === todayStr)
+          .map(t => t.title)
+        const userRecent = userTasks
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 8).map(t => t.title)
+
+        const greeting = await generateMorningGreeting(
+          firstName, userRecent, recentNoteTitles, userPending
+        ).catch(() => null)
+
+        const text = greeting || (
+          `✦ *Доброе утро, ${firstName}*\n\n` +
+          (userPending.length
+            ? `📋 *На сегодня (${userPending.length}):*\n` + userPending.slice(0, 5).map(t => `▪ ${t}`).join('\n') + '\n\n'
+            : '') +
+          `_Продуктивного дня! ✦_`
+        )
+
+        await sendTelegramMessage(chatId, text)
+        await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+        await new Promise(r => setTimeout(r, 300))
+      } catch (e) {
+        console.error('[Force Morning Greeting] user error:', e)
+      }
+    }
+
+    await markCronDoneToday('morning_greeting_global', todayStr)
+    console.log(`[Zerf Cron] Force morning greeting done — sent to ${seenChatIds.size} users`)
+  } catch (err) {
+    console.error('[Force Morning Greeting] error:', err)
   }
 }
 

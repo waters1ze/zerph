@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runAllCronTasks, runMorningGreeting, runEveningReview, runReminderCheck } from '@/lib/backend/cron-runner'
+import { runAllCronTasks, runMorningGreeting, runForceMorningGreeting, runEveningReview, runReminderCheck } from '@/lib/backend/cron-runner'
 import { postDailyMorningPostToChannel, postDailyPollToChannel, postDailyEveningPostToChannel, closeDailyPollAndNotifyAdmins } from '@/lib/backend/channel-poster'
 import { getAdminSecret, secretsMatch } from '@/lib/backend/auth'
 
@@ -49,6 +49,11 @@ export async function GET(req: NextRequest) {
       if (action === 'morning_greeting') {
         await runMorningGreeting()
         return NextResponse.json({ ok: true, action: 'morning_greeting' })
+      }
+      // Force-send morning greeting regardless of time window or lock state
+      if (action === 'force_morning_greeting') {
+        await runForceMorningGreeting()
+        return NextResponse.json({ ok: true, action: 'force_morning_greeting' })
       }
       if (action === 'evening_review') {
         await runEveningReview()
