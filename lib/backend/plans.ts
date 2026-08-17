@@ -85,6 +85,8 @@ export const COUNTERS = {
   photo: 'photo',
   goal: 'goal',
   reminder: 'reminder',
+  cli: 'cli',
+  chat: 'chat',
 } as const
 
 /** User preference keys (Config-backed settings). */

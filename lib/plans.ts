@@ -52,6 +52,8 @@ export interface PlanLimits {
   goalsPerDay: number
   /** AI chat messages per day */
   chatMessagesPerDay: number
+  /** CLI requests / mutations per day */
+  cliRequestsPerDay: number
   /** Shared tasks/reminders with friends require one plus+ participant */
   sharedRequiresPlan: PlanId | null
   /** Can disable daily news digests (morning/evening) */
@@ -67,28 +69,31 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     photosPerDay: 0,
     goalsPerDay: 5,
     chatMessagesPerDay: 10,
+    cliRequestsPerDay: 0, // CLI требует Plus+
     sharedRequiresPlan: 'plus',
     canDisableNews: false,
   },
   plus: {
-    maxStoredNotes: UNLIMITED,
-    maxActiveReminders: UNLIMITED,
-    siriLifetimeRequests: UNLIMITED,
+    maxStoredNotes: 250,
+    maxActiveReminders: 100,
+    siriLifetimeRequests: 250,
     voiceSecondsPerDay: 900, // 15 минут в день
-    photosPerDay: 15,
-    goalsPerDay: UNLIMITED,
-    chatMessagesPerDay: UNLIMITED,
+    photosPerDay: 25,
+    goalsPerDay: 25,
+    chatMessagesPerDay: 150,
+    cliRequestsPerDay: 300,
     sharedRequiresPlan: null,
     canDisableNews: true,
   },
   pro: {
-    maxStoredNotes: UNLIMITED,
-    maxActiveReminders: UNLIMITED,
-    siriLifetimeRequests: UNLIMITED,
-    voiceSecondsPerDay: UNLIMITED,
-    photosPerDay: UNLIMITED,
-    goalsPerDay: UNLIMITED,
-    chatMessagesPerDay: UNLIMITED,
+    maxStoredNotes: 5000,
+    maxActiveReminders: 1000,
+    siriLifetimeRequests: 5000,
+    voiceSecondsPerDay: 7200, // 2 часа голоса в день
+    photosPerDay: 200,
+    goalsPerDay: 100,
+    chatMessagesPerDay: 1000, // 1000 запросов к ИИ в день
+    cliRequestsPerDay: 1500, // 1500 запросов в терминале
     sharedRequiresPlan: null,
     canDisableNews: true,
   },
@@ -100,6 +105,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     photosPerDay: UNLIMITED,
     goalsPerDay: UNLIMITED,
     chatMessagesPerDay: UNLIMITED,
+    cliRequestsPerDay: UNLIMITED,
     sharedRequiresPlan: null,
     canDisableNews: true,
   },

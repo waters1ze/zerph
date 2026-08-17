@@ -8,6 +8,8 @@ import {
   getFriends,
   saveParsedItemToDb,
 } from '@/lib/backend/db'
+import { PLANS, PlanId } from '@/lib/plans'
+import { getDailyCount, incrementDailyCount } from '@/lib/backend/plans'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -34,7 +36,7 @@ async function getChatIdAndPlan(req: NextRequest) {
   const cid = BigInt(authUser.chatId)
   const { getUserUsageAndLimits } = await import('@/lib/backend/db')
   const limits = await getUserUsageAndLimits(authUser.chatId)
-  const plan = limits.plan
+  const plan = (limits.plan || 'free') as PlanId
 
   const chat = await prisma.telegramChat.findUnique({
     where: { chatId: cid },
@@ -54,6 +56,7 @@ async function getChatIdAndPlan(req: NextRequest) {
     username: chat?.username || null,
     plan,
     isPlusOrHigher,
+    planLimits: PLANS[plan] || PLANS.free,
   }
 }
 
@@ -77,14 +80,21 @@ export async function GET(req: NextRequest) {
       }, 403)
     }
 
-    // Fetch all user assets in parallel
-    const [tasks, notes, goals, habits, friends] = await Promise.all([
+    // Fetch daily counters & user assets in parallel
+    const [tasks, notes, goals, habits, friends, cliUsed, voiceUsed, chatUsed] = await Promise.all([
       getAllTasks(user.chatId),
       getAllNotes(user.chatId),
       getAllGoals(user.chatId),
       prisma.habit.findMany({ where: { ownerChatId: user.chatId } }).catch(() => []),
       getFriends(user.chatIdNum),
+      getDailyCount('cli', user.chatId),
+      getDailyCount('voice', user.chatId),
+      getDailyCount('chat', user.chatId),
     ])
+
+    const maxCli = user.planLimits.cliRequestsPerDay
+    const maxVoice = user.planLimits.voiceSecondsPerDay
+    const maxChat = user.planLimits.chatMessagesPerDay
 
     const payload = {
       allowed: true,
@@ -93,6 +103,17 @@ export async function GET(req: NextRequest) {
         name: user.name,
         username: user.username,
         plan: user.plan,
+      },
+      limits: {
+        plan: user.plan,
+        cliUsed,
+        maxCli: isFinite(maxCli) ? maxCli : '∞',
+        voiceUsedSeconds: voiceUsed,
+        maxVoiceSeconds: isFinite(maxVoice) ? maxVoice : '∞',
+        chatUsed,
+        maxChat: isFinite(maxChat) ? maxChat : '∞',
+        notesCount: notes.length,
+        maxNotes: isFinite(user.planLimits.maxStoredNotes) ? user.planLimits.maxStoredNotes : '∞',
       },
       stats: {
         totalTasks: tasks.length,
@@ -129,6 +150,21 @@ export async function POST(req: NextRequest) {
         upgradeUrl: 'https://t.me/Zerph_bot?start=buy',
       }, 403)
     }
+
+    // Check daily CLI limit if finite
+    const maxCli = user.planLimits.cliRequestsPerDay
+    if (isFinite(maxCli)) {
+      const currentCliUsed = await getDailyCount('cli', user.chatId)
+      if (currentCliUsed >= maxCli) {
+        return safeJsonResponse({
+          error: `Достигнут дневной лимит запросов для тарифа ${user.plan.toUpperCase()} (${maxCli} в день). Лимиты сбросятся в 00:00 МСК.`,
+          upgradeUrl: 'https://t.me/Zerph_bot?start=buy',
+        }, 429)
+      }
+    }
+
+    // Increment CLI daily counter
+    await incrementDailyCount('cli', user.chatId, 1)
 
     const body = await req.json()
     const { action, itemType, item, id } = body

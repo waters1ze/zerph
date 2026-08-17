@@ -29,6 +29,7 @@ export function Repl() {
   const [history, setHistory] = useState<LogEntry[]>([])
   const [focusRemaining, setFocusRemaining] = useState<number | null>(null)
   const [thinkingMode, setThinkingMode] = useState(true)
+  const [cliCount, setCliCount] = useState<number>(0)
 
   // Wing flapping animation
   useEffect(() => {
@@ -48,6 +49,7 @@ export function Repl() {
           setError(res.message || 'Zerf CLI доступен для подписчиков тарифов Plus, Pro и Corp.')
         } else {
           setData(res)
+          setCliCount(res.limits?.cliUsed || 0)
           setMood('idle')
         }
       } catch (err: any) {
@@ -107,6 +109,7 @@ export function Repl() {
 
     // Add user command to history
     setHistory(h => [...h, { id: String(Date.now()), type: 'user', text: raw }])
+    setCliCount(c => c + 1)
 
     // 1. Slash commands
     if (raw === '/exit' || raw === '/quit') {
@@ -132,11 +135,33 @@ export function Repl() {
             '/done <поиск>   — Завершить задачу по названию',
             '/note <текст>   — Сохранить заметку в базу знаний',
             '/habit          — Трекер привычек и стрики',
+            '/limits         — Показать использование дневных лимитов',
             '/focus [минуты] — Запустить Pomodoro таймер со сферой Тихони',
             '/find <текст>   — Поиск по всем задачам, заметкам и целям',
             '/sync           — Синхронизация с сервером',
             '/clear          — Очистить историю диалога',
             '/exit           — Выйти из CLI',
+          ]
+        }
+      ])
+      return
+    }
+
+    if (raw === '/limits' || raw === '/usage') {
+      const l = data?.limits
+      const planName = (data?.user?.plan || 'pro').toUpperCase()
+      setHistory(h => [
+        ...h,
+        {
+          id: String(Date.now()),
+          type: 'assistant',
+          text: `📊 Статус лимитов на сегодня (${planName}):`,
+          details: [
+            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'}`,
+            `• Голос (распознав): ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
+            `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
+            `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
+            `• Сброс счетчиков:   ежедневно в 00:00 МСК`,
           ]
         }
       ])
@@ -275,6 +300,8 @@ export function Repl() {
   const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
   const overdueTasks = tasks.filter((t: any) => t.status !== 'done' && t.dueDate && t.dueDate < todayStr)
   const spriteLines = getAllaySpriteLines(mood, wingFrame)
+  const limits = data?.limits
+  const planTag = (data?.user?.plan || 'pro').toUpperCase()
 
   const formatTimer = (secs: number) => {
     const m = Math.floor(secs / 60)
@@ -303,31 +330,39 @@ export function Repl() {
             <Box gap={1}>
               <Text bold color="cyanBright">Groq AI</Text>
               <Text color="gray">·</Text>
-              <Text bold color="greenBright">Zerf {data?.user?.plan?.toUpperCase() || 'CORP'}</Text>
+              <Text bold color="greenBright">Zerf {planTag}</Text>
               {data?.user?.username && <Text color="gray">· @{data.user.username}</Text>}
             </Box>
             <Text color="gray" dimColor>~/ZerfNotes/{todayStr}</Text>
           </Box>
         </Box>
 
-        {/* Right Column: Tips & Recent Activity */}
+        {/* Right Column: Tips, Limits & Activity */}
         <Box flexDirection="column" width={42} paddingX={1}>
           <Text bold color="yellow">Советы по началу работы</Text>
           <Box flexDirection="column" marginTop={1} gap={0}>
             <Text color="gray">• <Text color="cyanBright">/today</Text> — задачи на сегодня</Text>
             <Text color="gray">• <Text color="cyanBright">/focus 25</Text> — таймер фокуса</Text>
             <Text color="gray">• <Text color="cyanBright">/done [имя]</Text> — закрыть задачу</Text>
-            <Text color="gray">• <Text color="cyanBright">/help</Text> — все команды</Text>
+            <Text color="gray">• <Text color="cyanBright">/limits</Text> — счетчик запросов</Text>
           </Box>
 
           <Box marginY={1}>
             <Text color="gray" dimColor>───────────────────────────────────</Text>
           </Box>
 
-          <Text bold color="yellow">Активность сегодня</Text>
+          <Box justifyContent="space-between">
+            <Text bold color="yellow">Лимиты & Счётчик ({planTag})</Text>
+          </Box>
           <Box flexDirection="column" marginTop={1}>
             <Text color="white">
-              📋 {todayTasks.length} задач на сегодня {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
+              ⚡ CLI запросы: <Text bold color="cyanBright">{cliCount}</Text> / {limits?.maxCli || '∞'}
+            </Text>
+            <Text color="slate" dimColor>
+              🎙 Голос: {Math.floor((limits?.voiceUsedSeconds || 0) / 60)} / {limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(limits?.maxVoiceSeconds / 60)} мин
+            </Text>
+            <Text color="slate" dimColor>
+              📋 Задач на сегодня: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
             </Text>
             <Text color="yellow">🔥 Стрик продуктивности: 12 дней</Text>
             {focusRemaining !== null && (
@@ -379,14 +414,14 @@ export function Repl() {
             value={inputVal}
             onChange={setInputVal}
             onSubmit={handleCommand}
-            placeholder="Напишите задачу, /today, /focus 25, /help..."
+            placeholder="Напишите задачу, /today, /focus 25, /limits, /help..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
         {/* Footer info bar */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>? for shortcuts · /today · /focus · /done</Text>
+          <Text color="gray" dimColor>? for shortcuts · /today · /focus · /limits · /done</Text>
           <Text color="gray" dimColor>
             Thinking {thinkingMode ? 'on' : 'off'} (tab to toggle)
           </Text>
