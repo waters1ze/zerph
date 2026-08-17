@@ -24,15 +24,22 @@ function CliAuthContent() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
 
-  // Extract code safely on mount from searchParams OR window.location.search
+  // Extract code safely on mount from searchParams OR window.location.search & unregister stale SW
   useEffect(() => {
-    let c = searchParams.get('code') || searchParams.get('c') || ''
-    if (!c && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          for (const r of regs) {
+            r.unregister().catch(() => {})
+          }
+        }).catch(() => {})
+      }
+
       const sp = new URLSearchParams(window.location.search)
-      c = sp.get('code') || sp.get('c') || ''
-    }
-    if (c) {
-      setCode(c.trim().toUpperCase())
+      const c = sp.get('code') || sp.get('c') || searchParams.get('code') || searchParams.get('c') || ''
+      if (c) {
+        setCode(c.trim().toUpperCase())
+      }
     }
   }, [searchParams])
 
