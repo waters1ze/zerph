@@ -185,21 +185,30 @@ async function getPersonalizedDailyTip(chatId: string | null, todayISO: string):
       noteList.length ? `Заметки: ${noteList.join(', ')}` : '',
     ].filter(Boolean).join(' | ')
 
-    const prompt = `Ты — умный персональный ИИ-наставник по продуктивности Zerf AI. Имя пользователя: ${userName}. Его фокус на сегодня: ${contextText}. Сформулируй ОДИН ультра-точный, вдохновляющий и практичный совет на сегодня под эти дела. Правила: ровно 1 предложение, максимум 12-16 слов, только на русском языке, без кавычек и вводных фраз. СТРОГО без рассуждений, тегов <think> и пояснений, верни только текст совета.`
+    const prompt = `Ты — персональный ИИ-наставник по продуктивности Zerf Note. Имя пользователя: ${userName}. Его фокус на сегодня: ${contextText}.
+Сформулируй ОДИН короткий, вдохновляющий и практичный совет на сегодня на русском языке (ровно 1 предложение, максимум 14 слов).
+Запрещено выводить теги <think>, запрещено рассуждать или анализировать. Напиши сразу только текст совета.`
 
     const result = await callGroqChatCompletion({
       messages: [{ role: 'user', content: prompt }],
       model: GROQ_CHAT_MODEL,
-      temperature: 0.4,
-      max_tokens: 70,
+      temperature: 0.3,
+      max_tokens: 250,
     })
 
-    const generated = stripThinkingTags(result.content || '')
+    let generated = stripThinkingTags(result.content || '')
+      .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+      .replace(/<\/think>/gi, '')
+      .replace(/<[^>]+>/g, '')
       .replace(/^["«]|["»]$/g, '')
       .replace(/^Совет:\s*/i, '')
+      .replace(/^\s*[-*•]\s*/, '')
       .trim()
 
-    if (generated && generated.length > 10) {
+    const lower = generated.toLowerCase()
+    const hasLeak = lower.includes('think') || lower.includes('process') || lower.includes('analyze') || lower.includes('user input') || lower.includes('role:') || lower.includes('focus:')
+
+    if (generated && generated.length > 10 && !hasLeak) {
       userTipCache.set(chatId, { date: todayISO, tip: generated })
       return generated
     }

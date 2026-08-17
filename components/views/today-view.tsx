@@ -18,6 +18,33 @@ interface DailyContext {
   tip: string
 }
 
+export function cleanTipText(tip?: string | null): string {
+  if (!tip) return 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.'
+  let cleaned = tip
+    .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+    .replace(/<\/think>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/^["«]|["»]$/g, '')
+    .replace(/^Совет:\s*/i, '')
+    .replace(/^\s*[-*•]\s*/, '')
+    .trim()
+
+  const lower = cleaned.toLowerCase()
+  if (
+    !cleaned ||
+    cleaned.length < 8 ||
+    lower.includes('think') ||
+    lower.includes('process') ||
+    lower.includes('analyze') ||
+    lower.includes('user input') ||
+    lower.includes('role:') ||
+    lower.includes('focus:')
+  ) {
+    return 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.'
+  }
+  return cleaned
+}
+
 const getInitialDailyContext = (): DailyContext => {
   const now = new Date()
   const days = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота']
@@ -31,15 +58,15 @@ const getInitialDailyContext = (): DailyContext => {
         const parsed = JSON.parse(cached)
         return {
           formattedDate,
-          weather: parsed.weather || 'Москва, +20°C, Ясно',
-          tip: parsed.tip || 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.',
+          weather: parsed.weather || 'Москва: Переменная облачность +20°C',
+          tip: cleanTipText(parsed.tip),
         }
       }
     } catch {}
   }
   return {
     formattedDate,
-    weather: 'Москва, +20°C, Ясно',
+    weather: 'Москва: Переменная облачность +20°C',
     tip: 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.',
   }
 }
@@ -235,7 +262,7 @@ export function TodayView() {
             </div>
             <div className="flex items-start gap-2 pt-1 border-t border-border/40">
               <Lightbulb className="w-3.5 h-3.5 text-primary/70 shrink-0 mt-0.5" />
-              <p className="text-[12px] text-muted-foreground leading-relaxed italic">{context.tip}</p>
+              <p className="text-[12px] text-muted-foreground leading-relaxed italic">{cleanTipText(context.tip)}</p>
             </div>
           </motion.div>
         )}
