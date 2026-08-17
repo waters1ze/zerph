@@ -33,8 +33,11 @@ program
 program.action(async () => {
   const creds = loadCredentials()
   if (!creds.token) {
-    console.log(`\n ${GLYPH.logo} ${chalk.bold.white('Zerf — второй мозг в терминале')}`)
-    console.log(`   ${chalk.gray('Вы не авторизованы. Для входа выполните:')} ${chalk.white('zerf login')}\n`)
+    console.log(`\n ${GLYPH.logo} ${chalk.bold.white('Zerf CLI — Второй мозг в терминале')}`)
+    console.log(`   ${chalk.yellow('⊘ Требуется авторизация через аккаунт Zerf Note.')}`)
+    console.log(`\n   ${chalk.white('Для первого входа выполните команду:')}`)
+    console.log(`   ${chalk.bold.cyanBright('zerf login')}\n`)
+    console.log(`   ${chalk.gray('После подтверждения в браузере ваш терминал будет синхронизирован.')}\n`)
     return
   }
 
@@ -57,8 +60,9 @@ program.action(async () => {
 
     if (data.allowed === false) {
       process.stdout.write('\n')
-      console.log(`\n ${GLYPH.cancel} ${chalk.bold.yellow('Требуется подписка Plus, Pro или Corp')}`)
-      console.log(`   ${data.message}\n`)
+      console.log(`\n ${GLYPH.cancel} ${chalk.bold.yellow('Доступ заблокирован: требуется подписка Plus, Pro или Corp')}`)
+      console.log(`   ${data.message || 'Для обычных (бесплатных) аккаунтов доступ к Zerf CLI закрыт.'}`)
+      console.log(`   ${chalk.gray('Оформить подписку:')} ${chalk.cyanBright('https://zeprh.vercel.app/#pricing')}\n`)
       return
     }
 
