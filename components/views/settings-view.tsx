@@ -11,7 +11,7 @@ import {
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
-  Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy
+  Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -143,6 +143,22 @@ export function SettingsView() {
   const [citySavedStatus, setCitySavedStatus] = useState<boolean>(false)
   const citySaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
+
+  // Developer Mode State
+  const [isDeveloperMode, setIsDeveloperMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('zerf_developer_mode') === 'true'
+    }
+    return false
+  })
+
+  const toggleDeveloperMode = (val: boolean) => {
+    setIsDeveloperMode(val)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zerf_developer_mode', String(val))
+      window.dispatchEvent(new CustomEvent('zerf_dev_mode_changed', { detail: { enabled: val } }))
+    }
+  }
 
   // Subscriptions & Promo Code States
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
@@ -825,6 +841,60 @@ export function SettingsView() {
                 </div>
               </div>
             </Row>
+
+            {/* Developer Mode Toggle */}
+            <Row
+              label={
+                <span className="flex items-center gap-1.5 font-bold">
+                  <span className="p-1 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                    <Terminal className="w-3.5 h-3.5" />
+                  </span>
+                  <span>Режим разработчика (Developer Mode)</span>
+                  <span className="px-1.5 py-0.2 rounded-md bg-purple-500/20 text-purple-400 font-mono text-[9px] font-bold">
+                    SDK v2
+                  </span>
+                </span>
+              }
+              description="Создание и публикация расширений, конструктор манифеста, тестирование AI-эндпоинтов и выплаты авторам (80%)"
+            >
+              <div className="flex items-center gap-3">
+                <Toggle
+                  checked={isDeveloperMode}
+                  onChange={val => toggleDeveloperMode(val)}
+                />
+              </div>
+            </Row>
+
+            {isDeveloperMode && (
+              <div className="p-4 bg-muted/20 border-t border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <p className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    <span>Режим разработчика активен</span>
+                  </p>
+                  <p className="text-[11px]">Изучите документацию SDK и создайте свое первое расширение для Zerf Note.</p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a
+                    href="/developer?tab=docs"
+                    className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-primary" />
+                    <span>Документация SDK</span>
+                  </a>
+
+                  <a
+                    href="/developer"
+                    className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>Developer Hub</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* Multi-Provider Linked Accounts Hub */}

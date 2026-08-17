@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getExtensionById } from '@/lib/backend/extensions'
 import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
+import { getUserUsageAndLimits } from '@/lib/backend/db'
+import { getDailyCount, incrementDailyCount, COUNTERS, EXTENSION_AI_LIMITS } from '@/lib/backend/plans'
 import dns from 'dns/promises'
 import crypto from 'crypto'
 
@@ -104,6 +106,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: ssrfCheck.error }, { status: 400 })
     }
 
+    // Global daily extension AI limits to prevent abuse (Free: 10, Plus: 50, Pro: 150, Corp: 300)
+    const userLimits = await getUserUsageAndLimits(user.chatId)
+    const userPlan = (userLimits?.plan || 'free').toLowerCase()
+    const dailyLimit = EXTENSION_AI_LIMITS[userPlan] ?? EXTENSION_AI_LIMITS.free
+    const dailyUsed = await getDailyCount(COUNTERS.extensionAi, user.chatId)
+
+    if (dailyLimit !== -1 && dailyUsed >= dailyLimit) {
+      return NextResponse.json({
+        error: `Исчерпан дневной лимит запросов к ИИ для расширений (${dailyUsed}/${dailyLimit}). Перейдите на тариф Plus (50/день) или Pro (150/день) для увеличения квоты.`,
+        limitReached: true,
+        limit: dailyLimit,
+        used: dailyUsed,
+      }, { status: 429 })
+    }
+
     // Rate limiting: max 15 requests per minute per user per extension
     if (!checkInMemoryRateLimit(`ext_ai:${user.chatId}:${extensionId}`, 15, 60 * 1000)) {
       return NextResponse.json({ error: 'Превышен лимит запросов к ИИ-серверу расширения. Пожалуйста, подождите минуту.' }, { status: 429 })
@@ -118,7 +135,7 @@ export async function POST(req: NextRequest) {
       extensionId,
       context: {
         ...(context || {}),
-        plan: (user as any).plan || 'free',
+        plan: userPlan,
       },
     }
 
@@ -143,6 +160,9 @@ export async function POST(req: NextRequest) {
     if (rawText.length > 50_000) {
       return NextResponse.json({ error: 'Ответ AI-сервера расширения превышает допустимый размер (50 КБ)' }, { status: 502 })
     }
+
+    // Increment daily AI counter for extensions
+    await incrementDailyCount(COUNTERS.extensionAi, user.chatId)
 
     try {
       const data = JSON.parse(rawText)

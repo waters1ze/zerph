@@ -8,13 +8,13 @@ import {
   Clock, Share2, Layers, MessageSquare, ChevronRight, CornerDownLeft,
   AlertCircle, ShieldCheck, Terminal, Heart, Eye, ArrowUpRight,
   FileText, Lightbulb, Compass, Database, Hash, HelpCircle,
-  SlidersHorizontal, Flame, Cpu, GraduationCap
+  SlidersHorizontal, Flame, Cpu, GraduationCap, Bot
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import type { Note, Task } from '@/lib/types'
 import type { EntropySearchResult, EntropySource } from '@/app/api/entropy/search/route'
-import { TikhonyaMascot, type TikhonyaMood } from '@/components/views/tikhonya-mascot'
+import { ZerfikMascot, type ZerfikMood } from '@/components/views/tikhonya-mascot'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -22,7 +22,6 @@ const STARTER_TOPICS = [
   {
     category: 'AI & Технологии',
     icon: '🔮',
-    color: 'from-purple-500/20 to-indigo-500/20 border-purple-500/30 text-purple-400',
     queries: [
       'Архитектура MoE vs Dense модели в LLM 2026',
       'Локальный инференс LLM на Apple Silicon и Ollama',
@@ -30,9 +29,8 @@ const STARTER_TOPICS = [
     ],
   },
   {
-    category: 'Продуктивность & Заметки',
-    icon: '🧘',
-    color: 'from-sky-500/20 to-cyan-500/20 border-sky-500/30 text-sky-400',
+    category: 'Продуктивность & Базы знаний',
+    icon: '📚',
     queries: [
       'Методология Zettelkasten vs PARA для базы знаний',
       'Time-blocking и управление дофамином при глубокой работе',
@@ -42,7 +40,6 @@ const STARTER_TOPICS = [
   {
     category: 'Инженерия & Код',
     icon: '💻',
-    color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/30 text-emerald-400',
     queries: [
       'Сравнение Rust, Go и Zig для высоконагруженных систем',
       'Архитектура distributed key-value хранилищ',
@@ -52,7 +49,6 @@ const STARTER_TOPICS = [
   {
     category: 'Стартапы & Продукты',
     icon: '🚀',
-    color: 'from-amber-500/20 to-orange-500/20 border-amber-500/30 text-amber-400',
     queries: [
       'Unit-экономика B2B SaaS продуктов и расчет LTV/CAC',
       'Стратегии Product-Led Growth (PLG) для AI стартапов',
@@ -65,8 +61,6 @@ export function EntropySearchView() {
   const { state, dispatch } = useApp()
   const [query, setQuery] = useState('')
   const [activeMode, setActiveMode] = useState<'web' | 'academic' | 'notes' | 'fast' | 'code'>('web')
-  // По умолчанию ВЫКЛ: Pro-поиски жёстко лимитированы (Plus 3/день) и не должны
-  // молча тратиться — раньше каждый «обычный» поиск съедал Pro-квоту
   const [isProSearch, setIsProSearch] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [searchStep, setSearchStep] = useState<number>(0)
@@ -96,8 +90,8 @@ export function EntropySearchView() {
     return []
   })
 
-  const [tikhonyaMood, setTikhonyaMood] = useState<TikhonyaMood>('normal')
-  const [tikhonyaStatus, setTikhonyaStatus] = useState<string>('Тихоня готов исследовать любые темы на максимальной глубине [ ˘ ᴗ ˘ ]')
+  const [zerfikMood, setZerfikMood] = useState<ZerfikMood>('normal')
+  const [zerfikStatus, setZerfikStatus] = useState<string>('Зерфик готов исследовать любые темы на максимальной глубине')
   const [copiedAnswer, setCopiedAnswer] = useState(false)
   const [savedAsNote, setSavedAsNote] = useState(false)
   const [savedAsTasks, setSavedAsTasks] = useState(false)
@@ -193,18 +187,17 @@ export function EntropySearchView() {
     setIsLoading(true)
     setSavedAsNote(false)
     setSavedAsTasks(false)
-    setTikhonyaMood('thinking')
-    setTikhonyaStatus(`Тихоня ищет первоисточники по «${targetQuery}»...`)
+    setZerfikMood('thinking')
+    setZerfikStatus(`Поиск первоисточников по «${targetQuery}»...`)
     setSearchStep(1)
 
-    // Simulate progressive research pipeline steps for delightful UX
     const stepTimer1 = setTimeout(() => {
       setSearchStep(2)
-      setTikhonyaStatus('Тихоня синтезирует факты и проверяет цитаты 🧠')
+      setZerfikStatus('Синтезирую факты и проверяю цитаты...')
     }, 600)
     const stepTimer2 = setTimeout(() => {
       setSearchStep(3)
-      setTikhonyaStatus('Тихоня структурирует аналитический отчет ✧')
+      setZerfikStatus('Структурирую аналитический отчет...')
     }, 1200)
 
     try {
@@ -218,41 +211,43 @@ export function EntropySearchView() {
           query: targetQuery,
           mode: activeMode,
           isPro: isProSearch,
-          focus: activeMode === 'notes' ? 'knowledge_base' : undefined,
         }),
       })
 
       const data = await res.json()
+      clearTimeout(stepTimer1)
+      clearTimeout(stepTimer2)
 
       if (data.success && data.result) {
         setResult(data.result)
+        setZerfikMood('happy')
+        setZerfikStatus(data.result.tikhonyaComment || 'Исследование завершено, первоисточники проверены')
+
         if (data.result.usage) {
           setUsageInfo(data.result.usage)
         }
-        setTikhonyaMood('happy')
-        setTikhonyaStatus(data.result.tikhonyaComment || 'Тихоня успешно синтезировал первоисточники ✧')
 
-        // Save to search history
+        // Save to local history
         setHistory(prev => {
-          const next = [data.result, ...prev.filter(item => item.query !== data.result.query)].slice(0, 20)
+          const filtered = prev.filter(h => h.query.toLowerCase() !== targetQuery.toLowerCase())
+          const nextHistory = [data.result, ...filtered].slice(0, 30)
           try {
-            localStorage.setItem('zerf_entropy_search_history', JSON.stringify(next))
+            localStorage.setItem('zerf_entropy_search_history', JSON.stringify(nextHistory))
           } catch {}
-          return next
+          return nextHistory
         })
       } else {
-        setTikhonyaMood('normal')
-        setTikhonyaStatus(data.error || 'Не удалось выполнить поиск')
-        alert(data.error || 'Не удалось выполнить поиск. Проверьте лимиты или попробуйте еще раз.')
+        setZerfikMood('normal')
+        setZerfikStatus(data.error || 'Не удалось выполнить поиск. Попробуйте еще раз.')
+        alert(data.error || 'Ошибка поиска')
       }
     } catch (e: any) {
-      console.error(e)
-      setTikhonyaMood('normal')
-      setTikhonyaStatus('Ошибка связи с поисковым движком')
-      alert('Ошибка соединения с поисковым движком Entropy AI')
-    } finally {
       clearTimeout(stepTimer1)
       clearTimeout(stepTimer2)
+      setZerfikMood('normal')
+      setZerfikStatus('Ошибка сети при поиске. Проверьте соединение.')
+      alert('Ошибка при выполнении запроса к поисковому движку')
+    } finally {
       setIsLoading(false)
       setSearchStep(0)
     }
@@ -265,54 +260,45 @@ export function EntropySearchView() {
     }
   }
 
-  const cleanText = (s: string) =>
-    (s || '')
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '')
-      .replace(/\\t/g, '  ')
-      .replace(/\\"/g, '"')
-      .trim()
-
-  const handleCopyMarkdown = () => {
+  const handleCopyAnswer = () => {
     if (!result) return
-    let text = `# 🔮 ${result.query}\n\n`
-    text += `${cleanText(result.answer)}\n\n`
-    if (result.sources.length > 0) {
-      text += `### 📚 Источники:\n`
-      result.sources.forEach(s => {
-        text += `- [${s.id}] [${s.title}](${s.url}) — *${s.domain}*\n`
-      })
-    }
-    navigator.clipboard.writeText(text)
+    navigator.clipboard.writeText(result.answer)
     setCopiedAnswer(true)
-    setTimeout(() => setCopiedAnswer(false), 2500)
+    setTimeout(() => setCopiedAnswer(false), 2000)
   }
 
-  const handleSaveToZerfNotes = () => {
+  const handleSaveAsNote = () => {
     if (!result) return
 
-    let noteContent = `${cleanText(result.answer)}\n\n---\n### 📚 Синтезированные первоисточники:\n`
-    result.sources.forEach(s => {
-      noteContent += `- **[${s.id}]** [${s.title}](${s.url}) — *${s.domain}*\n  > ${s.snippet}\n`
-    })
+    let content = `# 🔍 ${result.query}\n\n`
+    content += `${result.answer}\n\n`
 
     if (result.takeaways && result.takeaways.length > 0) {
-      noteContent += `\n### 💡 Ключевые выводы:\n`
+      content += `### 💡 Ключевые выводы:\n`
       result.takeaways.forEach(t => {
-        noteContent += `- ${t}\n`
+        content += `- ${t}\n`
+      })
+      content += `\n`
+    }
+
+    if (result.sources && result.sources.length > 0) {
+      content += `### 🌐 Первоисточники:\n`
+      result.sources.forEach(s => {
+        content += `[${s.id}] [${s.title}](${s.url}) (${s.domain})\n`
       })
     }
 
     const newNote: Note = {
       id: `note_entropy_${Date.now()}`,
-      title: `🔮 ${result.query}`,
-      content: noteContent,
+      title: `[Исследование] ${result.query.slice(0, 60)}`,
+      content,
       type: 'note',
-      tags: ['entropy', 'ai-research', 'deep-search', activeMode],
-      folder: 'Entropy AI',
+      tags: ['entropy', 'ai-search', result.mode],
+      pinned: false,
+      aiGenerated: true,
+      folder: 'default',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      aiGenerated: true,
     }
 
     dispatch({ type: 'ADD_NOTE', note: newNote })
@@ -345,44 +331,47 @@ export function EntropySearchView() {
   const handleSelectHistoryItem = (item: EntropySearchResult) => {
     setQuery(item.query)
     setResult(item)
-    setTikhonyaMood('happy')
-    setTikhonyaStatus(item.tikhonyaComment || 'Тихоня открыл сохраненное исследование ✧')
+    setZerfikMood('happy')
+    setZerfikStatus(item.tikhonyaComment || 'Открыто сохраненное исследование')
   }
 
   const handleResetSearch = () => {
     setQuery('')
     setResult(null)
-    setTikhonyaMood('normal')
-    setTikhonyaStatus('Тихоня готов исследовать новые горизонты [ ˘ ᴗ ˘ ]')
+    setZerfikMood('normal')
+    setZerfikStatus('Зерфик готов исследовать новые темы')
     inputRef.current?.focus()
   }
 
   return (
     <div className="w-full min-h-screen px-3 sm:px-6 md:px-8 py-4 md:py-6 space-y-5 pb-24 text-foreground font-sans max-w-none">
-      {/* ── TOP HERO HEADER (REFINED SLEEK GLASSMORPHIC CAPSULE) ── */}
-      <div className="p-4 md:p-5 rounded-2xl md:rounded-3xl bg-card/90 border border-border/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-md">
-        {/* Subtle Gradient Accent */}
-        <div className="absolute right-0 top-0 w-80 h-full bg-gradient-to-l from-sky-500/10 via-primary/5 to-transparent pointer-events-none" />
-
-        {/* Left: 3D Visual Mascot & Dynamic Speech */}
-        <div className="flex items-center gap-3.5 flex-1 min-w-0">
-          <TikhonyaMascot
-            mood={tikhonyaMood}
-            statusText={tikhonyaStatus}
+      {/* ── TOP HERO HEADER (PERPLEXITY MINIMALIST STYLE) ── */}
+      <div className="p-4 md:p-5 rounded-2xl bg-card/60 border border-border/70 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-md">
+        {/* Left: Blended Organic Mascot & Status */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <ZerfikMascot
+            mood={zerfikMood}
+            statusText={zerfikStatus}
             size="md"
             onMascotClick={() => {
-              setTikhonyaMood('celebrate')
-              setTikhonyaStatus('Тихоня взмахнул крыльями и рад вам помочь! ✧ ٩(ˊᗜˋ*)و ✧')
+              setZerfikMood('celebrate')
+              setZerfikStatus('Зерфик готов к новым исследованиям!')
             }}
           />
         </div>
 
-        {/* Right: Status & Limits Controls */}
+        {/* Right: Engine Model Badge & Daily Quotas */}
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
           {/* Model Engine Tag */}
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/60 border border-border text-[11px] text-muted-foreground font-mono">
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/80 text-[11px] text-muted-foreground font-mono">
             <Cpu className="w-3.5 h-3.5 text-primary" />
-            <span>Entropy Engine (Groq · Qwen/Llama)</span>
+            <span>
+              {usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator'
+                ? 'DeepSeek R1 Distill 70B'
+                : isPlusOrHigher
+                ? 'Llama 3.3 70B'
+                : 'Llama 3.1 8B Instant'}
+            </span>
           </div>
 
           {/* Daily Usage Badge */}
@@ -392,15 +381,15 @@ export function EntropySearchView() {
                 'px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold flex items-center gap-1.5 shadow-2xs transition-all',
                 isProSearch
                   ? usageInfo.pro?.isUnlimited
-                    ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
-                    : 'bg-primary/15 text-primary border-primary/30'
+                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                    : 'bg-primary/10 text-primary border-primary/20'
                   : usageInfo.isUnlimited
-                  ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                  ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                   : usageInfo.remaining > 5
-                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
-                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
               )}
-              title="Ваши дневные лимиты поисковых запросов Entropy AI"
+              title="Дневные лимиты поисковых запросов Entropy AI"
             >
               <Zap className="w-3.5 h-3.5 text-primary" />
               <span>
@@ -427,7 +416,7 @@ export function EntropySearchView() {
         </div>
       </div>
 
-      {/* ── SEARCH BAR & FOCUS MODES (PERPLEXITY PRO STYLE) ── */}
+      {/* ── SEARCH BAR & FOCUS MODES ── */}
       <div className="space-y-3">
         {/* Focus Modes Pills & Pro Toggle */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -471,7 +460,7 @@ export function EntropySearchView() {
               'px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-colors cursor-pointer shrink-0',
               isProSearch
                 ? 'bg-primary/20 border-primary/40 text-primary'
-                : 'bg-muted border-border text-muted-foreground'
+                : 'bg-muted/40 border-border text-muted-foreground'
             )}
             title="Глубокий многоступенчатый анализ первоисточников"
           >
@@ -481,8 +470,8 @@ export function EntropySearchView() {
           </button>
         </div>
 
-        {/* Big Perplexity Search Capsule */}
-        <div className="p-2.5 rounded-2xl bg-card border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 shadow-md transition-all flex items-center gap-2">
+        {/* Clean Perplexity Search Capsule */}
+        <div className="p-2.5 rounded-2xl bg-card border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 shadow-xs transition-all flex items-center gap-2">
           <div className="pl-2 text-muted-foreground">
             <Search className="w-5 h-5 text-primary/80" />
           </div>
@@ -598,7 +587,7 @@ export function EntropySearchView() {
           </div>
 
           <p className="text-[11px] text-muted-foreground font-mono">
-            Тихоня анализирует публикации на arXiv, GitHub, научные статьи и статьи в Википедии...
+            Зерфик анализирует научные публикации на arXiv, GitHub, академические базы данных и Wikipedia...
           </p>
         </motion.div>
       )}
@@ -639,111 +628,100 @@ export function EntropySearchView() {
                         <span className="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold font-mono">
                           [{source.id}]
                         </span>
-                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono truncate">
-                          <span>{source.domain}</span>
-                          <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
+                          {source.domain}
+                        </span>
                       </div>
-
-                      <h4 className="text-xs font-bold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+                      <p className="text-xs font-bold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
                         {source.title}
-                      </h4>
+                      </p>
                     </div>
 
-                    <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
-                      {source.snippet}
-                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                      <span className="truncate max-w-[130px]">{source.snippet || 'Статья'}</span>
+                      <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                    </div>
                   </a>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 2. SYNTHESIZED ANSWER (Markdown & Citations) */}
-          <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border/50 pb-3">
+          {/* 2. SYNTHESIZED ANSWER SECTION */}
+          <div className="p-6 md:p-8 rounded-3xl bg-card border border-border/80 shadow-xs space-y-5">
+            {/* Header Action Bar */}
+            <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                  🔮
+                <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                  <Sparkles className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm md:text-base font-bold text-foreground">
-                  Синтез ответа и фактологический разбор
-                </h3>
+                <h3 className="font-bold text-sm text-foreground">Синтез ответа и фактологический отчет</h3>
               </div>
 
-              {/* Action Toolbar */}
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5">
                 <button
-                  onClick={handleSaveToZerfNotes}
-                  className={cn(
-                    'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border',
-                    savedAsNote
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                      : 'bg-muted hover:bg-muted/80 text-foreground border-border'
-                  )}
-                  title="Сохранить это исследование как заметку в Zerf Note"
-                >
-                  <FileText className="w-3.5 h-3.5 text-primary" />
-                  <span>{savedAsNote ? '✓ Сохранено в Заметки!' : 'В Заметки Zerf'}</span>
-                </button>
-
-                <button
-                  onClick={handleCreateTasksFromTakeaways}
-                  className={cn(
-                    'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border',
-                    savedAsTasks
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                      : 'bg-muted hover:bg-muted/80 text-foreground border-border'
-                  )}
-                  title="Создать задачи в Zerf Tasks на основе выводов"
-                >
-                  <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{savedAsTasks ? '✓ Задачи созданы!' : 'Создать задачи'}</span>
-                </button>
-
-                <button
-                  onClick={handleCopyMarkdown}
-                  className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs border border-border cursor-pointer transition-colors"
-                  title="Скопировать ответ с цитатами в буфер"
+                  onClick={handleCopyAnswer}
+                  className="px-2.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-medium flex items-center gap-1 border border-border transition-colors cursor-pointer"
+                  title="Скопировать ответ"
                 >
                   {copiedAnswer ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedAnswer ? 'Скопировано' : 'Копировать'}</span>
                 </button>
+
+                <button
+                  onClick={handleSaveAsNote}
+                  className="px-2.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-medium flex items-center gap-1 border border-border transition-colors cursor-pointer"
+                  title="Сохранить в заметки Zerf Note"
+                >
+                  <Bookmark className={cn('w-3.5 h-3.5', savedAsNote ? 'text-primary' : '')} />
+                  <span>{savedAsNote ? 'Сохранено в заметки!' : 'В заметки'}</span>
+                </button>
+
+                {result.takeaways && result.takeaways.length > 0 && (
+                  <button
+                    onClick={handleCreateTasksFromTakeaways}
+                    className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium flex items-center gap-1 border border-primary/20 transition-colors cursor-pointer"
+                    title="Создать задачи из выводов"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>{savedAsTasks ? 'Задачи созданы!' : 'Создать задачи'}</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Answer Text Body with Highlighted Citations & Rich Markdown */}
-            <div className="prose prose-invert max-w-none text-xs md:text-sm text-foreground/90 leading-relaxed space-y-3 font-sans">
+            {/* Markdown Rendered Content with Live Citation Badges */}
+            <div className="text-sm md:text-base leading-relaxed space-y-3 prose prose-invert max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  h1: ({ children }) => <h3 className="text-base md:text-lg font-bold text-foreground mt-4 mb-2 pb-1 border-b border-border/60">{children}</h3>,
-                  h2: ({ children }) => <h4 className="text-sm md:text-base font-bold text-foreground mt-3 mb-1.5 text-primary/95">{children}</h4>,
-                  h3: ({ children }) => <h5 className="text-xs md:text-sm font-bold text-foreground mt-3 mb-1 flex items-center gap-1.5"><span className="text-primary font-bold">◈</span>{children}</h5>,
-                  h4: ({ children }) => <h6 className="text-xs font-bold text-foreground mt-2 mb-1">{children}</h6>,
-                  p: ({ children }) => <p className="text-xs md:text-sm text-foreground/90 leading-relaxed mb-3">{children}</p>,
-                  ul: ({ children }) => <ul className="space-y-1.5 mb-3 pl-2 list-none">{children}</ul>,
-                  ol: ({ children }) => <ol className="space-y-1.5 mb-3 pl-4 list-decimal text-xs md:text-sm text-foreground/90 space-y-1">{children}</ol>,
-                  li: ({ children }) => (
-                    <li className="flex items-start gap-2 text-xs md:text-sm text-foreground/90 leading-relaxed">
-                      <span className="text-primary font-bold mt-1 text-[10px] shrink-0">▪</span>
-                      <div className="flex-1">{children}</div>
-                    </li>
-                  ),
-                  strong: ({ children }) => <strong className="font-bold text-foreground font-sans">{children}</strong>,
-                  em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
+                  h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mt-4 mb-2">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-lg font-bold text-foreground mt-3 mb-2 border-b border-border/40 pb-1">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-base font-bold text-foreground mt-2 mb-1">{children}</h3>,
+                  p: ({ children }) => <p className="text-foreground/90 leading-relaxed my-2">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 my-2 text-foreground/90">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 my-2 text-foreground/90">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
                   blockquote: ({ children }) => (
-                    <blockquote className="pl-3 py-1 my-2 border-l-2 border-primary/60 bg-primary/5 rounded-r-lg text-xs italic text-muted-foreground">
+                    <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-3 bg-muted/20 py-1 rounded-r-lg">
                       {children}
                     </blockquote>
                   ),
                   code: ({ node, inline, className, children, ...props }: any) => {
-                    return (
-                      <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[11px] text-primary border border-border" {...props}>
+                    const match = /language-(\w+)/.exec(className || '')
+                    return !inline ? (
+                      <pre className="p-4 rounded-2xl bg-zinc-950 text-zinc-100 text-xs font-mono overflow-x-auto border border-border/80 my-3">
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      </pre>
+                    ) : (
+                      <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-xs text-primary font-semibold" {...props}>
                         {children}
                       </code>
                     )
                   },
-                  a: ({ href, title, children }) => {
+                  a: ({ href, children, title }) => {
                     return (
                       <a
                         href={href}
@@ -843,7 +821,7 @@ export function EntropySearchView() {
               <input
                 ref={followUpInputRef}
                 type="text"
-                placeholder="Задайте уточняющий вопрос Тихоне..."
+                placeholder="Задайте уточняющий вопрос Зерфику..."
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     handleSearch(e.currentTarget.value)
@@ -869,7 +847,7 @@ export function EntropySearchView() {
         </motion.div>
       )}
 
-      {/* ── STARTER TOPICS / INSPIRATION (When idle) ── */}
+      {/* ── STARTER TOPICS (SLEEK MINIMALIST CARDS) ── */}
       {!result && !isLoading && (
         <div className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
@@ -885,10 +863,7 @@ export function EntropySearchView() {
             {STARTER_TOPICS.map((group, idx) => (
               <div
                 key={idx}
-                className={cn(
-                  'p-4 rounded-2xl bg-gradient-to-br border shadow-2xs space-y-2.5',
-                  group.color
-                )}
+                className="p-4 rounded-2xl bg-card border border-border/80 hover:border-primary/40 transition-all shadow-2xs space-y-2.5"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base">{group.icon}</span>
@@ -900,10 +875,10 @@ export function EntropySearchView() {
                     <button
                       key={qIdx}
                       onClick={() => handleSearch(topic)}
-                      className="w-full p-2 rounded-xl bg-card/60 hover:bg-card border border-border/60 hover:border-primary/40 text-left text-xs text-foreground/90 hover:text-foreground font-medium flex items-center justify-between gap-2 transition-all cursor-pointer group"
+                      className="w-full p-2.5 rounded-xl bg-muted/40 hover:bg-muted border border-border/60 hover:border-primary/40 text-left text-xs text-foreground/90 hover:text-foreground font-medium flex items-center justify-between gap-2 transition-all cursor-pointer group"
                     >
                       <span className="truncate">{topic}</span>
-                      <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary shrink-0 transition-transform group-hover:translate-x-0.5" />
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-transform group-hover:translate-x-0.5" />
                     </button>
                   ))}
                 </div>

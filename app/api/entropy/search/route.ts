@@ -249,19 +249,32 @@ JSON Схема:
     "Уточняющий вопрос 2",
     "Уточняющий вопрос 3"
   ],
-  "tikhonyaComment": "Тихоня проанализировал источники и собрал самое главное."
+  "tikhonyaComment": "Зерфик проанализировал источники и подготовил структурированный отчет."
 }`
 
     let llmResult: any = null
 
     try {
-      const effectiveModel = getModelForUserPlan(userPlan, undefined, 'chat')
+      // Model tier allocation:
+      // Free: Llama 3.1 8B Instant (fast Llama model)
+      // Plus: Llama 3.3 70B Versatile (large 70B model)
+      // Pro: DeepSeek R1 Distill Llama 70B / Llama 3.3 70B (deep reasoning)
+      // Corp / Creator: DeepSeek R1 Distill Llama 70B (maximum reasoning context)
+      let effectiveModel = 'llama-3.1-8b-instant'
+      const normPlan = String(userPlan).toLowerCase()
+      if (isPro || normPlan === 'corp' || normPlan === 'creator' || normPlan === 'admin') {
+        effectiveModel = 'deepseek-r1-distill-llama-70b'
+      } else if (normPlan === 'pro') {
+        effectiveModel = 'llama-3.3-70b-versatile'
+      } else if (normPlan === 'plus') {
+        effectiveModel = 'llama-3.3-70b-versatile'
+      }
 
       const completion = await callGroqChatCompletion({
         messages: [
           {
             role: 'system',
-            content: 'You are an advanced deep research AI engine that always responds with pure JSON adhering to the user schema.',
+            content: 'You are Zerfik — an advanced deep research AI engine that always responds with pure JSON adhering to the user schema. Cite sources as [1], [2] in the markdown answer.',
           },
           {
             role: 'user',
@@ -308,7 +321,7 @@ JSON Схема:
     const cleanFollowUps = Array.isArray(llmResult.followUpQuestions)
       ? llmResult.followUpQuestions.map(cleanStr).filter(Boolean)
       : []
-    const cleanTikhonya = cleanStr(llmResult.tikhonyaComment) || 'Тихоня завершил глубокий синтез источников [ ˘ ᴗ ˘ ]'
+    const cleanTikhonya = cleanStr(llmResult.tikhonyaComment) || 'Зерфик завершил глубокий синтез первоисточников'
 
     // Increment user's daily usage (persisted in DB — survives serverless instances)
     if (ownerChatId !== 'guest') {

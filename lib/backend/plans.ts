@@ -89,7 +89,18 @@ export const COUNTERS = {
   chat: 'chat',
   entropy: 'entropy',
   entropyPro: 'entropy_pro',
+  extensionAi: 'extension_ai',
 } as const
+
+// Daily global limits for extension AI requests to prevent author abuse
+export const EXTENSION_AI_LIMITS: Record<string, number> = {
+  free: 10,
+  plus: 50,
+  pro: 150,
+  corp: 300,
+  creator: -1, // Unlimited
+  admin: -1,   // Unlimited
+}
 
 /** User preference keys (Config-backed settings). */
 export const USER_SETTINGS = {
