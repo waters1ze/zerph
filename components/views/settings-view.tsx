@@ -63,16 +63,18 @@ function Row({
       className={cn(
         'px-4 sm:px-5 py-3.5 sm:py-4 transition-colors',
         vertical
-          ? 'flex flex-col gap-3'
+          ? 'flex flex-col gap-3.5 items-start'
           : 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4',
         className
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className={cn('min-w-0', vertical ? 'w-full' : 'flex-1')}>
         <div className="text-[13px] font-medium text-foreground">{label}</div>
         {description && <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">{description}</p>}
       </div>
-      <div className="shrink-0 w-full sm:w-auto flex items-center justify-start sm:justify-end">{children}</div>
+      <div className={cn('w-full min-w-0', vertical ? 'w-full flex items-center justify-start' : 'shrink-0 sm:w-auto flex items-center justify-start sm:justify-end')}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -916,67 +918,29 @@ export function SettingsView() {
         <div className="space-y-6">
           <Section title="Ваш Профиль">
             {/* Avatar / Emoji Selector Row (Telegram-style 1000+ emojis) */}
-            <Row
-              vertical
-              label={
-                <span className="flex items-center gap-1.5 font-bold flex-wrap">
-                  <span className="mono-emoji">🎭</span>
-                  <span>Аватар / Эмодзи профиля</span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-[9px] font-bold">
-                    1000+ эмодзи
-                  </span>
-                </span>
-              }
-              description="Ваш персональный статус и эмодзи, как в Telegram. Отображается в профиле, друзьях, командах и задачах."
-            >
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  {/* Main Avatar Bubble */}
-                  <button
-                    type="button"
-                    onClick={() => setShowEmojiPicker(true)}
-                    className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none touch-manipulation shrink-0"
-                    title="Нажмите, чтобы открыть каталог из 1000+ эмодзи и аватаров Зерфика"
-                  >
-                    <ZerfAvatar emoji={userAvatarEmoji} size="xl" />
-                    <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-primary text-primary-foreground text-[9px] shadow-xs group-hover:scale-110 transition-transform">
-                      <Sparkles className="w-2.5 h-2.5" />
+            <div className="px-4 sm:px-5 py-4 space-y-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 font-bold flex-wrap">
+                    <span className="mono-emoji text-sm">🎭</span>
+                    <span className="text-[13px] font-semibold text-foreground">Аватар / Эмодзи профиля</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-[9px] font-bold">
+                      1000+ эмодзи
                     </span>
-                  </button>
-
-                  {/* Quick Pick Chips (Scrollable) */}
-                  <div
-                    className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 max-w-full [scrollbar-width:none]"
-                    style={{ msOverflowStyle: 'none' }}
-                  >
-                    {ZERF_CUSTOM_EMOJIS.slice(0, 12).map(item => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleSelectAvatarEmoji(item.id)}
-                        className={cn(
-                          'w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer select-none touch-manipulation shrink-0',
-                          'opacity-80 hover:opacity-100',
-                          userAvatarEmoji === item.id
-                            ? 'bg-primary/25 border-2 border-primary scale-110 shadow-2xs opacity-100'
-                            : 'bg-muted/40 hover:bg-muted border border-border/60 hover:scale-105'
-                        )}
-                        title={`${item.name} · ${item.description}`}
-                      >
-                        <ZerfAvatar emoji={item.id} size="sm" monochrome={userAvatarEmoji !== item.id} />
-                      </button>
-                    ))}
                   </div>
+                  <p className="text-[12px] text-muted-foreground leading-relaxed max-w-2xl">
+                    Ваш персональный статус и эмодзи, как в Telegram. Отображается в профиле, друзьях, командах и задачах.
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center pt-1 sm:pt-0">
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker(true)}
                     className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 touch-manipulation min-h-[32px]"
                   >
-                    <Sparkles className="w-3 h-3" />
-                    <span>Выбрать (1000+)</span>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Каталог (1000+)</span>
                   </button>
 
                   {avatarSavedStatus && (
@@ -987,7 +951,49 @@ export function SettingsView() {
                   )}
                 </div>
               </div>
-            </Row>
+
+              {/* Dedicated Avatar & Quick-pick Emoji Strip */}
+              <div className="flex items-center gap-3 w-full min-w-0 p-2.5 rounded-2xl bg-muted/40 border border-border/70 overflow-hidden">
+                {/* Main Avatar Bubble */}
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(true)}
+                  className="w-11 h-11 rounded-2xl bg-card hover:bg-muted border-2 border-primary/50 hover:border-primary flex items-center justify-center shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none touch-manipulation shrink-0"
+                  title="Нажмите, чтобы открыть каталог из 1000+ эмодзи и аватаров Зерфика"
+                >
+                  <ZerfAvatar emoji={userAvatarEmoji} size="lg" />
+                  <span className="absolute -bottom-1 -right-1 p-0.5 rounded-full bg-primary text-primary-foreground text-[8px] shadow-xs group-hover:scale-110 transition-transform">
+                    <Sparkles className="w-2.5 h-2.5" />
+                  </span>
+                </button>
+
+                <div className="h-6 w-px bg-border/80 shrink-0" />
+
+                {/* Quick Pick Chips (Horizontal Scrollable) */}
+                <div
+                  className="flex items-center gap-1.5 overflow-x-auto min-w-0 flex-1 py-0.5 [scrollbar-width:none]"
+                  style={{ msOverflowStyle: 'none' }}
+                >
+                  {ZERF_CUSTOM_EMOJIS.slice(0, 16).map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSelectAvatarEmoji(item.id)}
+                      className={cn(
+                        'w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer select-none touch-manipulation shrink-0',
+                        'opacity-80 hover:opacity-100',
+                        userAvatarEmoji === item.id
+                          ? 'bg-primary/25 border-2 border-primary scale-110 shadow-2xs opacity-100'
+                          : 'bg-card hover:bg-muted border border-border/70 hover:scale-105'
+                      )}
+                      title={`${item.name} · ${item.description}`}
+                    >
+                      <ZerfAvatar emoji={item.id} size="sm" monochrome={userAvatarEmoji !== item.id} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             <Row label="Имя пользователя" description="Отображается в команде, совместных проектах, задачах и чате">
               <div className="flex items-center gap-2">
