@@ -131,12 +131,12 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
   {
     id: 'free',
     name: 'Базовый',
-    aiModel: 'Llama 3.1 8B / Qwen 7B',
+    aiModel: 'GPT-OSS 20B / Llama 3.1 8B',
     priceMonthly: 0,
     priceYearly: 0,
     tagline: 'Начните пользоваться прямо сейчас',
     features: [
-      '🤖 ИИ: Llama 3.1 8B / Qwen 7B',
+      '🤖 ИИ: GPT-OSS 20B / Llama 3.1 8B',
       '🧩 До 5 активных расширений и виджетов',
       'До 20 заметок в аккаунте',
       'До 10 активных напоминаний',

@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, Sparkles, Lock, Check, Zap, MessageSquare, ListTodo, Target, RotateCcw, BarChart2, Mic, Crown, Cpu, Terminal, Key, Eye, EyeOff, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useSettings } from '@/lib/store'
+import { useSettings, getAuthHeaders } from '@/lib/store'
 import { PlanId } from '@/lib/plans'
 
 interface AiModelsSectionProps {
@@ -14,12 +14,12 @@ interface AiModelsSectionProps {
 
 const ALL_MODELS = [
   { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект для масштабных проектов и декомпозиции' },
-  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', tier: 'pro', params: '20B', desc: 'Сверхбыстрый отклик (~600 мс), чистый русский язык, умеренный расход' },
+  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', tier: 'free', params: '20B', desc: 'Сверхбыстрый отклик (~150 мс), чистый русский язык, мгновенная обработка Siri и заметок' },
   { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, отличное понимание структуры дел и русского языка' },
-  { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B', tier: 'pro', params: '72B', desc: 'Глубокая аналитика, структурирование и планирование' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', tier: 'pro', params: '70B', desc: 'Мощная универсальная модель Meta с высокой точностью' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Сверхлегкая и экономичная модель для базового ввода и быстрых команд' },
   { id: 'groq/compound', name: 'Groq Compound', tier: 'pro', params: 'Compound', desc: 'Сбалансированная модель для быстрых вычислений' },
-  { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B', tier: 'free', params: '8B', desc: 'Сверхлегкая и экономичная модель для базового ввода и быстрых команд' },
-  { id: 'Qwen/Qwen2.5-7B-Instruct', name: 'Qwen 2.5 7B', tier: 'free', params: '7B', desc: 'Компактная быстрая модель с хорошим русским языком' },
+  { id: 'groq/compound-mini', name: 'Groq Compound Mini', tier: 'free', params: 'Mini', desc: 'Компактная легковесная модель для мгновенных задач' },
 ]
 
 export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionProps) {
@@ -28,7 +28,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   const isPlus = userPlan === 'plus'
   const isFree = userPlan === 'free'
 
-  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'meta-llama/Llama-3.1-8B-Instruct')
+  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b')
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
@@ -39,6 +39,16 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
     setTimeout(() => setSavedToast(false), 2000)
   }
 
+  const syncToBackend = async (payload: { aiModel?: string; aiTaskModels?: Record<string, string>; siriMode?: string }) => {
+    try {
+      await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch {}
+  }
+
   const handleGlobalModelChange = (modelId: string) => {
     update({
       integrations: {
@@ -46,20 +56,23 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
         aiModel: modelId,
       }
     })
+    syncToBackend({ aiModel: modelId })
     showSaved()
   }
 
-  const handleTaskModelChange = (taskKey: 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics', modelId: string) => {
+  const handleTaskModelChange = (taskKey: 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'siri', modelId: string) => {
     if (!isProOrCorp) return
+    const nextTaskModels = {
+      ...taskModels,
+      [taskKey]: modelId,
+    }
     update({
       integrations: {
         ...settings.integrations,
-        aiTaskModels: {
-          ...taskModels,
-          [taskKey]: modelId,
-        }
+        aiTaskModels: nextTaskModels,
       }
     })
+    syncToBackend({ aiTaskModels: nextTaskModels })
     showSaved()
   }
 
@@ -128,50 +141,55 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
             Выбор основной ИИ-модели для задач и чата
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Llama 3.1 8B */}
+            {/* GPT-OSS 20B Fast */}
             <button
               type="button"
-              onClick={() => handleGlobalModelChange('meta-llama/Llama-3.1-8B-Instruct')}
+              onClick={() => handleGlobalModelChange('openai/gpt-oss-20b')}
               className={cn(
                 "p-3.5 rounded-2xl border text-left flex flex-col justify-between space-y-2 transition-all cursor-pointer",
-                currentGlobalModel === 'meta-llama/Llama-3.1-8B-Instruct'
+                currentGlobalModel === 'openai/gpt-oss-20b'
                   ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
                   : "border-border bg-card hover:border-border/80 hover:bg-accent/40"
               )}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Llama 3.1 8B</span>
-                {currentGlobalModel === 'meta-llama/Llama-3.1-8B-Instruct' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-foreground">GPT-OSS 20B Fast</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    ⚡ Быстрая (~150мс)
+                  </span>
+                </div>
+                {currentGlobalModel === 'openai/gpt-oss-20b' && (
                   <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                     <Check className="w-2.5 h-2.5" />
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground">Сверхлегкая и экономичная модель для базового ввода и быстрых команд</p>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">8 млрд параметров</span>
+              <p className="text-[11px] text-muted-foreground">Сверхбыстрый отклик, чистый русский язык, мгновенная обработка заметок и Siri</p>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">20 млрд параметров</span>
             </button>
 
-            {/* Qwen 2.5 7B */}
+            {/* Llama 3.1 8B Instant */}
             <button
               type="button"
-              onClick={() => handleGlobalModelChange('Qwen/Qwen2.5-7B-Instruct')}
+              onClick={() => handleGlobalModelChange('llama-3.1-8b-instant')}
               className={cn(
                 "p-3.5 rounded-2xl border text-left flex flex-col justify-between space-y-2 transition-all cursor-pointer",
-                currentGlobalModel === 'Qwen/Qwen2.5-7B-Instruct'
+                currentGlobalModel === 'llama-3.1-8b-instant'
                   ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
                   : "border-border bg-card hover:border-border/80 hover:bg-accent/40"
               )}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Qwen 2.5 7B</span>
-                {currentGlobalModel === 'Qwen/Qwen2.5-7B-Instruct' && (
+                <span className="text-xs font-bold text-foreground">Llama 3.1 8B Instant</span>
+                {currentGlobalModel === 'llama-3.1-8b-instant' && (
                   <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                     <Check className="w-2.5 h-2.5" />
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground">Компактная быстрая модель с хорошим русским языком</p>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">7 млрд параметров</span>
+              <p className="text-[11px] text-muted-foreground">Компактная легковесная модель для базового ввода и быстрых команд</p>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">8 млрд параметров</span>
             </button>
 
             {/* Qwen 3.6 27B (Available on Plus, Locked on Free) */}
@@ -404,6 +422,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                   siriMode: 'fast',
                 }
               })
+              syncToBackend({ siriMode: 'fast' })
               showSaved()
             }}
             className={cn(
@@ -437,6 +456,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                   siriMode: 'full',
                 }
               })
+              syncToBackend({ siriMode: 'full' })
               showSaved()
             }}
             className={cn(

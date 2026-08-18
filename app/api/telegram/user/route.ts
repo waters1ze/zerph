@@ -47,6 +47,20 @@ export async function GET(req: NextRequest) {
             if (emojiConf?.value) avatarEmoji = emojiConf.value
           } catch {}
 
+          let aiModel: string | null = null
+          let aiTaskModels: Record<string, string> = {}
+          let siriMode = 'fast'
+          try {
+            const [modelConf, taskModelsConf, siriModeConf] = await Promise.all([
+              prisma.config.findUnique({ where: { key: `user_ai_model_${cid}` } }),
+              prisma.config.findUnique({ where: { key: `user_ai_task_models_${cid}` } }),
+              prisma.config.findUnique({ where: { key: `user_siri_mode_${cid}` } }),
+            ])
+            if (modelConf?.value) aiModel = modelConf.value
+            if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value)
+            if (siriModeConf?.value) siriMode = siriModeConf.value
+          } catch {}
+
           const siriKey = getSiriUserKey(chat.chatId)
 
           return NextResponse.json({
@@ -69,6 +83,9 @@ export async function GET(req: NextRequest) {
             reminderIntervalMinutes: chat.reminderIntervalMinutes ?? 5,
             reminderRepeatCount: chat.reminderRepeatCount ?? 3,
             ttsEnabled: Boolean(chat.ttsEnabled),
+            aiModel,
+            aiTaskModels,
+            siriMode,
             plan: activePlan,
             isPremium,
             subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
@@ -103,11 +120,37 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled, avatarEmoji } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled, avatarEmoji, aiModel, aiTaskModels, siriMode } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
 
     const updateData: any = {}
+
+    if (aiModel !== undefined) {
+      const cleanModel = String(aiModel).trim()
+      await prisma.config.upsert({
+        where: { key: `user_ai_model_${cid}` },
+        update: { value: cleanModel },
+        create: { key: `user_ai_model_${cid}`, value: cleanModel },
+      }).catch(() => {})
+    }
+
+    if (aiTaskModels !== undefined && typeof aiTaskModels === 'object') {
+      await prisma.config.upsert({
+        where: { key: `user_ai_task_models_${cid}` },
+        update: { value: JSON.stringify(aiTaskModels) },
+        create: { key: `user_ai_task_models_${cid}`, value: JSON.stringify(aiTaskModels) },
+      }).catch(() => {})
+    }
+
+    if (siriMode !== undefined) {
+      const cleanMode = String(siriMode).trim()
+      await prisma.config.upsert({
+        where: { key: `user_siri_mode_${cid}` },
+        update: { value: cleanMode },
+        create: { key: `user_siri_mode_${cid}`, value: cleanMode },
+      }).catch(() => {})
+    }
 
     if (avatarEmoji !== undefined) {
       const cleanEmoji = String(avatarEmoji).trim()

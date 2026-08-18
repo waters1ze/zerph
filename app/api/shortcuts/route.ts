@@ -333,9 +333,12 @@ export async function POST(req: NextRequest) {
     const isMutationOrComplex = /(удали|стереть|сотри|очисти|вычеркни|отмени|измени|поменяй|перенеси|расписание|график)/i.test(inputText)
 
     // Parallelize prerequisite DB queries in 1 lightweight batch
-    const [limits, friends] = await Promise.all([
+    const [limits, friends, customAiModelRow, customTaskModelsRow, siriModeRow] = await Promise.all([
       getUserUsageAndLimits(chatId),
       getFriends(chatId),
+      prisma.config.findUnique({ where: { key: `user_ai_model_${chatId}` } }).catch(() => null),
+      prisma.config.findUnique({ where: { key: `user_ai_task_models_${chatId}` } }).catch(() => null),
+      prisma.config.findUnique({ where: { key: `user_siri_mode_${chatId}` } }).catch(() => null),
     ])
 
     registerChatId(chatId).catch(() => {})
@@ -369,13 +372,25 @@ export async function POST(req: NextRequest) {
       }, { headers: NO_CACHE_HEADERS })
     }
 
-    // 2. Select ultra-fast optimized neural parser according to user plan and settings
-    const siriModel = getModelForUserPlan(limits.plan, undefined, 'siri')
+    // 2. Select ultra-fast optimized neural parser according to user settings & plan
+    let customSiriModel: string | undefined = undefined
+    if (customTaskModelsRow?.value) {
+      try {
+        const parsed = JSON.parse(customTaskModelsRow.value)
+        if (parsed.siri) customSiriModel = parsed.siri
+      } catch {}
+    }
+    if (!customSiriModel && customAiModelRow?.value) {
+      customSiriModel = customAiModelRow.value.trim()
+    }
+
+    const siriModel = getModelForUserPlan(limits.plan, customSiriModel, 'siri')
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
     const extensionsContext = await getUserExtensionsAIContext(chatId)
+    const forceFullContext = siriModeRow?.value === 'full'
 
     let items: any[]
-    if (isMutationOrComplex) {
+    if (isMutationOrComplex || forceFullContext) {
       const context = await getExistingItemsContext(chatId)
       items = await parseIntentWithGroq(inputText, key, siriModel, context, friendsContext, extensionsContext)
     } else {
