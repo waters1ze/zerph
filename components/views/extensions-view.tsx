@@ -427,6 +427,50 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [parsedManifest, setParsedManifest] = useState<any | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [isParsing, setIsParsing] = useState<boolean>(false)
+  const [userGithubUsername, setUserGithubUsername] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('zerf_github_username') || ''
+    }
+    return ''
+  })
+  const [userGithubRepos, setUserGithubRepos] = useState<Array<{
+    name: string
+    fullName: string
+    description: string
+    htmlUrl: string
+    isPrivate: boolean
+    stars: number
+    forks: number
+    language: string
+    updatedAt: string
+    defaultBranch: string
+  }>>([])
+  const [loadingGithubRepos, setLoadingGithubRepos] = useState<boolean>(false)
+  const [githubRepoSearch, setGithubRepoSearch] = useState<string>('')
+  const [githubModalTab, setGithubModalTab] = useState<'repos' | 'url'>('repos')
+  const [customGithubInput, setCustomGithubInput] = useState<string>('')
+
+  const fetchUserGithubRepos = async (usernameOverride?: string) => {
+    const targetUser = (usernameOverride || userGithubUsername || '').trim().replace(/^@/, '').replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').trim()
+    if (!targetUser) return
+    setLoadingGithubRepos(true)
+    try {
+      const res = await fetch(`/api/extensions?action=user_repos&username=${encodeURIComponent(targetUser)}`, {
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success && Array.isArray(data.repos)) {
+        setUserGithubRepos(data.repos)
+        if (data.username) {
+          setUserGithubUsername(data.username)
+          try { localStorage.setItem('zerf_github_username', data.username) } catch {}
+        }
+      }
+    } catch {}
+    finally {
+      setLoadingGithubRepos(false)
+    }
+  }
 
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
@@ -570,18 +614,20 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     }
   }
 
-  const handleParseGithub = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleParseGithub = async (e?: React.FormEvent, directUrl?: string) => {
+    if (e) e.preventDefault()
     setParseError(null)
     setParsedManifest(null)
-    if (!githubUrl.trim()) return
+    const targetUrl = (directUrl || githubUrl || '').trim()
+    if (!targetUrl) return
+    if (directUrl) setGithubUrl(directUrl)
 
     try {
       setIsParsing(true)
       const res = await fetch('/api/extensions', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'parse_github', githubUrl: githubUrl.trim() }),
+        body: JSON.stringify({ action: 'parse_github', githubUrl: targetUrl }),
       })
       const data = await res.json()
       if (data.success) {
@@ -2467,36 +2513,247 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 </div>
               )}
 
-              <form onSubmit={handleParseGithub} className="space-y-3 text-xs">
-                <div>
-                  <label className="font-semibold text-foreground block mb-1">Ссылка на открытый репозиторий GitHub:</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="url"
-                      value={githubUrl}
-                      onChange={e => setGithubUrl(e.target.value)}
-                      placeholder="https://github.com/username/zerf-pomodoro-widget"
-                      className="flex-1 h-9 px-3 rounded-xl bg-muted/50 border border-border text-foreground outline-none focus:border-primary font-mono text-[11px]"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      disabled={isParsing}
-                      className="px-3.5 h-9 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-                    >
-                      {isParsing ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Search className="w-3.5 h-3.5" />
+              {/* Tab Selector: My Repos vs Manual URL */}
+              <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-muted/50 border border-border text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGithubModalTab('repos')
+                    if (userGithubUsername && userGithubRepos.length === 0) fetchUserGithubRepos()
+                  }}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                    githubModalTab === 'repos'
+                      ? 'bg-card text-foreground font-bold shadow-xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <GithubIcon className="w-3.5 h-3.5" />
+                  <span>Мои репозитории {userGithubRepos.length > 0 && `(${userGithubRepos.length})`}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGithubModalTab('url')}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                    githubModalTab === 'url'
+                      ? 'bg-card text-foreground font-bold shadow-xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Вставить ссылку вручную</span>
+                </button>
+              </div>
+
+              {githubModalTab === 'repos' ? (
+                <div className="space-y-3">
+                  {!userGithubUsername ? (
+                    <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center">
+                          <GithubIcon className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-foreground text-xs">Привязка профиля GitHub</h4>
+                          <p className="text-[10px] text-muted-foreground">Укажите ваш логин на GitHub для выбора проектов в 1 клик</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={customGithubInput}
+                          onChange={e => setCustomGithubInput(e.target.value)}
+                          placeholder="например, waters1ze или octocat"
+                          className="flex-1 h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground text-xs outline-none focus:border-primary font-mono"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && customGithubInput.trim()) {
+                              fetchUserGithubRepos(customGithubInput)
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (customGithubInput.trim()) {
+                              fetchUserGithubRepos(customGithubInput)
+                            }
+                          }}
+                          disabled={loadingGithubRepos || !customGithubInput.trim()}
+                          className="px-3.5 h-9 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                        >
+                          {loadingGithubRepos ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                          <span>Загрузить</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {/* GitHub Profile Banner */}
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/40 border border-border text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-6 h-6 rounded-lg bg-foreground text-background flex items-center justify-center font-bold text-[10px] shrink-0">
+                            <GithubIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="font-bold text-foreground truncate">@{userGithubUsername}</span>
+                          <span className="px-1.5 py-0.2 rounded-md bg-primary/10 text-primary text-[10px] font-mono font-bold">
+                            {userGithubRepos.length} репо
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => fetchUserGithubRepos(userGithubUsername)}
+                            disabled={loadingGithubRepos}
+                            className="px-2 py-1 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Обновить репозитории"
+                          >
+                            <RefreshCw className={cn('w-3 h-3', loadingGithubRepos && 'animate-spin')} />
+                            <span>Обновить</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserGithubUsername('')
+                              setUserGithubRepos([])
+                            }}
+                            className="px-2 py-1 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground text-[11px] font-semibold cursor-pointer transition-colors"
+                            title="Сменить GitHub аккаунт"
+                          >
+                            Сменить
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Repositories Search Filter */}
+                      {userGithubRepos.length > 0 && (
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={githubRepoSearch}
+                            onChange={e => setGithubRepoSearch(e.target.value)}
+                            placeholder="Поиск по вашим репозиториям..."
+                            className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary placeholder:text-muted-foreground/70"
+                          />
+                        </div>
                       )}
-                      <span>Проверить</span>
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    В корне репозитория (ветка `main` или `master`) должен лежать файл <b>`zerf-extension.json`</b>
-                  </p>
+
+                      {/* Repositories List */}
+                      {loadingGithubRepos ? (
+                        <div className="p-8 rounded-2xl bg-muted/30 border border-border text-center space-y-2">
+                          <RefreshCw className="w-5 h-5 text-primary animate-spin mx-auto" />
+                          <p className="text-xs text-muted-foreground">Загрузка репозиториев с GitHub...</p>
+                        </div>
+                      ) : userGithubRepos.length === 0 ? (
+                        <div className="p-6 rounded-2xl bg-muted/30 border border-border text-center space-y-2">
+                          <p className="text-xs font-bold text-foreground">Публичные репозитории не найдены</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Создайте новый репозиторий на GitHub или вставьте ссылку на репозиторий вручную.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => fetchUserGithubRepos(userGithubUsername)}
+                            className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold cursor-pointer mt-1"
+                          >
+                            Повторить поиск
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                          {userGithubRepos
+                            .filter(r =>
+                              !githubRepoSearch ||
+                              r.name.toLowerCase().includes(githubRepoSearch.toLowerCase()) ||
+                              r.description.toLowerCase().includes(githubRepoSearch.toLowerCase()) ||
+                              r.language.toLowerCase().includes(githubRepoSearch.toLowerCase())
+                            )
+                            .map(repo => {
+                              const isThisParsing = isParsing && githubUrl === repo.htmlUrl
+                              return (
+                                <div
+                                  key={repo.fullName}
+                                  className="p-3 rounded-xl bg-card border border-border hover:border-primary/40 transition-all flex items-center justify-between gap-3 group"
+                                >
+                                  <div className="min-w-0 flex-1 space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <h5 className="font-bold text-foreground text-xs truncate group-hover:text-primary transition-colors">
+                                        {repo.name}
+                                      </h5>
+                                      {repo.language && (
+                                        <span className="px-1.5 py-0.2 rounded bg-muted text-muted-foreground text-[9px] font-mono shrink-0">
+                                          {repo.language}
+                                        </span>
+                                      )}
+                                      {repo.stars > 0 && (
+                                        <span className="text-[10px] text-amber-400 font-mono flex items-center gap-0.5 shrink-0">
+                                          ★ {repo.stars}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground truncate">
+                                      {repo.description || 'Репозиторий проекта'}
+                                    </p>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleParseGithub(undefined, repo.htmlUrl)}
+                                    disabled={isParsing}
+                                    className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                                  >
+                                    {isThisParsing ? (
+                                      <>
+                                        <RefreshCw className="w-3 h-3 animate-spin" />
+                                        <span>Проверка...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>Импортировать</span>
+                                        <ArrowRight className="w-3 h-3" />
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </form>
+              ) : (
+                <form onSubmit={handleParseGithub} className="space-y-3 text-xs">
+                  <div>
+                    <label className="font-semibold text-foreground block mb-1">Ссылка на открытый репозиторий GitHub:</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        value={githubUrl}
+                        onChange={e => setGithubUrl(e.target.value)}
+                        placeholder="https://github.com/username/zerf-pomodoro-widget"
+                        className="flex-1 h-9 px-3 rounded-xl bg-muted/50 border border-border text-foreground outline-none focus:border-primary font-mono text-[11px]"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        disabled={isParsing}
+                        className="px-3.5 h-9 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs disabled:opacity-50"
+                      >
+                        {isParsing ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Search className="w-3.5 h-3.5" />
+                        )}
+                        <span>Проверить</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      В корне репозитория (ветка `main` или `master`) должен лежать файл <b>`zerf-extension.json`</b>
+                    </p>
+                  </div>
+                </form>
+              )}
 
               {parsedManifest && (
                 <div className="p-4 rounded-2xl bg-muted/40 border border-border/80 space-y-3 text-xs">

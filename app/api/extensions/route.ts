@@ -118,6 +118,76 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req)
     const chatId = authUser?.chatId || null
 
+    const { searchParams } = new URL(req.url)
+    const action = searchParams.get('action')
+
+    if (action === 'user_repos') {
+      let username = searchParams.get('username') || ''
+      let token = searchParams.get('token') || ''
+      if (!username && chatId) {
+        try {
+          const ghRow = await prisma.config.findUnique({ where: { key: `user_github_${chatId}` } })
+          if (ghRow?.value) username = ghRow.value
+        } catch {}
+      }
+      if (!token && chatId) {
+        try {
+          const tokenRow = await prisma.config.findUnique({ where: { key: `user_github_token_${chatId}` } })
+          if (tokenRow?.value) token = tokenRow.value
+        } catch {}
+      }
+
+      if (!username && !token) {
+        return NextResponse.json({ success: false, error: 'Укажите логин GitHub для загрузки репозиториев', repos: [] })
+      }
+
+      const headers: Record<string, string> = {
+        'User-Agent': 'Zerf-Note-Extensions/1.0',
+        'Accept': 'application/vnd.github.v3+json',
+      }
+      if (token) {
+        headers['Authorization'] = `token ${token}`
+      }
+
+      try {
+        const ghUrl = token 
+          ? 'https://api.github.com/user/repos?sort=updated&per_page=100'
+          : `https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=100`
+
+        const ghRes = await fetch(ghUrl, { headers, cache: 'no-store' })
+        if (!ghRes.ok) {
+          return NextResponse.json({
+            success: false,
+            error: ghRes.status === 404 ? `Пользователь GitHub @${username} не найден` : `Ошибка GitHub API (${ghRes.status})`,
+            repos: []
+          })
+        }
+        const ghData = await ghRes.json()
+        if (Array.isArray(ghData)) {
+          const repos = ghData.map((r: any) => ({
+            name: r.name,
+            fullName: r.full_name,
+            description: r.description || '',
+            htmlUrl: r.html_url,
+            isPrivate: Boolean(r.private),
+            stars: r.stargazers_count || 0,
+            forks: r.forks_count || 0,
+            language: r.language || 'Code',
+            updatedAt: r.updated_at,
+            defaultBranch: r.default_branch || 'main',
+          }))
+          return NextResponse.json({
+            success: true,
+            username,
+            repos,
+          })
+        }
+        return NextResponse.json({ success: true, username, repos: [] })
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: err.message, repos: [] })
+      }
+    }
+
     const allItems = await loadExtensionsCatalog()
     const isCreator = chatId === '6136950061' || chatId === '5078516086'
     const catalog = allItems.filter(ext => {
@@ -133,6 +203,7 @@ export async function GET(req: NextRequest) {
     let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
     let boundCard: any = null
     let userPlan = 'free'
+    let userGithubUsername: string | null = null
 
     if (chatId) {
       installedIds = await getUserInstalledExtensions(chatId)
@@ -141,11 +212,15 @@ export async function GET(req: NextRequest) {
       authorStats = await getAuthorBalance(chatId)
       boundCard = await getAuthorPayoutCard(chatId)
       try {
-        const userRec = await prisma.telegramChat.findUnique({
-          where: { chatId: BigInt(chatId) },
-          select: { plan: true },
-        })
+        const [userRec, ghRow] = await Promise.all([
+          prisma.telegramChat.findUnique({
+            where: { chatId: BigInt(chatId) },
+            select: { plan: true },
+          }),
+          prisma.config.findUnique({ where: { key: `user_github_${chatId}` } }),
+        ])
         userPlan = normalizePlan(userRec?.plan)
+        if (ghRow?.value) userGithubUsername = ghRow.value
       } catch {}
     }
 
@@ -169,6 +244,7 @@ export async function GET(req: NextRequest) {
       installedIds,
       enabledIds,
       likedIds,
+      githubUsername: userGithubUsername,
       userPlan,
       maxExtensions: maxExtensions === UNLIMITED ? -1 : maxExtensions,
       canUseExtensions: true, // All users can install up to their plan limit (Free: 5, Plus: 10, Pro: 50, Corp: ∞)
