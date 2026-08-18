@@ -791,23 +791,24 @@ export function SettingsView() {
                   </span>
                 </button>
 
-                {/* Quick Pick Chips without horizontal scrollbar */}
-                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-full">
-                  {['⚡', '🔥', '🌊', '🎯', '🚀', '💎', '🌸', '🎭', '🧠', '👑'].map(emoji => (
+                {/* Quick Pick Chips (B&W / Monochrome AI Set) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-full">
+                  {['🤖', '🧠', '🔮', '⚡', '✨', '💻', '🔥', '👑', '🚀', '👾', '💎', '🦾'].map(emoji => (
                     <button
                       key={emoji}
                       type="button"
                       onClick={() => handleSelectAvatarEmoji(emoji)}
                       className={cn(
                         'w-8 h-8 rounded-xl flex items-center justify-center text-base transition-all cursor-pointer select-none touch-manipulation shrink-0',
+                        'grayscale contrast-125 opacity-75 hover:opacity-100 hover:grayscale-0',
                         userAvatarEmoji === emoji
-                          ? 'bg-primary/20 border border-primary/50 scale-110 shadow-2xs font-bold'
+                          ? 'bg-primary/20 border border-primary/50 scale-110 shadow-2xs font-bold opacity-100'
                           : 'bg-muted/40 hover:bg-muted border border-border/60 hover:scale-105'
                       )}
                       style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}
                       title={`Выбрать ${emoji}`}
                     >
-                      {emoji}
+                      <span>{emoji}</span>
                     </button>
                   ))}
                 </div>

@@ -589,38 +589,6 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           </div>
         )}
       </nav>
-
-      {/* Bottom Profile / Status bar */}
-      <div className={cn('border-t border-border bg-card/60 transition-all pb-[max(0.5rem,env(safe-area-inset-bottom))]', isCollapsed ? 'p-2 flex justify-center' : 'p-2.5')}>
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
-          className={cn(
-            'w-full flex items-center rounded-2xl hover:bg-muted/60 transition-all cursor-pointer group touch-manipulation',
-            isCollapsed ? 'justify-center p-1' : 'gap-2.5 px-2 py-1.5'
-          )}
-          title="Настройки профиля и аватар"
-        >
-          <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-base shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-            <span className="emoji-symbol" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
-              {userAvatarEmoji || '👤'}
-            </span>
-          </div>
-
-          {!isCollapsed && (
-            <div className="flex-1 text-left min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground truncate">{tgUser?.name || displayName || 'Мой профиль'}</span>
-                <div className="flex items-center gap-1">
-                  <Circle className="w-1.5 h-1.5 fill-[var(--status-done)] text-[var(--status-done)]" />
-                  <span className="text-[10px] text-muted-foreground font-medium">Онлайн</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground truncate">{todayCount} на сегодня • {activeTasksCount} активных</p>
-            </div>
-          )}
-        </motion.button>
-      </div>
     </aside>
   )
 }

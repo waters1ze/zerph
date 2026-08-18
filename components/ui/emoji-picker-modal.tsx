@@ -225,7 +225,8 @@ export function EmojiPickerModal({
                       style={EMOJI_FONT_STYLE}
                       className={cn(
                         'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted hover:scale-110 select-none touch-manipulation',
-                        currentEmoji === emoji ? 'bg-primary/20 border border-primary/40' : 'bg-card border border-border/40'
+                        'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
+                        currentEmoji === emoji ? 'bg-primary/20 border border-primary/40 opacity-100' : 'bg-card border border-border/40'
                       )}
                     >
                       {emoji}
@@ -244,7 +245,7 @@ export function EmojiPickerModal({
                     : EMOJI_CATEGORIES.find(c => c.id === activeCategoryId)?.name || 'Все эмодзи'}
                 </span>
                 <span className="text-[9px] font-mono">
-                  {displayedEmojis.length} эмодзи
+                  {displayedEmojis.length} эмодзи (Ч/Б)
                 </span>
               </div>
 
@@ -263,8 +264,9 @@ export function EmojiPickerModal({
                         style={EMOJI_FONT_STYLE}
                         className={cn(
                           'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted/80 hover:scale-115 active:scale-95 select-none relative group touch-manipulation',
+                          'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
                           isSelected
-                            ? 'bg-primary/20 border-2 border-primary shadow-xs'
+                            ? 'bg-primary/20 border-2 border-primary shadow-xs opacity-100'
                             : 'bg-muted/20 hover:bg-muted/50 border border-transparent'
                         )}
                         title={emoji}
