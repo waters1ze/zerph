@@ -14,7 +14,13 @@ interface CliAuthEntry {
   chatId?: string
   token?: string
   plan?: string
+  /** Когда CLI забрал токен — запись живёт ещё 90 с для повторной выдачи
+   *  (обрыв сети в момент ответа больше не теряет токен навсегда) */
+  claimedAt?: number
 }
+
+/** Окно повторной выдачи токена после первого GET */
+const CLAIM_GRACE_MS = 90 * 1000
 
 async function getAuthEntry(code: string): Promise<CliAuthEntry | null> {
   try {
@@ -105,15 +111,22 @@ export async function GET(req: NextRequest) {
     }
 
     if (entry.status === 'approved') {
-      // Return generated token and clear entry so it cannot be reused
-      const responsePayload = {
+      // Идемпотентная выдача: первые 90 секунд токен можно забрать повторно
+      // тем же кодом (страховка от обрыва сети), затем запись удаляется
+      if (entry.claimedAt && Date.now() - entry.claimedAt > CLAIM_GRACE_MS) {
+        await deleteAuthEntry(code)
+        return NextResponse.json({ error: 'Auth code already used' }, { status: 404 })
+      }
+      if (!entry.claimedAt) {
+        entry.claimedAt = Date.now()
+        await saveAuthEntry(code, entry)
+      }
+      return NextResponse.json({
         status: 'approved',
         token: entry.token,
         chatId: entry.chatId,
         plan: entry.plan,
-      }
-      await deleteAuthEntry(code)
-      return NextResponse.json(responsePayload)
+      })
     }
 
     if (entry.status === 'rejected') {
@@ -146,6 +159,10 @@ export async function PUT(req: NextRequest) {
     const entry = await getAuthEntry(cleanCode)
     if (!entry) {
       return NextResponse.json({ error: 'Срок действия кода истёк или код недействителен' }, { status: 404 })
+    }
+
+    if (entry.status !== 'pending') {
+      return NextResponse.json({ error: 'Этот код уже был использован. Запросите новый в терминале: zerf login' }, { status: 400 })
     }
 
     if (action === 'reject') {
