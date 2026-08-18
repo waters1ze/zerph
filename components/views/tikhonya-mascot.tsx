@@ -41,9 +41,11 @@ export function ZerfikMascot({
   const [isHovered, setIsHovered] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const [cursorVector, setCursorVector] = useState<{ dx: number; dy: number; facing: number; tilt: number }>({
+  const [cursorVector, setCursorVector] = useState<{ dx: number; dy: number; rawDx: number; rawDy: number; facing: number; tilt: number }>({
     dx: 0,
     dy: 0,
+    rawDx: 0,
+    rawDy: 0,
     facing: 1,
     tilt: 0,
   })
@@ -58,17 +60,17 @@ export function ZerfikMascot({
       const rect = containerRef.current.getBoundingClientRect()
       const centerX = rect.left + rect.width / 2
       const centerY = rect.top + rect.height / 2
-      const dx = e.clientX - centerX
-      const dy = e.clientY - centerY
+      const rawDx = e.clientX - centerX
+      const rawDy = e.clientY - centerY
       const maxDist = Math.max(window.innerWidth, window.innerHeight) || 1000
 
       // Normalize offsets smoothly
-      const normX = Math.max(-10, Math.min(10, (dx / maxDist) * 32))
-      const normY = Math.max(-8, Math.min(8, (dy / maxDist) * 24))
-      const tilt = Math.max(-12, Math.min(12, (dx / maxDist) * 35))
-      const facing = dx < -25 ? -1 : 1
+      const normX = Math.max(-12, Math.min(12, (rawDx / maxDist) * 35))
+      const normY = Math.max(-10, Math.min(10, (rawDy / maxDist) * 28))
+      const tilt = Math.max(-14, Math.min(14, (rawDx / maxDist) * 40))
+      const facing = rawDx < -20 ? -1 : 1
 
-      setCursorVector({ dx: normX, dy: normY, facing, tilt })
+      setCursorVector({ dx: normX, dy: normY, rawDx, rawDy, facing, tilt })
     }
 
     window.addEventListener('mousemove', handleMouseMove, { passive: true })
@@ -78,7 +80,7 @@ export function ZerfikMascot({
   const handleClick = () => {
     setQuoteIndex(prev => (prev + 1) % ZERFIK_QUOTES.length)
     setCurrentMood('celebrate')
-    setTimeout(() => setCurrentMood(mood), 1600)
+    setTimeout(() => setCurrentMood(mood), 1800)
     if (onMascotClick) onMascotClick()
   }
 
@@ -89,16 +91,26 @@ export function ZerfikMascot({
   }[size]
 
   const isThinking = currentMood === 'thinking'
+  const isHappy = currentMood === 'celebrate' || currentMood === 'happy' || isHovered
 
-  // Determine active sprite based on posture and mood
+  // Determine active sprite based on posture, cursor direction, and mood
   let activeSprite = '/images/zerfik_idle.png'
   if (isThinking) {
     activeSprite = '/images/zerfik_thinking.png'
-  } else if (currentMood === 'celebrate' || currentMood === 'happy') {
+  } else if (isHappy) {
+    // Raises arms high, joyfully moves and cheers!
     activeSprite = '/images/zerfik_happy.png'
-  } else if (cursorVector.dx < -3) {
+  } else if (cursorVector.rawDy > 35 && Math.abs(cursorVector.rawDy) >= Math.abs(cursorVector.rawDx) * 0.7) {
+    // Cursor is below (e.g. in search bar or cards below) -> looks down at cursor
+    activeSprite = '/images/zerfik_down.png'
+  } else if (cursorVector.rawDy < -35 && Math.abs(cursorVector.rawDy) >= Math.abs(cursorVector.rawDx) * 0.7) {
+    // Cursor is above -> looks up at cursor
+    activeSprite = '/images/zerfik_up.png'
+  } else if (cursorVector.rawDx < -20) {
+    // Cursor is to the left -> looks left
     activeSprite = '/images/zerfik_left.png'
-  } else if (cursorVector.dx > 3) {
+  } else if (cursorVector.rawDx > 20) {
+    // Cursor is to the right -> looks right
     activeSprite = '/images/zerfik_right.png'
   }
 
@@ -169,15 +181,15 @@ export function ZerfikMascot({
         <motion.div
           animate={{
             x: cursorVector.dx,
-            y: isThinking ? [-3, 3, -3] : cursorVector.dy,
-            rotate: isThinking ? [-2, 4, -2] : cursorVector.tilt,
-            scale: currentMood === 'celebrate' ? [1, 1.15, 1] : 1,
+            y: isThinking ? [-3, 3, -3] : isHappy ? [-8, 0, -4, 0] : cursorVector.dy,
+            rotate: isThinking ? [-2, 4, -2] : isHappy ? [-4, 4, -4] : cursorVector.tilt,
+            scale: isHappy ? [1, 1.15, 1.05] : 1,
           }}
           transition={{
             x: { type: 'spring', stiffness: 200, damping: 22 },
-            y: isThinking ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
-            rotate: isThinking ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 180, damping: 18 },
-            scale: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' },
+            y: isThinking ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : isHappy ? { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
+            rotate: isThinking ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : isHappy ? { duration: 0.6, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 180, damping: 18 },
+            scale: { duration: 0.4, ease: 'easeOut' },
           }}
           className="relative flex items-center justify-center transition-all pointer-events-auto select-none"
           style={{
@@ -185,6 +197,8 @@ export function ZerfikMascot({
             height: dimensions.height,
             filter: isThinking
               ? 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.85)) drop-shadow(0 0 4px rgba(6, 182, 212, 0.9))'
+              : isHappy
+              ? 'drop-shadow(0 0 16px rgba(56, 189, 248, 0.9)) drop-shadow(0 0 6px rgba(125, 211, 252, 0.8))'
               : isHovered
               ? 'drop-shadow(0 0 14px rgba(34, 211, 238, 0.75))'
               : 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.5))',
