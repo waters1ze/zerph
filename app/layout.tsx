@@ -60,7 +60,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION || process.env.GOOGLE_SITE_VERIFICATION || 'google44c9ead663596e11',
+    google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION || process.env.GOOGLE_SITE_VERIFICATION || 'google1cf58876479fe2e3',
     yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION || process.env.YANDEX_VERIFICATION || '5f45b0a0a8aac467',
   },
   openGraph: {
