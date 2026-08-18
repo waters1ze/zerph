@@ -1,39 +1,48 @@
 import { prisma } from '@/lib/backend/prisma'
+import { isUserAdmin } from '@/lib/backend/auth'
+
+export interface ExtensionCommand {
+  cmd: string
+  description: string
+}
+
+export interface ExtensionSkill {
+  name: string
+  description: string
+  action?: string
+}
 
 export interface ExtensionItem {
   id: string
   title: string
   version?: string
   description: string
-  type: 'widget' | 'template' | 'theme' | 'integration' | 'prompt'
+  type: 'widget' | 'template' | 'theme' | 'integration' | 'preset' | 'prompt'
   category: string
   icon: string
   githubUrl: string
+  manifestUrl?: string
+  hostingUrl?: string
+  selfHosted?: boolean
   authorChatId: string
   authorName: string
   authorGithub?: string
+  authorAvatar?: string
   price: number // 0 = free, > 0 = price in RUB
   minPlan?: 'free' | 'plus' | 'pro' | 'corp'
   isOfficial?: boolean
   isPublished?: boolean // false = Draft/Unpublished, true = Live in Store Catalog
+  isDisabledByOwner?: boolean
   isRunnable?: boolean // true if extension has an interactive app/runner window (e.g. Entropy Search)
   changelog?: string // Release notes / changelog
   rating: number
   ratingCount: number
   likesCount: number
   installCount: number
-  manifestUrl?: string
-  hostingUrl?: string // Custom self-hosted server endpoint for large-scale extensions
-  selfHosted?: boolean // true if extension uses an external microservice/server
-  isDisabledByOwner?: boolean // true if owner temporarily turned off the extension
   aiInstructions?: string
   triggers?: string[]
-  aiSkills?: Array<{
-    name: string
-    description: string
-    action?: string
-  }>
-  content: Record<string, any>
+  aiSkills?: ExtensionSkill[]
+  content: any
   createdAt: string
   updatedAt: string
 }
@@ -48,9 +57,9 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'ИИ & Промпты',
     icon: '🔮',
     githubUrl: 'https://github.com/waters1ze/Entropy',
-    authorChatId: '6136950061',
-    authorName: 'waters1ze',
-    authorGithub: 'waters1ze',
+    authorChatId: 'system',
+    authorName: 'Zerf Official',
+    authorGithub: 'zerf-official',
     price: 0,
     minPlan: 'plus',
     isOfficial: true,
@@ -91,9 +100,9 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'Темы & Стили',
     icon: '🌌',
     githubUrl: 'https://github.com/waters1ze/zerf-theme-cyberpunk',
-    authorChatId: '6136950061',
-    authorName: 'waters1ze',
-    authorGithub: 'waters1ze',
+    authorChatId: 'system',
+    authorName: 'Zerf Official',
+    authorGithub: 'zerf-official',
     price: 0,
     minPlan: 'free',
     isOfficial: true,
@@ -135,9 +144,9 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'Темы & Стили',
     icon: '👑',
     githubUrl: 'https://github.com/waters1ze/zerf-theme-royal-gold',
-    authorChatId: '6136950061',
-    authorName: 'waters1ze',
-    authorGithub: 'waters1ze',
+    authorChatId: 'system',
+    authorName: 'Zerf Official',
+    authorGithub: 'zerf-official',
     price: 0,
     minPlan: 'free',
     isOfficial: true,
@@ -175,9 +184,9 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     category: 'Темы & Стили',
     icon: '🗼',
     githubUrl: 'https://github.com/waters1ze/zerf-theme-tokyo-night',
-    authorChatId: '6136950061',
-    authorName: 'waters1ze',
-    authorGithub: 'waters1ze',
+    authorChatId: 'system',
+    authorName: 'Zerf Official',
+    authorGithub: 'zerf-official',
     price: 0,
     minPlan: 'free',
     isOfficial: true,
@@ -233,8 +242,8 @@ export async function getUserInstalledExtensions(chatId: string | number): Promi
     if (row?.value) {
       return JSON.parse(row.value)
     }
-    // Only creator/admin has Entropy Search pre-installed by default
-    if (cid === '6136950061' || cid === '5078516086') {
+    // Admin accounts get Entropy Search enabled by default
+    if (await isUserAdmin(cid)) {
       return ['ext_entropy_search']
     }
     return []

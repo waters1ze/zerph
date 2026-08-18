@@ -555,9 +555,9 @@ export function InstalledExtensionsSettingsSection() {
                       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
                         <span>{ext.category}</span>
                         <span>•</span>
-                        {ext.isOfficial || ext.authorChatId === 'system' || ext.authorChatId === '6136950061' ? (
+                        {ext.isOfficial || ext.authorChatId === 'system' ? (
                           <span className="inline-flex items-center gap-0.5 text-amber-500 font-semibold">
-                            <Crown className="w-2.5 h-2.5" /> Создатель
+                            <Crown className="w-2.5 h-2.5" /> Официальное
                           </span>
                         ) : (
                           <span>👤 {ext.authorName || 'Автор'}</span>

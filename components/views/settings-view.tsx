@@ -137,6 +137,7 @@ export function SettingsView() {
     name?: string
     avatarEmoji?: string | null
     plan?: string
+    isAdmin?: boolean
     isPremium?: boolean
     newsDisabled?: boolean
     ttsEnabled?: boolean
@@ -181,7 +182,7 @@ export function SettingsView() {
   const [userCity, setUserCity] = useState(cachedCity)
   const [citySavedStatus, setCitySavedStatus] = useState<boolean>(false)
   const citySaveTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
+  const isAdmin = Boolean(profileData.isAdmin)
 
   // Avatar / Profile Emoji State (Telegram-style 1000+ emojis)
   const cachedAvatarEmoji = typeof window !== 'undefined' ? localStorage.getItem('zerf_avatar_emoji') || 'zerfik_spirit' : 'zerfik_spirit'
@@ -420,7 +421,7 @@ export function SettingsView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: promoInput.trim(),
-          chatId: currentChatId || '6136950061',
+          chatId: currentChatId || undefined,
         }),
       })
       const data = await res.json()
@@ -2320,10 +2321,10 @@ export function SettingsView() {
 
                     {cliOs === 'windows' ? (
                       <div className="p-2.5 rounded-xl bg-muted/80 border border-border flex items-center justify-between font-mono text-xs text-emerald-400">
-                        <code>iwr -useb https://zeprh.vercel.app/install.ps1 | iex</code>
+                        <code>iwr -useb {originUrl}/install.ps1 | iex</code>
                         <button
                           type="button"
-                          onClick={() => navigator.clipboard.writeText('iwr -useb https://zeprh.vercel.app/install.ps1 | iex')}
+                          onClick={() => navigator.clipboard.writeText(`iwr -useb ${originUrl}/install.ps1 | iex`)}
                           title="Копировать"
                           className="p-1 hover:text-foreground text-muted-foreground transition-colors cursor-pointer"
                         >
@@ -2332,10 +2333,10 @@ export function SettingsView() {
                       </div>
                     ) : (
                       <div className="p-2.5 rounded-xl bg-muted/80 border border-border flex items-center justify-between font-mono text-xs text-emerald-400">
-                        <code>curl -fsSL https://zeprh.vercel.app/install.sh | bash</code>
+                        <code>curl -fsSL {originUrl}/install.sh | bash</code>
                         <button
                           type="button"
-                          onClick={() => navigator.clipboard.writeText('curl -fsSL https://zeprh.vercel.app/install.sh | bash')}
+                          onClick={() => navigator.clipboard.writeText(`curl -fsSL ${originUrl}/install.sh | bash`)}
                           title="Копировать"
                           className="p-1 hover:text-foreground text-muted-foreground transition-colors cursor-pointer"
                         >

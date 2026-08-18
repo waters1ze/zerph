@@ -259,9 +259,9 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     category: 'ИИ & Промпты',
     icon: '🔮',
     githubUrl: 'https://github.com/waters1ze/Entropy',
-    authorChatId: '6136950061',
-    authorName: 'waters1ze',
-    authorGithub: 'waters1ze',
+    authorChatId: 'system',
+    authorName: 'Zerf Official',
+    authorGithub: 'zerf-official',
     price: 0,
     minPlan: 'free',
     isOfficial: true,
@@ -400,7 +400,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [formDescription, setFormDescription] = useState('')
   const [formIcon, setFormIcon] = useState('🧩')
   const [formCategory, setFormCategory] = useState('ИИ & Промпты')
-  const [formType, setFormType] = useState<'widget' | 'template' | 'theme' | 'integration' | 'prompt'>('prompt')
+  const [formType, setFormType] = useState<'widget' | 'template' | 'theme' | 'integration' | 'preset' | 'prompt'>('prompt')
   const [isCategoryOpen, setIsCategoryOpen] = useState<boolean>(false)
   const [isTypeOpen, setIsTypeOpen] = useState<boolean>(false)
   const [formMinPlan, setFormMinPlan] = useState<'free' | 'plus' | 'pro' | 'corp'>('free')
@@ -1345,7 +1345,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         (ext.githubUrl && ext.githubUrl.toLowerCase().includes(searchQuery.toLowerCase()))
       
       if (selectedCategory === 'core') {
-        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.authorChatId === '6136950061' || ext.id === 'ext_entropy_search' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy')
+        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.id === 'ext_entropy_search' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy')
         return matchesSearch && isCore
       }
       if (selectedCategory === 'all') return matchesSearch
@@ -1370,9 +1370,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const myExtensions = useMemo(() => {
     if (!currentChatId) return []
-    const isCreator = currentChatId === '6136950061' || currentChatId === '5078516086'
-    return catalog.filter(ext => ext.authorChatId === currentChatId || (isCreator && ext.isOfficial))
-  }, [catalog, currentChatId])
+    return catalog.filter(ext => ext.authorChatId === currentChatId || (canCreate && ext.isOfficial))
+  }, [catalog, currentChatId, canCreate])
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 space-y-6 pb-20">
@@ -1699,10 +1698,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                           <GithubIcon className="w-2.5 h-2.5 text-muted-foreground shrink-0" />
                           <span>@{ext.authorGithub || ext.authorName.replace(/^@/, '')}</span>
                         </a>
-                      ) : ext.isOfficial || ext.authorChatId === 'system' || ext.authorChatId === '6136950061' || ext.authorName?.toLowerCase().includes('создатель') ? (
+                      ) : ext.isOfficial || ext.authorChatId === 'system' || ext.authorName?.toLowerCase().includes('создатель') ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold text-amber-400">
                           <Crown className="w-2.5 h-2.5" />
-                          Создатель
+                          Официальное
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 font-medium text-foreground/90 truncate max-w-[110px]" title={ext.authorName}>
@@ -1720,8 +1719,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                         <Eye className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Author or Admin Edit & Delete buttons */}
-                      {(ext.authorChatId === currentChatId || currentChatId === '6136950061' || currentChatId === '5078516086') && (
+                      {/* Author Edit & Delete buttons */}
+                      {(ext.authorChatId === currentChatId || (canCreate && ext.authorChatId === 'system')) && (
                         <>
                           <button
                             onClick={() => handleOpenEdit(ext)}
@@ -3017,9 +3016,9 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                           <GithubIcon className="w-3 h-3 text-muted-foreground shrink-0" />
                           <span>@{selectedExt.authorGithub || selectedExt.authorName.replace(/^@/, '')}</span>
                         </a>
-                      ) : selectedExt.isOfficial || selectedExt.authorChatId === 'system' || selectedExt.authorChatId === '6136950061' || selectedExt.authorName?.toLowerCase().includes('создатель') ? (
+                      ) : selectedExt.isOfficial || selectedExt.authorChatId === 'system' || selectedExt.authorName?.toLowerCase().includes('создатель') ? (
                         <span className="inline-flex items-center gap-0.5 font-bold text-amber-400">
-                          <Crown className="w-2.5 h-2.5" /> Создатель
+                          <Crown className="w-2.5 h-2.5" /> Официальное
                         </span>
                       ) : (
                         <span className="font-semibold text-foreground">{selectedExt.authorName || 'Автор расширения'}</span>

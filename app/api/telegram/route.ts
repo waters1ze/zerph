@@ -21,7 +21,7 @@ import {
   getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
   isHolidayTitle, isBirthdayTitle, cancelScheduleForDate,
 } from '@/lib/backend/db'
-import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret, getFeedSignature } from '@/lib/backend/auth'
+import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret, getFeedSignature, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -784,7 +784,10 @@ async function handleSubscribe(chatId: number) {
 
 async function handleAdminCommand(chatId: number, args: string[]) {
   const ADMIN_SECRET = getAdminSecret() || ''
-  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061,5078516086').split(',').map(s => s.trim()).filter(Boolean)
+  const ADMIN_CHAT_IDS = (process.env.ADMIN_CHAT_IDS || process.env.OWNER_CHAT_ID || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
   const cid = BigInt(chatId)
 
   let isAuthorized = ADMIN_CHAT_IDS.includes(String(chatId))
@@ -3312,13 +3315,13 @@ export async function POST(req: NextRequest) {
     // EXCLUDE:
     // 1. Channel automatic forwards / channel posts (msg.is_automatic_forward, msg.sender_chat)
     // 2. Bot itself (msg.from?.is_bot)
-    // 3. Channel admin / owner (senderId === 6136950061, username === 'proj_1', 'zerph_bot', 'zerph_off', etc.)
+    // 3. Channel admin / bot accounts
     const isFromChannelOrBotOrOwner = Boolean(msg.is_automatic_forward) ||
       Boolean(msg.sender_chat) ||
       Boolean(msg.from?.is_bot) ||
-      senderId === 6136950061 ||
+      ROOT_ADMIN_IDS.includes(String(senderId)) ||
       String(senderId) === process.env.OWNER_CHAT_ID ||
-      ['proj_1', 'zerph_bot', 'zerph_off', 'channel_bot', 'groupanonymousbot'].includes((username || '').toLowerCase())
+      ['channel_bot', 'groupanonymousbot'].includes((username || '').toLowerCase())
 
     if (text && !text.startsWith('/') && !isFromChannelOrBotOrOwner) {
       const isChannelComment = isDiscussionGroup || Boolean(msg.reply_to_message) || Boolean(msg.forward_from_chat)

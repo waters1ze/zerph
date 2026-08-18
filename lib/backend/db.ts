@@ -1024,7 +1024,7 @@ export async function checkGroupOrUserHasPremium(
 
 /**
  * Deduct usage for group requests:
- * 1. If Root Owner (6136950061) is in the group -> 100% deducted from Owner (infinite limits, members are untouched)
+ * 1. If Root Admin is in the group -> 100% deducted from Admin (infinite limits, members are untouched)
  * 2. If Owner is NOT in the group -> divided and deducted evenly among all active Premium members in the group
  * 3. If no Premium members -> distributed evenly among registered members
  */

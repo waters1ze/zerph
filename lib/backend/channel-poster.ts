@@ -50,9 +50,14 @@ function sanitizeTgHtml(raw: string): string {
 
 async function getAdminChatIds(): Promise<number[]> {
   const adminIds = new Set<number>()
-  const ownerEnv = process.env.OWNER_CHAT_ID || '6136950061'
-  if (ownerEnv) adminIds.add(Number(ownerEnv))
-  adminIds.add(6136950061)
+  const ownerEnv = process.env.OWNER_CHAT_ID
+  if (ownerEnv && !isNaN(Number(ownerEnv))) adminIds.add(Number(ownerEnv))
+  
+  const envAdmins = (process.env.ADMIN_CHAT_IDS || '')
+    .split(',')
+    .map(s => Number(s.trim()))
+    .filter(n => !isNaN(n) && n > 0)
+  envAdmins.forEach(id => adminIds.add(id))
 
   try {
     const dbAdmins = await prisma.telegramChat.findMany({

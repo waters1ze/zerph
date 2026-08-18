@@ -36,10 +36,31 @@ export function getFeedSignature(chatId: string | number | bigint): string {
   return crypto.createHmac('sha256', getInternalPepper()).update(`feed:${chatId}`).digest('hex').slice(0, 32)
 }
 
-export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || '6136950061')
+export const ROOT_ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || process.env.OWNER_CHAT_ID || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean)
+
+/**
+ * Checks if a user is an administrator via ROOT_ADMIN_IDS env or DB isAdmin flag
+ */
+export async function isUserAdmin(chatId: string | number | bigint | null | undefined): Promise<boolean> {
+  if (!chatId) return false
+  const strId = String(chatId).trim()
+  if (!strId) return false
+  if (ROOT_ADMIN_IDS.includes(strId)) return true
+  try {
+    const numId = /^\d+$/.test(strId) ? BigInt(strId) : null
+    if (numId) {
+      const chat = await prisma.telegramChat.findUnique({
+        where: { chatId: numId },
+        select: { isAdmin: true },
+      })
+      if (chat?.isAdmin) return true
+    }
+  } catch {}
+  return false
+}
 
 /** Generate deterministic HMAC auth token for user */
 export function getUserAuthToken(chatId: number | string | bigint): string {

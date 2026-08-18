@@ -30,18 +30,10 @@ export const ENTROPY_PRO_ROLE_LIMITS: Record<string, number> = {
   admin: -1,   // Unlimited
 }
 
-// ── Creator Custom Overrides by User Chat ID / Username ───────────────────
-export const ENTROPY_USER_LIMIT_OVERRIDES: Record<string, { regular: number; pro: number }> = {
-  '6136950061': { regular: -1, pro: -1 }, // Creator (Unlimited)
-  '5078516086': { regular: -1, pro: -1 }, // Co-creator (Unlimited)
-  'waters1ze':  { regular: -1, pro: -1 }, // Developer (Unlimited)
-}
+import { ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 
-// Daily In-Memory Usage Trackers (key: YYYY-MM-DD:chatId)
-// Счётчики хранятся в БД (Config, ключ cnt_<kind>_<chatId>_<UTCdate>) — единая
-// точка правды на всех инстансах Vercel. Прежняя in-memory Map жила только в
-// памяти одной лямбды: лимиты «плавали» между инстансами и сбрасывались при
-// холодном старте.
+// ── Role Limit Overrides ───────────────────
+export const ENTROPY_USER_LIMIT_OVERRIDES: Record<string, { regular: number; pro: number }> = {}
 
 function getUserLimits(chatId?: string, userPlan: string = 'free') {
   if (!chatId) {
@@ -52,7 +44,12 @@ function getUserLimits(chatId?: string, userPlan: string = 'free') {
     }
   }
 
-  // Check specific user override
+  const plan = userPlan.toLowerCase()
+  if (plan === 'creator' || plan === 'admin' || plan === 'corp' || ROOT_ADMIN_IDS.includes(chatId)) {
+    return { regularLimit: -1, proLimit: -1, isUnlimited: true }
+  }
+
+  // Check custom user override if set
   if (chatId in ENTROPY_USER_LIMIT_OVERRIDES) {
     const override = ENTROPY_USER_LIMIT_OVERRIDES[chatId]
     return {
@@ -60,11 +57,6 @@ function getUserLimits(chatId?: string, userPlan: string = 'free') {
       proLimit: override.pro,
       isUnlimited: override.regular === -1 && override.pro === -1,
     }
-  }
-
-  const plan = userPlan.toLowerCase()
-  if (plan === 'creator' || plan === 'admin' || chatId === '6136950061' || chatId === '5078516086') {
-    return { regularLimit: -1, proLimit: -1, isUnlimited: true }
   }
 
   const regularLimit = ENTROPY_ROLE_LIMITS[plan] ?? ENTROPY_ROLE_LIMITS.free

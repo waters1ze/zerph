@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { getAuthenticatedUser, isUserAdmin, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { planAtLeast, normalizePlan, PLANS, UNLIMITED } from '@/lib/backend/plans'
 import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
@@ -189,7 +189,7 @@ export async function GET(req: NextRequest) {
     }
 
     const allItems = await loadExtensionsCatalog()
-    const isCreator = chatId === '6136950061' || chatId === '5078516086'
+    const isCreator = await isUserAdmin(chatId)
     const catalog = allItems.filter(ext => {
       if (ext.isPublished === false) {
         return chatId && (ext.authorChatId === chatId || isCreator)
@@ -480,7 +480,7 @@ export async function POST(req: NextRequest) {
       }
 
       const extId = id || `ext_gh_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`
-      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      const isCreator = await isUserAdmin(chatId)
       const authorName = isCreator
         ? 'Создатель'
         : ([userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || (userRec?.username ? `@${userRec.username}` : 'Автор расширения'))
@@ -555,7 +555,7 @@ export async function POST(req: NextRequest) {
       if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
       const current: ExtensionItem = JSON.parse(extRec.value)
-      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      const isCreator = await isUserAdmin(chatId)
       if (current.authorChatId !== chatId && !isCreator) {
         return NextResponse.json({ error: 'У вас нет прав на изменение статуса публикации' }, { status: 403 })
       }
@@ -581,7 +581,7 @@ export async function POST(req: NextRequest) {
       if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
       const current: ExtensionItem = JSON.parse(extRec.value)
-      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      const isCreator = await isUserAdmin(chatId)
       if (current.authorChatId !== chatId && !isCreator) {
         return NextResponse.json({ error: 'У вас нет прав на удаление этого расширения' }, { status: 403 })
       }
@@ -611,7 +611,7 @@ export async function POST(req: NextRequest) {
       if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
       const current: ExtensionItem = JSON.parse(extRec.value)
-      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      const isCreator = await isUserAdmin(chatId)
       if (current.authorChatId !== chatId && !isCreator) {
         return NextResponse.json({ error: 'У вас нет прав на синхронизацию этого расширения' }, { status: 403 })
       }
@@ -677,7 +677,7 @@ export async function POST(req: NextRequest) {
       const ext = allItems.find(e => e.id === extensionId)
       if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
-      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      const isCreator = await isUserAdmin(chatId)
       if ((ext.isPublished === false || ext.isDisabledByOwner === true) && ext.authorChatId !== chatId && !isCreator) {
         return NextResponse.json({
           error: '🔴 Это расширение временно отключено автором и недоступно для установки.',
@@ -949,7 +949,7 @@ export async function POST(req: NextRequest) {
       if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
       const parsed = JSON.parse(extRec.value)
-      if (parsed.authorChatId !== chatId && chatId !== '6136950061' && chatId !== '5078516086') {
+      if (parsed.authorChatId !== chatId && !(await isUserAdmin(chatId))) {
         return NextResponse.json({ error: 'У вас нет прав на удаление этого расширения' }, { status: 403 })
       }
 
@@ -1073,7 +1073,7 @@ export async function POST(req: NextRequest) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: '6136950061',
+            chat_id: process.env.OWNER_CHAT_ID || ROOT_ADMIN_IDS[0] || chatId,
             text: adminMsg,
             parse_mode: 'Markdown',
           }),

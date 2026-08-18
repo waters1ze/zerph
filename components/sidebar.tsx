@@ -125,13 +125,6 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     // Check if user is Admin with cache
     const checkAdmin = async () => {
       try {
-        const cid = typeof window !== 'undefined' ? (localStorage.getItem('zerf_chat_id') || '') : ''
-        const tgCid = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id : null
-        if (cid === '6136950061' || cid === '5078516086' || String(tgCid) === '6136950061' || String(tgCid) === '5078516086') {
-          setIsAdmin(true)
-          return
-        }
-
         if (cachedAdminCheck && now - cachedAdminCheck.timestamp < 300_000) {
           setIsAdmin(cachedAdminCheck.isAdmin)
           return
