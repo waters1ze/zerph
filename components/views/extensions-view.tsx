@@ -356,7 +356,7 @@ export function ExtensionsView() {
   // Custom Extension Editor / Studio Modal
   const [showEditorModal, setShowEditorModal] = useState<boolean>(false)
   const [editingExt, setEditingExt] = useState<ExtensionItem | null>(null)
-  const [editorActiveTab, setEditorActiveTab] = useState<'ai' | 'general' | 'version' | 'access' | 'code' | 'github'>('ai')
+  const [editorActiveTab, setEditorActiveTab] = useState<'ai' | 'general' | 'version' | 'access' | 'hosting' | 'code' | 'github'>('ai')
   const [formTitle, setFormTitle] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formIcon, setFormIcon] = useState('🧩')
@@ -369,6 +369,12 @@ export function ExtensionsView() {
   const [formVersion, setFormVersion] = useState('1.0.0')
   const [formIsPublished, setFormIsPublished] = useState<boolean>(false)
   const [formIsRunnable, setFormIsRunnable] = useState<boolean>(false)
+  const [formHostingUrl, setFormHostingUrl] = useState<string>('')
+  const [formSelfHosted, setFormSelfHosted] = useState<boolean>(false)
+  const [isPingingHost, setIsPingingHost] = useState<boolean>(false)
+  const [pingResult, setPingResult] = useState<{ reachable: boolean; status?: number; latencyMs?: number; error?: string } | null>(null)
+  const [autoRenewEnabled, setAutoRenewEnabled] = useState<boolean>(true)
+  const [maxExtensionsAllowed, setMaxExtensionsAllowed] = useState<number>(5)
   const [formChangelog, setFormChangelog] = useState<string>('')
   const [formGithubUrl, setFormGithubUrl] = useState<string>('')
   const [formAiInstructions, setFormAiInstructions] = useState<string>('')
@@ -397,6 +403,8 @@ export function ExtensionsView() {
         setEnabledIds(Array.isArray(data.enabledIds) ? data.enabledIds : (Array.isArray(data.installedIds) ? data.installedIds : []))
         setLikedIds(data.likedIds || [])
         setUserPlan(data.userPlan || 'free')
+        if (data.maxExtensions !== undefined) setMaxExtensionsAllowed(data.maxExtensions)
+        if (data.autoRenewEnabled !== undefined) setAutoRenewEnabled(data.autoRenewEnabled)
         setCanCreate(Boolean(data.canCreateExtensions))
         setAuthorStats(data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 })
         if (data.boundCard) setBoundCard(data.boundCard)
@@ -871,6 +879,9 @@ export function ExtensionsView() {
     setFormVersion('1.0.0')
     setFormIsPublished(false) // Default to unpublished draft
     setFormIsRunnable(false)
+    setFormHostingUrl('')
+    setFormSelfHosted(false)
+    setPingResult(null)
     setFormChangelog('')
     setFormGithubUrl('')
     setFormAiInstructions('')
@@ -895,6 +906,9 @@ export function ExtensionsView() {
     setFormVersion(ext.version || '1.0.0')
     setFormIsPublished(ext.isPublished !== false)
     setFormIsRunnable(Boolean(ext.isRunnable || ext.content?.isRunnable))
+    setFormHostingUrl(ext.hostingUrl || (ext.content?.hostingUrl || ''))
+    setFormSelfHosted(Boolean(ext.selfHosted || ext.content?.selfHosted))
+    setPingResult(null)
     setFormChangelog(ext.changelog || '')
     setFormGithubUrl(ext.githubUrl || '')
     setFormAiInstructions(ext.aiInstructions || ext.content?.aiInstructions || '')
@@ -904,6 +918,36 @@ export function ExtensionsView() {
     setIsCategoryOpen(false)
     setIsTypeOpen(false)
     setShowEditorModal(true)
+  }
+
+  const handlePingHost = async () => {
+    if (!formHostingUrl.trim()) return
+    setIsPingingHost(true)
+    setPingResult(null)
+    try {
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ping_host', hostingUrl: formHostingUrl.trim() }),
+      })
+      const data = await res.json()
+      setPingResult(data)
+    } catch {
+      setPingResult({ reachable: false, error: 'Ошибка сети при проверке сервера' })
+    } finally {
+      setIsPingingHost(false)
+    }
+  }
+
+  const handleToggleAutoRenew = async (nextVal: boolean) => {
+    setAutoRenewEnabled(nextVal)
+    try {
+      await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_autorenew', enabled: nextVal }),
+      })
+    } catch {}
   }
 
   const handleSaveCustomExtension = async () => {
@@ -938,7 +982,10 @@ export function ExtensionsView() {
           githubUrl: formGithubUrl.trim(),
           version: formVersion.trim() || '1.0.0',
           isPublished: formIsPublished,
+          isDisabledByOwner: !formIsPublished,
           isRunnable: formIsRunnable,
+          hostingUrl: formHostingUrl.trim(),
+          selfHosted: formSelfHosted || Boolean(formHostingUrl.trim()),
           changelog: formChangelog.trim(),
           price: Number(formPrice) || 0,
           minPlan: formMinPlan,
@@ -997,10 +1044,20 @@ export function ExtensionsView() {
   }
 
   const handleInstall = async (extensionId: string) => {
-    if (!isPlusOrHigher) {
-      promptUpgradeToPlus('установки расширений')
+    if (maxExtensionsAllowed !== -1 && installedIds.length >= maxExtensionsAllowed && !installedIds.includes(extensionId)) {
+      const ok = await confirmDialog({
+        title: '🔒 Достигнут лимит расширений',
+        description: `На вашем тарифе (${userPlan.toUpperCase()}) доступно максимум ${maxExtensionsAllowed} расширений (у вас установлено: ${installedIds.length}).\n\n• Базовый: до 5 расширений\n• Zerf Plus (99 ₽): до 10 расширений\n• Zerf Pro (299 ₽): до 50 расширений\n• Corp: Безлимитно\n\nХотите улучшить тариф в Настройках?`,
+        confirmText: 'Улучшить тариф',
+        cancelText: 'Закрыть',
+        variant: 'primary',
+      })
+      if (ok) {
+        dispatch({ type: 'SET_VIEW', view: 'settings' })
+      }
       return
     }
+
     // Instant optimistic update
     setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
     setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
@@ -1022,8 +1079,15 @@ export function ExtensionsView() {
         setInstalledIds(prev => prev.filter(id => id !== extensionId))
         setEnabledIds(prev => prev.filter(id => id !== extensionId))
         setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
-        if (data.requiresPlan === 'plus') {
-          promptUpgradeToPlus('установки расширений')
+        if (data.requiresUpgrade) {
+          const ok = await confirmDialog({
+            title: '🔒 Лимит тарифа',
+            description: data.error || 'Для установки дополнительных расширений перейдите на более высокий тариф.',
+            confirmText: 'Перейти к тарифам',
+            cancelText: 'Закрыть',
+            variant: 'primary',
+          })
+          if (ok) dispatch({ type: 'SET_VIEW', view: 'settings' })
         } else {
           alert(data.error || 'Ошибка при установке расширения')
         }
@@ -1075,13 +1139,14 @@ export function ExtensionsView() {
   }
 
   const handleBuy = async (ext: ExtensionItem) => {
-    if (!isPlusOrHigher) {
-      promptUpgradeToPlus('покупки и установки расширений')
-      return
-    }
+    const gatewayFee = Math.round(ext.price * 0.035)
+    const netTotal = Math.max(0, ext.price - gatewayFee)
+    const authorShare = Math.round(netTotal * 0.80)
+    const platformShare = netTotal - authorShare
+
     const ok = await confirmDialog({
       title: `Приобрести «${ext.title}»?`,
-      description: `Стоимость расширения: ${ext.price} ₽.\n80% (${Math.round(ext.price * 0.8)} ₽) поступит автору на баланс, 20% — комиссия платформы Zerf. Оплата происходит через защищённый шлюз ЮMoney.`,
+      description: `Стоимость расширения: ${ext.price} ₽.\n\n• Комиссия платёжного шлюза (3.5%): -${gatewayFee} ₽\n• Чистая сумма: ${netTotal} ₽\n• Доход автора (80%): ${authorShare} ₽\n• Доля платформы (20%): ${platformShare} ₽\n\nОплата защищена официальным шлюзом ЮMoney. После оплаты расширение будет сразу установлено в ваш аккаунт.`,
       confirmText: `Перейти к оплате (${ext.price} ₽)`,
       cancelText: 'Отмена',
       variant: 'primary',
@@ -1104,11 +1169,7 @@ export function ExtensionsView() {
           alert(`🎉 Расширение «${ext.title}» успешно установлено!`)
         }
       } else {
-        if (data.requiresPlan === 'plus') {
-          promptUpgradeToPlus('покупки расширений')
-        } else {
-          alert(data.error || 'Ошибка при покупке')
-        }
+        alert(data.error || 'Ошибка при покупке')
       }
     } catch {
       alert('Ошибка покупки')
@@ -1922,14 +1983,19 @@ export function ExtensionsView() {
                           </div>
 
                           {/* Live Publication Status Badge */}
-                          <div className="shrink-0">
+                          <div className="shrink-0 flex items-center gap-1.5">
+                            {ext.selfHosted && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30" title={`Хостинг: ${ext.hostingUrl || 'Свой сервер'}`}>
+                                ⚡ Self-Hosted
+                              </span>
+                            )}
                             {isLive ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                                 🟢 Опубликован
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                                🟡 Черновик
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                🔴 Отключено
                               </span>
                             )}
                           </div>
@@ -2139,6 +2205,47 @@ export function ExtensionsView() {
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Subscription Auto-Renewal Card Setting */}
+          <div className="p-5 rounded-2xl bg-card border border-border shadow-xs flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-xl shrink-0">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-foreground">Автопродление подписки</h4>
+                  <span className={cn(
+                    'text-[9px] font-bold px-1.5 py-0.2 rounded-md',
+                    autoRenewEnabled
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-muted text-muted-foreground'
+                  )}>
+                    {autoRenewEnabled ? 'ВКЛ' : 'ВЫКЛ'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                  {autoRenewEnabled
+                    ? 'Автоматическое продление тарифа с привязанной карты в дату окончания периода.'
+                    : 'Автоматические списания отключены. Доступ завершится по окончании оплаченного периода.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleToggleAutoRenew(!autoRenewEnabled)}
+              className={cn(
+                'px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all border shrink-0',
+                autoRenewEnabled
+                  ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/30 shadow-xs'
+                  : 'bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border-border'
+              )}
+            >
+              {autoRenewEnabled ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
+              <span>{autoRenewEnabled ? 'Включено' : 'Выключено'}</span>
+            </button>
           </div>
 
           {/* Revenue Transparency & Protected Payout CTA */}
@@ -3047,6 +3154,7 @@ export function ExtensionsView() {
                   { id: 'general', label: '📝 Основное' },
                   { id: 'version', label: `🏷️ Версии (v${formVersion || '1.0.0'})` },
                   { id: 'access', label: '💎 Статус и Монетизация' },
+                  { id: 'hosting', label: '⚡ Свой сервер (Self-Host)' },
                   { id: 'code', label: '💻 JSON Код и Команды' },
                   { id: 'github', label: '🐙 GitHub Sync' },
                 ].map(tab => (
@@ -3608,7 +3716,7 @@ export function ExtensionsView() {
                           <span>Стоимость расширения (0 = Бесплатно):</span>
                         </label>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          80% с каждой покупки зачисляется прямо на ваш баланс
+                          80% чистой суммы после вычета эквайринга зачисляется сразу автору
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -3625,12 +3733,43 @@ export function ExtensionsView() {
                       </div>
                     </div>
 
-                    {formPrice > 0 && (
-                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-between text-xs font-medium">
-                        <span>Ваш доход за 1 продажу (80%):</span>
-                        <b className="text-sm font-bold">{Math.round(formPrice * 0.8)} ₽</b>
-                      </div>
-                    )}
+                    {formPrice > 0 && (() => {
+                      const gatewayFee = Math.round(formPrice * 0.035)
+                      const netDist = Math.max(0, formPrice - gatewayFee)
+                      const authorNet = Math.round(netDist * 0.80)
+                      const platformNet = netDist - authorNet
+                      return (
+                        <div className="p-3.5 rounded-2xl bg-card border border-border/80 space-y-2 text-xs">
+                          <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                            <span>Цена для покупателя:</span>
+                            <span className="font-bold text-foreground font-mono">{formPrice} ₽</span>
+                          </div>
+                          <div className="flex items-center justify-between text-amber-400/90 text-[11px]">
+                            <span>Комиссия платёжного эквайринга (3.5%):</span>
+                            <span className="font-mono">-{gatewayFee} ₽</span>
+                          </div>
+                          <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                            <span>Чистая сумма к распределению:</span>
+                            <span className="font-mono text-foreground font-bold">{netDist} ₽</span>
+                          </div>
+                          <div className="pt-2 border-t border-border flex items-center justify-between font-bold text-emerald-400">
+                            <span className="flex items-center gap-1">
+                              <span>💰 Ваш чистый доход (80%):</span>
+                            </span>
+                            <span className="text-sm font-mono font-bold">
+                              {authorNet} ₽
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                            <span>Доля платформы Zerf Note (20%):</span>
+                            <span className="font-mono">{platformNet} ₽</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground/80 leading-tight pt-1">
+                            ℹ️ Комиссия шлюза (3.5%) вычитается из суммы покупки перед начислением. Доход поступает на ваш баланс автора и выводится на привязанную карту или СБП.
+                          </p>
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Subscription Limit / Min Plan Selector */}
@@ -3667,6 +3806,86 @@ export function ExtensionsView() {
                           <span className="text-[9px] text-muted-foreground">{p.sub}</span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: SELF-HOSTING & CUSTOM SERVER ENDPOINT */}
+              {editorActiveTab === 'hosting' && (
+                <div className="space-y-4 pt-1">
+                  <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-2xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-primary" />
+                          <span>Хостинг крупномасштабного расширения на своём сервере</span>
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                          Если ваше расширение требует тяжелых вычислений, локальных моделей или собственной базы данных — вы можете захостить его на личном VPS/сервере. Zerf Note будет отправлять запросы напрямую к вашему микросервису.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormSelfHosted(!formSelfHosted)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all border shrink-0',
+                          formSelfHosted
+                            ? 'bg-primary/15 text-primary border-primary/30 shadow-xs'
+                            : 'bg-muted text-muted-foreground hover:text-foreground border-border'
+                        )}
+                      >
+                        {formSelfHosted ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
+                        <span>{formSelfHosted ? 'Self-Hosted Вкл' : 'Выкл'}</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-border/60">
+                      <label className="font-semibold text-foreground text-[11px] block">
+                        URL эндпоинта вашего сервера (HTTPS):
+                      </label>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <input
+                          type="url"
+                          value={formHostingUrl}
+                          onChange={e => {
+                            setFormHostingUrl(e.target.value)
+                            if (e.target.value.trim()) setFormSelfHosted(true)
+                          }}
+                          placeholder="https://api.yourdomain.com/v1/zerf-extension"
+                          className="flex-1 h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={handlePingHost}
+                          disabled={isPingingHost || !formHostingUrl.trim()}
+                          className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 disabled:opacity-50"
+                        >
+                          {isPingingHost ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                          <span>Проверить пинг (Health Check)</span>
+                        </button>
+                      </div>
+
+                      {pingResult && (
+                        <div className={cn(
+                          'p-3 rounded-xl border text-xs font-medium flex items-center justify-between transition-all',
+                          pingResult.reachable
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        )}>
+                          <div className="flex items-center gap-2">
+                            <span>{pingResult.reachable ? '🟢' : '🔴'}</span>
+                            <span>
+                              {pingResult.reachable
+                                ? `Сервер доступен (HTTP ${pingResult.status || 200})`
+                                : `Сервер недоступен: ${pingResult.error || 'Ошибка соединения'}`}
+                            </span>
+                          </div>
+                          {pingResult.latencyMs !== undefined && (
+                            <span className="font-mono text-[10px] opacity-80">{pingResult.latencyMs} ms</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

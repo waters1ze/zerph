@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
-import { planAtLeast, normalizePlan } from '@/lib/backend/plans'
+import { planAtLeast, normalizePlan, PLANS, UNLIMITED } from '@/lib/backend/plans'
 import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
 import {
   ExtensionItem,
@@ -149,6 +149,20 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
+    const userLimits = (PLANS as any)[userPlan] || PLANS.free
+    const maxExtensions = userLimits.maxExtensions ?? 5
+
+    // Check if autoRenew is enabled for this user
+    let autoRenewEnabled = true
+    if (chatId) {
+      try {
+        const arRow = await prisma.config.findUnique({ where: { key: `user_autorenew_${chatId}` } })
+        if (arRow?.value !== undefined) {
+          autoRenewEnabled = arRow.value === 'true'
+        }
+      } catch {}
+    }
+
     return NextResponse.json({
       success: true,
       catalog,
@@ -156,10 +170,12 @@ export async function GET(req: NextRequest) {
       enabledIds,
       likedIds,
       userPlan,
-      canUseExtensions: planAtLeast(userPlan, 'plus'),
+      maxExtensions: maxExtensions === UNLIMITED ? -1 : maxExtensions,
+      canUseExtensions: true, // All users can install up to their plan limit (Free: 5, Plus: 10, Pro: 50, Corp: ∞)
       canCreateExtensions: planAtLeast(userPlan, 'plus'),
       authorStats,
-      boundCard,
+      boundCard: boundCard ? { ...boundCard, autoRenewEnabled } : null,
+      autoRenewEnabled,
       payoutConfig: {
         platformPercent: 20,
         authorPercent: 80,
@@ -406,6 +422,16 @@ export async function POST(req: NextRequest) {
         category: finalCategory.trim().slice(0, 40),
         icon: finalIcon,
         githubUrl: githubUrl || '',
+        manifestUrl: existingData?.manifestUrl || '',
+        hostingUrl: body.hostingUrl !== undefined
+          ? String(body.hostingUrl).trim()
+          : (manifestContent?.hostingUrl || existingData?.hostingUrl || ''),
+        selfHosted: body.selfHosted !== undefined
+          ? Boolean(body.selfHosted)
+          : (manifestContent?.selfHosted !== undefined ? Boolean(manifestContent.selfHosted) : (existingData?.selfHosted || false)),
+        isDisabledByOwner: body.isDisabledByOwner !== undefined
+          ? Boolean(body.isDisabledByOwner)
+          : (existingData?.isDisabledByOwner || false),
         authorChatId: existingData?.authorChatId || chatId,
         authorName: existingData?.authorName || authorName,
         isOfficial: existingData ? existingData.isOfficial : isCreator,
@@ -456,6 +482,7 @@ export async function POST(req: NextRequest) {
       }
 
       current.isPublished = typeof isPublished === 'boolean' ? isPublished : !current.isPublished
+      current.isDisabledByOwner = !current.isPublished
       current.updatedAt = new Date().toISOString()
 
       await prisma.config.update({
@@ -463,7 +490,7 @@ export async function POST(req: NextRequest) {
         data: { value: JSON.stringify(current) },
       })
 
-      return NextResponse.json({ success: true, isPublished: current.isPublished })
+      return NextResponse.json({ success: true, isPublished: current.isPublished, isDisabledByOwner: current.isDisabledByOwner })
     }
 
     // ── ACTION: DELETE CUSTOM EXTENSION ──
@@ -543,7 +570,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, extension: current })
     }
 
-    // ── ACTION: INSTALL EXTENSION (Requires Zerf Plus) ──
+    // ── ACTION: INSTALL EXTENSION (Tiered limits: Free 5, Plus 10, Pro 50, Corp Unlimited) ──
     if (action === 'install') {
       if (!checkInMemoryRateLimit(`install:${chatId}`, 20, 60 * 1000)) {
         return NextResponse.json({ error: 'Слишком много запросов. Пожалуйста, подождите.' }, { status: 429 })
@@ -553,16 +580,31 @@ export async function POST(req: NextRequest) {
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
       const userPlan = normalizePlan((userRec as any)?.plan || 'free')
-      if (!planAtLeast(userPlan, 'plus')) {
+      const planLimits = (PLANS as any)[userPlan] || PLANS.free
+      const maxAllowed = planLimits.maxExtensions ?? 5
+
+      let installed = await getUserInstalledExtensions(chatId)
+      if (!installed.includes(extensionId) && maxAllowed !== UNLIMITED && installed.length >= maxAllowed) {
         return NextResponse.json({
-          error: '🔒 Установка расширений доступна с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
-          requiresPlan: 'plus',
+          error: `🔒 Превышен лимит расширений для вашего тарифа (${installed.length}/${maxAllowed} шт.). Для установки до 10 расширений подключите Plus, до 50 — Pro, или безлимит на тарифе Corp!`,
+          requiresUpgrade: true,
+          currentCount: installed.length,
+          maxAllowed,
+          userPlan,
         }, { status: 403 })
       }
 
       const allItems = [...STARTER_EXTENSIONS, ...(await getCustomExtensions())]
       const ext = allItems.find(e => e.id === extensionId)
       if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+
+      const isCreator = chatId === '6136950061' || chatId === '5078516086' || (userRec as any)?.isAdmin === true
+      if ((ext.isPublished === false || ext.isDisabledByOwner === true) && ext.authorChatId !== chatId && !isCreator) {
+        return NextResponse.json({
+          error: '🔴 Это расширение временно отключено автором и недоступно для установки.',
+          isDisabledByOwner: true,
+        }, { status: 403 })
+      }
 
       // Check minPlan requirement of extension
       if (ext.minPlan && ext.minPlan !== 'free' && !planAtLeast(userPlan, ext.minPlan)) {
@@ -586,7 +628,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      let installed = await getUserInstalledExtensions(chatId)
       if (!installed.includes(extensionId)) {
         installed.push(extensionId)
         await prisma.config.upsert({
@@ -703,8 +744,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, isFree: true, installedIds: installed })
       }
 
-      const authorShare = Math.round(ext.price * 0.8)
-      const platformShare = ext.price - authorShare
+      // Calculation of net revenue after 3.5% payment gateway fee:
+      const price = ext.price
+      const gatewayFeePercent = 3.5
+      const gatewayFeeRub = Math.round(price * (gatewayFeePercent / 100))
+      const netDistributableRub = Math.max(0, price - gatewayFeeRub)
+      const authorShare = Math.round(netDistributableRub * 0.80) // 80% of net after fee
+      const platformShare = netDistributableRub - authorShare     // 20% of net after fee
 
       // Unique tracking label for YooMoney: ext_<id>_<chatId>_<timestamp>
       const label = `ext_${ext.id}_${chatId}_${Date.now()}`
@@ -734,6 +780,8 @@ export async function POST(req: NextRequest) {
             buyerChatId: chatId,
             authorChatId: ext.authorChatId,
             price: ext.price,
+            gatewayFeeRub,
+            netDistributableRub,
             authorShare,
             platformShare,
             createdAt: new Date().toISOString(),
@@ -746,9 +794,73 @@ export async function POST(req: NextRequest) {
         paymentUrl,
         label,
         amount: ext.price,
+        gatewayFeeRub,
+        netDistributableRub,
         authorShare,
         platformShare,
       })
+    }
+
+    // ── ACTION: PING SELF-HOSTED SERVER (Health Check) ──
+    if (action === 'ping_host') {
+      const { hostingUrl } = body
+      if (!hostingUrl || typeof hostingUrl !== 'string') {
+        return NextResponse.json({ error: 'Укажите корректный URL сервера' }, { status: 400 })
+      }
+      const cleanUrl = hostingUrl.trim()
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        return NextResponse.json({ error: 'URL должен начинаться с https:// или http://' }, { status: 400 })
+      }
+
+      const start = Date.now()
+      try {
+        const res = await fetch(cleanUrl, {
+          method: 'GET',
+          headers: { 'User-Agent': 'Zerf-Note-HostCheck/1.0' },
+          signal: AbortSignal.timeout(5000),
+        })
+        const latencyMs = Date.now() - start
+        return NextResponse.json({
+          success: true,
+          reachable: res.status < 500,
+          status: res.status,
+          statusText: res.statusText,
+          latencyMs,
+        })
+      } catch (pingErr: any) {
+        const latencyMs = Date.now() - start
+        return NextResponse.json({
+          success: true,
+          reachable: false,
+          error: pingErr.message || 'Сервер недоступен (Timeout / Connection Refused)',
+          latencyMs,
+        })
+      }
+    }
+
+    // ── ACTION: TOGGLE SUBSCRIPTION AUTO-RENEWAL ──
+    if (action === 'toggle_autorenew') {
+      const { enabled } = body
+      const isAutoRenew = Boolean(enabled)
+
+      await prisma.config.upsert({
+        where: { key: `user_autorenew_${chatId}` },
+        update: { value: isAutoRenew ? 'true' : 'false' },
+        create: { key: `user_autorenew_${chatId}`, value: isAutoRenew ? 'true' : 'false' },
+      })
+
+      // Also update inside boundCard if present
+      const cardRow = await prisma.config.findUnique({ where: { key: `author_payout_card_${chatId}` } })
+      if (cardRow?.value) {
+        const cardObj = JSON.parse(cardRow.value)
+        cardObj.autoRenewEnabled = isAutoRenew
+        await prisma.config.update({
+          where: { key: `author_payout_card_${chatId}` },
+          data: { value: JSON.stringify(cardObj) },
+        })
+      }
+
+      return NextResponse.json({ success: true, autoRenewEnabled: isAutoRenew })
     }
 
     // ── ACTION: DELETE EXTENSION ──
@@ -766,12 +878,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // ── ACTION: BIND PAYOUT CARD / SBP DETAILS ──
+    // ── ACTION: BIND PAYOUT CARD / SBP DETAILS & AUTO-RENEW TOGGLE ──
     if (action === 'bind_card') {
-      const { payoutType, cardNumber, phone, bankName, recipientName } = body
+      const { payoutType, cardNumber, phone, bankName, recipientName, autoRenewEnabled } = body
       if (!cardNumber && !phone) {
         return NextResponse.json({ error: 'Укажите номер карты или номер телефона СБП' }, { status: 400 })
       }
+
+      const isAutoRenew = autoRenewEnabled !== undefined ? Boolean(autoRenewEnabled) : true
 
       const cardData = {
         payoutType: payoutType || 'card', // 'card' | 'sbp' | 'yoomoney'
@@ -779,6 +893,7 @@ export async function POST(req: NextRequest) {
         phone: phone ? String(phone).trim() : '',
         bankName: bankName ? String(bankName).trim() : '',
         recipientName: recipientName ? String(recipientName).trim() : '',
+        autoRenewEnabled: isAutoRenew,
         updatedAt: new Date().toISOString(),
       }
 
@@ -788,7 +903,13 @@ export async function POST(req: NextRequest) {
         create: { key: `author_payout_card_${chatId}`, value: JSON.stringify(cardData) },
       })
 
-      return NextResponse.json({ success: true, boundCard: cardData })
+      await prisma.config.upsert({
+        where: { key: `user_autorenew_${chatId}` },
+        update: { value: isAutoRenew ? 'true' : 'false' },
+        create: { key: `user_autorenew_${chatId}`, value: isAutoRenew ? 'true' : 'false' },
+      })
+
+      return NextResponse.json({ success: true, boundCard: cardData, autoRenewEnabled: isAutoRenew })
     }
 
     // ── ACTION: UNBIND PAYOUT CARD ──

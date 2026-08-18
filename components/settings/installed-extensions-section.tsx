@@ -525,13 +525,19 @@ export function InstalledExtensionsSettingsSection() {
                         <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-bold border border-primary/20">
                           {ext.type === 'widget' ? 'Виджет' : ext.type === 'template' ? 'Шаблон' : ext.type === 'theme' ? 'Тема' : ext.type === 'integration' ? 'Интеграция' : 'Промпт'}
                         </span>
-                        {isEnabled ? (
-                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 text-[9px] font-semibold border border-emerald-500/25">
+                        {ext.isPublished === false || (ext as any).isDisabledByOwner === true ? (
+                          <span className="px-1.5 py-0.2 rounded-md bg-rose-500/10 text-rose-400 text-[9px] font-bold border border-rose-500/25 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Отключено автором
+                          </span>
+                        ) : isEnabled ? (
+                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 text-[9px] font-semibold border border-emerald-500/25 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                             Активно
                           </span>
                         ) : (
                           <span className="px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground text-[9px] font-semibold border border-border">
-                            Отключено
+                            Отключено вами
                           </span>
                         )}
                       </div>

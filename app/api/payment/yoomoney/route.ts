@@ -162,6 +162,11 @@ export async function POST(req: NextRequest) {
           })
         }
 
+        const finalGatewayFee = order.gatewayFeeRub ?? Math.round(price * 0.035)
+        const finalNet = order.netDistributableRub ?? Math.max(0, price - finalGatewayFee)
+        const finalAuthorShare = order.authorShare ?? Math.round(finalNet * 0.80)
+        const finalPlatformShare = order.platformShare ?? (finalNet - finalAuthorShare)
+
         // 2. Record permanent purchase
         await prisma.config.create({
           data: {
@@ -171,15 +176,17 @@ export async function POST(req: NextRequest) {
               buyerChatId,
               authorChatId,
               price,
-              authorShare,
-              platformShare,
+              gatewayFeeRub: finalGatewayFee,
+              netDistributableRub: finalNet,
+              authorShare: finalAuthorShare,
+              platformShare: finalPlatformShare,
               operationId: operation_id,
               purchasedAt: datetime || new Date().toISOString(),
             }),
           },
         }).catch(() => {})
 
-        // 3. Credit author share (80%)
+        // 3. Credit author share (80% of net after fee)
         if (authorChatId && authorChatId !== 'system') {
           let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
           try {
@@ -187,8 +194,8 @@ export async function POST(req: NextRequest) {
             if (aRow?.value) authorStats = JSON.parse(aRow.value)
           } catch {}
 
-          authorStats.balance += authorShare
-          authorStats.totalEarned += authorShare
+          authorStats.balance += finalAuthorShare
+          authorStats.totalEarned += finalAuthorShare
           authorStats.salesCount += 1
 
           await prisma.config.upsert({
@@ -201,7 +208,9 @@ export async function POST(req: NextRequest) {
             authorChatId,
             `🎉 *Покупка вашего расширения!*\n\n` +
             `Пользователь приобрёл ваше расширение за *${price} ₽* в Zerf Note.\n` +
-            `Вам начислено *+${authorShare} ₽* (80%) на баланс автора! 💰\n` +
+            `• Комиссия платёжного шлюза (3.5%): -${finalGatewayFee} ₽\n` +
+            `• Чистая сумма: ${finalNet} ₽\n` +
+            `💰 *Вам начислено (80%): +${finalAuthorShare} ₽* на баланс автора!\n` +
             `• Проверить баланс и запросить вывод: https://zeprh.vercel.app`
           )
         }

@@ -23,6 +23,9 @@ export interface ExtensionItem {
   likesCount: number
   installCount: number
   manifestUrl?: string
+  hostingUrl?: string // Custom self-hosted server endpoint for large-scale extensions
+  selfHosted?: boolean // true if extension uses an external microservice/server
+  isDisabledByOwner?: boolean // true if owner temporarily turned off the extension
   aiInstructions?: string
   triggers?: string[]
   aiSkills?: Array<{

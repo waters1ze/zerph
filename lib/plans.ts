@@ -42,6 +42,8 @@ export interface PlanLimits {
   maxStoredNotes: number
   /** Maximum active non-holiday/non-birthday reminders simultaneously */
   maxActiveReminders: number
+  /** Maximum installed / active extensions */
+  maxExtensions: number
   /** Lifetime Siri / Apple Shortcuts requests */
   siriLifetimeRequests: number
   /** Total voice recognition seconds per day */
@@ -64,6 +66,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   free: {
     maxStoredNotes: 20,
     maxActiveReminders: 10,
+    maxExtensions: 5, // До 5 расширений на Базовом тарифе
     siriLifetimeRequests: 10,
     voiceSecondsPerDay: 90, // 1 мин 30 сек в день
     photosPerDay: 0,
@@ -76,6 +79,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   plus: {
     maxStoredNotes: 250,
     maxActiveReminders: 100,
+    maxExtensions: 10, // До 10 расширений на Plus
     siriLifetimeRequests: 250,
     voiceSecondsPerDay: 900, // 15 минут в день
     photosPerDay: 25,
@@ -88,6 +92,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   pro: {
     maxStoredNotes: 5000,
     maxActiveReminders: 1000,
+    maxExtensions: 50, // До 50 расширений на Pro
     siriLifetimeRequests: 5000,
     voiceSecondsPerDay: 7200, // 2 часа голоса в день
     photosPerDay: 200,
@@ -100,6 +105,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   corp: {
     maxStoredNotes: 25000,
     maxActiveReminders: 5000,
+    maxExtensions: UNLIMITED, // Безлимитно на Corp
     siriLifetimeRequests: 25000,
     voiceSecondsPerDay: 28800, // 8 часов голоса в день (на команду из ~4 человек)
     photosPerDay: 500,
@@ -131,6 +137,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     tagline: 'Начните пользоваться прямо сейчас',
     features: [
       '🤖 ИИ: Llama 3.1 8B / Qwen 7B',
+      '🧩 До 5 активных расширений и виджетов',
       'До 20 заметок в аккаунте',
       'До 10 активных напоминаний',
       '10 запросов Siri за всё время',
@@ -149,6 +156,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     tagline: 'Для ежедневной продуктивности',
     features: [
       '🤖 ИИ: Qwen 3.6 27B (продвинутая логика)',
+      '🧩 До 10 активных расширений и виджетов',
       '250 заметок в аккаунте',
       '100 активных напоминаний',
       '250 запросов Siri',
@@ -169,8 +177,9 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     tagline: 'Максимальный интеллект и глубокая автоматизация',
     features: [
       '🧠 Флагманский ИИ: OpenAI GPT-OSS 120B',
+      '🧩 До 50 активных расширений и виджетов',
       '🔌 Подключение своей нейросети по API (OpenAI, Claude, Gemini, Ollama)',
-      '💻 Создание и запуск расширений через Local CLI',
+      '💻 Создание и запуск расширений через Local CLI и Студию',
       '🎛 Кастомизация моделей под каждую задачу (Siri, чат, аналитика)',
       '5 000 заметок в аккаунте',
       '1 000 активных напоминаний',
@@ -193,6 +202,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
     tagline: 'Для команд и организаций — всё без ограничений',
     features: [
       '🧠 Флагманский ИИ: GPT-OSS 120B + Local CLI (agy, claude, gemini, ollama)',
+      '🧩 Безлимитные расширения и виджеты (Unlimited)',
       '⚡ Наивысший приоритет ИИ-запросов (обработка без очередей над всеми пользователями)',
       '🤖 Персональный ИИ-менеджер и выделенная поддержка',
       '25 000 заметок в аккаунте',

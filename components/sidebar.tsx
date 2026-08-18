@@ -422,6 +422,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                     if (extensionItem) {
                       const isEntropy = itemId === 'ext_entropy_search' || extensionItem.id === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')
                       const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
+                      const isOwnerDisabled = extensionItem.isPublished === false || (extensionItem as any).isDisabledByOwner === true
 
                       return (
                         <motion.button
@@ -442,7 +443,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                               ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
                               : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
                           )}
-                          title={extensionItem.title}
+                          title={isOwnerDisabled ? `${extensionItem.title} (🔴 Отключено автором)` : extensionItem.title}
                         >
                           <ExtensionIcon icon={extensionItem.icon} className="w-4 h-4 text-xs shrink-0" />
                           {!isCollapsed && (
@@ -450,7 +451,13 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                               <span className="flex-1 text-left line-clamp-1 truncate text-xs">
                                 {extensionItem.title}
                               </span>
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Активно" />
+                              <span
+                                className={cn(
+                                  'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
+                                  isOwnerDisabled ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]' : 'bg-emerald-400'
+                                )}
+                                title={isOwnerDisabled ? '🔴 Отключено автором / Недоступно' : '🟢 Активно'}
+                              />
                             </>
                           )}
                         </motion.button>
