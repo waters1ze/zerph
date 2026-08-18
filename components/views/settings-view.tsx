@@ -2752,6 +2752,123 @@ export function SettingsView() {
                 })}
               </div>
 
+              {/* ── EXTENSIONS & APIS MATRIX BY PLAN (Что входит в какой тариф) ── */}
+              <div className="p-5 rounded-2xl bg-card border border-border space-y-3.5 shadow-xs">
+                <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
+                      🧩
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground">Возможности расширений и ИИ по тарифам</h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        Какой тариф требуется для работы виджетов, шаблонов, Self-Host и SDK
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-muted text-muted-foreground hidden sm:inline-block">
+                    Лимиты & Доступы
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
+                        <th className="py-2 pr-4 font-bold">Функция / Возможность</th>
+                        <th className="py-2 px-2 text-center font-bold">Базовый (Free)</th>
+                        <th className="py-2 px-2 text-center font-bold text-sky-400">Plus (99 ₽)</th>
+                        <th className="py-2 px-2 text-center font-bold text-amber-400">Pro (299 ₽)</th>
+                        <th className="py-2 pl-2 text-center font-bold text-purple-400">Corp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40 text-[11px]">
+                      <tr>
+                        <td className="py-2.5 pr-4 font-medium text-foreground">
+                          🧩 Лимит активных расширений
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-foreground">до 5 шт.</td>
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-sky-400">до 10 шт.</td>
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-amber-400">до 50 шт.</td>
+                        <td className="py-2.5 pl-2 text-center font-mono font-bold text-purple-400">Безлимит (∞)</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          📦 Установка из официального каталога Store
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          📋 Импорт готовых задач и проектов из шаблонов
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/60">Базовые</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В 1 клик</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В 1 клик</td>
+                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Командные</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          🎨 Студия создания и публикация расширений
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В каталоге</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В каталоге</td>
+                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Приватные</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          💰 Монетизация плагинов (80% доход автора на карту/СБП)
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
+                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          ⚡ Свой сервер (Self-Hosting) для тяжелых вычислений
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Доступно</td>
+                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Доступно</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          🔌 Свои API ключи (OpenAI, Claude, Gemini, Ollama)
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Все провайдеры</td>
+                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Выделенные</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          💻 Zerf CLI & Terminal SDK
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-sky-400">300 req/день</td>
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-amber-400">1 500 req/день</td>
+                        <td className="py-2.5 pl-2 text-center font-mono font-bold text-purple-400">8 000 req/день</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 pr-4 text-muted-foreground">
+                          🎙 Скорость голосового распознавания и Siri
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-foreground">Стандартная</td>
+                        <td className="py-2.5 px-2 text-center text-sky-400 font-bold">Быстрая (Qwen)</td>
+                        <td className="py-2.5 px-2 text-center text-amber-400 font-bold">⚡ Мгновенная</td>
+                        <td className="py-2.5 pl-2 text-center text-purple-400 font-bold">🔥 Наивысший VIP</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* News digests opt-out (Plus+) */}
               {profileData.isPremium && (
                 <div className="p-4 rounded-2xl bg-card border border-border flex items-center justify-between gap-3">

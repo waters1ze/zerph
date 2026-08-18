@@ -19,21 +19,25 @@ import { normalizePlan } from '@/lib/plans'
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri'
 
 export const FREE_ALLOWED_MODELS = [
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b',
   'meta-llama/Llama-3.1-8B-Instruct',
   'Qwen/Qwen2.5-7B-Instruct',
 ]
 
 export const PLUS_ALLOWED_MODELS = [
   'qwen/qwen3.6-27b',
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-120b',
   'meta-llama/Llama-3.1-8B-Instruct',
   'Qwen/Qwen2.5-7B-Instruct',
 ]
 
 /**
  * Model allocation based on subscription tier:
- * - Free: 1 of 2 lightweight models (Llama 3.1 8B or Qwen 2.5 7B) for all tasks
- * - Plus (99 ₽): 1 single chosen model (Qwen 3.6 27B, Llama 3.1 8B, Qwen 2.5 7B) applied to ALL tasks (chat, siri, planner)
- * - Pro (299-300 ₽) & Corp: Full granular customization, can set ANY model for EACH individual task (including Siri)
+ * - Free: Ultra-fast model (GPT-OSS 20B or Qwen 3.6 27B) for all tasks
+ * - Plus (99 ₽): Fast model (Qwen 3.6 27B, GPT-OSS 20B) applied to ALL tasks
+ * - Pro (299-300 ₽) & Corp: Full granular customization, can set ANY model for EACH individual task
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -46,23 +50,24 @@ export function getModelForUserPlan(
   // Pro & Corp: full freedom to use ANY model for each task
   if (norm === 'pro' || norm === 'corp') {
     if (req) return req
-    if (taskKind === 'siri') return 'openai/gpt-oss-20b'
+    if (taskKind === 'siri' || taskKind === 'voice') return 'openai/gpt-oss-20b'
     return 'openai/gpt-oss-120b'
   }
 
-  // Plus: 1 single chosen model for ALL tasks
+  // Plus: fast models
   if (norm === 'plus') {
     if (req && PLUS_ALLOWED_MODELS.includes(req)) {
       return req
     }
+    if (taskKind === 'siri' || taskKind === 'voice') return 'openai/gpt-oss-20b'
     return 'qwen/qwen3.6-27b'
   }
 
-  // Free: 1 of 2 models for all tasks
+  // Free: ultra-fast 20B / 27B models on Groq
   if (req && FREE_ALLOWED_MODELS.includes(req)) {
     return req
   }
-  return 'meta-llama/Llama-3.1-8B-Instruct'
+  return 'openai/gpt-oss-20b'
 }
 
 interface KeyStatus {
@@ -105,15 +110,20 @@ export function normalizeGroqChatModel(model?: string): string {
   if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) return trimmed
   
   const lower = trimmed.toLowerCase()
-  // If legacy / deprecated model is requested (e.g. llama-3.3-70b-versatile, llama-3.1-8b-instant, etc.)
+  // Map Hugging Face / legacy names to fast Groq models
+  if (lower.includes('llama-3.1-8b') || lower.includes('llama-3.2') || lower.includes('qwen2.5-7b') || lower.includes('mini') || lower.includes('instant')) {
+    return 'openai/gpt-oss-20b'
+  }
+  if (lower.includes('qwen3.6') || lower.includes('qwen') || lower.includes('mixtral')) {
+    return 'qwen/qwen3.6-27b'
+  }
   if (
     lower.includes('llama') ||
-    lower.includes('mixtral') ||
     lower.includes('gemma') ||
     lower.includes('gpt-4') ||
     lower.includes('claude') ||
     lower.includes('versatile') ||
-    lower.includes('instant')
+    lower.includes('120b')
   ) {
     return GROQ_CHAT_MODEL
   }
@@ -343,7 +353,7 @@ export async function callGroqChatCompletion(options: {
   ].filter((v, i, a) => a.indexOf(v) === i)
 
   let lastError: Error | null = null
-  const tier1Deadline = Date.now() + 110_000
+  const tier1Deadline = Date.now() + 14_000
 
   // ── Tier 1: Groq Multi-Account Round-Robin Pool ──
   if (keys.length > 0) {
@@ -367,7 +377,7 @@ export async function callGroqChatCompletion(options: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(25000),
+            signal: AbortSignal.timeout(6000),
           })
 
           if (res.status === 429) {
@@ -411,13 +421,11 @@ export async function callGroqChatCompletion(options: {
   // ── Tier 2: Hugging Face Serverless Chat LLM Pool ──
   const hfTokens = getHuggingFaceTokens()
   if (hfTokens.length > 0) {
-    const tier2Deadline = Date.now() + 45_000
+    const tier2Deadline = Date.now() + 10_000
     const hfChatModels = [
       'meta-llama/Llama-3.1-8B-Instruct',
       'Qwen/Qwen2.5-7B-Instruct',
       'meta-llama/Llama-3.2-3B-Instruct',
-      'Qwen/Qwen2.5-72B-Instruct',
-      'mistralai/Mistral-7B-Instruct-v0.3',
     ]
 
     for (const hfModel of hfChatModels) {
@@ -437,7 +445,7 @@ export async function callGroqChatCompletion(options: {
               temperature: options.temperature ?? 0.3,
               max_tokens: options.max_tokens ?? 1024,
             }),
-            signal: AbortSignal.timeout(25000),
+            signal: AbortSignal.timeout(6000),
           })
 
           if (hfRes.ok) {
@@ -534,7 +542,7 @@ export async function callGroqWhisper(options: {
             method: 'POST',
             headers: { Authorization: `Bearer ${key}` },
             body: formData,
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(8000),
           })
 
           if (res.status === 429) {
