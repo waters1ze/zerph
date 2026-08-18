@@ -27,6 +27,7 @@ import { InstalledExtensionsSettingsSection } from '@/components/settings/instal
 import { EmojiPickerModal } from '@/components/ui/emoji-picker-modal'
 import { CustomThemesModal } from '@/components/settings/custom-themes-modal'
 import { ZerfAvatar } from '@/components/ui/zerf-avatar'
+import { ZerfikMascot } from '@/components/views/tikhonya-mascot'
 import { GithubIcon } from '@/components/views/extensions-view'
 import { ZERF_CUSTOM_EMOJIS } from '@/lib/custom-emojis'
 import {
@@ -2761,21 +2762,18 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
             </div>
 
             {/* Allay Mascot Showcase */}
-            <div className="p-5 rounded-2xl bg-sky-950/20 border border-sky-500/20 flex flex-col sm:flex-row items-center gap-5">
-              <div className="font-mono text-[11px] leading-tight text-sky-400 bg-slate-950/80 p-4 rounded-xl border border-sky-500/30 shrink-0 text-center select-none shadow-inner">
-                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;◈&nbsp;&nbsp;&nbsp;</div>
-                <div className="text-white font-bold">&nbsp;&nbsp;[ ˘ ᴗ ˘ ]</div>
-                <div className="text-indigo-400">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/|&nbsp;&nbsp;◈&nbsp;&nbsp;|\</div>
-                <div className="text-sky-400">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| \</div>
-                <div className="text-indigo-500">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;~&nbsp;&nbsp;'---'&nbsp;&nbsp;~</div>
+            <div className="p-5 rounded-3xl bg-gradient-to-r from-sky-500/10 via-primary/5 to-transparent border border-sky-500/30 flex flex-col sm:flex-row items-center gap-5 backdrop-blur-sm shadow-sm">
+              <div className="shrink-0 flex items-center justify-center p-2 rounded-2xl bg-card/70 border border-sky-500/20 shadow-inner">
+                <ZerfikMascot size="sm" showSpeechBubble={false} />
               </div>
 
               <div className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
-                <h5 className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                  <span>◈</span> Знакомьтесь: Зерфик (Zerf Spirit Mascot)
+                <h5 className="font-bold text-foreground text-sm flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
+                  <span>Знакомьтесь: Зерфик (Zerf Spirit Mascot)</span>
                 </h5>
                 <p>
-                  Ваш персональный цифровой дух-помощник в терминале. Он анимирован в реальном времени: взмахивает крылышками, помогает держать концентрацию в режиме фокуса, празднует выполнение задач и напоминает о дедлайнах.
+                  Ваш персональный цифровой дух-помощник в терминале и в приложении. Он следит за вашим фокусом, плавно реагирует на движение курсора мыши, потягивается и взмахивает крылышками, помогает держать концентрацию и напоминает о дедлайнах.
                 </p>
               </div>
             </div>
