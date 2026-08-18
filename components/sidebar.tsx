@@ -336,11 +336,11 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         >
           <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
             {userAvatarEmoji && userAvatarEmoji !== '👤' ? (
-              <span className="text-sm select-none emoji-symbol" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
+              <span className="text-sm select-none emoji-symbol grayscale contrast-125" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
                 {userAvatarEmoji}
               </span>
             ) : tgUser?.photoUrl ? (
-              <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+              <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover grayscale contrast-125" />
             ) : displayName !== 'Мой профиль' ? (
               <span className="text-[11px] font-bold uppercase">{displayName[0]}</span>
             ) : (

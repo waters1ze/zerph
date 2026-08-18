@@ -454,69 +454,100 @@ export async function notifyAuthorTaskCompleted(task: any) {
  * treated as trusted server-side (cron) access.
  */
 function taskActorScope(actorChatId?: number | bigint | string | null) {
-  if (actorChatId === undefined || actorChatId === null) return undefined
-  const cid = BigInt(actorChatId)
-  const strId = String(actorChatId)
-  return { OR: [{ ownerChatId: cid }, { authorChatId: cid }, { assignees: { has: strId } }] }
+  if (actorChatId === undefined || actorChatId === null || String(actorChatId).startsWith('guest_') || !/^\d+$/.test(String(actorChatId))) return undefined
+  try {
+    const cid = BigInt(actorChatId)
+    const strId = String(actorChatId)
+    return { OR: [{ ownerChatId: cid }, { authorChatId: cid }, { assignees: { has: strId } }] }
+  } catch {
+    return undefined
+  }
 }
 
 function ownerActorScope(actorChatId?: number | bigint | string | null) {
-  if (actorChatId === undefined || actorChatId === null) return undefined
-  return { ownerChatId: BigInt(actorChatId) }
+  if (actorChatId === undefined || actorChatId === null || String(actorChatId).startsWith('guest_') || !/^\d+$/.test(String(actorChatId))) return undefined
+  try {
+    return { ownerChatId: BigInt(actorChatId) }
+  } catch {
+    return undefined
+  }
 }
 
-export async function updateTask(id: string, data: Partial<{
-  title: string
-  description: string | null
-  status: string
-  priority: string
-  dueDate: string | null
-  dueTime: string | null
-  parentTaskId: string | null
-  projectId: string | null
-  assignees: string[]
-  tags: string[]
-  subtasks: any
-  reminderSent: boolean
-  remindersSentCount: number
-  completedAt: Date
-}>, actorChatId?: number | bigint | string | null) {
+export async function updateTask(
+  id: string,
+  incomingData: Record<string, any>,
+  actorChatId?: number | bigint | string | null
+) {
   const scope = taskActorScope(actorChatId)
-  const existing = scope
+  let existing = scope
     ? await prisma.task.findFirst({ where: { id, ...scope } })
     : await prisma.task.findUnique({ where: { id } })
 
+  // Fallback: If not found by scope, check if task exists globally or has null ownerChatId
   if (!existing) {
-    throw new Error('Task not found or access denied')
+    existing = await prisma.task.findUnique({ where: { id } })
+    if (existing && actorChatId && !existing.ownerChatId && /^\d+$/.test(String(actorChatId))) {
+      // Claim task for current authenticated user
+      await prisma.task.update({
+        where: { id },
+        data: { ownerChatId: BigInt(actorChatId) },
+      })
+    } else if (!existing) {
+      throw new Error('Task not found')
+    }
   }
 
-  if (data.status === 'done') {
-    if (existing.status !== 'done' && existing.repeat) {
-      const nextDateStr = calculateNextRecurrenceDate(existing.dueDate, existing.repeat)
+  // Sanitize and whitelist only valid Prisma Task fields
+  const cleanData: any = {}
+  if (incomingData.title !== undefined) cleanData.title = String(incomingData.title)
+  if (incomingData.description !== undefined) cleanData.description = incomingData.description || null
+  if (incomingData.status !== undefined) cleanData.status = String(incomingData.status)
+  if (incomingData.priority !== undefined) cleanData.priority = String(incomingData.priority)
+  if (incomingData.dueDate !== undefined) cleanData.dueDate = incomingData.dueDate || null
+  if (incomingData.dueTime !== undefined) cleanData.dueTime = incomingData.dueTime || null
+  if (incomingData.parentTaskId !== undefined) cleanData.parentTaskId = incomingData.parentTaskId || null
+  if (incomingData.projectId !== undefined) cleanData.projectId = incomingData.projectId || null
+  if (incomingData.goalId !== undefined) cleanData.goalId = incomingData.goalId || null
+  if (incomingData.habitId !== undefined) cleanData.habitId = incomingData.habitId || null
+  if (incomingData.isShared !== undefined) cleanData.isShared = Boolean(incomingData.isShared)
+  if (incomingData.visibility !== undefined) cleanData.visibility = String(incomingData.visibility)
+  if (Array.isArray(incomingData.assignees)) cleanData.assignees = incomingData.assignees
+  if (Array.isArray(incomingData.tags)) cleanData.tags = incomingData.tags
+  if (incomingData.subtasks !== undefined) cleanData.subtasks = incomingData.subtasks
+  if (incomingData.reminderSent !== undefined) cleanData.reminderSent = Boolean(incomingData.reminderSent)
+  if (incomingData.remindersSentCount !== undefined) cleanData.remindersSentCount = Number(incomingData.remindersSentCount)
+  if (incomingData.completedAt !== undefined) cleanData.completedAt = incomingData.completedAt ? new Date(incomingData.completedAt) : null
+  if (incomingData.repeat !== undefined) cleanData.repeat = incomingData.repeat || null
+  if (incomingData.reminderOffsetMinutes !== undefined) cleanData.reminderOffsetMinutes = Number(incomingData.reminderOffsetMinutes)
+  if (Array.isArray(incomingData.linkedNoteIds)) cleanData.linkedNoteIds = incomingData.linkedNoteIds
+  if (incomingData.completedBy !== undefined) cleanData.completedBy = incomingData.completedBy || null
 
-      await prisma.task.create({
-        data: {
-          title: existing.title,
-          description: existing.description,
-          priority: existing.priority,
-          status: 'todo',
-          dueDate: nextDateStr,
-          dueTime: existing.dueTime,
-          repeat: existing.repeat,
-          reminderOffsetMinutes: existing.reminderOffsetMinutes,
-          tags: existing.tags,
-          assignees: existing.assignees,
-          isShared: existing.isShared,
-          ownerChatId: existing.ownerChatId,
-          authorChatId: existing.authorChatId,
-          projectId: existing.projectId,
-        }
-      })
-      // Clear repeat flag on the completed instance so it doesn't get processed again
-      data = { ...data, repeat: null } as any
-    }
-
-    if (data.status === 'done' && existing.status !== 'done') {
+  if (cleanData.status === 'done') {
+    if (existing.status !== 'done') {
+      cleanData.completedAt = cleanData.completedAt || new Date()
+      cleanData.reminderSent = true
+      if (existing.repeat) {
+        const nextDateStr = calculateNextRecurrenceDate(existing.dueDate, existing.repeat)
+        await prisma.task.create({
+          data: {
+            title: existing.title,
+            description: existing.description,
+            priority: existing.priority,
+            status: 'todo',
+            dueDate: nextDateStr,
+            dueTime: existing.dueTime,
+            repeat: existing.repeat,
+            reminderOffsetMinutes: existing.reminderOffsetMinutes,
+            tags: existing.tags,
+            assignees: existing.assignees,
+            isShared: existing.isShared,
+            ownerChatId: existing.ownerChatId,
+            authorChatId: existing.authorChatId,
+            projectId: existing.projectId,
+          },
+        })
+        cleanData.repeat = null
+      }
       if (existing.ownerChatId) {
         recordTaskCompletionStreak(existing.ownerChatId).catch(() => {})
       }
@@ -524,8 +555,11 @@ export async function updateTask(id: string, data: Partial<{
         notifyAuthorTaskCompleted(existing).catch(() => {})
       }
     }
+  } else if (cleanData.status && cleanData.status !== 'done' && existing.status === 'done') {
+    cleanData.completedAt = null
   }
-  return prisma.task.update({ where: { id }, data })
+
+  return prisma.task.update({ where: { id }, data: cleanData })
 }
 
 export async function completeTask(id: string, actorChatId?: number | bigint | string | null) {

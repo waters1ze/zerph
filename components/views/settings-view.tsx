@@ -776,14 +776,14 @@ export function SettingsView() {
               description="Ваш персональный статус и эмодзи, как в Telegram. Отображается в профиле, друзьях, командах и задачах."
             >
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Main Avatar Bubble */}
+                {/* Main Avatar Bubble (Monochrome B&W) */}
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(true)}
                   className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center text-2xl shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none touch-manipulation"
                   title="Нажмите, чтобы открыть каталог из 1000+ эмодзи"
                 >
-                  <span style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
+                  <span className="grayscale contrast-125" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
                     {userAvatarEmoji}
                   </span>
                   <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-primary text-primary-foreground text-[9px] shadow-xs group-hover:scale-110 transition-transform">
@@ -791,9 +791,9 @@ export function SettingsView() {
                   </span>
                 </button>
 
-                {/* Quick Pick Chips (B&W / Monochrome AI Set) */}
+                {/* Quick Pick Chips (Neural Network & AI Emojis First - B&W Monochrome) */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-full">
-                  {['🤖', '🧠', '🔮', '⚡', '✨', '💻', '🔥', '👑', '🚀', '👾', '💎', '🦾'].map(emoji => (
+                  {['🤖', '🧠', '🔮', '⚡', '✨', '💻', '👾', '🦾', '🧬', '🌌', '💡', '👑'].map(emoji => (
                     <button
                       key={emoji}
                       type="button"
