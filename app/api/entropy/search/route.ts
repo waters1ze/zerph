@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
     const ownerChatId = authUser?.chatId || 'guest'
 
     const body = await req.json()
-    const { query, mode = 'web', isPro = false, focus, depth = 'high', apiKey, userNotes } = body
+    const { query, mode = 'web', isPro = false, focus, depth = 'high', apiKey, userNotes, userTasks, userGoals } = body
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return NextResponse.json({ error: 'Поисковый запрос обязателен' }, { status: 400 })
@@ -227,23 +227,62 @@ export async function POST(req: NextRequest) {
 
     const words = cleanQuery.toLowerCase().split(/[\s,.;:!?\-#]+/).filter(w => w.length >= 2)
 
-    // 2. Smart Client/User Notes Context Integration
+    // 2. Smart Client Workspace Context Integration (Notes, Tasks, Goals)
+    const clientSources: any[] = []
+
     if (Array.isArray(userNotes) && userNotes.length > 0) {
       const matchedClientNotes = userNotes.filter((n: any) => {
         const combined = ((n.title || '') + ' ' + (n.content || '') + ' ' + (n.tags || []).join(' ')).toLowerCase()
         return words.some(w => combined.includes(w))
       })
-      if (matchedClientNotes.length > 0) {
-        const noteSources = matchedClientNotes.slice(0, 4).map((n: any) => ({
-          title: `📝 Личная заметка: «${n.title || 'Без названия'}»`,
+      matchedClientNotes.slice(0, 3).forEach((n: any) => {
+        clientSources.push({
+          title: `📝 Заметка: «${n.title || 'Без названия'}»`,
           url: `/notes?id=${n.id}`,
           domain: 'zerf.notes',
-          snippet: (n.content || '').slice(0, 300) || `Теги: ${(n.tags || []).join(', ')}`,
+          snippet: (n.content || '').slice(0, 350) || `Теги: ${(n.tags || []).join(', ')}`,
           type: 'note',
           noteId: n.id,
-        }))
-        liveSources = [...noteSources, ...liveSources]
-      }
+        })
+      })
+    }
+
+    if (Array.isArray(userTasks) && userTasks.length > 0) {
+      const matchedClientTasks = userTasks.filter((t: any) => {
+        const combined = ((t.title || '') + ' ' + (t.tags || []).join(' ')).toLowerCase()
+        return words.some(w => combined.includes(w))
+      })
+      matchedClientTasks.slice(0, 3).forEach((t: any) => {
+        clientSources.push({
+          title: `✓ Задача: «${t.title}»`,
+          url: `/tasks?id=${t.id}`,
+          domain: 'zerf.tasks',
+          snippet: `Задача из Zerf Note${t.dueDate ? ` (Срок: ${t.dueDate})` : ''}${t.status === 'done' ? ' — Выполнена' : ' — В процессе'}`,
+          type: 'task',
+          taskId: t.id,
+        })
+      })
+    }
+
+    if (Array.isArray(userGoals) && userGoals.length > 0) {
+      const matchedClientGoals = userGoals.filter((g: any) => {
+        const combined = (g.title || '').toLowerCase()
+        return words.some(w => combined.includes(w))
+      })
+      matchedClientGoals.slice(0, 2).forEach((g: any) => {
+        clientSources.push({
+          title: `🎯 Цель: «${g.title}»`,
+          url: `/goals?id=${g.id}`,
+          domain: 'zerf.goals',
+          snippet: `Цель пользователя (Прогресс: ${g.progress || 0}%${g.deadline ? `, дедлайн: ${g.deadline}` : ''})`,
+          type: 'goal',
+          goalId: g.id,
+        })
+      })
+    }
+
+    if (clientSources.length > 0) {
+      liveSources = [...clientSources, ...liveSources]
     }
 
     // 3. Search user's internal notes, tasks and graph knowledge in DB
@@ -344,8 +383,8 @@ export async function POST(req: NextRequest) {
 - Стиль: подробный структурированный ответ с ключевыми подробностями, аргументами, фактами и сносками [1], [2].`
     }
 
-    // Build prompt for factual, human-friendly search with citations
-    const prompt = `Ты — поисковый исследовательский ИИ-движок Zerf AI (в стиле Perplexity AI Pro Search) совместно с маскотом «Зерфик».
+    // Build prompt for high-intelligence factual, human-friendly search with citations
+    const prompt = `Ты — высокоинтеллектуальный исследовательский ИИ-движок Zerf AI (в стиле Perplexity AI Pro Search / ChatGPT Search) совместно с маскотом «Зерфик».
 
 ПОЛЬЗОВАТЕЛЬСКИЙ ВОПРОС: "${cleanQuery}"
 РЕЖИМ ПОИСКА: ${mode} (${modePriorityInstruction})
@@ -355,13 +394,26 @@ ${focus ? `Фокус анализа: ${focus}` : ''}
 ${liveContext}
 
 ИНСТРУКЦИИ:
-1. Дай прямой, ясный, фактологический и понятный ответ на русском языке конкретно на вопрос пользователя.
-2. Отвечай СТРОГО ПО СУТИ ВОПРОСА! Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал технический вопрос по программированию.
-3. Если предоставлены первоисточники или личные заметки, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
-4. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 500 симв.' : depth === 'max' ? 'до 2000 симв.' : 'до 1000 симв.'}).
-5. Сформируй 2-4 ключевых факта ("takeaways").
-6. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
-7. Напиши милую и умную реплику от Зерфика ("tikhonyaComment").
+1. Дай прямой, живой, фактологический и максимально полезный ответ на русском языке конкретно на вопрос пользователя.
+2. ГЛУБОКИЙ КОНТЕКСТУАЛЬНЫЙ ИНТЕЛЛЕКТ:
+   - Если вопрос касается ПОДАРКА или ДНЯ РОЖДЕНИЯ (например: «Что подарить на день рождения: Лерочч?»):
+     • Предложи 4 конкретные вдохновляющие категории подарков:
+       1) 🎁 Впечатления и эмоции (мастер-классы, спа, концерты, квесты).
+       2) 💡 Практичные и полезные вещи (уют для дома, качественные аксессуары, полезный софт/подписки).
+       3) ✨ Стильные и памятные подарки (украшения, персонализированные подарки, фотокниги).
+       4) 📱 Современные гаджеты и хобби (наушники, умные лампы, книги, настолки).
+     • Укажи варианты под разный бюджет (до 1500 ₽, 3000–5000 ₽, премиум).
+     • Приведи 2 небанальных, красивых варианта поздравления и идею, как необычно упаковать или вручить.
+   - Если вопрос касается ЗАДАЧИ, ПРОЕКТА, УЧЕБЫ, ПУТЕШЕСТВИЯ или ПОКУПКИ:
+     • Дай четкий структурированный пошаговый план, лайфхаки, неочевидные подводные камни и чек-лист.
+   - Если вопрос касается ПОЛИТИКИ, НОВОСТЕЙ, НАУКИ или ФАКТОВ:
+     • Проведи объективный анализ первоисточников, укажи точные факты, хронологию и расставь сноски [1], [2], [3].
+3. Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал вопрос по программированию!
+4. Если предоставлены первоисточники или личные заметки/задачи, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
+5. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 500 симв.' : depth === 'max' ? 'до 2000 симв.' : 'до 1000 симв.'}).
+6. Сформируй 2-4 ключевых вывода/инсайта ("takeaways").
+7. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
+8. Напиши умный, тёплый и живой комментарий от Зерфика ("tikhonyaComment"), отражающий суть вопроса.
 
 ОТВЕТЬ ИСКЛЮЧИТЕЛЬНО В ФОРМАТЕ JSON:
 {
@@ -383,7 +435,7 @@ ${liveContext}
     "Уточняющий вопрос 1?",
     "Уточняющий вопрос 2?"
   ],
-  "tikhonyaComment": "Зерфик проанализировал источники и подготовил ответ."
+  "tikhonyaComment": "Зерфик исследовал тему и подготовил персональный ответ ✨"
 }`
 
     const modelInfo = getEntropyModelForPlan(userPlan, isPro)

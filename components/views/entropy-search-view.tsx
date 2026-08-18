@@ -10,7 +10,7 @@ import {
   FileText, Lightbulb, Compass, Database, Hash, HelpCircle,
   SlidersHorizontal, Flame, Cpu, GraduationCap, Bot, Trash2
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, isBirthdayTask, isHolidayTask } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import type { Note, Task } from '@/lib/types'
 import type { EntropySearchResult, EntropySource } from '@/app/api/entropy/search/route'
@@ -147,56 +147,102 @@ export function EntropySearchView() {
   const inputRef = useRef<HTMLInputElement>(null)
   const followUpInputRef = useRef<HTMLInputElement>(null)
 
-  // Dynamic personalized suggestions based on plan, workspace items & history
-  const isPlusOrHigher = usageInfo?.plan === 'plus' || usageInfo?.plan === 'pro' || usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator'
-
+  // Dynamic personalized suggestions based on workspace context (birthdays, holidays, tasks, notes, goals)
   const personalizedSuggestions = useMemo(() => {
-    if (!isPlusOrHigher) {
-      return [
-        'Архитектура MoE vs Dense модели в LLM 2026',
-        'Методология Zettelkasten для базы знаний',
-        'Сравнение Rust и Go для микросервисов',
-        'Unit-экономика B2B SaaS продуктов',
-      ]
-    }
-
     const suggestions: string[] = []
 
-    // 1. From recent search history
-    if (history.length > 0) {
-      const lastQuery = history[0].query
-      suggestions.push(`Углубленный анализ: ${lastQuery}`)
+    // 1. Check for upcoming birthdays (highest emotional & gift context)
+    const birthdayTasks = (state.tasks || []).filter(t => isBirthdayTask(t) && t.status !== 'done')
+    if (birthdayTasks.length > 0) {
+      const topBday = birthdayTasks[0]
+      const cleanName = (topBday.title || '')
+        .replace(/^[🎂🎉🎈🎁\s]+/, '')
+        .replace(/^(день\s+рождения|др)[\s:]*/i, '')
+        .trim() || 'близкого человека'
+      suggestions.push(`🎁 Что подарить на день рождения: ${cleanName}? Идеи подарков и поздравлений`)
     }
 
-    // 2. From user notes
-    if (state.notes && state.notes.length > 0) {
+    // 2. Check for upcoming holidays & celebrations
+    const holidayTasks = (state.tasks || []).filter(t => isHolidayTask(t) && !isBirthdayTask(t) && t.status !== 'done')
+    if (holidayTasks.length > 0 && suggestions.length < 2) {
+      const topHoliday = holidayTasks[0]
+      const cleanHoliday = (topHoliday.title || '').replace(/^[🎂🎉🎈🎁\s]+/, '').trim()
+      suggestions.push(`🎉 Идеи для празднования и подарков: ${cleanHoliday}`)
+    }
+
+    // 3. Check for active goals
+    const activeGoals = (state.goals || []).filter(g => g.status !== 'completed')
+    if (activeGoals.length > 0 && suggestions.length < 3) {
+      const topGoal = activeGoals[0]
+      suggestions.push(`🎯 Стратегия и пошаговый план к цели «${topGoal.title.slice(0, 35)}»`)
+    }
+
+    // 4. Check for actionable tasks
+    const actionableTasks = (state.tasks || []).filter(t => !isBirthdayTask(t) && !isHolidayTask(t) && t.status !== 'done')
+    if (actionableTasks.length > 0 && suggestions.length < 3) {
+      const topTask = actionableTasks[0]
+      const titleLower = (topTask.title || '').toLowerCase()
+      const cleanTitle = (topTask.title || '').replace(/^[✓\s\d.-]+/, '').trim()
+
+      if (titleLower.includes('купить') || titleLower.includes('выбрать') || titleLower.includes('заказать')) {
+        suggestions.push(`🛍️ Сравнение вариантов и где выгоднее: ${cleanTitle.slice(0, 35)}`)
+      } else if (titleLower.includes('поездк') || titleLower.includes('билет') || titleLower.includes('отель') || titleLower.includes('отпуск') || titleLower.includes('путешеств')) {
+        suggestions.push(`✈️ Маршрут, лайфхаки и чек-лист поездки: ${cleanTitle.slice(0, 35)}`)
+      } else if (titleLower.includes('экзамен') || titleLower.includes('курс') || titleLower.includes('диплом') || titleLower.includes('учеб') || titleLower.includes('книг')) {
+        suggestions.push(`🎓 Экспресс-план подготовки и конспект: ${cleanTitle.slice(0, 35)}`)
+      } else if (titleLower.includes('код') || titleLower.includes('api') || titleLower.includes('баг') || titleLower.includes('фикс') || titleLower.includes('разработ')) {
+        suggestions.push(`💻 Архитектурные паттерны и решения: ${cleanTitle.slice(0, 35)}`)
+      } else if (titleLower.includes('тренировк') || titleLower.includes('спорт') || titleLower.includes('зал') || titleLower.includes('бег') || titleLower.includes('питани')) {
+        suggestions.push(`💪 Эффективная программа и рекомендации: ${cleanTitle.slice(0, 35)}`)
+      } else {
+        suggestions.push(`⚡ Чек-лист и лучшие практики для задачи «${cleanTitle.slice(0, 35)}»`)
+      }
+    }
+
+    // 5. Check for recent user notes
+    if (state.notes && state.notes.length > 0 && suggestions.length < 3) {
       const recentNote = state.notes[0]
-      if (recentNote.title && recentNote.title.length > 3) {
-        suggestions.push(`Факты и первоисточники: ${recentNote.title.slice(0, 35)}`)
+      if (recentNote.title && recentNote.title.length > 2) {
+        suggestions.push(`📝 Синтез первоисточников и фактчекинг: ${recentNote.title.slice(0, 35)}`)
       }
     }
 
-    // 3. From pending tasks
-    const pendingTasks = state.tasks?.filter(t => t.status !== 'done') || []
-    if (pendingTasks.length > 0) {
-      const topTask = pendingTasks[0]
-      if (topTask.title && topTask.title.length > 3) {
-        suggestions.push(`Как эффективно решить: ${topTask.title.slice(0, 35)}`)
-      }
+    // 6. Recent search history exploration
+    if (history.length > 0 && suggestions.length < 3) {
+      const lastQuery = history[0].query
+      suggestions.push(`🔍 Углубленный анализ по теме «${lastQuery.slice(0, 35)}»`)
     }
 
-    // 4. Time of day
+    // 7. Time of day / Trending global topics fallback
     const hour = new Date().getHours()
-    if (hour >= 5 && hour < 12) {
-      suggestions.push('🌅 Утренний дайджест: главные мировые tech-новости')
-    } else if (hour >= 12 && hour < 18) {
-      suggestions.push('⚡ Синтез трендов в разработке и AI на сегодня')
-    } else {
-      suggestions.push('🌙 Вечерний обзор исследований и аналитики')
+    if (suggestions.length < 4) {
+      if (hour >= 5 && hour < 12) {
+        suggestions.push('🌅 Утренний дайджест: главные мировые tech-тренды и наука')
+      } else if (hour >= 12 && hour < 18) {
+        suggestions.push('⚡ Синтез трендов в разработке, AI и продуктивности на сегодня')
+      } else {
+        suggestions.push('🌙 Вечерний аналитический обзор ключевых исследований')
+      }
+    }
+
+    // Fallbacks if user has completely empty workspace
+    const fallbacks = [
+      'Архитектура MoE vs Dense модели в LLM 2026',
+      'Методология Zettelkasten для базы знаний',
+      'Сравнение Rust и Go для высоконагруженных сервисов',
+    ]
+
+    while (suggestions.length < 3) {
+      const nextFallback = fallbacks.shift()
+      if (nextFallback && !suggestions.includes(nextFallback)) {
+        suggestions.push(nextFallback)
+      } else {
+        break
+      }
     }
 
     return suggestions.slice(0, 4)
-  }, [isPlusOrHigher, history, state.notes, state.tasks])
+  }, [state.tasks, state.goals, state.notes, history])
 
   // Fetch initial usage limits on mount and persist
   useEffect(() => {
@@ -265,11 +311,26 @@ export function EntropySearchView() {
           mode: activeMode,
           isPro: isProSearch,
           depth: searchDepth,
-          userNotes: state.notes.slice(0, 20).map(n => ({
+          userNotes: (state.notes || []).slice(0, 25).map(n => ({
             id: n.id,
             title: n.title,
-            content: (n.content || '').slice(0, 400),
+            content: (n.content || '').slice(0, 500),
             tags: n.tags,
+          })),
+          userTasks: (state.tasks || []).slice(0, 25).map(t => ({
+            id: t.id,
+            title: t.title,
+            dueDate: t.dueDate,
+            priority: t.priority,
+            status: t.status,
+            tags: t.tags,
+          })),
+          userGoals: (state.goals || []).slice(0, 10).map(g => ({
+            id: g.id,
+            title: g.title,
+            progress: g.progress,
+            deadline: g.deadline,
+            status: g.status,
           })),
         }),
       })
@@ -627,12 +688,12 @@ export function EntropySearchView() {
           </div>
         </div>
 
-        {/* Personalized Suggestions Pills (Plus/Pro/Corp dynamic, Free static) */}
+        {/* Personalized Suggestions Pills */}
         {!result && !isLoading && (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-primary" />
-              {isPlusOrHigher ? '💡 Для вас:' : '💡 Примеры:'}
+              💡 Для вас:
             </span>
             {personalizedSuggestions.map((sug: string, sIdx: number) => (
               <button
