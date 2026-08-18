@@ -129,13 +129,13 @@ export function ZerfikMascot({
               : 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.45))',
           }}
         >
-          {/* Transparent Blended Spirit Hologram */}
+          {/* Transparent Blended Spirit Hologram with Seamless Radial Feathering */}
           <div
-            className="relative w-full h-full overflow-hidden select-none"
+            className="relative w-full h-full rounded-full overflow-hidden select-none"
             style={{
               mixBlendMode: 'screen',
-              maskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 80%)',
-              WebkitMaskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 80%)',
+              maskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 28%, rgba(0,0,0,0.85) 45%, rgba(0,0,0,0.25) 58%, rgba(0,0,0,0) 68%)',
+              WebkitMaskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 28%, rgba(0,0,0,0.85) 45%, rgba(0,0,0,0.25) 58%, rgba(0,0,0,0) 68%)',
             }}
           >
             <Image
@@ -143,7 +143,7 @@ export function ZerfikMascot({
               alt="Зерфик — Zerf AI Spirit"
               fill
               sizes="120px"
-              className="object-cover transition-transform duration-300 group-hover:scale-110"
+              className="object-cover scale-110 transition-transform duration-300 group-hover:scale-125"
               priority
             />
           </div>

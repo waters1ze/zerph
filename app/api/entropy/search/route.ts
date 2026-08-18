@@ -210,26 +210,67 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 1. Fetch real-time live open knowledge sources (Wikipedia, DuckDuckGo, arXiv, GitHub, HackerNews, OpenAlex)
-    const liveSources: LiveSource[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
+    // 1. Fetch real-time live open knowledge sources
+    let liveSources: LiveSource[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
+
+    // If mode is 'notes', search user's internal notes in Prisma DB
+    if (mode === 'notes' && ownerChatId !== 'guest') {
+      try {
+        const words = cleanQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+        const notes = await prisma.note.findMany({
+          where: { userChatId: BigInt(ownerChatId) },
+          take: 12,
+          orderBy: { updatedAt: 'desc' },
+        })
+        const matched = notes.filter((n: any) => {
+          const combined = (n.title + ' ' + (n.content || '')).toLowerCase()
+          return words.some(w => combined.includes(w))
+        })
+        const chosen = matched.length > 0 ? matched.slice(0, 4) : notes.slice(0, 3)
+        const noteSources: LiveSource[] = chosen.map((n: any, idx: number) => ({
+          id: idx + 1,
+          title: `Заметка: «${n.title}»`,
+          url: `https://zerf.app/notes?id=${n.id}`,
+          domain: 'zerf-note.internal',
+          snippet: (n.content || '').slice(0, 300) || 'Заметка в базе знаний Zerf Note',
+        }))
+        if (noteSources.length > 0) {
+          liveSources = [...noteSources, ...liveSources.slice(0, 4)].map((s: any, idx: number) => ({ ...s, id: idx + 1 }))
+        }
+      } catch {}
+    }
 
     const liveContext = liveSources.length > 0
-      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ ИЗ СЕТИ:\n` +
+      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ (${mode.toUpperCase()}):\n` +
         liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
       : ''
+
+    let modePriorityInstruction = ''
+    if (mode === 'academic') {
+      modePriorityInstruction = 'ПРИОРИТЕТ: Академические и научные исследования (arXiv, OpenAlex). Детально разбирай формулы, методологию, цитируй авторов публикаций.'
+    } else if (mode === 'code') {
+      modePriorityInstruction = 'ПРИОРИТЕТ: Программный код, библиотеки, архитектура ПО, GitHub репозитории. Приводи реальные примеры кода и архитектурные сопоставления.'
+    } else if (mode === 'notes') {
+      modePriorityInstruction = 'ПРИОРИТЕТ: База заметок Zerf Note. Синтезируй информацию из заметок пользователя с мировыми знаниями.'
+    } else if (mode === 'fast') {
+      modePriorityInstruction = 'ПРИОРИТЕТ: Быстрый факт-чекинг. Ответ должен быть лаконичным, предельно точным и структурированным.'
+    } else {
+      modePriorityInstruction = 'ПРИОРИТЕТ: Всемирная сеть, всесторонний поиск фактов и синтез открытых источников.'
+    }
 
     // Build system prompt for Perplexity style synthesis with citations
     const prompt = `Ты — ведущий исследовательский ИИ-движок глубоких инсайтов Entropy AI Deep Search (в стиле Perplexity AI Pro Search) совместно с живым маскотом «Зерфик».
 
 Пользовательский запрос: "${cleanQuery}"
 Режим поиска: ${mode}
-${isPro ? 'РЕЖИМ: PRO SEARCH (Глубокий многоступенчатый анализ первоисточников и фактов)' : 'РЕЖИМ: STANDARD SEARCH'}
+${modePriorityInstruction}
+${isPro ? 'РЕЖИМ: PRO SEARCH (Глубокий многоступенчатый анализ первоисточников, многофакторный синтез и расширенные выводы)' : 'РЕЖИМ: STANDARD SEARCH'}
 ${focus ? `Фокус: ${focus}` : ''}
 ${liveContext}
 
 Твоя задача:
-1. Выполнить глубокий синтез фактов, современных концепций и первоисточников из интернета на русском языке.
-2. Если предоставлены «ФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ ИЗ СЕТИ», обязательно опирайся на них и используй их точные URL, названия и домены в массиве "sources", а в тексте ответа расставляй соответствующие сноски [1], [2], [3].
+1. Выполнить глубокий синтез фактов, современных концепций и первоисточников на русском языке с учётом выбранного режима (${mode}).
+2. Если предоставлены первоисточники, обязательно опирайся на них и используй их точные URL, названия и домены в массиве "sources", а в тексте ответа расставляй соответствующие сноски [1], [2], [3].
 3. Оформить ответ в формате строгого JSON (без markdown оберток вокруг json, чистый json объект).
 4. В тексте "answer" ОБЯЗАТЕЛЬНО расставляй числовые сноски на источники в квадратных скобках: [1], [2], [3], [4].
 5. Структурируй "answer" в красивый Markdown (заголовки, жирный шрифт, списки, если уместно — код или таблицы).
