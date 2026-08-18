@@ -108,7 +108,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
   { value: 3,  label: 'A' },
 ]
 
-type SettingsTab = 'account' | 'subscription' | 'ai' | 'apikeys' | 'teams' | 'notifications' | 'focus' | 'automation' | 'cli' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
+type SettingsTab = 'account' | 'integrations' | 'subscription' | 'ai' | 'apikeys' | 'teams' | 'notifications' | 'focus' | 'automation' | 'cli' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
 
 export function SettingsView() {
   const { state, dispatch, syncData } = useApp()
@@ -829,8 +829,9 @@ export function SettingsView() {
       ],
     },
     {
-      group: 'СВЯЗЬ & ГОЛОС',
+      group: 'СВЯЗЬ & ИНТЕГРАЦИИ',
       items: [
+        { id: 'integrations' as SettingsTab, label: 'Google Календарь & Интеграции', icon: Calendar, desc: 'Двусторонняя синхронизация с Google Calendar, экспорт и импорт' },
         { id: 'notifications' as SettingsTab, label: 'Уведомления & Каналы', icon: Bell, desc: 'Telegram, VK, Web Push, звуки, повторы' },
         { id: 'focus' as SettingsTab, label: 'Фокус & Таймеры', icon: Timer, desc: 'Pomodoro, перерывы, автоперенос задач' },
         { id: 'automation' as SettingsTab, label: 'Голос & Siri', icon: Zap, desc: 'iOS Shortcuts, быстрые команды, виджеты' },
@@ -1853,6 +1854,185 @@ export function SettingsView() {
               <SessionsPanel />
             </Section>
           )}
+        </div>
+      )}
+
+      {/* ── TAB: Google Calendar & Integrations ────────────────────────────── */}
+      {activeTab === 'integrations' && (
+        <div className="space-y-6">
+          {/* Hero Integration Card */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600/15 via-cyan-500/10 to-primary/5 border border-blue-500/30 p-6 sm:p-8 backdrop-blur-md shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/25">
+                  <Calendar className="w-7 h-7" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">Google Календарь</h2>
+                    {profileData.googleCalendarSync ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1 border border-emerald-500/30">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Синхронизация активна
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium border border-border">
+                        Не подключен
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground max-w-xl leading-relaxed">
+                    Двусторонняя (2-Way) интеграция: задачи с дедлайнами из Zerf Note мгновенно появляются в Google Календаре, а ваши встречи и дела из Google импортируются в виде задач.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {profileData.googleCalendarSync ? (
+                  <>
+                    <button
+                      onClick={handleSyncGoogleCalendarNow}
+                      disabled={gcalSyncing}
+                      className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-2 transition-all shadow-md shadow-blue-500/20 active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      <RefreshCw className={cn('w-4 h-4', gcalSyncing && 'animate-spin')} />
+                      <span>{gcalSyncing ? 'Синхронизация...' : 'Синхронизировать сейчас'}</span>
+                    </button>
+                    <button
+                      onClick={handleDisconnectGoogleCalendar}
+                      className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/25 text-xs font-semibold transition-all cursor-pointer"
+                      title="Отключить Google Календарь"
+                    >
+                      Отключить
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleConnectGoogleCalendar}
+                    disabled={gcalLoading}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span>{gcalLoading ? 'Подключение...' : 'Подключить Google Календарь'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Status notification toast inside card */}
+            {gcalStatusMsg && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-4 p-3 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-medium flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>{gcalStatusMsg}</span>
+              </motion.div>
+            )}
+          </div>
+
+          {/* 3 Pillars of 2-Way Sync */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-1.5 shadow-xs">
+              <div className="flex items-center gap-2 text-blue-500 font-bold text-xs">
+                <span>📤 Экспорт задач</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Каждая задача с датой и временем автоматически создаёт событие в Google Календаре с напоминанием.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-1.5 shadow-xs">
+              <div className="flex items-center gap-2 text-cyan-500 font-bold text-xs">
+                <span>📥 Импорт событий</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Встречи и мероприятия из вашего календаря попадают в Zerf Note с тегом <code className="text-[11px] text-primary">#календарь</code>.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-1.5 shadow-xs">
+              <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs">
+                <span>⚡ Фоновый обмен</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Сервер автоматически поддерживает актуальность расписания каждые несколько минут без вашего участия.
+              </p>
+            </div>
+          </div>
+
+          {/* Comprehensive Step-by-Step Instructions */}
+          <Section title="Подробная инструкция по подключению и настройке">
+            <div className="p-5 space-y-6 text-xs text-foreground">
+              {/* Section 1: User Guide */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-bold">1</span>
+                  Как подключить свой Google Календарь (Пошагово):
+                </h4>
+                <ol className="space-y-2.5 pl-2 text-muted-foreground">
+                  <li className="flex items-start gap-2.5">
+                    <span className="font-bold text-foreground shrink-0">1.</span>
+                    <span>Нажмите кнопку <strong className="text-foreground">«Подключить Google Календарь»</strong> в блоке выше.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="font-bold text-foreground shrink-0">2.</span>
+                    <span>Откроется стандартное безопасное окно авторизации Google OAuth 2.0. Выберите ваш аккаунт <code className="text-primary font-mono text-[11px]">@gmail.com</code>.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="font-bold text-foreground shrink-0">3.</span>
+                    <span>Нажмите <strong className="text-foreground">«Продолжить»</strong> и разрешите приложению доступ к календарю (чтение и добавление событий).</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="font-bold text-foreground shrink-0">4.</span>
+                    <span>Браузер вернется обратно в Zerf Note с уведомлением об успешном подключении. Все события немедленно синхронизируются в обе стороны!</span>
+                  </li>
+                </ol>
+              </div>
+
+              {/* Section 2: How 2-Way Sync Works */}
+              <div className="space-y-3 pt-4 border-t border-border/60">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-blue-500/15 text-blue-500 flex items-center justify-center text-xs font-bold">2</span>
+                  Правила двустороннего обмена (2-Way Sync):
+                </h4>
+                <ul className="space-y-2 pl-2 text-muted-foreground list-disc list-inside">
+                  <li>События синхронизируются на <strong className="text-foreground">7 дней назад</strong> и на <strong className="text-foreground">60 дней вперёд</strong>.</li>
+                  <li>При создании задачи с дедлайном (например, «Встреча с клиентом завтра в 14:00») событие появится в календаре телефона и ПК.</li>
+                  <li>При изменении времени в Google Календаре задача в Zerf Note автоматически обновит свой срок.</li>
+                  <li>При удалении или отметке «Выполнено» синхронизация сохраняет целостность вашей истории.</li>
+                </ul>
+              </div>
+
+              {/* Section 3: Developer / Google Cloud setup */}
+              <div className="space-y-3 pt-4 border-t border-border/60">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center text-xs font-bold">3</span>
+                  Для разработчиков: Настройка Google Cloud Console (OAuth 2.0):
+                </h4>
+                <div className="p-4 rounded-xl bg-muted/40 border border-border/70 space-y-2 text-muted-foreground font-mono text-[11px]">
+                  <p className="text-foreground font-sans font-semibold text-xs">
+                    Если вы разворачиваете собственный сервер Zerf Note:
+                  </p>
+                  <p>1. Перейдите в <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Console</a> и создайте проект.</p>
+                  <p>2. Включите API: <strong>Google Calendar API</strong>.</p>
+                  <p>3. В разделе <strong>Credentials</strong> создайте <strong>OAuth 2.0 Client ID</strong> (Web application).</p>
+                  <p>4. В <strong>Authorized redirect URIs</strong> укажите:</p>
+                  <div className="p-2 rounded bg-background border border-border text-primary select-all">
+                    https://zeprh.vercel.app/api/calendar/token
+                  </div>
+                  <p>5. Добавьте в <code className="text-foreground">.env</code> или переменные Vercel:</p>
+                  <pre className="p-2.5 rounded bg-background border border-border text-emerald-500 text-[10px] overflow-x-auto">
+GOOGLE_CLIENT_ID=ваш_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=ваш_client_secret
+GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </Section>
         </div>
       )}
 

@@ -72,9 +72,10 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
         fill_rect(28, 15, 30, 16, C_WING_DARK)
         fill_rect(21, 11, 27, 11, C_WING_LIGHT)
 
-    # 2. Torso (13..18, 15..19)
+    # 2. Torso (13..18, 15..19) -> 6x5 block
     fill_rect(13, 15, 18, 19, C_MAIN)
     fill_rect(13, 18, 18, 19, C_SHADOW)
+    # Highlight on chest
     fill_rect(15, 15, 16, 16, C_HEAD_TOP)
 
     # 3. Floating stepped tail/dress (20..25)
@@ -82,25 +83,27 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
     fill_rect(14, 22, 16, 23, C_SHADOW)
     fill_rect(15, 24, 15, 25, C_DARK)
 
-    # 4. Tiny Block Arms (CALMLY DOWN BY DEFAULT)
+    # 4. Tiny Block Arms:
+    # - By default: resting flush and lowered DOWN against the torso (NOT sticking out!)
+    # - When happy: joyfully raised up high!
     if pose == 'happy' or pose == 'celebrate':
         # Arms raised joyfully up high!
-        fill_rect(10, 11, 12, 14, C_MAIN)
-        fill_rect(10, 11, 12, 11, C_HEAD_TOP)
-        fill_rect(19, 11, 21, 14, C_MAIN)
-        fill_rect(19, 11, 21, 11, C_HEAD_TOP)
+        fill_rect(10, 10, 12, 14, C_MAIN)
+        fill_rect(10, 10, 12, 10, C_HEAD_TOP)
+        fill_rect(19, 10, 21, 14, C_MAIN)
+        fill_rect(19, 10, 21, 10, C_HEAD_TOP)
     elif pose == 'thinking':
-        # Left arm down, right arm touching cheek
-        fill_rect(11, 15, 12, 18, C_MAIN)
-        fill_rect(19, 13, 20, 16, C_HEAD_TOP)
+        # Left arm down, right arm bent to cheek
+        fill_rect(12, 16, 13, 19, C_MAIN)
+        fill_rect(18, 12, 19, 15, C_HEAD_TOP)
     else:
-        # Default: Hanging calmly downwards along the torso
-        fill_rect(11, 15, 12, 18, C_MAIN)
-        fill_rect(11, 18, 12, 18, C_SHADOW)
-        fill_rect(19, 15, 20, 18, C_MAIN)
-        fill_rect(19, 18, 20, 18, C_SHADOW)
+        # Arms hanging completely down along torso (flush with body, vertically lowered)
+        fill_rect(12, 16, 13, 20, C_MAIN)
+        fill_rect(12, 19, 13, 20, C_SHADOW)
+        fill_rect(18, 16, 19, 20, C_MAIN)
+        fill_rect(18, 19, 19, 20, C_SHADOW)
 
-    # 5. Cubic Head (10x10)
+    # 5. Cubic Minecraft Head (10x10)
     fill_rect(hx1, hy1, hx2, hy2, C_MAIN)
     fill_rect(hx1, hy1, hx2, hy1 + 1, C_HEAD_TOP)
     fill_rect(hx1, hy2 - 1, hx2, hy2, C_SHADOW)
@@ -109,19 +112,15 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
 
     # 6. Glowing Rectangular Eyes (Vertical 2x4 White Bars)
     if pose == 'down':
-        # Lowered looking down towards cursor below
         eye1_x, eye2_x = hx1 + 2, hx1 + 6
         eye_y1, eye_y2 = hy1 + 5, hy1 + 8
     elif pose == 'up':
-        # Lifted looking up towards cursor above
         eye1_x, eye2_x = hx1 + 2, hx1 + 6
         eye_y1, eye_y2 = hy1 + 1, hy1 + 4
     elif pose == 'look_left':
-        # Shifted left
         eye1_x, eye2_x = hx1 + 1, hx1 + 4
         eye_y1, eye_y2 = hy1 + 3, hy1 + 6
     elif pose == 'look_right':
-        # Shifted right
         eye1_x, eye2_x = hx1 + 5, hx1 + 8
         eye_y1, eye_y2 = hy1 + 3, hy1 + 6
     elif pose == 'thinking':
@@ -131,21 +130,17 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
         eye1_x, eye2_x = hx1 + 2, hx1 + 6
         eye_y1, eye_y2 = hy1 + 2, hy1 + 5
     else:
-        # Centered standard
         eye1_x, eye2_x = hx1 + 2, hx1 + 6
         eye_y1, eye_y2 = hy1 + 3, hy1 + 6
 
-    # Draw Eye 1 (Left vertical bar: 2x4)
     fill_rect(eye1_x, eye_y1, eye1_x + 1, eye_y2, C_EYE_WHITE)
-    # Draw Eye 2 (Right vertical bar: 2x4)
     fill_rect(eye2_x, eye_y1, eye2_x + 1, eye_y2, C_EYE_WHITE)
 
     base_img = Image.fromarray(grid, 'RGBA')
     upscaled = base_img.resize((256, 256), Image.Resampling.NEAREST)
     upscaled.save(filename, 'PNG')
-    print(f"Rendered Allay pose: {pose} -> {filename}")
+    print(f"Generated Allay pose with lowered arms: {pose} -> {filename}")
 
-# Generate all directional & mood sprites
 draw_allay_sprite('idle', 'public/images/zerfik_idle.png')
 draw_allay_sprite('down', 'public/images/zerfik_down.png')
 draw_allay_sprite('up', 'public/images/zerfik_up.png')
