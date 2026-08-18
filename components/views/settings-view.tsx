@@ -24,6 +24,7 @@ import { ApiKeysSection } from '@/components/settings/api-keys-section'
 import { SidebarCustomizerSection } from '@/components/settings/sidebar-customizer-section'
 import { InstalledExtensionsSettingsSection } from '@/components/settings/installed-extensions-section'
 import { EmojiPickerModal } from '@/components/ui/emoji-picker-modal'
+import { CustomThemesModal } from '@/components/settings/custom-themes-modal'
 import {
   THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
   normalizeTheme, type ThemePresetId, type TextScaleStep,
@@ -154,6 +155,8 @@ export function SettingsView() {
   const cachedAvatarEmoji = typeof window !== 'undefined' ? localStorage.getItem('zerf_avatar_emoji') || '👤' : '👤'
   const [userAvatarEmoji, setUserAvatarEmoji] = useState(profileData.avatarEmoji || cachedAvatarEmoji)
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false)
+  const [showThemesModal, setShowThemesModal] = useState<boolean>(false)
+  const [showPricingMatrix, setShowPricingMatrix] = useState<boolean>(false)
   const [avatarSavedStatus, setAvatarSavedStatus] = useState<boolean>(false)
 
   useEffect(() => {
@@ -777,28 +780,31 @@ export function SettingsView() {
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(true)}
-                  className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center text-2xl shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none"
+                  className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center text-2xl shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none touch-manipulation"
                   title="Нажмите, чтобы открыть каталог из 1000+ эмодзи"
                 >
-                  <span>{userAvatarEmoji}</span>
+                  <span style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
+                    {userAvatarEmoji}
+                  </span>
                   <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-primary text-primary-foreground text-[9px] shadow-xs group-hover:scale-110 transition-transform">
                     <Sparkles className="w-2.5 h-2.5" />
                   </span>
                 </button>
 
-                {/* Quick Pick Chips */}
-                <div className="flex items-center gap-1 overflow-x-auto max-w-[200px] sm:max-w-none">
-                  {['🤖', '⚡', '🧠', '🔮', '✨', '💻', '🔥', '👑', '🚀', '👾'].map(emoji => (
+                {/* Quick Pick Chips without horizontal scrollbar */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-full">
+                  {['⚡', '🔥', '🌊', '🎯', '🚀', '💎', '🌸', '🎭', '🧠', '👑'].map(emoji => (
                     <button
                       key={emoji}
                       type="button"
                       onClick={() => handleSelectAvatarEmoji(emoji)}
                       className={cn(
-                        'w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all cursor-pointer select-none',
+                        'w-8 h-8 rounded-xl flex items-center justify-center text-base transition-all cursor-pointer select-none touch-manipulation shrink-0',
                         userAvatarEmoji === emoji
                           ? 'bg-primary/20 border border-primary/50 scale-110 shadow-2xs font-bold'
                           : 'bg-muted/40 hover:bg-muted border border-border/60 hover:scale-105'
                       )}
+                      style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}
                       title={`Выбрать ${emoji}`}
                     >
                       {emoji}
@@ -809,7 +815,7 @@ export function SettingsView() {
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(true)}
-                  className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="h-8 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shrink-0 touch-manipulation min-h-[32px]"
                 >
                   <Sparkles className="w-3 h-3" />
                   <span>Выбрать эмодзи (1000+)</span>
@@ -2140,11 +2146,35 @@ export function SettingsView() {
       {activeTab === 'appearance' && (
         <div className="space-y-6">
           <Section title="Тема оформления">
-            <div className="p-4">
-              <div className="text-[13px] font-medium text-foreground mb-1">Цветовая тема</div>
-              <p className="text-[12px] text-muted-foreground mb-3">Пять продуманных пресетов — меняется весь интерфейс целиком</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                {THEME_PRESETS.map(preset => {
+            <div className="p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <div className="text-[13px] font-medium text-foreground">Цветовая тема оформления</div>
+                  <p className="text-[12px] text-muted-foreground">Пресеты и кастомные стили — меняется весь интерфейс целиком</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowThemesModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors touch-manipulation"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>Библиотека тем (8+)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowThemesModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors touch-manipulation"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Своя тема</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2 Preview Themes initially */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {THEME_PRESETS.slice(0, 2).map(preset => {
                   const active = normalizeTheme(settings.theme) === preset.id
                   return (
                     <button
@@ -2156,15 +2186,15 @@ export function SettingsView() {
                         update({ theme: preset.id, ...(accentStillValid ? {} : { accentColor: 'default' }) })
                       }}
                       className={cn(
-                        'group text-left rounded-xl border p-2.5 transition-all cursor-pointer',
+                        'group text-left rounded-2xl border p-3 transition-all cursor-pointer touch-manipulation relative',
                         active
-                          ? 'border-primary/60 ring-1 ring-primary/30 bg-card'
+                          ? 'border-primary ring-2 ring-primary/30 bg-card shadow-xs'
                           : 'border-border hover:border-foreground/25 bg-card/50'
                       )}
                     >
                       {/* mini preview */}
                       <div
-                        className="h-14 rounded-lg border border-black/10 mb-2 relative overflow-hidden flex flex-col justify-center gap-1.5 px-2"
+                        className="h-14 rounded-xl border border-border/40 mb-2.5 relative overflow-hidden flex flex-col justify-center gap-1.5 px-3"
                         style={{ background: preset.preview.bg }}
                       >
                         <div className="h-2 w-4/5 rounded-sm" style={{ background: preset.preview.surface }} />
@@ -2173,13 +2203,16 @@ export function SettingsView() {
                           <div className="h-2 w-1/2 rounded-sm" style={{ background: preset.preview.surface }} />
                         </div>
                         {active && (
-                          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: preset.preview.accent }}>
-                            <Check className="w-2.5 h-2.5" style={{ color: preset.preview.bg }} />
+                          <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center shadow-md" style={{ background: preset.preview.accent }}>
+                            <Check className="w-3 h-3 text-white" />
                           </div>
                         )}
                       </div>
-                      <div className={cn('text-[12.5px] font-bold', active ? 'text-primary' : 'text-foreground')}>{preset.label}</div>
-                      <div className="text-[10.5px] leading-snug text-muted-foreground line-clamp-2">{preset.tagline}</div>
+                      <div className="flex items-center justify-between">
+                        <span className={cn('text-xs font-bold', active ? 'text-primary' : 'text-foreground')}>{preset.label}</span>
+                        {active && <span className="text-[10px] font-bold text-primary font-mono">Активна</span>}
+                      </div>
+                      <div className="text-[11px] leading-snug text-muted-foreground mt-0.5 line-clamp-1">{preset.tagline}</div>
                     </button>
                   )
                 })}
@@ -2754,121 +2787,127 @@ export function SettingsView() {
                 })}
               </div>
 
-              {/* ── EXTENSIONS & APIS MATRIX BY PLAN (Что входит в какой тариф) ── */}
-              <div className="p-5 rounded-2xl bg-card border border-border space-y-3.5 shadow-xs">
-                <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-2.5">
+              {/* ── EXTENSIONS & APIS MATRIX BY PLAN (Collapsible details) ── */}
+              <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowPricingMatrix(prev => !prev)}
+                  className="w-full flex items-center justify-between gap-3 cursor-pointer text-left"
+                >
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
                       🧩
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-foreground">Возможности расширений и ИИ по тарифам</h4>
+                      <h4 className="text-xs font-bold text-foreground">Подробная таблица сравнения лимитов</h4>
                       <p className="text-[10px] text-muted-foreground">
-                        Какой тариф требуется для работы виджетов, шаблонов, Self-Host и SDK
+                        {showPricingMatrix ? 'Скрыть детальное сравнение тарифов' : 'Нажмите, чтобы развернуть полную матрицу возможностей'}
                       </p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-muted text-muted-foreground hidden sm:inline-block">
-                    Лимиты & Доступы
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                    {showPricingMatrix ? 'Свернуть ▲' : 'Сравнить все тарифы ▼'}
                   </span>
-                </div>
+                </button>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
-                        <th className="py-2 pr-4 font-bold">Функция / Возможность</th>
-                        <th className="py-2 px-2 text-center font-bold">Базовый (Free)</th>
-                        <th className="py-2 px-2 text-center font-bold text-sky-400">Plus (99 ₽)</th>
-                        <th className="py-2 px-2 text-center font-bold text-amber-400">Pro (299 ₽)</th>
-                        <th className="py-2 pl-2 text-center font-bold text-purple-400">Corp</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40 text-[11px]">
-                      <tr>
-                        <td className="py-2.5 pr-4 font-medium text-foreground">
-                          🧩 Лимит активных расширений
-                        </td>
-                        <td className="py-2.5 px-2 text-center font-mono font-bold text-foreground">до 5 шт.</td>
-                        <td className="py-2.5 px-2 text-center font-mono font-bold text-sky-400">до 10 шт.</td>
-                        <td className="py-2.5 px-2 text-center font-mono font-bold text-amber-400">до 50 шт.</td>
-                        <td className="py-2.5 pl-2 text-center font-mono font-bold text-purple-400">Безлимит (∞)</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          📦 Установка из официального каталога Store
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
-                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Да</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          📋 Импорт готовых задач и проектов из шаблонов
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/60">Базовые</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В 1 клик</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В 1 клик</td>
-                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Командные</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          🎨 Студия создания и публикация расширений
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В каталоге</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В каталоге</td>
-                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Приватные</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          💰 Монетизация плагинов (80% доход автора на карту/СБП)
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
-                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          ⚡ Свой сервер (Self-Hosting) для тяжелых вычислений
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Доступно</td>
-                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Доступно</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          🔌 Свои API ключи (OpenAI, Claude, Gemini, Ollama)
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Все провайдеры</td>
-                        <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Выделенные</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          💻 Zerf CLI & Terminal SDK
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
-                        <td className="py-2.5 px-2 text-center font-mono font-bold text-sky-400">300 req/день</td>
-                        <td className="py-2.5 px-2 text-center font-mono font-bold text-amber-400">1 500 req/день</td>
-                        <td className="py-2.5 pl-2 text-center font-mono font-bold text-purple-400">8 000 req/день</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 pr-4 text-muted-foreground">
-                          🎙 Скорость голосового распознавания и Siri
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-foreground">Стандартная</td>
-                        <td className="py-2.5 px-2 text-center text-sky-400 font-bold">Быстрая (Qwen)</td>
-                        <td className="py-2.5 px-2 text-center text-amber-400 font-bold">⚡ Мгновенная</td>
-                        <td className="py-2.5 pl-2 text-center text-purple-400 font-bold">🔥 Наивысший VIP</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                {showPricingMatrix && (
+                  <div className="overflow-x-auto pt-2 border-t border-border/60 animate-in fade-in">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
+                          <th className="py-2 pr-4 font-bold">Функция / Возможность</th>
+                          <th className="py-2 px-2 text-center font-bold">Базовый (Free)</th>
+                          <th className="py-2 px-2 text-center font-bold text-sky-400">Plus (99 ₽)</th>
+                          <th className="py-2 px-2 text-center font-bold text-amber-400">Pro (299 ₽)</th>
+                          <th className="py-2 pl-2 text-center font-bold text-purple-400">Corp</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40 text-[11px]">
+                        <tr>
+                          <td className="py-2.5 pr-4 font-medium text-foreground">
+                            🧩 Лимит активных расширений
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-mono font-bold text-foreground">до 5 шт.</td>
+                          <td className="py-2.5 px-2 text-center font-mono font-bold text-sky-400">до 10 шт.</td>
+                          <td className="py-2.5 px-2 text-center font-mono font-bold text-amber-400">до 50 шт.</td>
+                          <td className="py-2.5 pl-2 text-center font-mono font-bold text-purple-400">Безлимит (∞)</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            📦 Установка из официального каталога Store
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                          <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Да</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            📋 Импорт готовых задач и проектов из шаблонов
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/60">Базовые</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В 1 клик</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В 1 клик</td>
+                          <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Командные</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            🎨 Студия создания и публикация расширений
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В каталоге</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ В каталоге</td>
+                          <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Приватные</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            💰 Монетизация плагинов (80% доход автора на карту/СБП)
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
+                          <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ 80% автору</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            ⚡ Свой сервер (Self-Hosting) для тяжелых вычислений
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Доступно</td>
+                          <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Доступно</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            🔌 Свои API ключи (OpenAI, Claude, Gemini, Ollama)
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center text-emerald-400 font-bold">✓ Все провайдеры</td>
+                          <td className="py-2.5 pl-2 text-center text-emerald-400 font-bold">✓ Выделенные</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            💻 Zerf CLI & Terminal SDK
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground/40">—</td>
+                          <td className="py-2.5 px-2 text-center font-mono font-bold text-sky-400">300 req/день</td>
+                          <td className="py-2.5 px-2 text-center font-mono font-bold text-amber-400">1 500 req/день</td>
+                          <td className="py-2.5 pl-2 text-center font-mono font-bold text-purple-400">8 000 req/день</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 pr-4 text-muted-foreground">
+                            🎙 Скорость голосового распознавания и Siri
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-foreground">Стандартная</td>
+                          <td className="py-2.5 px-2 text-center text-sky-400 font-bold">Быстрая (Qwen)</td>
+                          <td className="py-2.5 px-2 text-center text-amber-400 font-bold">⚡ Мгновенная</td>
+                          <td className="py-2.5 pl-2 text-center text-purple-400 font-bold">🔥 Наивысший VIP</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* News digests opt-out (Plus+) */}
@@ -3113,6 +3152,25 @@ export function SettingsView() {
         onSelect={handleSelectAvatarEmoji}
         onClose={() => setShowEmojiPicker(false)}
         title="Выберите аватар / эмодзи профиля"
+      />
+
+      {/* Custom Themes Library & Creator Modal */}
+      <CustomThemesModal
+        isOpen={showThemesModal}
+        currentTheme={settings.theme || 'strict'}
+        onClose={() => setShowThemesModal(false)}
+        onApplyTheme={(themeId, customVars) => {
+          update({ theme: themeId as any })
+          if (customVars && typeof window !== 'undefined') {
+            try {
+              Object.entries(customVars).forEach(([k, v]) => {
+                document.documentElement.style.setProperty(k, v)
+              })
+              localStorage.setItem('zerf_active_theme_vars', JSON.stringify(customVars))
+            } catch {}
+          }
+          setShowThemesModal(false)
+        }}
       />
     </div>
   )

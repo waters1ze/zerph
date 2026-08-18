@@ -274,6 +274,10 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     return d === today && t.status !== 'done'
   }).length
 
+  const activeTasksCount = tasks.filter(t => t.status !== 'done' && !(t as any).isDeleted).length
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const completedTodayCount = tasks.filter(t => t.status === 'done' && !(t as any).isDeleted && (((t as any).completedAt && String((t as any).completedAt).startsWith(todayStr)) || (t.dueDate === todayStr))).length
+
   const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done' && !isYearlyEventTask(t)).length
   const notesCount = notes.length
 
@@ -283,16 +287,9 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     ? `${tgUser.username} · Подключено`
     : (isConnected ? 'Telegram Подключён' : 'Telegram Не подключён')
 
-  // Map of extensions for quick lookup with fallback for Entropy AI Search
+  // Map of extensions for quick lookup strictly from user's installed extensions
   const extensionsMap = useMemo(() => {
     const map = new Map<string, Partial<ExtensionItem>>()
-    map.set('ext_entropy_search', {
-      id: 'ext_entropy_search',
-      title: 'Entropy AI Search',
-      icon: '🔮',
-      type: 'widget',
-      category: 'ИИ & Промпты',
-    })
     installedExts.forEach(e => map.set(e.id, e))
     return map
   }, [installedExts])
@@ -332,13 +329,17 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         <div 
           onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
           className={cn(
-            'flex-1 min-w-0 rounded-xl bg-muted/40 hover:bg-muted/70 border border-border/50 flex items-center cursor-pointer transition-colors group',
+            'flex-1 min-w-0 rounded-xl bg-muted/40 hover:bg-muted/70 border border-border/50 flex items-center cursor-pointer transition-colors group touch-manipulation',
             isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-1.5 gap-2.5'
           )}
           title={`Профиль: ${displayName} (кликните для настроек)`}
         >
           <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
-            {tgUser?.photoUrl ? (
+            {userAvatarEmoji && userAvatarEmoji !== '👤' ? (
+              <span className="text-sm select-none emoji-symbol" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
+                {userAvatarEmoji}
+              </span>
+            ) : tgUser?.photoUrl ? (
               <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
             ) : displayName !== 'Мой профиль' ? (
               <span className="text-[11px] font-bold uppercase">{displayName[0]}</span>
@@ -353,9 +354,11 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                 <p className="text-xs font-bold text-foreground truncate font-sans leading-tight" title={displayName}>
                   {displayName}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate font-sans leading-tight mt-0.5">
-                  {userSubtext}
-                </p>
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate font-sans leading-tight mt-0.5">
+                  <span className="text-foreground/90 font-medium">{activeTasksCount} активных</span>
+                  <span className="opacity-40">•</span>
+                  <span>{completedTodayCount} выполнено</span>
+                </div>
               </div>
               <div
                 className={cn(
@@ -588,30 +591,32 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
       </nav>
 
       {/* Bottom Profile / Status bar */}
-      <div className={cn('border-t border-border bg-card/60 transition-all', isCollapsed ? 'p-2 flex justify-center' : 'p-2.5')}>
+      <div className={cn('border-t border-border bg-card/60 transition-all pb-[max(0.5rem,env(safe-area-inset-bottom))]', isCollapsed ? 'p-2 flex justify-center' : 'p-2.5')}>
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
           className={cn(
-            'w-full flex items-center rounded-2xl hover:bg-muted/60 transition-all cursor-pointer group',
+            'w-full flex items-center rounded-2xl hover:bg-muted/60 transition-all cursor-pointer group touch-manipulation',
             isCollapsed ? 'justify-center p-1' : 'gap-2.5 px-2 py-1.5'
           )}
           title="Настройки профиля и аватар"
         >
           <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-base shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-            <span>{userAvatarEmoji}</span>
+            <span className="emoji-symbol" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
+              {userAvatarEmoji || '👤'}
+            </span>
           </div>
 
           {!isCollapsed && (
             <div className="flex-1 text-left min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground truncate">{tgUser?.name || 'Мой профиль'}</span>
+                <span className="text-xs font-bold text-foreground truncate">{tgUser?.name || displayName || 'Мой профиль'}</span>
                 <div className="flex items-center gap-1">
                   <Circle className="w-1.5 h-1.5 fill-[var(--status-done)] text-[var(--status-done)]" />
                   <span className="text-[10px] text-muted-foreground font-medium">Онлайн</span>
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground truncate">{todayCount} задач на сегодня</p>
+              <p className="text-[10px] text-muted-foreground truncate">{todayCount} на сегодня • {activeTasksCount} активных</p>
             </div>
           )}
         </motion.button>

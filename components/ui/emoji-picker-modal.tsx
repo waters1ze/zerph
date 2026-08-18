@@ -14,6 +14,10 @@ interface EmojiPickerModalProps {
   title?: string
 }
 
+const EMOJI_FONT_STYLE = {
+  fontFamily: "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Android Emoji', 'Twemoji Mozilla', 'Segoe UI Symbol', sans-serif",
+}
+
 export function EmojiPickerModal({
   isOpen,
   currentEmoji = '👤',
@@ -101,26 +105,29 @@ export function EmojiPickerModal({
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between gap-3 bg-muted/20">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shadow-xs">
+              <div
+                className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shadow-xs shrink-0 select-none"
+                style={EMOJI_FONT_STYLE}
+              >
                 {currentEmoji}
               </div>
               <div>
                 <h3 className="font-bold text-sm text-foreground">{title}</h3>
-                <p className="text-[11px] text-muted-foreground">Более 1000 эмодзи: ИИ, нейросети, киберпанк и др.</p>
+                <p className="text-[11px] text-muted-foreground">Более 1000 цветных эмодзи: ИИ, нейросети, киберпанк и др.</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={handleRandomPick}
-                className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground hover:text-primary transition-colors cursor-pointer"
+                className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground hover:text-primary transition-colors cursor-pointer touch-manipulation"
                 title="Случайный эмодзи"
               >
                 <Shuffle className="w-4 h-4" />
               </button>
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer touch-manipulation"
                 title="Закрыть"
               >
                 <X className="w-4 h-4" />
@@ -144,7 +151,7 @@ export function EmojiPickerModal({
                 {search && (
                   <button
                     onClick={() => setSearch('')}
-                    className="text-xs text-muted-foreground hover:text-foreground p-0.5"
+                    className="text-xs text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
                   >
                     ✕
                   </button>
@@ -152,7 +159,7 @@ export function EmojiPickerModal({
               </div>
 
               {/* Direct Emoji Paste input */}
-              <form onSubmit={handleCustomSubmit} className="flex items-center gap-1">
+              <form onSubmit={handleCustomSubmit} className="flex items-center gap-1 shrink-0">
                 <input
                   type="text"
                   value={customEmojiInput}
@@ -172,9 +179,9 @@ export function EmojiPickerModal({
               </form>
             </div>
 
-            {/* Category Navigation Pills */}
+            {/* Category Navigation Pills without scrollbar */}
             {!search && (
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {EMOJI_CATEGORIES.map(cat => {
                   const active = activeCategoryId === cat.id
                   return (
@@ -182,14 +189,14 @@ export function EmojiPickerModal({
                       key={cat.id}
                       onClick={() => setActiveCategoryId(cat.id)}
                       className={cn(
-                        'px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer',
+                        'px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer touch-manipulation',
                         active
                           ? 'bg-primary/15 text-primary border border-primary/30 shadow-2xs'
                           : 'bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground border border-transparent'
                       )}
                       title={cat.name}
                     >
-                      <span>{cat.icon}</span>
+                      <span style={EMOJI_FONT_STYLE}>{cat.icon}</span>
                       <span className="text-[11px] hidden sm:inline">{cat.name.split(' ')[0]}</span>
                     </button>
                   )
@@ -199,7 +206,7 @@ export function EmojiPickerModal({
           </div>
 
           {/* Emojis Grid Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[380px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[380px] [scrollbar-width:thin]">
             {/* Recent Emojis Section */}
             {!search && recentEmojis.length > 0 && (
               <div className="space-y-1.5">
@@ -215,9 +222,10 @@ export function EmojiPickerModal({
                     <button
                       key={idx}
                       onClick={() => handleEmojiClick(emoji)}
+                      style={EMOJI_FONT_STYLE}
                       className={cn(
-                        'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted hover:scale-110 select-none',
-                        currentEmoji === emoji ? 'bg-primary/20 border border-primary/40' : 'bg-card'
+                        'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted hover:scale-110 select-none touch-manipulation',
+                        currentEmoji === emoji ? 'bg-primary/20 border border-primary/40' : 'bg-card border border-border/40'
                       )}
                     >
                       {emoji}
@@ -252,8 +260,9 @@ export function EmojiPickerModal({
                       <button
                         key={idx}
                         onClick={() => handleEmojiClick(emoji)}
+                        style={EMOJI_FONT_STYLE}
                         className={cn(
-                          'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted/80 hover:scale-115 active:scale-95 select-none relative group',
+                          'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted/80 hover:scale-115 active:scale-95 select-none relative group touch-manipulation',
                           isSelected
                             ? 'bg-primary/20 border-2 border-primary shadow-xs'
                             : 'bg-muted/20 hover:bg-muted/50 border border-transparent'

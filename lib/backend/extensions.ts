@@ -52,7 +52,7 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     authorName: 'waters1ze',
     authorGithub: 'waters1ze',
     price: 0,
-    minPlan: 'free',
+    minPlan: 'plus',
     isOfficial: true,
     isPublished: true,
     isRunnable: true,
@@ -113,9 +113,13 @@ export async function getUserInstalledExtensions(chatId: string | number): Promi
     if (row?.value) {
       return JSON.parse(row.value)
     }
-    return ['ext_entropy_search']
+    // Only creator/admin has Entropy Search pre-installed by default
+    if (cid === '6136950061' || cid === '5078516086') {
+      return ['ext_entropy_search']
+    }
+    return []
   } catch {
-    return ['ext_entropy_search']
+    return []
   }
 }
 
@@ -130,7 +134,7 @@ export async function getUserEnabledExtensions(chatId: string | number): Promise
     }
     return await getUserInstalledExtensions(cid)
   } catch {
-    return ['ext_entropy_search']
+    return []
   }
 }
 

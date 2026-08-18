@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Key, Shield, Check, Copy, Eye, EyeOff, Sparkles,
   Zap, Terminal, RefreshCw, Smartphone, CheckCircle2,
-  ExternalLink, AlertCircle, Cpu, Lock
+  ExternalLink, AlertCircle, Cpu, Lock, Bell, Code2,
+  Share2, Bot, Layers
 } from 'lucide-react'
 import { useSettings, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -24,13 +25,36 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
   const [testingKey, setTestingKey] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ id: string; ok: boolean; message: string } | null>(null)
 
-  // Local state for inputs
+  // Push test states
+  const [pushLoading, setPushLoading] = useState(false)
+  const [pushResult, setPushResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  // Local state for AI inputs
   const [groqKey, setGroqKey] = useState(settings.integrations?.apiKey || '')
   const [openaiKey, setOpenaiKey] = useState(settings.integrations?.openaiKey || '')
   const [anthropicKey, setAnthropicKey] = useState(settings.integrations?.anthropicKey || '')
   const [geminiKey, setGeminiKey] = useState(settings.integrations?.geminiKey || '')
 
-  const currentAuthToken = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || siriKey || chatId || '') : (siriKey || '')
+  const currentAuthToken = typeof window !== 'undefined'
+    ? (localStorage.getItem('zerf_auth_token') || siriKey || chatId || 'zerf_sec_' + (chatId || 'guest'))
+    : (siriKey || 'zerf_sec_demo')
+
+  // Generate a project key format
+  const projectApiKey = `zerf_pk_${currentAuthToken.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}`
+
+  // MCP Configuration JSON snippet
+  const mcpConfigJson = JSON.stringify({
+    mcpServers: {
+      zerf: {
+        command: "npx",
+        args: ["-y", "@zerf/mcp-server"],
+        env: {
+          ZERF_API_TOKEN: currentAuthToken,
+          ZERF_BASE_URL: typeof window !== 'undefined' ? window.location.origin : "https://zeprh.vercel.app"
+        }
+      }
+    }
+  }, null, 2)
 
   const toggleVisibility = (id: string) => {
     setShowKeys(prev => ({ ...prev, [id]: !prev[id] }))
@@ -54,7 +78,6 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
       }
     })
 
-    // Also sync to backend
     try {
       await fetch('/api/telegram/user', {
         method: 'POST',
@@ -98,23 +121,45 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
     }
   }
 
+  const handleTestPush = async () => {
+    setPushLoading(true)
+    setPushResult(null)
+    try {
+      const res = await fetch('/api/telegram/test-push', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setPushResult({ ok: true, message: data.message || 'Тестовое уведомление доставлено!' })
+      } else {
+        setPushResult({ ok: false, message: data.error || 'Ошибка отправки тестового пуша.' })
+      }
+    } catch (err: any) {
+      setPushResult({ ok: false, message: err?.message || 'Ошибка сети при отправке пуша.' })
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Header Info */}
-      <div className="p-4 rounded-2xl bg-card border border-border/80 flex items-start justify-between gap-3 relative overflow-hidden">
+    <div className="space-y-6 text-foreground font-sans">
+      {/* Header Banner */}
+      <div className="p-4 rounded-2xl bg-card border border-border/80 flex items-start justify-between gap-3 relative overflow-hidden shadow-xs">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
             <Key className="w-5 h-5" />
           </div>
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-foreground">API Ключи и Провайдеры</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-foreground">API Ключи, MCP & Интеграции</h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                BYOK (Bring Your Own Key)
+                BYOK & MCP Ready
               </span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Вы можете использовать как встроенные облачные мощности Zerf, так и подключить собственные API-ключи для неограниченных лимитов и максимальной скорости.
+              Подключайте Zerf Note к сторонним нейросетям (Claude, Cursor, ChatGPT) через Model Context Protocol и используйте собственные API-ключи для неограниченных лимитов.
             </p>
           </div>
         </div>
@@ -133,10 +178,153 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
         </AnimatePresence>
       </div>
 
-      {/* Section 1: AI Provider Keys */}
+      {/* ── Section 1: Zerf Project API & MCP ── */}
       <div className="space-y-4">
         <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground px-1 flex items-center gap-1.5">
-          <Cpu className="w-3.5 h-3.5 text-primary" /> Провайдеры искусственного интеллекта
+          <Layers className="w-3.5 h-3.5 text-primary" /> Ключ проекта и подключение к ИИ (Claude / Cursor / MCP)
+        </h4>
+
+        {/* Zerf Project API Key */}
+        <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3 shadow-2xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold text-xs">
+                <Code2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-foreground">Zerf Project API Key</h5>
+                <p className="text-[11px] text-muted-foreground">Прямой ключ для доступа нейросетей (Claude, Cursor, ChatGPT) к вашим задачам и заметкам</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              Полноправный доступ
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-col sm:flex-row">
+            <div className="relative flex-1 w-full">
+              <input
+                type={showKeys['projectKey'] ? 'text' : 'password'}
+                readOnly
+                value={projectApiKey}
+                className="w-full pl-3 pr-10 py-2 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono select-all focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => toggleVisibility('projectKey')}
+                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Показать/Скрыть"
+              >
+                {showKeys['projectKey'] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(projectApiKey, 'projectKey')}
+              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs hover:opacity-90 transition-all cursor-pointer shrink-0"
+            >
+              {copiedKey === 'projectKey' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedKey === 'projectKey' ? 'Скопировано!' : 'Скопировать ключ'}</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground/80 leading-tight">
+            💡 Передайте этот ключ в системный промпт Claude или GPT, чтобы нейросеть могла обращаться к API вашего проекта.
+          </p>
+        </div>
+
+        {/* Zerf MCP Server Integration Card */}
+        <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3 shadow-2xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold text-xs">
+                <Bot className="w-4 h-4" />
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-foreground">Zerf MCP Сервер (Model Context Protocol)</h5>
+                <p className="text-[11px] text-muted-foreground">Интеграция для Claude Desktop, Cursor AI, Windsurf и других MCP-клиентов</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              MCP Protocol
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/70 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono text-muted-foreground">Конфигурация claude_desktop_config.json:</span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(mcpConfigJson, 'mcp')}
+                className="px-2.5 py-1 rounded-lg bg-card hover:bg-muted text-foreground text-[11px] font-semibold border border-border flex items-center gap-1 transition-all cursor-pointer"
+              >
+                {copiedKey === 'mcp' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedKey === 'mcp' ? 'JSON скопирован!' : 'Скопировать JSON'}</span>
+              </button>
+            </div>
+            <pre className="text-[10.5px] font-mono text-foreground/90 overflow-x-auto p-2.5 rounded-lg bg-black/40 border border-border/40 max-h-36">
+              {mcpConfigJson}
+            </pre>
+          </div>
+        </div>
+
+        {/* Telegram Test Push Notification Card */}
+        <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3 shadow-2xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-xs">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-foreground">Проверка связи и Push-уведомлений</h5>
+                <p className="text-[11px] text-muted-foreground">Мгновенная отправка тестового сообщения в ваш Telegram-аккаунт</p>
+              </div>
+            </div>
+            <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", chatId ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20")}>
+              {chatId ? `ID: ${chatId}` : 'Telegram не привязан'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTestPush}
+              disabled={pushLoading}
+              className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-bold border border-border flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {pushLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-500" />}
+              <span>Отправить тестовое уведомление</span>
+            </button>
+            {!chatId && (
+              <a
+                href="https://t.me/Zerph_bot"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold flex items-center gap-1 border border-primary/25"
+              >
+                <span>Подключить @Zerph_bot</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+
+          {pushResult && (
+            <div className={cn(
+              "p-2.5 rounded-xl text-xs flex items-center gap-2 animate-in fade-in",
+              pushResult.ok
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+            )}>
+              {pushResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+              <span>{pushResult.message}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Section 2: AI Provider Keys (BYOK) ── */}
+      <div className="space-y-4 pt-2">
+        <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground px-1 flex items-center gap-1.5">
+          <Cpu className="w-3.5 h-3.5 text-primary" /> Провайдеры искусственного интеллекта (BYOK)
         </h4>
 
         <div className="grid grid-cols-1 gap-3">
@@ -144,9 +332,7 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
           <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center font-bold text-xs">
-                  ⚡
-                </div>
+                <div className="w-7 h-7 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center font-bold text-xs">⚡</div>
                 <div>
                   <h5 className="text-xs font-bold text-foreground">Groq API Key</h5>
                   <p className="text-[11px] text-muted-foreground">Для Llama 3.1 8B, Qwen 3.6 27B, GPT-OSS 20B/120B и Whisper</p>
@@ -154,16 +340,14 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
               </div>
               <span className={cn(
                 "text-[10px] font-bold px-2 py-0.5 rounded-full border",
-                groqKey
-                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                  : "bg-muted text-muted-foreground border-border"
+                groqKey ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-muted text-muted-foreground border-border"
               )}>
                 {groqKey ? 'Пользовательский ключ' : 'Встроенный пул Zerf'}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
+            <div className="flex items-center gap-2 flex-col sm:flex-row">
+              <div className="relative flex-1 w-full">
                 <input
                   type={showKeys['groq'] ? 'text' : 'password'}
                   value={groqKey}
@@ -183,10 +367,10 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
                 type="button"
                 onClick={testGroqConnection}
                 disabled={testingKey === 'groq'}
-                className="px-3 py-2 rounded-xl bg-muted hover:bg-accent text-foreground text-xs font-semibold border border-border flex items-center gap-1.5 transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl bg-muted hover:bg-accent text-foreground text-xs font-semibold border border-border flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 disabled:opacity-50"
               >
                 {testingKey === 'groq' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-500" />}
-                Проверить
+                <span>Проверить</span>
               </button>
             </div>
 
@@ -207,9 +391,7 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
           <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-xs">
-                  🤖
-                </div>
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-xs">🤖</div>
                 <div>
                   <h5 className="text-xs font-bold text-foreground">OpenAI API Key</h5>
                   <p className="text-[11px] text-muted-foreground">Для GPT-4o, GPT-4o-mini и Whisper API</p>
@@ -245,9 +427,7 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
           <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold text-xs">
-                  🔮
-                </div>
+                <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold text-xs">🔮</div>
                 <div>
                   <h5 className="text-xs font-bold text-foreground">Anthropic Claude API Key</h5>
                   <p className="text-[11px] text-muted-foreground">Для Claude 3.7 Sonnet, Claude 3.5 Haiku и Deep Research</p>
@@ -283,9 +463,7 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
           <div className="p-4 rounded-2xl bg-card border border-border/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold text-xs">
-                  ✨
-                </div>
+                <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold text-xs">✨</div>
                 <div>
                   <h5 className="text-xs font-bold text-foreground">Google Gemini API Key</h5>
                   <p className="text-[11px] text-muted-foreground">Для моделей Gemini 2.5 Flash и Gemini 2.5 Pro</p>
@@ -322,16 +500,16 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
         <button
           type="button"
           onClick={handleSaveKeys}
-          className="w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
         >
           <Check className="w-4 h-4" /> Сохранить ключи ИИ
         </button>
       </div>
 
-      {/* Section 2: Integration Tokens (Siri & CLI) */}
+      {/* ── Section 3: Siri & CLI Tokens ── */}
       <div className="space-y-4 pt-2">
         <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground px-1 flex items-center gap-1.5">
-          <Shield className="w-3.5 h-3.5 text-primary" /> Токены интеграций и приложений
+          <Shield className="w-3.5 h-3.5 text-primary" /> Токены голосового ввода и терминала
         </h4>
 
         <div className="grid grid-cols-1 gap-3">
@@ -352,8 +530,8 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
+            <div className="flex items-center gap-2 flex-col sm:flex-row">
+              <div className="relative flex-1 w-full">
                 <input
                   type={showKeys['siri'] ? 'text' : 'password'}
                   readOnly
@@ -371,10 +549,10 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
               <button
                 type="button"
                 onClick={() => copyToClipboard(siriKey || currentAuthToken, 'siri')}
-                className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-1.5 shadow-xs hover:opacity-90 transition-all cursor-pointer shrink-0"
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs hover:opacity-90 transition-all cursor-pointer shrink-0"
               >
                 {copiedKey === 'siri' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedKey === 'siri' ? 'Скопировано' : 'Копировать'}
+                <span>{copiedKey === 'siri' ? 'Скопировано' : 'Копировать'}</span>
               </button>
             </div>
           </div>
@@ -396,17 +574,17 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
               </span>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-muted/60 border border-border/70 flex items-center justify-between gap-2">
-              <code className="text-[11px] font-mono text-muted-foreground truncate">
+            <div className="p-2.5 rounded-xl bg-muted/60 border border-border/70 flex items-center justify-between gap-2 flex-col sm:flex-row">
+              <code className="text-[11px] font-mono text-muted-foreground truncate w-full sm:w-auto">
                 zerf auth login --token {currentAuthToken.slice(0, 12)}...
               </code>
               <button
                 type="button"
                 onClick={() => copyToClipboard(`zerf auth login --token ${currentAuthToken}`, 'cli')}
-                className="px-2.5 py-1 rounded-lg bg-card hover:bg-accent text-foreground text-xs font-semibold border border-border flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-card hover:bg-accent text-foreground text-xs font-semibold border border-border flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
               >
                 {copiedKey === 'cli' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                {copiedKey === 'cli' ? 'Скопировано' : 'Скопировать команду'}
+                <span>{copiedKey === 'cli' ? 'Скопировано' : 'Скопировать команду'}</span>
               </button>
             </div>
           </div>
