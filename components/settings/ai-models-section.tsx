@@ -28,7 +28,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   const isPlus = userPlan === 'plus'
   const isFree = userPlan === 'free'
 
-  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b')
+  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'llama-3.1-8b-instant')
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
@@ -50,6 +50,17 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   }
 
   const handleGlobalModelChange = (modelId: string) => {
+    // Prevent Free users from selecting >8B models
+    if (isFree && modelId !== 'llama-3.1-8b-instant' && modelId !== 'groq/compound-mini') {
+      if (onUpgradeClick) onUpgradeClick()
+      return
+    }
+    // Prevent Plus users from selecting Pro-only models
+    if (isPlus && (modelId === 'openai/gpt-oss-120b' || modelId === 'llama-3.3-70b-versatile' || modelId === 'openai/gpt-oss-20b' || modelId === 'groq/compound')) {
+      if (onUpgradeClick) onUpgradeClick()
+      return
+    }
+
     update({
       integrations: {
         ...settings.integrations,
@@ -89,7 +100,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-bold text-foreground">
-              {isProOrCorp ? '👑 Режим Pro & Corp: Полная кастомизация ИИ' : isPlus ? '⚡ Режим Plus: 3 модели ИИ' : '🆓 Базовый режим: 2 легковесные модели'}
+              {isProOrCorp ? '👑 Режим Pro & Corp: Полная кастомизация ИИ' : isPlus ? '⚡ Режим Plus: 3 модели ИИ (до 27B)' : '🆓 Базовый режим: 2 легковесные модели (до 8B)'}
             </h4>
             <span className={cn(
               "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
@@ -102,8 +113,8 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
             {isProOrCorp
               ? 'Вам доступен выбор любой нейросети под каждый тип задач отдельно, а также максимальный приоритет и кастомные системные промпты.'
               : isPlus
-              ? 'Вам доступна мощная модель Qwen 3.6 27B + 2 легкие модели. Оформите Pro, чтобы настраивать отдельную нейросеть для каждой задачи!'
-              : 'На бесплатном тарифе можно выбрать 1 модель для всех задач из 2 легковесных (Llama 3.1 8B или Qwen 2.5 7B).'}
+              ? 'Вам доступна продвинутая модель Qwen 3.6 27B + легкие модели. Оформите Pro для раздельной настройки моделей по каждой задаче!'
+              : 'На бесплатном тарифе доступны 2 легковесные модели до 8 млрд параметров (Llama 3.1 8B Instant и Compound Mini).'}
           </p>
         </div>
         {savedToast && (
@@ -118,7 +129,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
         )}
       </div>
 
-      {/* Voice Transcription Info (Always cheapest Whisper) */}
+      {/* Voice Transcription Info */}
       <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
@@ -141,35 +152,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
             Выбор основной ИИ-модели для задач и чата
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* GPT-OSS 20B Fast */}
-            <button
-              type="button"
-              onClick={() => handleGlobalModelChange('openai/gpt-oss-20b')}
-              className={cn(
-                "p-3.5 rounded-2xl border text-left flex flex-col justify-between space-y-2 transition-all cursor-pointer",
-                currentGlobalModel === 'openai/gpt-oss-20b'
-                  ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
-                  : "border-border bg-card hover:border-border/80 hover:bg-accent/40"
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-foreground">GPT-OSS 20B Fast</span>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    ⚡ Быстрая (~150мс)
-                  </span>
-                </div>
-                {currentGlobalModel === 'openai/gpt-oss-20b' && (
-                  <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5" />
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-muted-foreground">Сверхбыстрый отклик, чистый русский язык, мгновенная обработка заметок и Siri</p>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">20 млрд параметров</span>
-            </button>
-
-            {/* Llama 3.1 8B Instant */}
+            {/* Llama 3.1 8B Instant (Free & Plus) */}
             <button
               type="button"
               onClick={() => handleGlobalModelChange('llama-3.1-8b-instant')}
@@ -188,8 +171,31 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground">Компактная легковесная модель для базового ввода и быстрых команд</p>
+              <p className="text-[11px] text-muted-foreground">Легковесная и быстрая модель для базового ввода заметок и команд</p>
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">8 млрд параметров</span>
+            </button>
+
+            {/* Groq Compound Mini (Free & Plus) */}
+            <button
+              type="button"
+              onClick={() => handleGlobalModelChange('groq/compound-mini')}
+              className={cn(
+                "p-3.5 rounded-2xl border text-left flex flex-col justify-between space-y-2 transition-all cursor-pointer",
+                currentGlobalModel === 'groq/compound-mini'
+                  ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
+                  : "border-border bg-card hover:border-border/80 hover:bg-accent/40"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Groq Compound Mini</span>
+                {currentGlobalModel === 'groq/compound-mini' && (
+                  <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5" />
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Компактная оптимизированная нейросеть для быстрых задач</p>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">Легковесная</span>
             </button>
 
             {/* Qwen 3.6 27B (Available on Plus, Locked on Free) */}
@@ -208,14 +214,14 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                   ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
                   : isPlus
                   ? "border-border bg-card hover:border-border/80 hover:bg-accent/40 cursor-pointer"
-                  : "border-border/60 bg-muted/40 opacity-70 cursor-pointer"
+                  : "border-border/60 bg-muted/40 opacity-75 cursor-pointer"
               )}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold text-foreground">Qwen 3.6 27B</span>
                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                    Рекомендуется
+                    {isPlus ? 'Рекомендуется' : 'Продвинутая'}
                   </span>
                 </div>
                 {isPlus && currentGlobalModel === 'qwen/qwen3.6-27b' ? (

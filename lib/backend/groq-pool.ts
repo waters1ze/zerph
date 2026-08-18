@@ -19,23 +19,21 @@ import { normalizePlan } from '@/lib/plans'
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri'
 
 export const FREE_ALLOWED_MODELS = [
-  'openai/gpt-oss-20b',
   'llama-3.1-8b-instant',
   'groq/compound-mini',
 ]
 
 export const PLUS_ALLOWED_MODELS = [
   'qwen/qwen3.6-27b',
-  'openai/gpt-oss-20b',
   'llama-3.1-8b-instant',
   'groq/compound-mini',
 ]
 
 /**
  * Model allocation based on subscription tier:
- * - Free: Ultra-fast model (GPT-OSS 20B or Llama 3.1 8B Instant)
- * - Plus (99 ₽): Fast model (Qwen 3.6 27B, GPT-OSS 20B, Llama 3.1 8B)
- * - Pro (299-300 ₽) & Corp: Full granular customization for ANY task
+ * - Free: Strictly limited to lightweight models <= 8B (Llama 3.1 8B Instant, Compound Mini)
+ * - Plus (99 ₽): Models up to 27B (Qwen 3.6 27B, Llama 3.1 8B Instant)
+ * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, GPT-OSS 20B, Llama 3.3 70B, etc.) and per-task custom routing
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -52,20 +50,19 @@ export function getModelForUserPlan(
     return 'openai/gpt-oss-120b'
   }
 
-  // Plus: user selected model from allowed list, or default to Qwen 3.6 27B (for Siri gpt-oss-20b)
+  // Plus: up to 27B (Qwen 3.6 27B or Llama 3.1 8B)
   if (norm === 'plus') {
-    if (req && (PLUS_ALLOWED_MODELS.includes(req) || req === 'qwen/qwen3.6-27b' || req === 'openai/gpt-oss-20b' || req === 'llama-3.1-8b-instant')) {
+    if (req && (PLUS_ALLOWED_MODELS.includes(req) || req === 'qwen/qwen3.6-27b' || req === 'llama-3.1-8b-instant' || req === 'groq/compound-mini')) {
       return req
     }
-    if (taskKind === 'siri' || taskKind === 'voice') return 'openai/gpt-oss-20b'
     return 'qwen/qwen3.6-27b'
   }
 
-  // Free: ultra-fast 20B / 8B models on Groq
-  if (req && (FREE_ALLOWED_MODELS.includes(req) || req === 'openai/gpt-oss-20b' || req === 'llama-3.1-8b-instant')) {
+  // Free: strictly <= 8B (Llama 3.1 8B Instant or Compound Mini)
+  if (req && (FREE_ALLOWED_MODELS.includes(req) || req === 'llama-3.1-8b-instant' || req === 'groq/compound-mini')) {
     return req
   }
-  return 'openai/gpt-oss-20b'
+  return 'llama-3.1-8b-instant'
 }
 
 interface KeyStatus {
