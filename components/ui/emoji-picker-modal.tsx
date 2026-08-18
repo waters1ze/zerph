@@ -2,8 +2,10 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, X, Sparkles, Clock, Shuffle, Check } from 'lucide-react'
+import { Search, X, Sparkles, Clock, Shuffle, Check, Bot } from 'lucide-react'
 import { EMOJI_CATEGORIES, ALL_EMOJIS, type EmojiCategory } from '@/lib/emoji-data'
+import { ZerfAvatar } from '@/components/ui/zerf-avatar'
+import { ZERF_CUSTOM_EMOJIS, getCustomZerfEmoji } from '@/lib/custom-emojis'
 import { cn } from '@/lib/utils'
 
 interface EmojiPickerModalProps {
@@ -20,10 +22,10 @@ const EMOJI_FONT_STYLE = {
 
 export function EmojiPickerModal({
   isOpen,
-  currentEmoji = '👤',
+  currentEmoji = 'zerfik_spirit',
   onSelect,
   onClose,
-  title = 'Выберите эмодзи для профиля'
+  title = 'Выберите эмодзи / аватар профиля'
 }: EmojiPickerModalProps) {
   const [search, setSearch] = useState('')
   const [activeCategoryId, setActiveCategoryId] = useState<string>(EMOJI_CATEGORIES[0].id)
@@ -35,10 +37,10 @@ export function EmojiPickerModal({
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('zerf_recent_emojis')
-        return saved ? JSON.parse(saved) : ['🤖', '⚡', '🧠', '🔮', '✨', '💻', '🔥', '👑']
+        return saved ? JSON.parse(saved) : ['zerfik_spirit', 'zerfik_focus', 'zerfik_wink', 'zerf_brain', 'zerf_crystal', 'zerf_cli', 'zerf_crown', 'zerf_streak']
       } catch {}
     }
-    return ['🤖', '⚡', '🧠', '🔮', '✨', '💻', '🔥', '👑']
+    return ['zerfik_spirit', 'zerfik_focus', 'zerfik_wink', 'zerf_brain', 'zerf_crystal', 'zerf_cli', 'zerf_crown', 'zerf_streak']
   })
 
   // Auto-focus search when opened
@@ -78,8 +80,18 @@ export function EmojiPickerModal({
     })
   }, [search, activeCategoryId])
 
+  // Filtered custom Zerf emojis based on search
+  const displayedCustomZerf = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return ZERF_CUSTOM_EMOJIS
+    return ZERF_CUSTOM_EMOJIS.filter(
+      z => z.name.toLowerCase().includes(query) || z.description.toLowerCase().includes(query) || z.badgeLabel.toLowerCase().includes(query)
+    )
+  }, [search])
+
   const handleRandomPick = () => {
-    const random = ALL_EMOJIS[Math.floor(Math.random() * ALL_EMOJIS.length)]
+    const allOptions = [...ZERF_CUSTOM_EMOJIS.map(z => z.id), ...ALL_EMOJIS]
+    const random = allOptions[Math.floor(Math.random() * allOptions.length)]
     handleEmojiClick(random)
   }
 
@@ -100,20 +112,26 @@ export function EmojiPickerModal({
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-foreground font-sans"
+          className="w-full max-w-xl bg-card border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-foreground font-sans"
         >
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between gap-3 bg-muted/20">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <div
-                className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shadow-xs shrink-0 select-none"
-                style={EMOJI_FONT_STYLE}
+                className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center shadow-xs shrink-0 select-none"
               >
-                {currentEmoji}
+                <ZerfAvatar emoji={currentEmoji} size="lg" />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-foreground">{title}</h3>
-                <p className="text-[11px] text-muted-foreground">Более 1000 цветных эмодзи: ИИ, нейросети, киберпанк и др.</p>
+                <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                  <span>{title}</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[9px] font-mono font-bold">
+                    ✦ Zerfik Inside
+                  </span>
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  Эксклюзивные аватары экосистемы Zerf + более 1000 стандартных эмодзи
+                </p>
               </div>
             </div>
 
@@ -121,7 +139,7 @@ export function EmojiPickerModal({
               <button
                 onClick={handleRandomPick}
                 className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground hover:text-primary transition-colors cursor-pointer touch-manipulation"
-                title="Случайный эмодзи"
+                title="Случайный выбор"
               >
                 <Shuffle className="w-4 h-4" />
               </button>
@@ -145,7 +163,7 @@ export function EmojiPickerModal({
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Поиск эмодзи (нейросеть, код, огонь, кот...)"
+                  placeholder="Поиск аватаров (Зерфик, brain, crystal, огонь, кот...)"
                   className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 outline-none"
                 />
                 {search && (
@@ -167,7 +185,7 @@ export function EmojiPickerModal({
                   placeholder="Свой"
                   maxLength={4}
                   className="w-14 h-9 px-2 text-center rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary"
-                  title="Вставить любой свой эмодзи"
+                  title="Вставить любой символ"
                 />
                 <button
                   type="submit"
@@ -209,7 +227,53 @@ export function EmojiPickerModal({
           </div>
 
           {/* Emojis Grid Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[380px] [scrollbar-width:thin]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[420px] [scrollbar-width:thin]">
+            {/* Premier Section: Exclusive Zerfik & Zerf Ecosystem Avatars */}
+            {displayedCustomZerf.length > 0 && (
+              <div className="space-y-2 p-3 rounded-2xl bg-gradient-to-br from-primary/10 via-muted/30 to-card border border-primary/20">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    <span>✦ Эксклюзивы: Зерфик & Экосистема Zerf Note</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-primary font-bold">
+                    {displayedCustomZerf.length} шт.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {displayedCustomZerf.map(item => {
+                    const isSelected = currentEmoji === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleEmojiClick(item.id)}
+                        className={cn(
+                          'p-2 rounded-xl flex items-center gap-2.5 text-left transition-all cursor-pointer group touch-manipulation',
+                          isSelected
+                            ? 'bg-primary/25 border-2 border-primary shadow-xs'
+                            : 'bg-card/70 hover:bg-card border border-border/70 hover:border-primary/40 hover:scale-[1.02]'
+                        )}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-muted/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                          <ZerfAvatar emoji={item.id} size="sm" monochrome={!isSelected} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                            {item.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                            {item.badgeLabel}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Recent Emojis Section */}
             {!search && recentEmojis.length > 0 && (
               <div className="space-y-1.5">
@@ -225,14 +289,13 @@ export function EmojiPickerModal({
                     <button
                       key={idx}
                       onClick={() => handleEmojiClick(emoji)}
-                      style={EMOJI_FONT_STYLE}
                       className={cn(
-                        'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted hover:scale-110 select-none touch-manipulation',
-                        'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
-                        currentEmoji === emoji ? 'bg-primary/20 border border-primary/40 opacity-100' : 'bg-card border border-border/40'
+                        'h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:bg-muted hover:scale-110 select-none touch-manipulation',
+                        currentEmoji === emoji ? 'bg-primary/20 border border-primary/40' : 'bg-card border border-border/40'
                       )}
+                      title={emoji}
                     >
-                      {emoji}
+                      <ZerfAvatar emoji={emoji} size="sm" />
                     </button>
                   ))}
                 </div>

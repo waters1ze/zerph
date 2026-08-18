@@ -25,6 +25,8 @@ import { SidebarCustomizerSection } from '@/components/settings/sidebar-customiz
 import { InstalledExtensionsSettingsSection } from '@/components/settings/installed-extensions-section'
 import { EmojiPickerModal } from '@/components/ui/emoji-picker-modal'
 import { CustomThemesModal } from '@/components/settings/custom-themes-modal'
+import { ZerfAvatar } from '@/components/ui/zerf-avatar'
+import { ZERF_CUSTOM_EMOJIS } from '@/lib/custom-emojis'
 import {
   THEME_PRESETS, accentPaletteFor, DENSITY_MODES, RADIUS_MODES,
   normalizeTheme, type ThemePresetId, type TextScaleStep,
@@ -776,55 +778,39 @@ export function SettingsView() {
               description="Ваш персональный статус и эмодзи, как в Telegram. Отображается в профиле, друзьях, командах и задачах."
             >
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Main Avatar Bubble (Monochrome B&W) */}
+                {/* Main Avatar Bubble (Custom Hand-Crafted Zerf Avatars & Emojis) */}
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(true)}
-                  className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center text-2xl shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none touch-manipulation"
-                  title="Нажмите, чтобы открыть каталог из 1000+ эмодзи"
+                  className="w-12 h-12 rounded-2xl bg-muted/60 hover:bg-muted border-2 border-primary/40 hover:border-primary flex items-center justify-center shadow-xs transition-all cursor-pointer hover:scale-105 relative group select-none touch-manipulation"
+                  title="Нажмите, чтобы открыть каталог из 1000+ эмодзи и аватаров Зерфика"
                 >
-                  <span className="grayscale contrast-125" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
-                    {userAvatarEmoji}
-                  </span>
+                  <ZerfAvatar emoji={userAvatarEmoji} size="xl" />
                   <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-primary text-primary-foreground text-[9px] shadow-xs group-hover:scale-110 transition-transform">
                     <Sparkles className="w-2.5 h-2.5" />
                   </span>
                 </button>
 
-                {/* Quick Pick Chips (Zerfik & Zerf Ecosystem Emojis First - B&W Monochrome - No Scrollbar) */}
+                {/* Quick Pick Chips (Hand-Crafted Custom Zerfik & Ecosystem Badges) */}
                 <div
                   className="flex items-center gap-1.5 flex-wrap max-w-full"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
-                  {[
-                    { char: '✦', label: 'Зерфик (Маскот)' },
-                    { char: '✧', label: 'Зерфик (Фокус)' },
-                    { char: '🤖', label: 'Zerf AI Agent' },
-                    { char: '🧠', label: 'Второй мозг' },
-                    { char: '🔮', label: 'Entropy AI' },
-                    { char: '⚡', label: 'Фокус' },
-                    { char: '🌌', label: 'Граф знаний' },
-                    { char: '💎', label: 'Кристалл' },
-                    { char: '💻', label: 'Zerf CLI' },
-                    { char: '👑', label: 'VIP Creator' },
-                    { char: '🦾', label: 'Автоматизация' },
-                    { char: '🔥', label: 'Стрик' },
-                  ].map(({ char, label }) => (
+                  {ZERF_CUSTOM_EMOJIS.slice(0, 12).map(item => (
                     <button
-                      key={char}
+                      key={item.id}
                       type="button"
-                      onClick={() => handleSelectAvatarEmoji(char)}
+                      onClick={() => handleSelectAvatarEmoji(item.id)}
                       className={cn(
-                        'w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition-all cursor-pointer select-none touch-manipulation shrink-0',
-                        'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
-                        userAvatarEmoji === char
-                          ? 'bg-primary/20 border border-primary/50 scale-110 shadow-2xs font-bold opacity-100'
+                        'w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer select-none touch-manipulation shrink-0',
+                        'opacity-80 hover:opacity-100',
+                        userAvatarEmoji === item.id
+                          ? 'bg-primary/25 border-2 border-primary scale-110 shadow-2xs opacity-100'
                           : 'bg-muted/40 hover:bg-muted border border-border/60 hover:scale-105'
                       )}
-                      style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}
-                      title={`${label} (${char})`}
+                      title={`${item.name} · ${item.description}`}
                     >
-                      <span>{char}</span>
+                      <ZerfAvatar emoji={item.id} size="sm" monochrome={userAvatarEmoji !== item.id} />
                     </button>
                   ))}
                 </div>

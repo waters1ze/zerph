@@ -14,6 +14,7 @@ import {
 import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, type SidebarFolder } from '@/components/settings/sidebar-customizer-section'
 import type { ExtensionItem } from '@/app/api/extensions/route'
 import { ExtensionIcon } from '@/components/views/extensions-view'
+import { ZerfAvatar } from '@/components/ui/zerf-avatar'
 
 export interface NavItem {
   id: View
@@ -336,9 +337,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         >
           <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
             {userAvatarEmoji && userAvatarEmoji !== '👤' ? (
-              <span className="text-sm select-none emoji-symbol grayscale contrast-125" style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}>
-                {userAvatarEmoji}
-              </span>
+              <ZerfAvatar emoji={userAvatarEmoji} size="sm" />
             ) : tgUser?.photoUrl ? (
               <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover grayscale contrast-125" />
             ) : displayName !== 'Мой профиль' ? (
