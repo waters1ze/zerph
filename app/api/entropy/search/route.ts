@@ -96,6 +96,8 @@ export interface EntropySearchResult {
     remaining: number
     isUnlimited: boolean
     plan: string
+    model?: string
+    modelDisplayName?: string
     pro: {
       used: number
       limit: number
@@ -104,6 +106,20 @@ export interface EntropySearchResult {
       isUnlimited: boolean
     }
   }
+}
+
+export function getEntropyModelForPlan(userPlan?: string, isPro = false): { model: string; displayName: string } {
+  const norm = String(userPlan || 'free').toLowerCase()
+  if (norm === 'corp' || norm === 'creator' || norm === 'admin') {
+    return { model: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B Flagship' }
+  }
+  if (norm === 'pro' || isPro) {
+    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' }
+  }
+  if (norm === 'plus') {
+    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B Reasoning' }
+  }
+  return { model: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B Instant' }
 }
 
 // GET: Return user's daily search quotas and usage
@@ -121,6 +137,7 @@ export async function GET(req: NextRequest) {
 
     const regRemaining = regularLimit === -1 ? 999999 : Math.max(0, regularLimit - regUsed)
     const proRemaining = proLimit === -1 ? 999999 : Math.max(0, proLimit - proUsed)
+    const activeModel = getEntropyModelForPlan(userPlan, false)
 
     return NextResponse.json({
       success: true,
@@ -130,6 +147,8 @@ export async function GET(req: NextRequest) {
         remaining: regRemaining,
         isUnlimited: regularLimit === -1,
         plan: userPlan,
+        model: activeModel.model,
+        modelDisplayName: activeModel.displayName,
         pro: {
           used: proUsed,
           limit: proLimit,
@@ -303,24 +322,11 @@ JSON Схема:
   "tikhonyaComment": "Зерфик проанализировал источники и подготовил структурированный отчет."
 }`
 
+    const modelInfo = getEntropyModelForPlan(userPlan, isPro)
+    const effectiveModel = modelInfo.model
     let llmResult: any = null
 
     try {
-      // Model tier allocation:
-      // Free: Llama 3.1 8B Instant (fast Llama model)
-      // Plus: Llama 3.3 70B Versatile (large 70B model)
-      // Pro: DeepSeek R1 Distill Llama 70B / Llama 3.3 70B (deep reasoning)
-      // Corp / Creator: DeepSeek R1 Distill Llama 70B (maximum reasoning context)
-      let effectiveModel = 'llama-3.1-8b-instant'
-      const normPlan = String(userPlan).toLowerCase()
-      if (isPro || normPlan === 'corp' || normPlan === 'creator' || normPlan === 'admin') {
-        effectiveModel = 'deepseek-r1-distill-llama-70b'
-      } else if (normPlan === 'pro') {
-        effectiveModel = 'llama-3.3-70b-versatile'
-      } else if (normPlan === 'plus') {
-        effectiveModel = 'llama-3.3-70b-versatile'
-      }
-
       const completion = await callGroqChatCompletion({
         messages: [
           {
@@ -417,6 +423,8 @@ JSON Схема:
         remaining: regularLimit === -1 ? 999999 : Math.max(0, regularLimit - newRegUsed),
         isUnlimited: regularLimit === -1,
         plan: userPlan,
+        model: modelInfo.model,
+        modelDisplayName: modelInfo.displayName,
         pro: {
           used: newProUsed,
           limit: proLimit,

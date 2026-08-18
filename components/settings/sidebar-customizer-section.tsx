@@ -16,7 +16,7 @@ import { useApp, getAuthHeaders } from '@/lib/store'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import { planAtLeast, normalizePlan } from '@/lib/plans'
 import type { ExtensionItem } from '@/app/api/extensions/route'
-import { ExtensionIcon } from '@/components/views/extensions-view'
+import { ExtensionIcon, GithubIcon } from '@/components/views/extensions-view'
 
 export interface SidebarFolder {
   id: string
@@ -88,6 +88,7 @@ export interface LayoutPreset {
   description: string
   icon: string
   author: string
+  authorGithub?: string
   minPlan: 'free' | 'plus' | 'pro' | 'corp'
   likesCount: number
   config: SidebarConfig
@@ -164,6 +165,7 @@ export function SidebarCustomizerSection() {
   const [showAllPresetsModal, setShowAllPresetsModal] = useState(false)
   const [presetSearch, setPresetSearch] = useState('')
   const [presetFilter, setPresetFilter] = useState<'all' | 'free' | 'paid' | 'my'>('all')
+  const [storePresets, setStorePresets] = useState<LayoutPreset[]>([])
 
   // Create preset form states
   const [formPresetTitle, setFormPresetTitle] = useState('')
@@ -246,6 +248,30 @@ export function SidebarCustomizerSection() {
             enabledIds.includes(e.id) || installedIds.includes(e.id) || e.id === 'ext_entropy_search'
           )
           setInstalledExts(activeExts)
+
+          // Extract public/published layout presets & templates from store catalog dynamically
+          const extractedStorePresets: LayoutPreset[] = data.catalog
+            .filter((ext: ExtensionItem) => {
+              if (ext.id === 'preset_default_workspace') return false
+              return ext.type === 'template' || (ext.content && (Array.isArray(ext.content.folders) || ext.content.sidebarConfig))
+            })
+            .map((ext: ExtensionItem) => ({
+              id: ext.id,
+              title: ext.title,
+              description: ext.description,
+              icon: ext.icon || '✨',
+              author: ext.authorGithub || ext.authorName || 'waters1ze',
+              authorGithub: ext.authorGithub || (ext.githubUrl ? ext.githubUrl.split('/').filter(Boolean).slice(-2, -1)[0] : undefined),
+              minPlan: (ext.minPlan as any) || 'free',
+              likesCount: (ext.ratingCount || 0) * 3 + (ext.installCount || 0),
+              config: ext.content?.sidebarConfig || {
+                hiddenItems: ext.content?.hiddenItems || [],
+                folders: Array.isArray(ext.content?.folders) ? ext.content.folders : DEFAULT_SIDEBAR_FOLDERS,
+              },
+              recommendedExts: ext.content?.recommendedExts || [],
+              isCustom: false,
+            }))
+          setStorePresets(extractedStorePresets)
         }
       } catch {}
     }
@@ -503,13 +529,19 @@ export function SidebarCustomizerSection() {
     }
   }
 
-  // All presets combined and filtered
+  // All presets combined and filtered (dynamic from store + custom + default official)
   const allPresets = useMemo(() => {
-    return [...customPresets, ...DEFAULT_OFFICIAL_PRESETS]
-  }, [customPresets])
+    const combined = [...customPresets, ...storePresets, ...DEFAULT_OFFICIAL_PRESETS]
+    const seen = new Set<string>()
+    return combined.filter(p => {
+      if (seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  }, [customPresets, storePresets])
 
   const topPopularPresets = useMemo(() => {
-    return [...allPresets].sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0)).slice(0, 4)
+    return [...allPresets].sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0)).slice(0, 3)
   }, [allPresets])
 
   const filteredPresets = useMemo(() => {
@@ -839,7 +871,20 @@ export function SidebarCustomizerSection() {
                       <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
                       <span>{currentLikes}</span>
                     </button>
-                    <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]">@{preset.author}</span>
+                    {preset.authorGithub || (preset.author && preset.author !== 'Zerf Official' && !preset.author.includes(' ')) ? (
+                      <a
+                        href={`https://github.com/${preset.authorGithub || preset.author.replace(/^@/, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors font-mono truncate max-w-[130px]"
+                        title={`@${preset.authorGithub || preset.author} на GitHub`}
+                      >
+                        <GithubIcon className="w-2.5 h-2.5 shrink-0" />
+                        <span>@{preset.authorGithub || preset.author.replace(/^@/, '')}</span>
+                      </a>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]">@{preset.author}</span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -1622,7 +1667,20 @@ export function SidebarCustomizerSection() {
                             <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
                             <span>{currentLikes}</span>
                           </button>
-                          <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
+                          {preset.authorGithub || (preset.author && preset.author !== 'Zerf Official' && !preset.author.includes(' ')) ? (
+                            <a
+                              href={`https://github.com/${preset.authorGithub || preset.author.replace(/^@/, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors font-mono truncate max-w-[130px]"
+                              title={`@${preset.authorGithub || preset.author} на GitHub`}
+                            >
+                              <GithubIcon className="w-2.5 h-2.5 shrink-0" />
+                              <span>@{preset.authorGithub || preset.author.replace(/^@/, '')}</span>
+                            </a>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground font-mono">@{preset.author}</span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1.5">

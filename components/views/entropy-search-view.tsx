@@ -372,15 +372,19 @@ export function EntropySearchView() {
 
         {/* Right: Engine Model Badge & Daily Quotas */}
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
-          {/* Model Engine Tag */}
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/80 text-[11px] text-muted-foreground font-mono">
+          {/* Real AI Neural Network Engine Badge */}
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/80 text-[11px] text-muted-foreground font-mono">
             <Cpu className="w-3.5 h-3.5 text-primary" />
             <span>
-              {usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator'
-                ? 'DeepSeek R1 Distill 70B'
-                : isPlusOrHigher
-                ? 'Llama 3.3 70B'
-                : 'Llama 3.1 8B Instant'}
+              {(usageInfo as any)?.modelDisplayName || (
+                usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator' || usageInfo?.plan === 'admin'
+                  ? 'GPT-OSS 120B Flagship'
+                  : usageInfo?.plan === 'pro' || isProSearch
+                  ? 'Llama 3.3 70B Versatile'
+                  : usageInfo?.plan === 'plus'
+                  ? 'Qwen 3.6 27B Reasoning'
+                  : 'Llama 3.1 8B Instant'
+              )}
             </span>
           </div>
 
