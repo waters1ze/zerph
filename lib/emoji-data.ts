@@ -12,6 +12,17 @@ export interface EmojiCategory {
 
 export const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
+    id: 'zerf_ecosystem',
+    name: '✦ Зерфик & Zerf Ecosystem',
+    icon: '✦',
+    emojis: [
+      '✦', '✧', '🤖', '🧠', '🔮', '⚡', '🌌', '💎', '💻', '👑',
+      '🦾', '🔥', '🎯', '🚀', '👾', '🧬', '💡', '🛡️', '🗝️', '🛸',
+      '🪐', '📡', '🕹️', '🧩', '🎲', '🪄', '👁️‍🗨️', '🎙️', '⏱️', '⏳',
+      '📜', '🔗', '🌐', '🔋', '🔌', '📦', '🔔', '✨', '☕', '🌟'
+    ]
+  },
+  {
     id: 'ai_tech',
     name: 'ИИ, Нейросети & Киберпанк',
     icon: '🤖',

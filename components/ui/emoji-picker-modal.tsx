@@ -181,7 +181,10 @@ export function EmojiPickerModal({
 
             {/* Category Navigation Pills without scrollbar */}
             {!search && (
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div
+                className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:!hidden [&::-webkit-scrollbar]:!h-0"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
                 {EMOJI_CATEGORIES.map(cat => {
                   const active = activeCategoryId === cat.id
                   return (

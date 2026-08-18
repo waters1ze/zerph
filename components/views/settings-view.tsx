@@ -791,24 +791,40 @@ export function SettingsView() {
                   </span>
                 </button>
 
-                {/* Quick Pick Chips (Neural Network & AI Emojis First - B&W Monochrome) */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-w-full">
-                  {['🤖', '🧠', '🔮', '⚡', '✨', '💻', '👾', '🦾', '🧬', '🌌', '💡', '👑'].map(emoji => (
+                {/* Quick Pick Chips (Zerfik & Zerf Ecosystem Emojis First - B&W Monochrome - No Scrollbar) */}
+                <div
+                  className="flex items-center gap-1.5 flex-wrap max-w-full"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {[
+                    { char: '✦', label: 'Зерфик (Маскот)' },
+                    { char: '✧', label: 'Зерфик (Фокус)' },
+                    { char: '🤖', label: 'Zerf AI Agent' },
+                    { char: '🧠', label: 'Второй мозг' },
+                    { char: '🔮', label: 'Entropy AI' },
+                    { char: '⚡', label: 'Фокус' },
+                    { char: '🌌', label: 'Граф знаний' },
+                    { char: '💎', label: 'Кристалл' },
+                    { char: '💻', label: 'Zerf CLI' },
+                    { char: '👑', label: 'VIP Creator' },
+                    { char: '🦾', label: 'Автоматизация' },
+                    { char: '🔥', label: 'Стрик' },
+                  ].map(({ char, label }) => (
                     <button
-                      key={emoji}
+                      key={char}
                       type="button"
-                      onClick={() => handleSelectAvatarEmoji(emoji)}
+                      onClick={() => handleSelectAvatarEmoji(char)}
                       className={cn(
-                        'w-8 h-8 rounded-xl flex items-center justify-center text-base transition-all cursor-pointer select-none touch-manipulation shrink-0',
-                        'grayscale contrast-125 opacity-75 hover:opacity-100 hover:grayscale-0',
-                        userAvatarEmoji === emoji
+                        'w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition-all cursor-pointer select-none touch-manipulation shrink-0',
+                        'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
+                        userAvatarEmoji === char
                           ? 'bg-primary/20 border border-primary/50 scale-110 shadow-2xs font-bold opacity-100'
                           : 'bg-muted/40 hover:bg-muted border border-border/60 hover:scale-105'
                       )}
                       style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}
-                      title={`Выбрать ${emoji}`}
+                      title={`${label} (${char})`}
                     >
-                      <span>{emoji}</span>
+                      <span>{char}</span>
                     </button>
                   ))}
                 </div>
