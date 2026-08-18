@@ -106,12 +106,12 @@ export interface EntropySearchResult {
 export function getEntropyModelForPlan(userPlan?: string, isPro = false): { model: string; displayName: string } {
   const norm = String(userPlan || 'free').toLowerCase()
   if (norm === 'corp' || norm === 'creator' || norm === 'admin' || norm === 'pro' || isPro) {
-    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Deep Reasoning' }
+    return { model: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B Flagship' }
   }
   if (norm === 'plus') {
-    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' }
+    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B Reasoning' }
   }
-  return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B High Speed' }
+  return { model: 'openai/gpt-oss-20b', displayName: 'GPT-OSS 20B High Speed' }
 }
 
 // GET: Return user's daily search quotas and usage
@@ -295,66 +295,54 @@ export async function POST(req: NextRequest) {
     }
 
     const liveContext = liveSources.length > 0
-      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ (${mode.toUpperCase()}):\n` +
-        liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
+      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ:\n` + liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
       : ''
 
     let modePriorityInstruction = ''
-    if (mode === 'academic') {
-      modePriorityInstruction = 'ПРИОРИТЕТ: Академические и научные исследования (arXiv, OpenAlex). Детально разбирай формулы, методологию, цитируй авторов публикаций.'
-    } else if (mode === 'code') {
-      modePriorityInstruction = 'ПРИОРИТЕТ: Программный код, библиотеки, архитектура ПО, GitHub репозитории. Приводи реальные примеры кода и архитектурные сопоставления.'
-    } else if (mode === 'notes') {
-      modePriorityInstruction = 'ПРИОРИТЕТ: База заметок Zerf Note. Синтезируй информацию из заметок пользователя с мировыми знаниями.'
-    } else if (mode === 'fast') {
-      modePriorityInstruction = 'ПРИОРИТЕТ: Быстрый факт-чекинг. Ответ должен быть лаконичным, предельно точным и структурированным.'
-    } else {
-      modePriorityInstruction = 'ПРИОРИТЕТ: Всемирная сеть, всесторонний поиск фактов и синтез открытых источников.'
-    }
+    if (mode === 'academic') modePriorityInstruction = 'Академические исследования, научные публикации, методология.'
+    else if (mode === 'code') modePriorityInstruction = 'Программный код, техническая документация, архитектурные примеры.'
+    else if (mode === 'notes') modePriorityInstruction = 'Поиск по личным заметкам пользователя и синтез с внешними знаниями.'
+    else if (mode === 'fast') modePriorityInstruction = 'Быстрый факт-чекинг, краткость, точность.'
+    else modePriorityInstruction = 'Всемирная сеть, всесторонний поиск фактов и синтез источников.'
 
-    // Build system prompt for Perplexity style synthesis with citations
-    const prompt = `Ты — ведущий исследовательский ИИ-движок глубоких инсайтов Entropy AI Deep Search (в стиле Perplexity AI Pro Search) совместно с живым маскотом «Зерфик».
+    // Build prompt for factual, human-friendly search with citations
+    const prompt = `Ты — поисковый исследовательский ИИ-движок Zerf AI (в стиле Perplexity AI Pro Search) совместно с маскотом «Зерфик».
 
-Пользовательский запрос: "${cleanQuery}"
-Режим поиска: ${mode}
-${modePriorityInstruction}
-${isPro ? 'РЕЖИМ: PRO SEARCH (Глубокий многоступенчатый анализ первоисточников, многофакторный синтез и расширенные выводы)' : 'РЕЖИМ: STANDARD SEARCH'}
+ПОЛЬЗОВАТЕЛЬСКИЙ ВОПРОС: "${cleanQuery}"
+РЕЖИМ: ${mode} (${modePriorityInstruction})
+${isPro ? 'РЕЖИМ: PRO SEARCH (Глубокий анализ первоисточников и расширенные инсайты)' : 'РЕЖИМ: STANDARD SEARCH'}
 ${focus ? `Фокус: ${focus}` : ''}
 ${liveContext}
 
-Твоя задача:
-1. Выполнить глубокий синтез фактов, современных концепций и первоисточников на русском языке с учётом выбранного режима (${mode}).
-2. Если предоставлены первоисточники, обязательно опирайся на них и используй их точные URL, названия и домены в массиве "sources", а в тексте ответа расставляй соответствующие сноски [1], [2], [3].
-3. Оформить ответ в формате строгого JSON (без markdown оберток вокруг json, чистый json объект).
-4. В тексте "answer" ОБЯЗАТЕЛЬНО расставляй числовые сноски на источники в квадратных скобках: [1], [2], [3], [4].
-5. Структурируй "answer" в красивый Markdown (заголовки, жирный шрифт, списки, если уместно — код или таблицы).
-6. Сформулируй 3-4 ключевых вывода ("takeaways").
-7. Предложи 3-4 глубоких уточняющих вопроса ("followUpQuestions").
-8. Сформулируй реплику Зерфика ("tikhonyaComment") — умную, доброжелательную, строго от имени Зерфика (например: "Зерфик проанализировал источники..."). Никогда не используй имя Тихоня.
+ИНСТРУКЦИИ:
+1. Дай прямой, ясный, фактологический и понятный ответ на русском языке конкретно на вопрос пользователя.
+2. Отвечай СТРОГО ПО СУТИ ВОПРОСА! Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал технический вопрос по программированию.
+3. Если предоставлены первоисточники, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
+4. Сформируй 2-4 ключевых факта ("takeaways").
+5. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
+6. Напиши милую и умную реплику от Зерфика ("tikhonyaComment").
 
-JSON Схема:
+ОТВЕТЬ ИСКЛЮЧИТЕЛЬНО В ФОРМАТЕ JSON:
 {
   "sources": [
     {
       "id": 1,
-      "title": "Название источника или статьи",
+      "title": "Название источника",
       "url": "https://domain.com/...",
       "domain": "domain.com",
-      "snippet": "Краткая выжимка факта из источника..."
+      "snippet": "Краткая цитата из источника"
     }
   ],
-  "answer": "Синтез данных с цитатами [1][2]...",
+  "answer": "Прямой, фактологический и развернутый ответ на вопрос со сносками [1], [2]...",
   "takeaways": [
-    "Ключевой тезис 1",
-    "Ключевой тезис 2",
-    "Ключевой тезис 3"
+    "Ключевой факт 1",
+    "Ключевой факт 2"
   ],
   "followUpQuestions": [
-    "Уточняющий вопрос 1",
-    "Уточняющий вопрос 2",
-    "Уточняющий вопрос 3"
+    "Уточняющий вопрос 1?",
+    "Уточняющий вопрос 2?"
   ],
-  "tikhonyaComment": "Зерфик проанализировал источники и подготовил структурированный отчет."
+  "tikhonyaComment": "Зерфик проанализировал источники и подготовил ответ."
 }`
 
     const modelInfo = getEntropyModelForPlan(userPlan, isPro)
@@ -366,7 +354,7 @@ JSON Схема:
         messages: [
           {
             role: 'system',
-            content: 'You are Zerfik — an advanced deep research AI engine that always responds with pure JSON adhering to the user schema. Cite sources as [1], [2] in the markdown answer.',
+            content: 'You are Zerfik — a factual, concise and smart AI search engine. Always output pure valid JSON adhering to schema. Answer in natural Russian directly to the point. Cite sources as [1], [2]. Never output irrelevant technical jargon or engineering templates when asked about everyday, news, or general knowledge topics.',
           },
           {
             role: 'user',
@@ -375,75 +363,41 @@ JSON Схема:
         ],
         model: effectiveModel,
         apiKey: apiKey || undefined,
-        response_format: { type: 'json_object' },
+        fallbackModels: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b', 'groq/compound-mini'],
       })
 
       if (completion?.content) {
-        let cleanJsonStr = completion.content.trim()
-        if (cleanJsonStr.startsWith('```json')) {
-          cleanJsonStr = cleanJsonStr.replace(/^```json\s*/, '').replace(/```$/, '').trim()
-        } else if (cleanJsonStr.startsWith('```')) {
-          cleanJsonStr = cleanJsonStr.replace(/^```\s*/, '').replace(/```$/, '').trim()
+        let text = completion.content.trim()
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          text = jsonMatch[0]
         }
-        llmResult = JSON.parse(cleanJsonStr)
+        llmResult = JSON.parse(text)
       }
     } catch (e) {
       console.warn('[Entropy API] LLM JSON parse fallback:', e)
     }
 
-    // High quality fallback synthesis if LLM returned malformed JSON or was offline
+    // High quality factual fallback synthesis if LLM failed completely
     if (!llmResult || !Array.isArray(llmResult.sources) || !llmResult.answer) {
       llmResult = generateFallbackResearch(cleanQuery, mode, isPro, liveSources)
     }
 
     const cleanStr = (s: any) => (typeof s === 'string' ? s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').trim() : '')
 
-    // Merge and ensure high quality verified sources (prefer live sources with real URLs)
-    let rawSources = Array.isArray(llmResult.sources) && llmResult.sources.length > 0
-      ? llmResult.sources
-      : liveSources
+    const cleanSources: EntropySource[] = Array.isArray(llmResult.sources) && llmResult.sources.length > 0
+      ? llmResult.sources.map((s: any, idx: number) => ({
+          id: typeof s.id === 'number' ? s.id : idx + 1,
+          title: cleanStr(s.title) || `Источник [${idx + 1}]`,
+          url: cleanStr(s.url) || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
+          domain: cleanStr(s.domain) || 'web',
+          snippet: cleanStr(s.snippet) || '',
+        }))
+      : liveSources.length > 0
+        ? liveSources.map((s, idx) => ({ ...s, id: idx + 1 }))
+        : []
 
-    if (liveSources.length > 0 && rawSources !== liveSources) {
-      // If LLM returned generic/fake URLs, map them to our real live verified URLs
-      rawSources = rawSources.map((s: any, idx: number) => {
-        const matchingLive = liveSources[idx] || liveSources[0]
-        return {
-          id: idx + 1,
-          title: s.title || matchingLive?.title || `Источник ${idx + 1}`,
-          url: (s.url && (s.url.startsWith('http') || s.url.startsWith('/')) && !s.url.includes('domain.com')) ? s.url : (matchingLive?.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`),
-          domain: s.domain || matchingLive?.domain || 'web',
-          snippet: cleanStr(s.snippet || matchingLive?.snippet || ''),
-          type: matchingLive?.type || s.type || 'web',
-          noteId: matchingLive?.noteId || s.noteId,
-          taskId: matchingLive?.taskId || s.taskId,
-        }
-      })
-    }
-
-    const cleanSources: EntropySource[] = rawSources.map((s: any, idx: number) => {
-      const matchingLive = liveSources.find((l: any) => l.id === s.id || l.title === s.title)
-      return {
-        id: typeof s.id === 'number' ? s.id : idx + 1,
-        title: cleanStr(s.title || `Источник ${idx + 1}`),
-        url: s.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
-        domain: s.domain || (s.url && s.url.startsWith('http') ? new URL(s.url).hostname : 'zerf.app'),
-        snippet: cleanStr(s.snippet || ''),
-        type: s.type || matchingLive?.type || (s.noteId ? 'note' : s.taskId ? 'task' : 'web'),
-        noteId: s.noteId || matchingLive?.noteId,
-        taskId: s.taskId || matchingLive?.taskId,
-      }
-    })
-
-    const cleanAnswer = cleanStr(llmResult.answer)
-    const cleanTakeaways = Array.isArray(llmResult.takeaways)
-      ? llmResult.takeaways.map(cleanStr).filter(Boolean)
-      : []
-    const cleanFollowUps = Array.isArray(llmResult.followUpQuestions)
-      ? llmResult.followUpQuestions.map(cleanStr).filter(Boolean)
-      : []
-    const cleanTikhonya = cleanStr(llmResult.tikhonyaComment) || 'Зерфик завершил глубокий синтез первоисточников'
-
-    // Increment user's daily usage (persisted in DB — survives serverless instances)
+    // Increment user's daily usage (persisted in DB)
     if (ownerChatId !== 'guest') {
       await incrementDailyCount(isPro ? COUNTERS.entropyPro : COUNTERS.entropy, ownerChatId)
     }
@@ -456,10 +410,14 @@ JSON Схема:
       mode,
       isPro,
       sources: cleanSources,
-      answer: cleanAnswer,
-      takeaways: cleanTakeaways,
-      followUpQuestions: cleanFollowUps,
-      tikhonyaComment: cleanTikhonya,
+      answer: cleanStr(llmResult.answer) || `По запросу «${cleanQuery}» нет прямых совпадений. Попробуйте уточнить формулировку.`,
+      takeaways: Array.isArray(llmResult.takeaways)
+        ? llmResult.takeaways.map(cleanStr).filter(Boolean)
+        : [],
+      followUpQuestions: Array.isArray(llmResult.followUpQuestions)
+        ? llmResult.followUpQuestions.map(cleanStr).filter(Boolean)
+        : [],
+      tikhonyaComment: cleanStr(llmResult.tikhonyaComment) || 'Зерфик подготовил ответ на основе проверенных первоисточников.',
       createdAt: new Date().toISOString(),
       usage: {
         used: newRegUsed,
@@ -481,43 +439,32 @@ JSON Схема:
 
     return NextResponse.json({ success: true, result: responsePayload })
   } catch (error: any) {
-    console.error('[Entropy API Error]:', error)
-    return NextResponse.json({ error: error?.message || 'Ошибка выполнения глубокого поиска' }, { status: 500 })
+    console.error('[Entropy Search API] Fatal error:', error)
+    return NextResponse.json(
+      {
+        error: 'Внутренняя ошибка поискового движка. Попробуйте повторить запрос позже.',
+        details: error?.message || String(error),
+      },
+      { status: 500 }
+    )
   }
 }
 
 function generateFallbackResearch(query: string, mode: string, isPro: boolean, liveSources: LiveSource[] = []) {
-  const qLower = query.toLowerCase()
-  const slug = encodeURIComponent(query)
-
   const defaultSources: EntropySource[] = [
     {
       id: 1,
-      title: `${query} — Фундаментальное исследование и сравнительный анализ`,
-      url: `https://arxiv.org/search/?query=${slug}&searchtype=all`,
-      domain: 'arxiv.org',
-      snippet: `Комплексный обзор архитектурных принципов, теоретических моделей и экспериментальных метрик по теме ${query}.`,
+      title: `Поиск: ${query}`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+      domain: 'google.com',
+      snippet: `Актуальная информация и результаты поиска по теме: ${query}.`,
     },
     {
       id: 2,
-      title: `${query} — Реализации с открытым исходным кодом & Бенчмарки`,
-      url: `https://github.com/topics/${encodeURIComponent(qLower.replace(/\s+/g, '-'))}`,
-      domain: 'github.com',
-      snippet: `Репозитории, практические примеры интеграции и замеры производительности при высоких нагрузках.`,
-    },
-    {
-      id: 3,
-      title: `Энциклопедическая статья: ${query}`,
-      url: `https://ru.wikipedia.org/wiki/${slug}`,
+      title: `Энциклопедическая справка: ${query}`,
+      url: `https://ru.wikipedia.org/wiki/${encodeURIComponent(query)}`,
       domain: 'wikipedia.org',
-      snippet: `Систематизация терминологии, хронология развития и общепринятые стандарты в индустрии.`,
-    },
-    {
-      id: 4,
-      title: `Практический опыт внедрения и кейсы: ${query}`,
-      url: `https://habr.com/ru/search/?q=${slug}`,
-      domain: 'habr.com',
-      snippet: `Разбор типовых ошибок при эксплуатации, оптимизация задержек и архитектурные компромиссы.`,
+      snippet: `Общая информация и хронология по теме ${query}.`,
     },
   ]
 
@@ -525,33 +472,27 @@ function generateFallbackResearch(query: string, mode: string, isPro: boolean, l
     ? liveSources.map((s, idx) => ({ ...s, id: idx + 1 }))
     : defaultSources
 
-  const answer = `### 🔍 ${isPro ? '⚡ Pro Search Анализ' : 'Аналитический обзор'}: «${query}»
+  let answer = ''
+  if (liveSources.length > 0) {
+    const items = liveSources
+      .filter(s => s.snippet && s.snippet.length > 5)
+      .slice(0, 4)
+      .map((s, idx) => `• **${s.title}** [${idx + 1}]:\n  ${s.snippet}`)
+      .join('\n\n')
 
-На основе глубокого синтеза проверенных источников **[1]**, **[2]**${isPro ? ', **[5]**' : ''}, сформирована следующая картина:
+    answer = `По вашему запросу **«${query}»** найдены следующие факты из открытых источников:\n\n${items}\n\n_Данные получены из новостных и открытых источников сети._`
+  } else {
+    answer = `По запросу **«${query}»** не найдено прямых результатов. Попробуйте переформулировать запрос или переключить режим поиска на «Все источники».`
+  }
 
-#### 1. Ключевые аспекты и концепция
-Тема **${query}** является критически важной областью современного технологического ландшафта **[1]**. Исследования показывают, что грамотная декомпозиция и модульная структура позволяют снизить накладные расходы системы на **35–45%** **[2]**.
-
-#### 2. Архитектура и методология
-- **Модульность и изоляция:** Разделение логики на независимые контексты обеспечивает устойчивость к пиковым нагрузкам **[3]**.
-- **Оптимизация задержек:** Предварительное кэширование и асинхронный конвейер данных минимизируют latency **[4]**.
-- **Фактологическая верификация:** Все выводы валидируются на основе перекрестных ссылок первоисточников **[1]** **[3]**${isPro ? ' **[5]**' : ''}.
-
-#### 3. Практические рекомендации
-1. Начните с декомпозиции на базовые модули и фиксации входных/выходных контрактов.
-2. Зафиксируйте измеримые метрики качества до начала глубокой модификации.
-3. Сохраните выжимку в базу знаний Zerf Note для регулярного пересмотра.`
-
-  const takeaways = [
-    `Фундаментальная основа «${query}» строится на модульной архитектуре и строгой верификации фактов.`,
-    `Современный стек позволяет повысить производительность решения до 40% за счет оптимизации узких мест.`,
-    `Рекомендуется фиксировать прогресс и внедрять изменения итеративно.`,
-  ]
+  const takeaways = liveSources.slice(0, 3).map((s, idx) => `[${idx + 1}] ${s.title}`)
+  if (takeaways.length === 0) {
+    takeaways.push(`Поиск по теме «${query}» завершён.`)
+  }
 
   const followUpQuestions = [
-    `Как внедрить лучшие практики по «${query}» в текущие рабочие проекты?`,
-    `Какие скрытые ограничения и риски существуют в данном подходе?`,
-    `Сравни «${query}» с альтернативными популярными методологиями.`,
+    `Узнать больше подробностей по теме «${query}»?`,
+    `Какие ещё вопросы по теме «${query}» вас интересуют?`,
   ]
 
   return {
@@ -559,6 +500,7 @@ function generateFallbackResearch(query: string, mode: string, isPro: boolean, l
     answer,
     takeaways,
     followUpQuestions,
-    tikhonyaComment: `Зерфик собрал ${sources.length} первоисточников и структурировал ключевые тезисы для вашей базы знаний.`,
+    tikhonyaComment: `Зерфик нашел ${sources.length} источников и структурировал факты.`,
   }
 }
+
