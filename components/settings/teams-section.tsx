@@ -8,8 +8,9 @@ import {
   UserPlus, ArrowRight, X, Sparkles
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getAuthHeaders } from '@/lib/store'
+import { getAuthHeaders, useApp } from '@/lib/store'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
+import { GithubIcon } from '@/components/views/extensions-view'
 
 interface TeamSummary {
   id: string
@@ -51,6 +52,7 @@ interface TeamDetail {
 }
 
 export function TeamsSection() {
+  const { dispatch } = useApp()
   const confirm = useConfirmDialog()
   const [teams, setTeams] = useState<TeamSummary[]>([])
   const [loading, setLoading] = useState(false)
@@ -335,6 +337,37 @@ export function TeamsSection() {
             <span>Создать команду</span>
           </button>
         </div>
+      </div>
+
+      {/* Quick Jump: My Projects & GitHub Plugins */}
+      <div className="p-4 rounded-2xl bg-card border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-muted text-foreground flex items-center justify-center font-bold text-xs border border-border shrink-0">
+            <GithubIcon className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span>Мои проекты и плагины на GitHub</span>
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 text-[9px] font-mono font-bold border border-emerald-500/25">Store</span>
+            </h4>
+            <p className="text-[11px] text-muted-foreground">
+              Управление вашими авторскими расширениями, манифестами и версиями в Zerf Note
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            dispatch({ type: 'SET_VIEW', view: 'extensions' })
+            window.dispatchEvent(new CustomEvent('zerf_open_extensions_tab', { detail: { tab: 'my' } }))
+          }}
+          className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <GithubIcon className="w-3.5 h-3.5" />
+          <span>Мои проекты (GitHub)</span>
+          <ArrowRight className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Teams List */}

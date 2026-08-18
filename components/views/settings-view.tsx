@@ -1354,6 +1354,20 @@ export function SettingsView() {
                       <GithubIcon className="w-3 h-3 text-muted-foreground" />
                       <span>{profileData.githubUsername || userGithub ? 'Изменить GitHub' : 'Привязать GitHub'}</span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                        window.dispatchEvent(new CustomEvent('zerf_open_extensions_tab', { detail: { tab: 'my' } }))
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      title="Открыть мои проекты и GitHub плагины"
+                    >
+                      <span>Мои проекты</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+
                     {(profileData.githubUsername || userGithub) && (
                       <a
                         href={`https://github.com/${profileData.githubUsername || userGithub}`}

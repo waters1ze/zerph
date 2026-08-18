@@ -482,6 +482,21 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
           showToast('🎉 Оплата прошла успешно! Расширение активировано и установлено в ваш аккаунт.', 'success')
         }, 800)
       }
+
+      const handleOpenTab = (e: any) => {
+        if (e.detail?.tab) {
+          setActiveTab(e.detail.tab)
+        }
+      }
+      const handleOpenMyPlugins = () => {
+        setActiveTab('my')
+      }
+      window.addEventListener('zerf_open_extensions_tab', handleOpenTab)
+      window.addEventListener('zerf_open_my_plugins', handleOpenMyPlugins)
+      return () => {
+        window.removeEventListener('zerf_open_extensions_tab', handleOpenTab)
+        window.removeEventListener('zerf_open_my_plugins', handleOpenMyPlugins)
+      }
     }
   }, [])
 
@@ -1380,7 +1395,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-border/80 pb-2 overflow-x-auto">
+      <div className="flex items-center gap-1.5 border-b border-border/80 pb-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {[
           { id: 'store', label: 'Каталог (Store)', icon: Puzzle, count: catalog.length },
           { id: 'installed', label: 'Установленные', icon: Check, count: installedExtensions.length },
@@ -1394,7 +1409,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shrink-0',
+                'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shrink-0 select-none',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -1425,7 +1440,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         <div className="space-y-5">
           {/* Filters, Top sorting and Search Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1 min-w-0 flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {[
                 { id: 'core', label: '🌟 Основное' },
                 { id: 'all', label: 'Все категории' },
@@ -1439,9 +1454,9 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id)}
                   className={cn(
-                    'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors shrink-0 cursor-pointer',
+                    'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors shrink-0 cursor-pointer select-none',
                     selectedCategory === cat.id
-                      ? 'bg-card border-primary text-primary font-bold shadow-xs'
+                      ? 'bg-card border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30'
                       : 'bg-card/60 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}
                 >
@@ -1450,13 +1465,13 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {/* Sorting Pills */}
               <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border shrink-0 text-xs">
                 <button
                   onClick={() => setSortBy('top_likes')}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer font-medium',
+                    'px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer font-medium select-none',
                     sortBy === 'top_likes' ? 'bg-card text-foreground font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                   )}
                   title="Топ по лайкам и сердечкам"
@@ -1467,7 +1482,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 <button
                   onClick={() => setSortBy('popular')}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg transition-all cursor-pointer font-medium',
+                    'px-2.5 py-1 rounded-lg transition-all cursor-pointer font-medium select-none',
                     sortBy === 'popular' ? 'bg-card text-foreground font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
@@ -1476,7 +1491,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 <button
                   onClick={() => setSortBy('newest')}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg transition-all cursor-pointer font-medium',
+                    'px-2.5 py-1 rounded-lg transition-all cursor-pointer font-medium select-none',
                     sortBy === 'newest' ? 'bg-card text-foreground font-bold shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >

@@ -9,7 +9,7 @@ import {
   Sun, Inbox, CheckSquare, FileText, Calendar, Clock,
   Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Crown, Network,
   UserCheck, Building2, Puzzle, ChevronRight, ChevronDown, Circle, User, Menu,
-  PanelLeftClose, PanelLeftOpen, Folder
+  PanelLeftClose, PanelLeftOpen, Folder, X
 } from 'lucide-react'
 import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, type SidebarFolder } from '@/components/settings/sidebar-customizer-section'
 import type { ExtensionItem } from '@/app/api/extensions/route'
@@ -59,6 +59,8 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [isAdmin, setIsAdmin] = useState(false)
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
+  const [enabledExtIds, setEnabledExtIds] = useState<string[]>([])
+  const [disabledNotice, setDisabledNotice] = useState<string | null>(null)
 
   // User Avatar Emoji State
   const [userAvatarEmoji, setUserAvatarEmoji] = useState<string>(() => {
@@ -213,7 +215,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchUserProfile()
 
-    // Fetch pending team invites count with cache
+    // Fetch pending team join requests count with cache
     const fetchPendingTeamRequests = async () => {
       try {
         if (cachedPendingCount && Date.now() - cachedPendingCount.timestamp < 180_000) {
@@ -223,9 +225,9 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
 
         const headers = getAuthHeaders()
         if (Object.keys(headers).length > 0) {
-          const res = await fetch('/api/friends', { headers })
+          const res = await fetch('/api/teams', { headers })
           const data = await res.json()
-          if (Array.isArray(data.pendingRequests)) {
+          if (data.success && Array.isArray(data.pendingRequests)) {
             cachedPendingCount = { count: data.pendingRequests.length, timestamp: Date.now() }
             setPendingTeamRequestsCount(data.pendingRequests.length)
           }
@@ -247,8 +249,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         if (data.success && Array.isArray(data.catalog)) {
           const installedIds = Array.isArray(data.installedIds) ? data.installedIds : []
           const enabledIds = Array.isArray(data.enabledIds) ? data.enabledIds : installedIds
+          setEnabledExtIds(enabledIds)
+          const myExts = Array.isArray(data.myExtensions) ? data.myExtensions : []
+          const myIds = myExts.map((e: any) => e.id)
+          // Keep ALL installed or user-owned extensions so they NEVER disappear from sidebar
           const activeExts = data.catalog.filter((e: ExtensionItem) =>
-            enabledIds.includes(e.id) || (e.id === 'ext_entropy_search' && installedIds.includes(e.id))
+            installedIds.includes(e.id) || enabledIds.includes(e.id) || myIds.includes(e.id) || e.id === 'ext_entropy_search'
           )
           cachedInstalledExts = { exts: activeExts, timestamp: Date.now() }
           setInstalledExts(activeExts)
@@ -478,12 +484,19 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                       const isEntropy = itemId === 'ext_entropy_search' || extensionItem.id === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')
                       const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
                       const isOwnerDisabled = extensionItem.isPublished === false || (extensionItem as any).isDisabledByOwner === true
+                      const isUserDisabled = Boolean(extensionItem.id && !enabledExtIds.includes(extensionItem.id) && !isOwnerDisabled)
 
                       return (
                         <motion.button
                           key={itemId}
                           whileTap={{ scale: 0.97 }}
                           onClick={() => {
+                            if (isOwnerDisabled) {
+                              setDisabledNotice(`🔴 Расширение «${extensionItem.title}» отключено автором или снято с публикации`)
+                              setTimeout(() => setDisabledNotice(null), 4000)
+                              dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                              return
+                            }
                             if (isEntropy) {
                               dispatch({ type: 'SET_VIEW', view: 'entropy' })
                               window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
@@ -498,20 +511,36 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                               ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
                               : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
                           )}
-                          title={isOwnerDisabled ? `${extensionItem.title} (🔴 Отключено автором)` : extensionItem.title}
+                          title={
+                            isOwnerDisabled
+                              ? `${extensionItem.title} (🔴 Отключено автором)`
+                              : isUserDisabled
+                                ? `${extensionItem.title} (⚪ Отключено в настройках)`
+                                : extensionItem.title
+                          }
                         >
                           <ExtensionIcon icon={extensionItem.icon} className="w-4 h-4 text-xs shrink-0" />
                           {!isCollapsed && (
                             <>
-                              <span className="flex-1 text-left line-clamp-1 truncate text-xs">
+                              <span className={cn('flex-1 text-left line-clamp-1 truncate text-xs', isOwnerDisabled && 'text-muted-foreground')}>
                                 {extensionItem.title}
                               </span>
                               <span
                                 className={cn(
                                   'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
-                                  isOwnerDisabled ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]' : 'bg-emerald-400'
+                                  isOwnerDisabled
+                                    ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]'
+                                    : isUserDisabled
+                                      ? 'bg-muted-foreground/40'
+                                      : 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.6)]'
                                 )}
-                                title={isOwnerDisabled ? '🔴 Отключено автором / Недоступно' : '🟢 Активно'}
+                                title={
+                                  isOwnerDisabled
+                                    ? '🔴 Отключено автором / Недоступно'
+                                    : isUserDisabled
+                                      ? '⚪ Отключено в настройках'
+                                      : '🟢 Активно'
+                                }
                               />
                             </>
                           )}
@@ -540,12 +569,20 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
               {unassignedActiveExts.map(ext => {
                 const isEntropy = ext.id === 'ext_entropy_search' || ext.title?.toLowerCase().includes('entropy')
                 const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
+                const isOwnerDisabled = ext.isPublished === false || (ext as any).isDisabledByOwner === true
+                const isUserDisabled = !enabledExtIds.includes(ext.id) && !isOwnerDisabled
 
                 return (
                   <motion.button
                     key={ext.id}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => {
+                      if (isOwnerDisabled) {
+                        setDisabledNotice(`🔴 Расширение «${ext.title}» отключено автором или снято с публикации`)
+                        setTimeout(() => setDisabledNotice(null), 4000)
+                        dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                        return
+                      }
                       if (isEntropy) {
                         dispatch({ type: 'SET_VIEW', view: 'entropy' })
                         window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
@@ -560,15 +597,37 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                         ? 'bg-primary/15 text-primary font-bold border border-primary/20 shadow-xs'
                         : 'text-foreground/80 hover:bg-muted/60 hover:text-foreground'
                     )}
-                    title={ext.title}
+                    title={
+                      isOwnerDisabled
+                        ? `${ext.title} (🔴 Отключено автором)`
+                        : isUserDisabled
+                          ? `${ext.title} (⚪ Отключено в настройках)`
+                          : ext.title
+                    }
                   >
                     <ExtensionIcon icon={ext.icon} className="w-4 h-4 text-xs shrink-0" />
                     {!isCollapsed && (
                       <>
-                        <span className="flex-1 text-left line-clamp-1 truncate text-xs">
+                        <span className={cn('flex-1 text-left line-clamp-1 truncate text-xs', isOwnerDisabled && 'text-muted-foreground')}>
                           {ext.title}
                         </span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Включено" />
+                        <span
+                          className={cn(
+                            'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
+                            isOwnerDisabled
+                              ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]'
+                              : isUserDisabled
+                                ? 'bg-muted-foreground/40'
+                                : 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.6)]'
+                          )}
+                          title={
+                            isOwnerDisabled
+                              ? '🔴 Отключено автором / Недоступно'
+                              : isUserDisabled
+                                ? '⚪ Отключено в настройках'
+                                : '🟢 Активно'
+                          }
+                        />
                       </>
                     )}
                   </motion.button>
@@ -664,6 +723,27 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           </div>
         )}
       </div>
+
+      {/* Floating Notice when clicking disabled extension */}
+      <AnimatePresence>
+        {disabledNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="fixed bottom-16 left-4 z-[300] max-w-xs p-3 rounded-2xl bg-card/95 border border-rose-500/40 text-foreground shadow-2xl text-xs flex items-center gap-2 backdrop-blur-xl pointer-events-auto"
+          >
+            <span className="flex-1 leading-snug">{disabledNotice}</span>
+            <button
+              type="button"
+              onClick={() => setDisabledNotice(null)}
+              className="p-1 hover:bg-white/10 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </aside>
   )
 }
