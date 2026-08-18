@@ -5,6 +5,7 @@ import { handleNoteCommand } from './commands/note.js';
 import { handleChatCommand } from './commands/chat.js';
 import { sendAiQuery } from '../api.js';
 import { dispatchCommand } from '../extensions/loader.js';
+import { getLocalDeveloperExtensions } from '../extensions/registry.js';
 import { GLYPH } from './theme.js';
 export const PLAN_RANKS = {
     free: 0,
@@ -316,13 +317,26 @@ export const BASE_COMMAND_REGISTRY = [
 export async function executeExtensionAction(ext, cmd, args, ctx) {
     const query = args.trim();
     const extTitle = ext.title || ext.name || 'Плагин';
+    // Safely format author name
+    const authorStr = ext.authorGithub
+        ? `@${String(ext.authorGithub).replace(/^@/, '')}`
+        : ext.authorName
+            ? (String(ext.authorName).startsWith('@') ? ext.authorName : ext.authorName)
+            : 'сообщество';
     // If user just typed command without arguments, show friendly extension info & commands
     if (!query) {
-        const commandsList = (ext.content?.commands || ext.commands || []).map((c) => `• ${c.cmd} — ${c.description || 'Действие'}`);
-        const triggers = (ext.triggers || []).join(', ');
+        let content = ext.content;
+        if (typeof content === 'string') {
+            try {
+                content = JSON.parse(content);
+            }
+            catch { }
+        }
+        const commandsList = (content?.commands || ext.commands || []).map((c) => `• ${c.cmd} — ${c.description || 'Действие'}`);
+        const triggers = (ext.triggers || content?.triggers || []).join(', ');
         const details = [
             `• Описание: ${ext.description || 'Пользовательский модуль'}`,
-            `• Автор: @${ext.authorName || ext.authorGithub || 'сообщество'}`,
+            `• Автор: ${authorStr}`,
         ];
         if (commandsList.length > 0) {
             details.push('Команды расширения:');
@@ -460,7 +474,7 @@ export async function executeExtensionAction(ext, cmd, args, ctx) {
     }
 }
 /**
- * Dynamically extracts all custom commands, triggers, and skills from ANY installed user extensions.
+ * Dynamically extracts all custom commands, triggers, and skills from ANY user extension.
  */
 export function extractExtensionCommands(extensions) {
     if (!Array.isArray(extensions) || extensions.length === 0)
@@ -473,23 +487,38 @@ export function extractExtensionCommands(extensions) {
         const extDesc = ext.description || 'Пользовательский модуль';
         const extIcon = ext.icon || '◈';
         const extPlan = (ext.minPlan || 'free').toLowerCase();
-        const explicitCmds = ext.content?.commands || ext.commands || [];
-        const triggers = ext.triggers || ext.content?.triggers || [];
+        let content = ext.content;
+        if (typeof content === 'string') {
+            try {
+                content = JSON.parse(content);
+            }
+            catch { }
+        }
+        // 1. Explicit commands from content or top-level
+        const explicitCmds = (Array.isArray(content?.commands) ? content.commands : []) ||
+            (Array.isArray(ext.commands) ? ext.commands : []) ||
+            [];
+        // 2. Triggers defined by the author
+        const triggers = (Array.isArray(ext.triggers) ? ext.triggers : []) ||
+            (Array.isArray(content?.triggers) ? content.triggers : []) ||
+            [];
         const commandsToRegister = [];
         if (explicitCmds.length > 0) {
             explicitCmds.forEach(c => {
-                if (c.cmd) {
+                if (c && c.cmd) {
                     const cleanCmd = c.cmd.startsWith('/') ? c.cmd : `/${c.cmd}`;
-                    commandsToRegister.push({
-                        cmd: cleanCmd,
-                        desc: `[${extTitle}] ${c.description || extDesc}`,
-                    });
+                    if (!commandsToRegister.some(x => x.cmd.toLowerCase() === cleanCmd.toLowerCase())) {
+                        commandsToRegister.push({
+                            cmd: cleanCmd,
+                            desc: `[${extTitle}] ${c.description || extDesc}`,
+                        });
+                    }
                 }
             });
         }
         // Add slash triggers as commands if not already added
         triggers.forEach(t => {
-            if (t.startsWith('/')) {
+            if (typeof t === 'string' && t.startsWith('/')) {
                 if (!commandsToRegister.some(c => c.cmd.toLowerCase() === t.toLowerCase())) {
                     commandsToRegister.push({
                         cmd: t,
@@ -511,10 +540,10 @@ export function extractExtensionCommands(extensions) {
             const cleanName = item.cmd.replace(/^\//, '');
             const aliases = [
                 cleanName,
-                ...(triggers.filter(t => !t.startsWith('/')).map(t => t.toLowerCase())),
+                ...(triggers.filter(t => typeof t === 'string' && !t.startsWith('/')).map(t => t.toLowerCase())),
             ];
             result.push({
-                id: `ext_${ext.id}_${cleanName}`,
+                id: `ext_${ext.id || ext.name}_${cleanName}`,
                 name: item.cmd,
                 aliases,
                 description: item.desc,
@@ -531,12 +560,18 @@ export function extractExtensionCommands(extensions) {
     return result;
 }
 /**
- * Returns full combined command list (built-in commands + any installed user extension commands).
+ * Returns full combined command list (built-in commands + any installed remote or local user extension commands).
  */
 export function getAllCommands(userExtensions = []) {
-    const extCmds = extractExtensionCommands(userExtensions);
+    let localDevExts = [];
+    try {
+        localDevExts = getLocalDeveloperExtensions();
+    }
+    catch { }
+    const combinedExts = [...userExtensions, ...localDevExts];
+    const extCmds = extractExtensionCommands(combinedExts);
     const map = new Map();
-    // Register extension commands first (giving them priority for their unique commands)
+    // Register extension commands (giving them priority for their unique command names)
     for (const cmd of extCmds) {
         map.set(cmd.name.toLowerCase(), cmd);
     }

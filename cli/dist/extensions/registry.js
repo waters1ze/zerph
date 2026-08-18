@@ -3,7 +3,6 @@ import path from 'path';
 import os from 'os';
 const ZERF_DIR = path.join(os.homedir(), '.zerf');
 const EXT_DIR = path.join(ZERF_DIR, 'extensions');
-const REGISTRY_CACHE_FILE = path.join(ZERF_DIR, 'ext-registry.json');
 export const OFFICIAL_CATALOG = [
     { name: 'zerf-github', version: '1.0.0', description: 'GitHub Issues и PR синхронизация с задачами Zerf', author: 'Zerf Team' },
     { name: 'zerf-jira', version: '1.2.0', description: 'Jira Sprint & Backlog импорт в задачи и заметки', author: 'Zerf Team' },
@@ -39,18 +38,59 @@ export function getInstalledExtensions() {
         return [];
     }
 }
+/**
+ * Returns full loaded manifests of all local developer extensions coded on disk in ~/.zerf/extensions/
+ */
+export function getLocalDeveloperExtensions() {
+    if (!fs.existsSync(EXT_DIR))
+        return [];
+    try {
+        const dirs = fs.readdirSync(EXT_DIR);
+        const result = [];
+        for (const d of dirs) {
+            const manifestPath = path.join(EXT_DIR, d, 'zerf.manifest.json');
+            if (fs.existsSync(manifestPath)) {
+                try {
+                    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                    result.push({
+                        id: manifest.name || d,
+                        title: manifest.title || manifest.name || d,
+                        name: manifest.name || d,
+                        version: manifest.version || '1.0.0',
+                        description: manifest.description || 'Локальный модуль',
+                        authorName: manifest.author || 'local',
+                        authorGithub: manifest.authorGithub,
+                        icon: manifest.icon || '🛠️',
+                        commands: manifest.commands || [],
+                        triggers: manifest.triggers || [],
+                        aiInstructions: manifest.aiInstructions,
+                        content: manifest,
+                        isLocal: true,
+                    });
+                }
+                catch { }
+            }
+        }
+        return result;
+    }
+    catch {
+        return [];
+    }
+}
 export function scaffoldExtension(name, desc) {
     const cleanName = name.startsWith('zerf-') ? name : `zerf-${name}`;
     const targetDir = path.join(EXT_DIR, cleanName);
     if (!fs.existsSync(targetDir)) {
         fs.mkdirSync(targetDir, { recursive: true });
     }
-    const cmdName = cleanName.replace('zerf-', '');
+    const cmdName = cleanName.replace(/^zerf-/, '');
     const manifest = {
         name: cleanName,
+        title: name.replace(/^zerf-/, ''),
         version: '1.0.0',
         description: desc || 'Модуль расширения Zerf CLI',
         author: os.userInfo().username || 'developer',
+        icon: '🛠️',
         aiInstructions: `Инструкция для Zerf AI: при вызове команды /${cmdName} или связанных триггеров обрабатывай задачи согласно логике плагина ${cleanName}.`,
         triggers: [`/${cmdName}`, `${cmdName}`],
         commands: [{ cmd: `/${cmdName}`, description: desc || 'Команда расширения' }],
@@ -79,20 +119,21 @@ export default {
 }
 export async function installExtensionPackage(name) {
     const cleanName = name.startsWith('zerf-') ? name : `zerf-${name}`;
-    return new Promise((resolve, reject) => {
-        const isWin = os.platform() === 'win32';
-        const npmCmd = isWin ? 'npm.cmd' : 'npm';
+    return new Promise((resolve) => {
         const targetDir = path.join(EXT_DIR, cleanName);
         if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true });
         }
-        // Scaffold initial installed manifest
+        const cmdName = cleanName.replace(/^zerf-/, '');
         const manifest = {
             name: cleanName,
+            title: cmdName,
             version: '1.0.0',
             description: `Установленное расширение ${cleanName}`,
             author: 'registry',
-            commands: [{ cmd: `/${cleanName.replace('zerf-', '')}`, description: `Команда ${cleanName}` }],
+            icon: '◈',
+            commands: [{ cmd: `/${cmdName}`, description: `Команда ${cleanName}` }],
+            triggers: [`/${cmdName}`, `${cmdName}`],
             entrypoint: 'index.js',
         };
         fs.writeFileSync(path.join(targetDir, 'zerf.manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
