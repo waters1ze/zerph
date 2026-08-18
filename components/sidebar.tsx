@@ -272,14 +272,22 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const todayCount = tasks.filter(t => {
     const d = t.dueDate
     const today = new Date().toISOString().slice(0, 10)
-    return d === today && t.status !== 'done'
+    return d === today && t.status !== 'done' && !(t as any).isDeleted
   }).length
 
-  const activeTasksCount = tasks.filter(t => t.status !== 'done' && !(t as any).isDeleted).length
+  const activeTasksCount = tasks.filter(t => t.status !== 'done' && !(t as any).isDeleted && !isYearlyEventTask(t)).length
   const todayStr = new Date().toISOString().slice(0, 10)
   const completedTodayCount = tasks.filter(t => t.status === 'done' && !(t as any).isDeleted && (((t as any).completedAt && String((t as any).completedAt).startsWith(todayStr)) || (t.dueDate === todayStr))).length
 
-  const inboxCount = tasks.filter(t => !t.projectId && !t.goalId && t.status !== 'done' && !isYearlyEventTask(t)).length
+  // Inbound tasks only: shared with others, delegated to me, or created by other authors
+  const inboxCount = tasks.filter(t => {
+    if (t.status === 'done' || (t as any).isDeleted || isYearlyEventTask(t)) return false
+    const tags = (t.tags || []).map(x => String(x).toLowerCase())
+    const isSharedOrDelegated = t.isShared || tags.includes('общая') || tags.includes('общие') || tags.includes('совместная') || tags.includes('поручение') || tags.includes('делегировано') || tags.includes('поручено') || tags.includes('входящие')
+    const hasMultipleAssignees = Array.isArray(t.assignees) && t.assignees.length > 1
+    const isFromOtherAuthor = Boolean(t.authorChatId && t.ownerChatId && String(t.authorChatId) !== String(t.ownerChatId))
+    return isSharedOrDelegated || hasMultipleAssignees || isFromOtherAuthor
+  }).length
   const notesCount = notes.length
 
   const displayName = (settings.name && settings.name.trim() && settings.name !== 'Мой профиль' ? settings.name.trim() : null) || tgUser?.name || 'Мой профиль'
@@ -416,6 +424,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                       const badge =
                         itemId === 'today' ? (todayCount || undefined) :
                         itemId === 'inbox' ? (inboxCount || undefined) :
+                        itemId === 'tasks' ? (activeTasksCount || undefined) :
                         itemId === 'notes' ? (notesCount || undefined) :
                         itemId === 'friends' ? (pendingTeamRequestsCount || undefined) :
                         undefined
