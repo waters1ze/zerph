@@ -45,9 +45,9 @@ export default function TgPage() {
   if (!mounted) return null
 
   return (
-    <div className="w-full h-full min-h-[100dvh] max-w-full overflow-hidden">
+    <div className="w-full h-full min-h-[100dvh] max-w-full overflow-hidden flex justify-center bg-background">
       <AppProvider>
-        <AppShell />
+        <AppShell forceMobileLayout={true} />
       </AppProvider>
     </div>
   )

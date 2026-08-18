@@ -32,12 +32,39 @@ import { AuthGateModal } from '@/components/auth-gate-modal'
 import { PullToRefresh } from '@/components/ui/pull-to-refresh'
 import { cn } from '@/lib/utils'
 
-export function AppShell() {
+export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } = {}) {
   const { state, dispatch, syncData } = useApp()
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+
+  // Detect Telegram Mini App environment (via prop, path, WebApp SDK, or body class)
+  const [isTelegramMiniApp, setIsTelegramMiniApp] = useState<boolean>(() => {
+    if (forceMobileLayout) return true
+    if (typeof window !== 'undefined') {
+      const isTgPath = window.location.pathname.startsWith('/tg')
+      const hasTgSdk = Boolean((window as any).Telegram?.WebApp?.initData)
+      const hasTgClass = document.body.classList.contains('telegram-webapp-mode')
+      return isTgPath || hasTgSdk || hasTgClass
+    }
+    return false
+  })
+
+  useEffect(() => {
+    if (forceMobileLayout) {
+      setIsTelegramMiniApp(true)
+      return
+    }
+    if (typeof window !== 'undefined') {
+      const isTgPath = window.location.pathname.startsWith('/tg')
+      const hasTgSdk = Boolean((window as any).Telegram?.WebApp?.initData)
+      const hasTgClass = document.body.classList.contains('telegram-webapp-mode')
+      if (isTgPath || hasTgSdk || hasTgClass) {
+        setIsTelegramMiniApp(true)
+      }
+    }
+  }, [forceMobileLayout])
 
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -124,7 +151,10 @@ export function AppShell() {
   const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings'
 
   return (
-    <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]">
+    <div className={cn(
+      'app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]',
+      isTelegramMiniApp && 'w-full max-w-[500px] mx-auto border-x border-border/40 shadow-2xl justify-center'
+    )}>
       {/* ── Mobile sidebar overlay ── */}
       <AnimatePresence>
         {mobileSidebarOpen && (
@@ -137,7 +167,10 @@ export function AppShell() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setMobileSidebarOpen(false)}
-              className="fixed inset-0 bg-black/70 z-50 sm:hidden backdrop-blur-xs"
+              className={cn(
+                'fixed inset-0 bg-black/70 z-50 backdrop-blur-xs',
+                !isTelegramMiniApp && 'sm:hidden'
+              )}
             />
             {/* Slide-in panel */}
             <motion.div
@@ -146,7 +179,10 @@ export function AppShell() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed top-0 left-0 h-full w-[280px] max-w-[85vw] z-50 sm:hidden overflow-y-auto no-scrollbar bg-card border-r border-border shadow-2xl flex flex-col"
+              className={cn(
+                'fixed top-0 left-0 h-full w-[280px] max-w-[85vw] z-50 overflow-y-auto no-scrollbar bg-card border-r border-border shadow-2xl flex flex-col',
+                !isTelegramMiniApp && 'sm:hidden'
+              )}
             >
               <Sidebar />
             </motion.div>
@@ -154,29 +190,32 @@ export function AppShell() {
         )}
       </AnimatePresence>
 
-      {/* ── Desktop Sidebar ── */}
-      <div className={cn(
-        'hidden sm:block shrink-0 h-full overflow-y-auto no-scrollbar border-r border-border transition-all duration-200',
-        isDesktopCollapsed ? 'sm:w-16' : 'sm:w-56'
-      )}>
-        <Sidebar
-          isCollapsed={isDesktopCollapsed}
-          onToggleCollapse={() => {
-            const next = !isDesktopCollapsed
-            setIsDesktopCollapsed(next)
-            try {
-              localStorage.setItem('zerf_sidebar_collapsed', String(next))
-              window.dispatchEvent(new CustomEvent('zerf_sidebar_collapse_changed', { detail: next }))
-            } catch {}
-          }}
-        />
-      </div>
+      {/* ── Desktop Sidebar (Disabled in Telegram Mini App mode to preserve clean phone look) ── */}
+      {!isTelegramMiniApp && (
+        <div className={cn(
+          'hidden sm:block shrink-0 h-full overflow-y-auto no-scrollbar border-r border-border transition-all duration-200',
+          isDesktopCollapsed ? 'sm:w-16' : 'sm:w-56'
+        )}>
+          <Sidebar
+            isCollapsed={isDesktopCollapsed}
+            onToggleCollapse={() => {
+              const next = !isDesktopCollapsed
+              setIsDesktopCollapsed(next)
+              try {
+                localStorage.setItem('zerf_sidebar_collapsed', String(next))
+                window.dispatchEvent(new CustomEvent('zerf_sidebar_collapse_changed', { detail: next }))
+              } catch {}
+            }}
+          />
+        </div>
+      )}
 
       {/* ── Main content area ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar
           onNewTask={handleOpenNewTask}
           onMenuOpen={() => setMobileSidebarOpen(true)}
+          isMobileLayout={isTelegramMiniApp}
         />
 
         <div className="flex flex-1 overflow-hidden relative">
