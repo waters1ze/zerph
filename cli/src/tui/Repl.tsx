@@ -19,8 +19,8 @@ import { setScreen, updateReplState } from './state.js'
 import {
   matchCommand,
   getCommandSuggestions,
+  getAllCommands,
   isPlanAllowed,
-  COMMAND_REGISTRY,
   type CommandDefinition,
 } from './commandRegistry.js'
 import { GLYPH } from './theme.js'
@@ -106,28 +106,10 @@ export function Repl({ initialData }: { initialData?: any }) {
     })),
   ]
 
-  // Dynamic extension menu items
-  const customExtItems: MenuItem[] = (data?.extensions || []).flatMap((ext: any) => {
-    const extCommands = ext.content?.commands || ext.commands || []
-    if (Array.isArray(extCommands) && extCommands.length > 0) {
-      return extCommands.map((c: any) => ({
-        cmd: c.cmd?.startsWith('/') ? c.cmd : `/${c.cmd || ext.name || ext.id}`,
-        label: c.cmd?.startsWith('/') ? c.cmd : `/${c.cmd || ext.name || ext.id}`,
-        desc: `[${ext.title || ext.name || 'Плагин'}] ${c.description || ext.description}`,
-        glyph: '◈',
-      }))
-    }
-    const defaultCmd = ext.id === 'ext_nexus_search' || ext.name === 'zerf-search' ? '/search' : `/ext ${ext.name || ext.id}`
-    return [{
-      cmd: defaultCmd,
-      label: defaultCmd,
-      desc: `[${ext.title || ext.name || 'Плагин'}] ${ext.description || 'Пользовательский модуль'}`,
-      glyph: '◈',
-    }]
-  })
-
-  // Registered commands as menu items
-  const baseMenuItems: MenuItem[] = COMMAND_REGISTRY.map(c => ({
+  // Dynamic combined commands (built-in + all installed user extensions)
+  const userExtensions = data?.extensions || []
+  const allCommands = getAllCommands(userExtensions)
+  const allMenuItems: MenuItem[] = allCommands.map(c => ({
     cmd: c.name,
     label: c.name,
     desc: c.description,
@@ -135,26 +117,17 @@ export function Repl({ initialData }: { initialData?: any }) {
     minPlan: c.minPlan !== 'free' ? c.minPlan.toUpperCase() : undefined,
   }))
 
-  const seenCmds = new Set<string>()
-  const allMenuItems: MenuItem[] = []
-  for (const item of [...customExtItems, ...baseMenuItems]) {
-    const key = item.cmd.toLowerCase()
-    if (!seenCmds.has(key)) {
-      seenCmds.add(key)
-      allMenuItems.push(item)
-    }
-  }
-
   const isSlashOrTyping = (inputVal.startsWith('/') || menuForced || (inputVal.length >= 2 && !inputVal.includes(' '))) && !pickingModel && !pickingChatFriend
   const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim().replace(/^\//, '')
   
   const filteredCommands = isSlashOrTyping
-    ? allMenuItems.filter(m => {
-        if (!filterQuery) return true
-        const cmdClean = m.cmd.toLowerCase().replace(/^\//, '')
-        const labelClean = m.label.toLowerCase().replace(/^\//, '')
-        return cmdClean.startsWith(filterQuery) || labelClean.startsWith(filterQuery) || m.desc.toLowerCase().includes(filterQuery)
-      })
+    ? getCommandSuggestions(filterQuery, userPlan, userExtensions).map(c => ({
+        cmd: c.name,
+        label: c.name,
+        desc: c.description,
+        glyph: c.glyph,
+        minPlan: c.minPlan !== 'free' ? c.minPlan.toUpperCase() : undefined,
+      }))
     : []
 
   useInput((input, key) => {
@@ -318,8 +291,8 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    // 2. Command Registry Match (handles /settings, settings, /today, today, /cal, cal, /friends, etc.)
-    const matched = matchCommand(raw)
+    // 2. Command Registry Match (handles /settings, settings, /today, today, /cal, cal, /friends, and any extension command)
+    const matched = matchCommand(raw, userExtensions)
     if (matched) {
       const { command, args } = matched
 

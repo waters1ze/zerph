@@ -3,7 +3,8 @@ import { handleAddCommand } from './commands/add.js'
 import { handleDoneCommand } from './commands/done.js'
 import { handleNoteCommand } from './commands/note.js'
 import { handleChatCommand } from './commands/chat.js'
-import type { ZerfCredentials, ZerfConfig } from '../api.js'
+import { sendAiQuery, type ZerfCredentials, type ZerfConfig } from '../api.js'
+import { dispatchCommand } from '../extensions/loader.js'
 import { GLYPH } from './theme.js'
 
 export type PlanTier = 'free' | 'plus' | 'pro' | 'corp'
@@ -42,7 +43,7 @@ export interface CommandDefinition {
   name: string
   aliases: string[]
   description: string
-  category: 'general' | 'tasks' | 'productivity' | 'system' | 'ai' | 'team'
+  category: 'general' | 'tasks' | 'productivity' | 'system' | 'ai' | 'team' | 'extension'
   minPlan: PlanTier
   glyph: string
   usage?: string
@@ -50,7 +51,7 @@ export interface CommandDefinition {
   handler?: (args: string, ctx: CommandContext) => Promise<CommandResult | void> | CommandResult | void
 }
 
-export const COMMAND_REGISTRY: CommandDefinition[] = [
+export const BASE_COMMAND_REGISTRY: CommandDefinition[] = [
   // ── Navigation & Screens ──
   {
     id: 'settings',
@@ -328,26 +329,6 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     },
   },
   {
-    id: 'search',
-    name: '/search',
-    aliases: ['search', 'поиск', 'серч', 'найти', 'гугл', 'исследуй', 'исследование'],
-    description: 'Entropy AI — глубокий веб-поиск и синтез первоисточников',
-    category: 'ai',
-    minPlan: 'plus',
-    glyph: '🔮',
-    usage: '/search <запрос>',
-  },
-  {
-    id: 'entropy',
-    name: '/entropy',
-    aliases: ['entropy', 'энтропия', 'дипсерч', 'deepsearch'],
-    description: 'Entropy AI — запуск аналитики инсайтов и фактчекинга',
-    category: 'ai',
-    minPlan: 'plus',
-    glyph: '🔮',
-    usage: '/entropy <запрос>',
-  },
-  {
     id: 'chat',
     name: '/chat',
     aliases: ['chat', 'чат', 'спросить', 'сообщение', 'поручить'],
@@ -365,10 +346,275 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
 ]
 
 /**
- * Normalizes user input and matches it against the command registry.
- * Supports commands with or without leading '/', Russian aliases, and argument splitting.
+ * Generic execution runner for ANY extension created by ANY author or user.
  */
-export function matchCommand(raw: string): { command: CommandDefinition; args: string } | null {
+export async function executeExtensionAction(
+  ext: any,
+  cmd: string,
+  args: string,
+  ctx: CommandContext
+): Promise<CommandResult> {
+  const query = args.trim()
+  const extTitle = ext.title || ext.name || 'Плагин'
+
+  // If user just typed command without arguments, show friendly extension info & commands
+  if (!query) {
+    const commandsList = (ext.content?.commands || ext.commands || []).map((c: any) => `• ${c.cmd} — ${c.description || 'Действие'}`)
+    const triggers = (ext.triggers || []).join(', ')
+
+    const details: string[] = [
+      `• Описание: ${ext.description || 'Пользовательский модуль'}`,
+      `• Автор: @${ext.authorName || ext.authorGithub || 'сообщество'}`,
+    ]
+    if (commandsList.length > 0) {
+      details.push('Команды расширения:')
+      details.push(...commandsList.map((c: string) => `  ${c}`))
+    }
+    if (triggers) {
+      details.push(`• Ключевые слова: ${triggers}`)
+    }
+    details.push(`• Использование: ${cmd} <ваш запрос>`)
+
+    return {
+      ok: true,
+      message: `${ext.icon || '◈'} Расширение: ${extTitle} (v${ext.version || '1.0.0'})`,
+      details,
+    }
+  }
+
+  // 1. Dedicated Search / Entropy AI Engine
+  if (ext.id === 'ext_entropy_search' || ext.content?.engine === 'entropy_deep_search') {
+    const apiBase = (ctx.creds.serverUrl || 'https://zeprh.vercel.app').replace(/\/$/, '')
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (ctx.creds.token) headers['x-telegram-auth'] = ctx.creds.token
+    if (ctx.creds.chatId) headers['x-telegram-chat-id'] = ctx.creds.chatId
+
+    try {
+      const res = await fetch(`${apiBase}/api/entropy/search`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query, mode: 'web' }),
+      })
+      const searchData = await res.json()
+
+      if (searchData.success && searchData.result) {
+        const r = searchData.result
+        const details: string[] = []
+        details.push(`◈ Маскот: «${r.tikhonyaComment || 'Синтезировал первоисточники [ ˘ ᴗ ˘ ]'}»`)
+        if (r.sources && r.sources.length > 0) {
+          details.push('─'.repeat(50))
+          details.push('📚 Верифицированные первоисточники:')
+          r.sources.forEach((s: any) => details.push(`  [${s.id}] ${s.title} (${s.domain})`))
+          details.push('─'.repeat(50))
+        }
+        details.push('')
+        r.answer.split('\n').forEach((line: string) => details.push(line))
+        if (r.takeaways && r.takeaways.length > 0) {
+          details.push('')
+          details.push('💡 Главные выводы:')
+          r.takeaways.forEach((t: string) => details.push(`  ◈ ${t}`))
+        }
+
+        return {
+          ok: true,
+          message: `🔮 Entropy AI: «${query}»`,
+          details,
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Custom Webhook / Self-Hosted Endpoint
+  const customEndpoint = ext.hostingUrl || ext.content?.aiEndpoint || ext.content?.endpoint
+  if (customEndpoint && customEndpoint.startsWith('http')) {
+    try {
+      const res = await fetch(customEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: cmd,
+          query,
+          chatId: ctx.creds.chatId,
+          userName: ctx.creds.userName,
+          extensionId: ext.id,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const replyText = data.text || data.message || data.result || JSON.stringify(data, null, 2)
+        return {
+          ok: true,
+          message: `${ext.icon || '◈'} [${extTitle}] Ответ сервиса:`,
+          details: typeof replyText === 'string' ? replyText.split('\n') : [String(replyText)],
+        }
+      }
+    } catch (e: any) {
+      return {
+        ok: false,
+        message: `${GLYPH.cancel} Ошибка обращения к эндпоинту расширения: ${e.message}`,
+      }
+    }
+  }
+
+  // 3. Local Extension Runtime Bridge
+  try {
+    const localDispatched = await dispatchCommand(cmd, query.split(' '), {
+      api: {
+        getTasks: async () => ctx.userData?.tasks || [],
+        createTask: async (title) => ({ title }),
+        getNotes: async () => ctx.userData?.notes || [],
+        createNote: async (title, body) => ({ title, body }),
+      },
+      log: {
+        info: () => {},
+        success: () => {},
+        error: () => {},
+      },
+      config: {
+        get: () => null,
+        set: () => {},
+      },
+    })
+    if (localDispatched) {
+      return {
+        ok: true,
+        message: `${GLYPH.ok} Команда «${cmd}» выполнена локальным модулем ${extTitle}`,
+      }
+    }
+  } catch {}
+
+  // 4. AI Prompt / Custom Skill Execution with Author's AI Instructions
+  const systemPrompt = ext.aiInstructions || ext.content?.aiInstructions || ext.content?.systemPrompt
+  const promptToRun = systemPrompt
+    ? `Ты исполняешь расширение «${extTitle}» для Zerf Note.\nИнструкция автора расширения:\n${systemPrompt}\n\nЗапрос пользователя: ${query}`
+    : `Запрос для модуля «${extTitle}»: ${query}`
+
+  try {
+    const activeModel = ctx.config?.model || 'openai/gpt-oss-120b'
+    const aiRes = await sendAiQuery(ctx.creds, promptToRun, activeModel)
+    return {
+      ok: true,
+      message: `${ext.icon || '◈'} [${extTitle}] Результат:`,
+      details: aiRes.message ? aiRes.message.split('\n') : (aiRes.details || []),
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      message: `${GLYPH.cancel} Ошибка выполнения расширения: ${err.message}`,
+    }
+  }
+}
+
+/**
+ * Dynamically extracts all custom commands, triggers, and skills from ANY installed user extensions.
+ */
+export function extractExtensionCommands(extensions: any[]): CommandDefinition[] {
+  if (!Array.isArray(extensions) || extensions.length === 0) return []
+
+  const result: CommandDefinition[] = []
+  for (const ext of extensions) {
+    if (!ext || typeof ext !== 'object') continue
+
+    const extTitle = ext.title || ext.name || 'Плагин'
+    const extDesc = ext.description || 'Пользовательский модуль'
+    const extIcon = ext.icon || '◈'
+    const extPlan = (ext.minPlan || 'free').toLowerCase() as PlanTier
+
+    const explicitCmds: Array<{ cmd: string; description?: string }> =
+      ext.content?.commands || ext.commands || []
+    const triggers: string[] = ext.triggers || ext.content?.triggers || []
+
+    const commandsToRegister: Array<{ cmd: string; desc: string }> = []
+
+    if (explicitCmds.length > 0) {
+      explicitCmds.forEach(c => {
+        if (c.cmd) {
+          const cleanCmd = c.cmd.startsWith('/') ? c.cmd : `/${c.cmd}`
+          commandsToRegister.push({
+            cmd: cleanCmd,
+            desc: `[${extTitle}] ${c.description || extDesc}`,
+          })
+        }
+      })
+    }
+
+    // Add slash triggers as commands if not already added
+    triggers.forEach(t => {
+      if (t.startsWith('/')) {
+        if (!commandsToRegister.some(c => c.cmd.toLowerCase() === t.toLowerCase())) {
+          commandsToRegister.push({
+            cmd: t,
+            desc: `[${extTitle}] ${extDesc}`,
+          })
+        }
+      }
+    })
+
+    // If no explicit slash command was found, auto-generate standard slash command from ext id/name
+    if (commandsToRegister.length === 0) {
+      const slug = (ext.name || ext.id || 'ext').replace(/^ext_/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '_')
+      commandsToRegister.push({
+        cmd: `/${slug}`,
+        desc: `[${extTitle}] ${extDesc}`,
+      })
+    }
+
+    // Convert to CommandDefinition
+    for (const item of commandsToRegister) {
+      const cleanName = item.cmd.replace(/^\//, '')
+      const aliases = [
+        cleanName,
+        ...(triggers.filter(t => !t.startsWith('/')).map(t => t.toLowerCase())),
+      ]
+
+      result.push({
+        id: `ext_${ext.id}_${cleanName}`,
+        name: item.cmd,
+        aliases,
+        description: item.desc,
+        category: 'extension',
+        minPlan: extPlan,
+        glyph: extIcon,
+        usage: `${item.cmd} <запрос>`,
+        handler: async (args, ctx) => {
+          return await executeExtensionAction(ext, item.cmd, args, ctx)
+        },
+      })
+    }
+  }
+
+  return result
+}
+
+/**
+ * Returns full combined command list (built-in commands + any installed user extension commands).
+ */
+export function getAllCommands(userExtensions: any[] = []): CommandDefinition[] {
+  const extCmds = extractExtensionCommands(userExtensions)
+  const map = new Map<string, CommandDefinition>()
+
+  // Register extension commands first (giving them priority for their unique commands)
+  for (const cmd of extCmds) {
+    map.set(cmd.name.toLowerCase(), cmd)
+  }
+
+  // Register base commands
+  for (const cmd of BASE_COMMAND_REGISTRY) {
+    if (!map.has(cmd.name.toLowerCase())) {
+      map.set(cmd.name.toLowerCase(), cmd)
+    }
+  }
+
+  return Array.from(map.values())
+}
+
+/**
+ * Normalizes user input and matches it against the combined command registry.
+ */
+export function matchCommand(
+  raw: string,
+  userExtensions: any[] = []
+): { command: CommandDefinition; args: string } | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
 
@@ -377,8 +623,9 @@ export function matchCommand(raw: string): { command: CommandDefinition; args: s
   const args = firstSpaceIdx === -1 ? '' : trimmed.slice(firstSpaceIdx + 1).trim()
 
   const normalizedLead = leadWord.toLowerCase().replace(/^\//, '')
+  const allCommands = getAllCommands(userExtensions)
 
-  for (const cmd of COMMAND_REGISTRY) {
+  for (const cmd of allCommands) {
     const cmdNameNoSlash = cmd.name.toLowerCase().replace(/^\//, '')
     if (normalizedLead === cmdNameNoSlash) {
       return { command: cmd, args }
@@ -394,18 +641,25 @@ export function matchCommand(raw: string): { command: CommandDefinition; args: s
 }
 
 /**
- * Searches for command suggestions matching query.
+ * Searches for command suggestions matching query across all base and extension commands.
  */
-export function getCommandSuggestions(query: string, userPlan: string = 'free'): CommandDefinition[] {
+export function getCommandSuggestions(
+  query: string,
+  userPlan: string = 'free',
+  userExtensions: any[] = []
+): CommandDefinition[] {
   const normalized = query.trim().toLowerCase().replace(/^\//, '')
+  const allCommands = getAllCommands(userExtensions)
+
   if (!normalized) {
-    return COMMAND_REGISTRY
+    return allCommands
   }
 
-  return COMMAND_REGISTRY.filter(cmd => {
+  return allCommands.filter(cmd => {
     const nameMatch = cmd.name.toLowerCase().replace(/^\//, '').startsWith(normalized)
     const idMatch = cmd.id.toLowerCase().startsWith(normalized)
     const aliasMatch = cmd.aliases.some(a => a.toLowerCase().replace(/^\//, '').startsWith(normalized))
-    return nameMatch || idMatch || aliasMatch
+    const descMatch = cmd.description.toLowerCase().includes(normalized)
+    return nameMatch || idMatch || aliasMatch || descMatch
   })
 }

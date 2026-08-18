@@ -8,7 +8,7 @@ import { getAllaySpriteLines } from '../mascot.js';
 import { makeUniqueId } from './utils.js';
 import { scaffoldExtension, installExtensionPackage } from '../extensions/registry.js';
 import { setScreen } from './state.js';
-import { matchCommand, isPlanAllowed, COMMAND_REGISTRY, } from './commandRegistry.js';
+import { matchCommand, getCommandSuggestions, getAllCommands, isPlanAllowed, } from './commandRegistry.js';
 import { GLYPH } from './theme.js';
 export const CLOUD_MODELS = [
     { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
@@ -62,52 +62,26 @@ export function Repl({ initialData }) {
             status: c.installed ? 'Готов к работе' : 'Не установлен в PATH',
         })),
     ];
-    // Dynamic extension menu items
-    const customExtItems = (data?.extensions || []).flatMap((ext) => {
-        const extCommands = ext.content?.commands || ext.commands || [];
-        if (Array.isArray(extCommands) && extCommands.length > 0) {
-            return extCommands.map((c) => ({
-                cmd: c.cmd?.startsWith('/') ? c.cmd : `/${c.cmd || ext.name || ext.id}`,
-                label: c.cmd?.startsWith('/') ? c.cmd : `/${c.cmd || ext.name || ext.id}`,
-                desc: `[${ext.title || ext.name || 'Плагин'}] ${c.description || ext.description}`,
-                glyph: '◈',
-            }));
-        }
-        const defaultCmd = ext.id === 'ext_nexus_search' || ext.name === 'zerf-search' ? '/search' : `/ext ${ext.name || ext.id}`;
-        return [{
-                cmd: defaultCmd,
-                label: defaultCmd,
-                desc: `[${ext.title || ext.name || 'Плагин'}] ${ext.description || 'Пользовательский модуль'}`,
-                glyph: '◈',
-            }];
-    });
-    // Registered commands as menu items
-    const baseMenuItems = COMMAND_REGISTRY.map(c => ({
+    // Dynamic combined commands (built-in + all installed user extensions)
+    const userExtensions = data?.extensions || [];
+    const allCommands = getAllCommands(userExtensions);
+    const allMenuItems = allCommands.map(c => ({
         cmd: c.name,
         label: c.name,
         desc: c.description,
         glyph: c.glyph,
         minPlan: c.minPlan !== 'free' ? c.minPlan.toUpperCase() : undefined,
     }));
-    const seenCmds = new Set();
-    const allMenuItems = [];
-    for (const item of [...customExtItems, ...baseMenuItems]) {
-        const key = item.cmd.toLowerCase();
-        if (!seenCmds.has(key)) {
-            seenCmds.add(key);
-            allMenuItems.push(item);
-        }
-    }
     const isSlashOrTyping = (inputVal.startsWith('/') || menuForced || (inputVal.length >= 2 && !inputVal.includes(' '))) && !pickingModel && !pickingChatFriend;
     const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim().replace(/^\//, '');
     const filteredCommands = isSlashOrTyping
-        ? allMenuItems.filter(m => {
-            if (!filterQuery)
-                return true;
-            const cmdClean = m.cmd.toLowerCase().replace(/^\//, '');
-            const labelClean = m.label.toLowerCase().replace(/^\//, '');
-            return cmdClean.startsWith(filterQuery) || labelClean.startsWith(filterQuery) || m.desc.toLowerCase().includes(filterQuery);
-        })
+        ? getCommandSuggestions(filterQuery, userPlan, userExtensions).map(c => ({
+            cmd: c.name,
+            label: c.name,
+            desc: c.description,
+            glyph: c.glyph,
+            minPlan: c.minPlan !== 'free' ? c.minPlan.toUpperCase() : undefined,
+        }))
         : [];
     useInput((input, key) => {
         if (key.ctrl && input === 'c') {
@@ -258,8 +232,8 @@ export function Repl({ initialData }) {
             setSelectedIdx(0);
             return;
         }
-        // 2. Command Registry Match (handles /settings, settings, /today, today, /cal, cal, /friends, etc.)
-        const matched = matchCommand(raw);
+        // 2. Command Registry Match (handles /settings, settings, /today, today, /cal, cal, /friends, and any extension command)
+        const matched = matchCommand(raw, userExtensions);
         if (matched) {
             const { command, args } = matched;
             // Check subscription plan access
