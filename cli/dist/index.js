@@ -5,7 +5,7 @@ import { render } from 'ink';
 import chalk from 'chalk';
 import { App } from './tui/App.js';
 import { loadCredentials, saveCredentials, clearCredentials, fetchUserData, startDeviceAuth, pollDeviceAuth, } from './api.js';
-import { GLYPH } from './tui/theme.js';
+import { GLYPH, ASCII_BANNER } from './tui/theme.js';
 function renderStartupBar(ratio, width = 18) {
     const clamped = Math.max(0, Math.min(1, ratio));
     const filled = Math.round(clamped * width);
@@ -21,10 +21,11 @@ program
 program.action(async () => {
     const creds = loadCredentials();
     if (!creds.token) {
-        console.log(`\n ${GLYPH.logo} ${chalk.bold.white('Zerf CLI — Второй мозг в терминале')}`);
+        console.log(`\n${chalk.hex('#6366f1')(ASCII_BANNER)}`);
+        console.log(`  ${chalk.dim('v2.0.0 · Второй мозг в терминале ·')} ${chalk.hex('#6366f1')('Зерфик ✦ ˘ᴗ˘')}\n`);
         console.log(`   ${chalk.yellow('⊘ Требуется авторизация через аккаунт Zerf Note.')}`);
         console.log(`\n   ${chalk.white('Для первого входа выполните команду:')}`);
-        console.log(`   ${chalk.bold.cyanBright('zerf login')}\n`);
+        console.log(`   ${chalk.bold.hex('#6366f1')('zerf login')}\n`);
         console.log(`   ${chalk.gray('После подтверждения в браузере ваш терминал будет синхронизирован.')}\n`);
         return;
     }

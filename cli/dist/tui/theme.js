@@ -11,8 +11,16 @@ export const c = {
     warn: chalk.yellow,
     subtle: chalk.dim,
 };
+export const ASCII_BANNER = [
+    '  ██████╗ ███████╗██████╗ ███████╗',
+    '  ╚════██╗██╔════╝██╔══██╗██╔════╝',
+    '   █████╔╝█████╗  ██████╔╝█████╗  ',
+    '   ╚═══██╗██╔══╝  ██╔══██╗██╔══╝  ',
+    '  ██████╔╝███████╗██║  ██║██║     ',
+    '  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  Note ✦',
+].join('\n');
 /**
- * Standard ASCII glyphs per specification §2.2 (strictly 0 emojis)
+ * Standard ASCII glyphs per specification §2.2
  */
 export const GLYPH = {
     logo: '❖',

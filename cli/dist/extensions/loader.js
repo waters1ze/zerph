@@ -10,14 +10,35 @@ export async function loadInstalledExtensions(ctx) {
     try {
         const dirs = fs.readdirSync(EXT_DIR);
         for (const d of dirs) {
-            const manifestPath = path.join(EXT_DIR, d, 'zerf.manifest.json');
+            const dirPath = path.join(EXT_DIR, d);
+            const manifestPath = path.join(dirPath, 'zerf.manifest.json');
             if (fs.existsSync(manifestPath)) {
                 try {
                     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-                    const ext = { manifest };
+                    let pluginModule = {};
+                    const entrypoint = manifest.entrypoint || 'index.js';
+                    const entryPath = path.join(dirPath, entrypoint);
+                    if (fs.existsSync(entryPath)) {
+                        try {
+                            const fileUrl = `file://${entryPath.replace(/\\/g, '/')}`;
+                            const mod = await import(fileUrl);
+                            pluginModule = mod.default || mod;
+                        }
+                        catch (loadErr) {
+                            ctx.log.error(`Не удалось импортировать модуль ${d}: ${String(loadErr)}`);
+                        }
+                    }
+                    const ext = {
+                        manifest,
+                        onLoad: pluginModule.onLoad,
+                        onCommand: pluginModule.onCommand,
+                        onHook: pluginModule.onHook,
+                    };
                     loadedExtensions.set(manifest.name || d, ext);
                     if (ext.onLoad) {
-                        await ext.onLoad(ctx).catch(() => { });
+                        await ext.onLoad(ctx).catch(err => {
+                            ctx.log.error(`Ошибка в onLoad ${manifest.name}: ${String(err)}`);
+                        });
                     }
                 }
                 catch { }
@@ -25,6 +46,9 @@ export async function loadInstalledExtensions(ctx) {
         }
     }
     catch { }
+}
+export function getLoadedExtensions() {
+    return loadedExtensions;
 }
 export function findExtensionByCommand(cmd) {
     const cleanCmd = cmd.startsWith('/') ? cmd : `/${cmd}`;
@@ -35,4 +59,29 @@ export function findExtensionByCommand(cmd) {
         }
     }
     return null;
+}
+export async function dispatchCommand(cmd, args, ctx) {
+    const match = findExtensionByCommand(cmd);
+    if (!match || !match.ext.onCommand)
+        return false;
+    try {
+        await match.ext.onCommand(cmd, args, ctx);
+        return true;
+    }
+    catch (err) {
+        ctx.log.error(`Ошибка при выполнении команды ${cmd}: ${String(err)}`);
+        return false;
+    }
+}
+export async function fireHook(event, data, ctx) {
+    for (const ext of loadedExtensions.values()) {
+        if (ext.onHook && ext.manifest.hooks?.includes(event)) {
+            try {
+                await ext.onHook(event, data, ctx);
+            }
+            catch (err) {
+                ctx.log.error(`Ошибка хука ${event} в ${ext.manifest.name}: ${String(err)}`);
+            }
+        }
+    }
 }

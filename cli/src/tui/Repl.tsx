@@ -9,29 +9,38 @@ import {
   loadConfig,
   saveConfig,
   type ZerfCredentials,
-  type ZerfConfig
+  type ZerfConfig,
 } from '../api.js'
 import { detectInstalledClis, runLocalCliBridge, type DetectedCli } from '../local-cli.js'
 import { getAllaySpriteLines, GLYPHS } from '../mascot.js'
-import { makeUniqueId, getInputHistory, pushInputHistory } from './utils.js'
+import { makeUniqueId } from './utils.js'
 import { scaffoldExtension, installExtensionPackage, getInstalledExtensions } from '../extensions/registry.js'
-import { updateReplState } from './state.js'
+import { setScreen, updateReplState } from './state.js'
+import {
+  matchCommand,
+  getCommandSuggestions,
+  isPlanAllowed,
+  COMMAND_REGISTRY,
+  type CommandDefinition,
+} from './commandRegistry.js'
+import { GLYPH } from './theme.js'
 
-interface LogEntry {
+export interface LogEntry {
   id: string
   type: 'user' | 'assistant' | 'error' | 'system'
   text: string
   details?: string[]
 }
 
-interface MenuItem {
+export interface MenuItem {
   cmd: string
   label: string
   desc: string
   glyph: string
+  minPlan?: string
 }
 
-interface AiModelOption {
+export interface AiModelOption {
   id: string
   name: string
   desc: string
@@ -39,71 +48,12 @@ interface AiModelOption {
   status?: string
 }
 
-const CLOUD_MODELS: AiModelOption[] = [
+export const CLOUD_MODELS: AiModelOption[] = [
   { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
   { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
   { id: 'groq/compound', name: 'Groq Compound Router', desc: 'Авто-роутинг оптимальной модели под контекст', type: 'cloud' },
   { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
 ]
-
-const BASE_MENU_ITEMS: MenuItem[] = [
-  { cmd: '/today', label: '/today', desc: 'Задачи, привычки и цели на сегодня с таймером', glyph: '❖' },
-  { cmd: '/cal', label: '/cal', desc: 'Календарь задач по дням недели с расписанием', glyph: '◫' },
-  { cmd: '/tasks', label: '/tasks', desc: 'Полный список всех активных и завершенных задач', glyph: '❖' },
-  { cmd: '/notes', label: '/notes', desc: 'Все сохранённые заметки и конспекты', glyph: '≡' },
-  { cmd: '/goals', label: '/goals', desc: 'Трекинг долгосрочных целей и шкала прогресса', glyph: '◈' },
-  { cmd: '/habits', label: '/habits', desc: 'Привычки, прогресс-бары и серии дней', glyph: '●' },
-  { cmd: '/focus 5', label: '/focus 5', desc: '5 минут (быстрый микро-спринт)', glyph: '⊘' },
-  { cmd: '/focus 10', label: '/focus 10', desc: '10 минут (короткий фокус-блок)', glyph: '⊘' },
-  { cmd: '/focus 15', label: '/focus 15', desc: '15 минут (интенсивная задача)', glyph: '⊘' },
-  { cmd: '/focus 20', label: '/focus 20', desc: '20 минут (рабочий интервал)', glyph: '⊘' },
-  { cmd: '/focus 25', label: '/focus 25', desc: '25 минут (классический Pomodoro)', glyph: '⊘' },
-  { cmd: '/focus 45', label: '/focus 45', desc: '45 минут (глубокое погружение)', glyph: '⊘' },
-  { cmd: '/chat', label: '/chat', desc: 'Диалог с друзьями / поручение задачи', glyph: '◈' },
-  { cmd: '/friends', label: '/friends', desc: 'Список команды/друзей и ссылка-приглашение', glyph: '◈' },
-  { cmd: '/ext', label: '/ext', desc: 'Каталог расширений и маркетплейс Zerf Ext', glyph: '◈' },
-  { cmd: '/ext create ', label: '/ext create <имя>', desc: 'Создать новое расширение (шаблон плагина)', glyph: '▸' },
-  { cmd: '/add ', label: '/add <текст>', desc: 'Создать задачу с умным распознаванием даты', glyph: '▸' },
-  { cmd: '/done ', label: '/done <имя>', desc: 'Завершить задачу по названию', glyph: '✔' },
-  { cmd: '/note ', label: '/note <текст>', desc: 'Быстрая заметка в базу знаний', glyph: '≡' },
-  { cmd: '/model', label: '/model', desc: 'Выбор нейросети (GPT-OSS, Compound) или CLI', glyph: '◈' },
-  { cmd: '/settings', label: '/settings', desc: 'Настройки профиля, параметров и подключений', glyph: '⚙' },
-  { cmd: '/limits', label: '/limits', desc: 'Статус лимитов и квот на текущие сутки', glyph: '●' },
-  { cmd: '/stats', label: '/stats', desc: 'Аналитика продуктивности за 7 дней', glyph: '●' },
-  { cmd: '/clear', label: '/clear', desc: 'Очистить историю диалога', glyph: '─' },
-  { cmd: '/help', label: '/help', desc: 'Справка по всем возможностям', glyph: '?' },
-  { cmd: '/exit', label: '/exit', desc: 'Выйти из Zerf CLI', glyph: '✕' },
-]
-
-function getCountdownText(dueTime?: string | null, status?: string): string {
-  if (status === 'done') return '✔ Выполнено'
-  if (!dueTime) return 'без точного времени'
-
-  const [dueHours, dueMinutes] = dueTime.split(':').map(Number)
-  if (isNaN(dueHours) || isNaN(dueMinutes)) return dueTime
-
-  const now = new Date()
-  const target = new Date()
-  target.setHours(dueHours, dueMinutes, 0, 0)
-
-  const diffMs = target.getTime() - now.getTime()
-  const diffMins = Math.round(diffMs / 60000)
-
-  if (diffMins > 60) {
-    const h = Math.floor(diffMins / 60)
-    const m = diffMins % 60
-    return `через ${h} ч ${m > 0 ? `${m} мин` : ''}`
-  } else if (diffMins > 0) {
-    return `через ${diffMins} мин`
-  } else if (diffMins === 0) {
-    return `прямо сейчас!`
-  } else {
-    const passed = Math.abs(diffMins)
-    const h = Math.floor(passed / 60)
-    const m = passed % 60
-    return `просрочено на ${h > 0 ? `${h} ч ` : ''}${m} мин`
-  }
-}
 
 function renderProgressBar(ratio: number, length = 12): string {
   const clamped = Math.max(0, Math.min(1, isNaN(ratio) ? 0 : ratio))
@@ -131,6 +81,8 @@ export function Repl({ initialData }: { initialData?: any }) {
   const [wingFrame, setWingFrame] = useState(0)
   const [actionProgress, setActionProgress] = useState<{ label: string; ratio: number } | null>(null)
 
+  const userPlan = (data?.user?.plan || creds.plan || 'corp').toLowerCase()
+
   useEffect(() => {
     try {
       const found = detectInstalledClis()
@@ -154,6 +106,7 @@ export function Repl({ initialData }: { initialData?: any }) {
     })),
   ]
 
+  // Dynamic extension menu items
   const customExtItems: MenuItem[] = (data?.extensions || []).flatMap((ext: any) => {
     const extCommands = ext.content?.commands || ext.commands || []
     if (Array.isArray(extCommands) && extCommands.length > 0) {
@@ -173,17 +126,38 @@ export function Repl({ initialData }: { initialData?: any }) {
     }]
   })
 
-  const allMenuItems = [...BASE_MENU_ITEMS, ...customExtItems]
+  // Registered commands as menu items
+  const baseMenuItems: MenuItem[] = COMMAND_REGISTRY.map(c => ({
+    cmd: c.name,
+    label: c.name,
+    desc: c.description,
+    glyph: c.glyph,
+    minPlan: c.minPlan !== 'free' ? c.minPlan.toUpperCase() : undefined,
+  }))
 
-  const isSlash = (inputVal.startsWith('/') || menuForced) && !pickingModel && !pickingChatFriend
-  const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim()
-  const filteredCommands = isSlash
-    ? allMenuItems.filter(m => !filterQuery || m.cmd.toLowerCase().startsWith(filterQuery))
+  const allMenuItems = [...baseMenuItems, ...customExtItems]
+
+  const isSlashOrTyping = (inputVal.startsWith('/') || menuForced || (inputVal.length >= 2 && !inputVal.includes(' '))) && !pickingModel && !pickingChatFriend
+  const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim().replace(/^\//, '')
+  
+  const filteredCommands = isSlashOrTyping
+    ? allMenuItems.filter(m => {
+        if (!filterQuery) return true
+        const cmdClean = m.cmd.toLowerCase().replace(/^\//, '')
+        const labelClean = m.label.toLowerCase().replace(/^\//, '')
+        return cmdClean.startsWith(filterQuery) || labelClean.startsWith(filterQuery) || m.desc.toLowerCase().includes(filterQuery)
+      })
     : []
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       exit()
+      return
+    }
+
+    if (key.ctrl && input === 'l') {
+      console.clear()
+      setHistory([])
       return
     }
 
@@ -260,7 +234,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       }
     }
 
-    if (isSlash && filteredCommands.length > 0) {
+    if (isSlashOrTyping && filteredCommands.length > 0) {
       if (key.upArrow) {
         setSelectedIdx(prev => (prev > 0 ? prev - 1 : filteredCommands.length - 1))
         return
@@ -300,8 +274,8 @@ export function Repl({ initialData }: { initialData?: any }) {
     let raw = val.trim()
     if (!raw) return
 
-    // If menu was open and user pressed enter on selected item
-    if (isSlash && filteredCommands.length > 0 && (menuForced || raw === '/menu' || raw === '/')) {
+    // If dropdown menu was open and user pressed enter on an autocomplete item
+    if (isSlashOrTyping && filteredCommands.length > 0 && (menuForced || raw === '/menu' || raw === '/' || raw === 'menu')) {
       const selectedItem = filteredCommands[selectedIdx]
       if (selectedItem) {
         if (selectedItem.cmd.endsWith(' ')) {
@@ -318,181 +292,91 @@ export function Repl({ initialData }: { initialData?: any }) {
     setHistory(h => [...h, { id: makeUniqueId(), type: 'user', text: raw }])
     setCliCount(c => c + 1)
 
-    if (raw === '/exit' || raw === '/quit') {
+    // 1. Built-in exit & clear
+    if (raw === '/exit' || raw === '/quit' || raw === 'exit' || raw === 'quit') {
       exit()
       return
     }
 
-    if (raw === '/clear') {
+    if (raw === '/clear' || raw === 'clear' || raw === 'cls') {
       console.clear()
       setHistory([])
       return
     }
 
-    if (raw === '/menu') {
+    if (raw === '/menu' || raw === 'menu') {
       setMenuForced(true)
       setSelectedIdx(0)
       return
     }
 
-    if (raw === '/model' || raw === '/ai') {
-      setPickingModel(true)
-      return
-    }
+    // 2. Command Registry Match (handles /settings, settings, /today, today, /cal, cal, /friends, etc.)
+    const matched = matchCommand(raw)
+    if (matched) {
+      const { command, args } = matched
 
-    if (raw === '/settings') {
-      const currentModelObj = allAvailableModels.find(m => m.id === config.model) || allAvailableModels[0]
-      const installedCliCount = detectedClis.filter(c => c.installed).length
-      setHistory(h => [
-        ...h,
-        {
-          id: makeUniqueId(),
-          type: 'assistant',
-          text: '⚙ Настройки Zerf CLI:',
-          details: [
-            `• Активная модель / CLI: ${currentModelObj?.name} (сменить: /model)`,
-            `• Локальные CLI на ПК:  Обнаружено: ${installedCliCount} (agy, claude, opencode, gh, ollama)`,
-            `• Тема оформления:      Strict Cyan (Монохром + Тихоня)`,
-            `• Автосинхронизация:    Включена (каждые 30 сек)`,
-            `• Telegram Бот:         Подключен (@Zerph_bot)`,
-            `• Текущий тариф:        ${(data?.user?.plan || 'corp').toUpperCase()}`,
-          ],
-        },
-      ])
-      return
-    }
+      // Check subscription plan access
+      if (!isPlanAllowed(userPlan, command.minPlan)) {
+        setHistory(h => [
+          ...h,
+          {
+            id: makeUniqueId(),
+            type: 'error',
+            text: `${GLYPH.cancel} Команда «${command.name}» доступна на тарифе ${command.minPlan.toUpperCase()}`,
+            details: [
+              `Ваш текущий тариф: ${userPlan.toUpperCase()}`,
+              `Оформить подписку для снятия ограничений: https://t.me/Zerph_bot?start=buy`,
+            ],
+          },
+        ])
+        return
+      }
 
-    if (raw === '/help' || raw === '?') {
-      setHistory(h => [
-        ...h,
-        {
-          id: makeUniqueId(),
-          type: 'assistant',
-          text: '❖ Быстрые команды Zerf CLI:',
-          details: [
-            '/menu           — Интерактивное меню со всеми разделами (стрелки ↑/↓)',
-            '/today          — Задачи, привычки и цели на сегодня с отсчетом',
-            '/cal            — 7-дневный календарь с расписанием задач по дням',
-            '/tasks          — Полный список задач (активные и выполненные)',
-            '/notes          — Все сохранённые заметки и конспекты',
-            '/goals          — Трекинг целей и прогресс',
-            '/habits         — Привычки, шкалы прогресса и стрик',
-            '/focus [минуты] — Сфера концентрации Pomodoro с таймером',
-            '/chat <текст>   — Чат с друзьями / поручение задачи',
-            '/friends        — Список команды и персональная ссылка-приглашение',
-            '/ext            — Маркетплейс и каталог расширений',
-            '/ext create     — Создать новый плагин',
-            '/model          — Выбор нейросети (GPT-OSS, Compound, agy, claude)',
-            '/settings       — Окно параметров и настроек',
-            '/limits         — Статус использования лимитов',
-            '/clear          — Очистить историю диалога',
-            '/exit           — Выйти из CLI',
-          ],
-        },
-      ])
-      return
-    }
+      // If command maps directly to a full-screen TUI view
+      if (command.screen) {
+        setScreen(command.screen)
+        return
+      }
 
-    // ── Tasks list (/tasks) ──
-    if (raw === '/tasks' || raw === '/задачи_все') {
-      const tasks = data?.tasks || []
-      if (tasks.length === 0) {
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Задач пока нет. Добавьте первую через /add <текст>' }])
-      } else {
-        const pending = tasks.filter((t: any) => t.status !== 'done')
-        const done = tasks.filter((t: any) => t.status === 'done')
-        const lines: string[] = []
-        lines.push(`Активные задачи (${pending.length}):`)
-        pending.slice(0, 10).forEach((t: any) => {
-          const due = t.dueDate ? ` [на ${t.dueDate}${t.dueTime ? ` в ${t.dueTime}` : ''}]` : ''
-          lines.push(`  • [◌] ${t.title}${due}`)
-        })
-        if (done.length > 0) {
-          lines.push(`Завершенные задачи (${done.length}):`)
-          done.slice(0, 5).forEach((t: any) => {
-            lines.push(`  • [✔] ${t.title}`)
+      // If command has an action handler
+      if (command.handler) {
+        setActionProgress({ label: `Выполнение ${command.name}...`, ratio: 0.5 })
+        try {
+          const res = await command.handler(args, {
+            creds,
+            config,
+            userData: data,
+            rawInput: raw,
+            exitApp: exit,
           })
+          setActionProgress({ label: 'Готово', ratio: 1.0 })
+          setTimeout(() => setActionProgress(null), 600)
+
+          if (res) {
+            setHistory(h => [
+              ...h,
+              {
+                id: makeUniqueId(),
+                type: res.ok ? 'assistant' : 'error',
+                text: res.message,
+                details: res.details,
+              },
+            ])
+          }
+        } catch (err: any) {
+          setActionProgress(null)
+          setHistory(h => [
+            ...h,
+            { id: makeUniqueId(), type: 'error', text: `Ошибка выполнения: ${err.message}` },
+          ])
         }
-        setHistory(h => [
-          ...h,
-          { id: makeUniqueId(), type: 'assistant', text: `❖ База задач Zerf (${tasks.length} всего):`, details: lines },
-        ])
+        return
       }
-      return
     }
 
-    // ── Notes list (/notes) ──
-    if (raw === '/notes' || raw === '/заметки') {
-      const notes = data?.notes || []
-      if (notes.length === 0) {
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Заметок пока нет. Создайте через /note <текст>' }])
-      } else {
-        const lines = notes.slice(0, 10).map((n: any) => `• ≡ ${n.title || n.body} (${n.createdAt ? n.createdAt.slice(0, 10) : 'сегодня'})`)
-        setHistory(h => [
-          ...h,
-          { id: makeUniqueId(), type: 'assistant', text: `≡ Сохранённые заметки (${notes.length}):`, details: lines },
-        ])
-      }
-      return
-    }
-
-    // ── Goals list (/goals) ──
-    if (raw === '/goals' || raw === '/цели') {
-      const goals = data?.goals || []
-      if (goals.length === 0) {
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Цели пока не заданы.' }])
-      } else {
-        const lines = goals.map((g: any) => {
-          const prog = typeof g.progress === 'number' ? g.progress : 50
-          return `• ◈ ${g.title.padEnd(24)} ${renderProgressBar(prog / 100, 8)} ${prog}%`
-        })
-        setHistory(h => [
-          ...h,
-          { id: makeUniqueId(), type: 'assistant', text: `◈ Долгосрочные цели (${goals.length}):`, details: lines },
-        ])
-      }
-      return
-    }
-
-    // ── Habits list (/habits) ──
-    if (raw === '/habits' || raw === '/привычки') {
-      const habits = data?.habits || []
-      if (habits.length === 0) {
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'Привычки пока не настроены.' }])
-      } else {
-        const lines = habits.map((hb: any) => {
-          const cur = hb.currentStreak || hb.progress || 3
-          const target = hb.targetDays || 10
-          return `• ● ${hb.title.padEnd(18)} ${renderProgressBar(cur / target, 8)} ${cur}/${target} · стрик ${cur} дн.`
-        })
-        setHistory(h => [
-          ...h,
-          { id: makeUniqueId(), type: 'assistant', text: `● Трекер привычек (${habits.length}):`, details: lines },
-        ])
-      }
-      return
-    }
-
-    // ── Extensions commands (/ext) ──
-    if (raw === '/ext' || raw === '/extensions') {
-      const installed = getInstalledExtensions()
-      const lines = [
-        `Установлено расширений: ${installed.length}`,
-        ...installed.map(i => `  • ◈ ${i.name} v${i.version} — ${i.description}`),
-        '',
-        'Доступные команды:',
-        '  • /ext create <название> — создать каркас нового плагина',
-        '  • /ext install <имя>    — установить расширение из каталога',
-      ]
-      setHistory(h => [
-        ...h,
-        { id: makeUniqueId(), type: 'assistant', text: '◈ Маркетплейс расширений Zerf Ext:', details: lines },
-      ])
-      return
-    }
-
-    if (raw.startsWith('/ext create')) {
-      const name = raw.replace('/ext create', '').trim() || 'my-plugin'
+    // 3. Extension Management commands: /ext create, /ext install
+    if (raw.startsWith('/ext create') || raw.startsWith('ext create')) {
+      const name = raw.replace(/^(\/ext|ext)\s+create\s*/i, '').trim() || 'my-plugin'
       const { dir } = scaffoldExtension(name, 'Пользовательский модуль расширения Zerf')
       setHistory(h => [
         ...h,
@@ -506,8 +390,8 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    if (raw.startsWith('/ext install')) {
-      const name = raw.replace('/ext install', '').trim()
+    if (raw.startsWith('/ext install') || raw.startsWith('ext install')) {
+      const name = raw.replace(/^(\/ext|ext)\s+install\s*/i, '').trim()
       if (!name) {
         setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: 'Укажите название расширения: /ext install <name>' }])
         return
@@ -528,9 +412,9 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    // ── Extension: Entropy AI Search (Perplexity style Deep Web Search) ──
+    // 4. Entropy AI Search & Deep Research (Perplexity style)
     if (raw.startsWith('/search') || raw.startsWith('/entropy') || raw.startsWith('/энтропия') || raw.startsWith('/серч') || raw.startsWith('/поиск')) {
-      const query = raw.replace(/^(\/search|\/entropy|\/энтропия|\/серч|\/поиск)/, '').trim()
+      const query = raw.replace(/^(\/search|\/entropy|\/энтропия|\/серч|\/поиск)\s*/i, '').trim()
       if (!query) {
         setHistory(h => [
           ...h,
@@ -539,7 +423,6 @@ export function Repl({ initialData }: { initialData?: any }) {
             type: 'assistant',
             text: '🔮 Расширение: Entropy AI Search & Deep Research (v1.0.0)',
             details: [
-              '• Автор: @waters1ze (GitHub: waters1ze/Entropy)',
               '• Использование: /search <запрос> или /entropy <запрос>',
               '• Пример: /search архитектура MoE vs Dense в LLM 2026',
               '• Тихоня выполнит глубокий поиск, верификацию первоисточников и синтез цитат [1][2].',
@@ -569,10 +452,10 @@ export function Repl({ initialData }: { initialData?: any }) {
             headers,
             body: JSON.stringify({ query, mode: 'web' }),
           })
-          const data = await res.json()
+          const searchData = await res.json()
 
-          if (data.success && data.result) {
-            const r = data.result
+          if (searchData.success && searchData.result) {
+            const r = searchData.result
             answerText = `🔮 Entropy AI: «${query}»`
             details.push(`◈ Тихоня: «${r.tikhonyaComment || 'Синтезировал первоисточники [ ˘ ᴗ ˘ ]'}»`)
             if (r.sources && r.sources.length > 0) {
@@ -592,20 +475,16 @@ export function Repl({ initialData }: { initialData?: any }) {
               r.takeaways.forEach((t: string) => details.push(`  ◈ ${t}`))
             }
           }
-        } catch {
-          // Fallback to local AI synthesis
-        }
+        } catch {}
 
         if (details.length === 0) {
-          const searchPrompt = `Ты — ведущий исследовательский поисково-аналитический движок Entropy AI (в стиле Perplexity) с маскотом Тихоня.
+          const searchPrompt = `Ты — ведущий исследовательский поисково-аналитический движок Entropy AI с маскотом Тихоня.
 Пользователь ищет: "${query}".
 
 Сформируй глубокий структурированный ответ со следующей структурой:
 1. Краткий прямой ответ (Direct Summary).
 2. Подробный разбор с цитатами и фактами. Помечай факты сносками [1], [2], [3].
-3. Список проверенных источников (Sources & References):
-   [1] Источник 1 (Название и контекст)
-   [2] Источник 2 (Название и контекст)
+3. Список проверенных источников (Sources & References).
 4. Ключевые выводы (Key takeaways).
 5. Реплика Тихони [ ˘ ᴗ ˘ ].`
 
@@ -638,264 +517,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    if (raw === '/today' || raw === '/задачи') {
-      const tasks = data?.tasks || []
-      const todayStr = new Date().toISOString().slice(0, 10)
-      const todayTasks = tasks.filter((t: any) => !t.dueDate || t.dueDate.startsWith(todayStr))
-      const doneCount = todayTasks.filter((t: any) => t.status === 'done').length
-      const progressRatio = todayTasks.length > 0 ? doneCount / todayTasks.length : 0
-      const progressBar = renderProgressBar(progressRatio, 10)
-
-      if (todayTasks.length === 0) {
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: 'На сегодня задач нет! Отличный день для отдыха.' }])
-      } else {
-        const lines = todayTasks.map((t: any) => {
-          const isDone = t.status === 'done'
-          const check = isDone ? `${GLYPHS.taskDone} ` : `${GLYPHS.taskTodo} `
-          const countdown = getCountdownText(t.dueTime, t.status)
-          const timeStr = t.dueTime ? ` [${t.dueTime}]` : ''
-          const prio = t.priority === 'urgent' ? ' [Срочно]' : t.priority === 'high' ? ' [Высокий]' : ''
-          return `${check} ${t.title}${timeStr}${prio}  →  ${countdown}`
-        })
-        setHistory(h => [
-          ...h,
-          {
-            id: makeUniqueId(),
-            type: 'assistant',
-            text: `❖ Задачи на сегодня (${doneCount}/${todayTasks.length}) ${progressBar} ${Math.round(progressRatio * 100)}%:`,
-            details: lines,
-          },
-        ])
-      }
-      return
-    }
-
-    // ── Rich 7-day calendar with real tasks (/cal) ──
-    if (raw === '/cal' || raw === '/calendar' || raw === '/календарь') {
-      const today = new Date()
-      const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-      const monthNames = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
-      const tasks = data?.tasks || []
-      const details: string[] = []
-
-      for (let i = 0; i < 7; i++) {
-        const d = new Date()
-        d.setDate(today.getDate() + i)
-        const dateStr = d.toISOString().slice(0, 10)
-        const dayLabel = dayNames[d.getDay()]
-        const dayNum = d.getDate()
-        const monthName = monthNames[d.getMonth()]
-        const dayTasks = tasks.filter((t: any) => t.dueDate && t.dueDate.startsWith(dateStr))
-        const isToday = i === 0
-        const isTomorrow = i === 1
-        const dayTag = isToday ? ' (Сегодня)' : isTomorrow ? ' (Завтра)' : ''
-        const countTag = dayTasks.length > 0 ? ` · ${dayTasks.length} ${dayTasks.length === 1 ? 'дело' : 'дел(а)'}` : ''
-
-        details.push(`• [${dayLabel} ${dayNum} ${monthName}]${dayTag}${countTag}`)
-        if (dayTasks.length === 0) {
-          details.push(`  └─ нет запланированных задач`)
-        } else {
-          dayTasks.forEach((t: any) => {
-            const check = t.status === 'done' ? '[✔]' : '[◌]'
-            const timeStr = t.dueTime ? ` [${t.dueTime}]` : ''
-            const prio = t.priority === 'urgent' ? ' [Срочно]' : ''
-            details.push(`  └─ ${check} ${t.title}${timeStr}${prio}`)
-          })
-        }
-      }
-
-      setHistory(h => [
-        ...h,
-        {
-          id: makeUniqueId(),
-          type: 'assistant',
-          text: `◫ Календарь задач на 7 дней (${today.getDate()} ${monthNames[today.getMonth()]} — ${new Date(today.getTime() + 6 * 86400000).getDate()} ${monthNames[new Date(today.getTime() + 6 * 86400000).getMonth()]}):`,
-          details,
-        },
-      ])
-      return
-    }
-
-    if (raw.startsWith('/chat')) {
-      const rest = raw.replace(/^\/chat\s*/i, '').trim()
-      const friends = data?.friends || []
-      const chatId = data?.user?.chatId || ''
-
-      if (!rest) {
-        if (friends.length > 0) {
-          setPickingChatFriend(true)
-          setSelectedFriendIdx(0)
-          return
-        } else {
-          setHistory(h => [
-            ...h,
-            {
-              id: makeUniqueId(),
-              type: 'assistant',
-              text: '◈ Командный чат & Друзья (0):',
-              details: [
-                'У вас пока нет добавленных друзей для диалога.',
-                `▸ Ваша ссылка для добавления: https://t.me/Zerph_bot?start=invite_${chatId}`,
-              ],
-            },
-          ])
-          return
-        }
-      }
-
-      let targetFriend = activeChatTarget
-      let messageText = rest
-
-      if (rest.startsWith('@')) {
-        const parts = rest.split(' ')
-        const targetUsername = parts[0].replace('@', '').toLowerCase()
-        messageText = parts.slice(1).join(' ')
-        targetFriend = friends.find((f: any) => (f.username || '').toLowerCase() === targetUsername || f.name.toLowerCase() === targetUsername) || { name: `@${targetUsername}`, username: targetUsername }
-      }
-
-      setActionProgress({ label: `Отправка сообщения ${targetFriend?.name || 'собеседнику'}...`, ratio: 0.6 })
-      try {
-        await mutateItem(creds, {
-          action: 'create_task',
-          title: messageText,
-          priority: 'medium',
-          isShared: true,
-          assignees: targetFriend?.chatId ? [String(targetFriend.chatId)] : (targetFriend?.username ? [targetFriend.username] : []),
-        })
-        setActionProgress({ label: 'Сообщение доставлено', ratio: 1.0 })
-        setTimeout(() => setActionProgress(null), 1000)
-        setHistory(h => [
-          ...h,
-          {
-            id: makeUniqueId(),
-            type: 'assistant',
-            text: `◈ Сообщение / поручение отправлено ${targetFriend?.name || 'другу'}!`,
-            details: [`Текст: «${messageText}»`, 'Синхронизировано в командный чат Zerf Note и Telegram.'],
-          },
-        ])
-      } catch (err: any) {
-        setActionProgress(null)
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'error', text: `Ошибка: ${err.message}` }])
-      }
-      return
-    }
-
-    if (raw === '/friends') {
-      const friends = data?.friends || []
-      const chatId = data?.user?.chatId || ''
-      if (friends.length === 0) {
-        setHistory(h => [
-          ...h,
-          {
-            id: makeUniqueId(),
-            type: 'assistant',
-            text: '◈ Список друзей (0):',
-            details: [
-              'У вас пока нет добавленных друзей.',
-              `▸ Ссылка-приглашение: https://t.me/Zerph_bot?start=invite_${chatId}`,
-            ],
-          },
-        ])
-      } else {
-        const friendLines = friends.map((f: any) => `• ${f.name} (@${f.username || 'нет юзернейма'}) — [В сети]`)
-        setHistory(h => [
-          ...h,
-          {
-            id: makeUniqueId(),
-            type: 'assistant',
-            text: `◈ Список друзей (${friends.length}):`,
-            details: [...friendLines, `▸ Ссылка: https://t.me/Zerph_bot?start=invite_${chatId}`],
-          },
-        ])
-      }
-      return
-    }
-
-    if (raw === '/limits') {
-      const l = data?.limits
-      const planName = (data?.user?.plan || 'corp').toUpperCase()
-      const maxCli = typeof l?.maxCli === 'number' ? l.maxCli : 8000
-      const cliBar = renderProgressBar(cliCount / maxCli, 10)
-      setHistory(h => [
-        ...h,
-        {
-          id: makeUniqueId(),
-          type: 'assistant',
-          text: `● Статус лимитов на сегодня (${planName}):`,
-          details: [
-            `• Запросы CLI:       ${cliCount} / ${l?.maxCli || '∞'} ${cliBar}`,
-            `• Распознав. голоса: ${Math.floor((l?.voiceUsedSeconds || 0) / 60)} / ${l?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(l?.maxVoiceSeconds / 60)} мин`,
-            `• ИИ диалоги:        ${l?.chatUsed || 0} / ${l?.maxChat || '∞'}`,
-            `• Активные заметки:  ${l?.notesCount || 0} / ${l?.maxNotes || '∞'}`,
-          ],
-        },
-      ])
-      return
-    }
-
-    if (raw.startsWith('/focus')) {
-      const mins = parseInt(raw.split(' ')[1] || '25', 10)
-      updateReplState({ screen: 'focus', focusMinutes: mins })
-      return
-    }
-
-    if (raw.startsWith('/done')) {
-      const query = raw.replace('/done', '').trim().toLowerCase()
-      const tasks = data?.tasks || []
-      const match = tasks.find((t: any) => t.status !== 'done' && t.title.toLowerCase().includes(query))
-      if (match) {
-        setActionProgress({ label: `Завершение «${match.title}»...`, ratio: 0.6 })
-        await mutateItem(creds, { action: 'toggle_task', id: match.id })
-        match.status = 'done'
-        setActionProgress({ label: `Задача «${match.title}» закрыта`, ratio: 1.0 })
-        setTimeout(() => setActionProgress(null), 1000)
-        setHistory(h => [
-          ...h,
-          { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${match.title}» успешно завершена!` },
-        ])
-      } else {
-        setHistory(h => [...h, { id: makeUniqueId(), type: 'assistant', text: `Задача не найдена по запросу «${query}»` }])
-      }
-      return
-    }
-
-    if (raw.startsWith('/add')) {
-      const text = raw.replace('/add', '').trim()
-      setActionProgress({ label: `Сохранение задачи «${text}»...`, ratio: 0.6 })
-      await mutateItem(creds, {
-        action: 'create_task',
-        title: text,
-        dueDate: new Date().toISOString().slice(0, 10),
-        priority: 'medium',
-        rawText: text,
-      })
-      setActionProgress({ label: `Задача сохранена в расписание`, ratio: 1.0 })
-      setTimeout(() => setActionProgress(null), 1000)
-      setHistory(h => [
-        ...h,
-        { id: makeUniqueId(), type: 'assistant', text: `✔ Задача «${text}» добавлена на сегодня!` },
-      ])
-      return
-    }
-
-    if (raw.startsWith('/note')) {
-      const text = raw.replace('/note', '').trim()
-      setActionProgress({ label: `Синхронизация заметки...`, ratio: 0.6 })
-      await mutateItem(creds, {
-        action: 'create_note',
-        title: text.length > 40 ? text.slice(0, 37) + '…' : text,
-        body: text,
-      })
-      setActionProgress({ label: `Заметка сохранена в базу`, ratio: 1.0 })
-      setTimeout(() => setActionProgress(null), 1000)
-      setHistory(h => [
-        ...h,
-        { id: makeUniqueId(), type: 'assistant', text: `✔ Заметка «${text}» сохранена в базу.` },
-      ])
-      return
-    }
-
-    // ── Smart Natural Language Summaries Detection (e.g. "выдай мне сводку на след месяц по задачам") ──
+    // 5. Smart Natural Language Summaries Detection (e.g. "выдай мне сводку на след месяц по задачам")
     const lower = raw.toLowerCase()
     const isSummaryRequest =
       (lower.includes('сводк') || lower.includes('отчет') || lower.includes('итог') || lower.includes('план')) &&
@@ -956,7 +578,7 @@ export function Repl({ initialData }: { initialData?: any }) {
       return
     }
 
-    // AI Query / Free text
+    // 6. AI Query / Free text assistant
     try {
       const currentModel = config.model || 'openai/gpt-oss-120b'
       setActionProgress({ label: `Генерация ответа через ${currentModel}...`, ratio: 0.45 })
@@ -998,7 +620,7 @@ export function Repl({ initialData }: { initialData?: any }) {
 
   return (
     <Box flexDirection="column" paddingX={1} width={90}>
-      {/* ── Single Clean Top Bar (NO DUPLICATES) ── */}
+      {/* ── Top Bar ── */}
       <Box justifyContent="space-between" width={86} marginY={0}>
         <Box gap={1}>
           <Text bold color="cyanBright">◈</Text>
@@ -1013,7 +635,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       </Box>
 
-      {/* ── Pixel-Perfect Hero Box (Built with native Ink rounded borders) ── */}
+      {/* ── Hero Box ── */}
       <Box borderStyle="round" borderColor="cyan" flexDirection="row" width={86} marginY={0}>
         {/* Left Column: Mascot Render */}
         <Box flexDirection="column" width={40} paddingX={1} borderStyle="single" borderColor="gray" borderTop={false} borderBottom={false} borderLeft={false}>
@@ -1035,10 +657,10 @@ export function Repl({ initialData }: { initialData?: any }) {
         <Box flexDirection="column" width={42} paddingX={1}>
           <Text bold color="cyanBright">Советы & Шорткаты</Text>
           <Box flexDirection="column" marginTop={0}>
-            <Text color="gray">• <Text color="cyanBright">/menu</Text> — интерактивное меню (↑/↓)</Text>
-            <Text color="gray">• <Text color="cyanBright">/today</Text> — задачи на сегодня</Text>
-            <Text color="gray">• <Text color="cyanBright">/cal</Text> — календарь с задачами</Text>
-            <Text color="gray">• <Text color="cyanBright">/tasks</Text> — все задачи · <Text color="cyanBright">/notes</Text></Text>
+            <Text color="gray">• <Text color="cyanBright">settings</Text> / <Text color="cyanBright">/settings</Text> — настройки</Text>
+            <Text color="gray">• <Text color="cyanBright">today</Text> — задачи · <Text color="cyanBright">cal</Text> — календарь</Text>
+            <Text color="gray">• <Text color="cyanBright">add &lt;текст&gt;</Text> — создать задачу</Text>
+            <Text color="gray">• <Text color="cyanBright">done &lt;имя&gt;</Text> — закрыть дело</Text>
           </Box>
 
           <Box marginY={0}>
@@ -1055,7 +677,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       </Box>
 
-      {/* ── Action History Feed (Keep clean viewport) ───────────────────── */}
+      {/* ── Action History Feed ── */}
       {history.slice(-5).map(item => (
         <Box key={`hist_${item.id}`} flexDirection="column" marginY={0} marginTop={1}>
           {item.type === 'user' ? (
@@ -1084,7 +706,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       ))}
 
-      {/* ── Interactive Friend Picker Modal (/chat) ─────────────────────── */}
+      {/* ── Interactive Friend Picker Modal (/chat) ── */}
       {pickingChatFriend && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
@@ -1108,7 +730,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       )}
 
-      {/* ── Interactive Model Picker Modal (/model) ─────────────────────── */}
+      {/* ── Interactive Model Picker Modal (/model) ── */}
       {pickingModel && (
         <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
@@ -1133,8 +755,8 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       )}
 
-      {/* ── Interactive /menu Dropdown (Navigable via ↑/↓ arrows and Tab/Enter) ── */}
-      {isSlash && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (
+      {/* ── Interactive Command Autocomplete Dropdown ── */}
+      {isSlashOrTyping && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">
@@ -1144,13 +766,14 @@ export function Repl({ initialData }: { initialData?: any }) {
           </Box>
           {filteredCommands.slice(0, 10).map((item, idx) => {
             const isSel = idx === selectedIdx
+            const planBadge = item.minPlan ? `[${item.minPlan}] ` : ''
             return (
               <Box key={`cmd_opt_${item.cmd}_${idx}`} gap={1}>
                 <Text bold color={isSel ? 'cyanBright' : 'gray'}>
                   {isSel ? '▶ ' : '  '}{item.label.padEnd(18)}
                 </Text>
                 <Text color={isSel ? 'white' : 'gray'}>
-                  — {item.desc}
+                  — {planBadge}{item.desc}
                 </Text>
               </Box>
             )
@@ -1161,7 +784,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       )}
 
-      {/* ── Live Action Progress Bar ──────────────────────────────────────── */}
+      {/* ── Live Action Progress Bar ── */}
       {actionProgress && (
         <Box gap={1} marginY={0} marginTop={1} marginLeft={1}>
           <Text bold color="cyanBright">{renderProgressBar(actionProgress.ratio, 14)}</Text>
@@ -1170,7 +793,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       )}
 
-      {/* ── Pinned Bottom Prompt Frame (Claude Code style) ────────────────── */}
+      {/* ── Pinned Bottom Prompt Frame ── */}
       <Box flexDirection="column" marginTop={1}>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
         <Box gap={1} marginY={0}>
@@ -1182,14 +805,14 @@ export function Repl({ initialData }: { initialData?: any }) {
               if (!val) setMenuForced(false)
             }}
             onSubmit={executeCommand}
-            placeholder="Напишите задачу, вопрос ИИ, /menu, /model, /settings..."
+            placeholder="Напишите задачу, вопрос ИИ, settings, today, /menu..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>
 
-        {/* Footer info & limits bar (Claude Code bottom style) */}
+        {/* Footer info & limits bar */}
         <Box justifyContent="space-between" marginTop={0}>
-          <Text color="gray" dimColor>/menu меню · /model ИИ/CLI · /settings · ? справка</Text>
+          <Text color="gray" dimColor>settings настройки · today задачи · cal календарь · /menu меню · ? справка</Text>
           <Text color="gray" dimColor>
             [{planTag}: {cliCount}/{data?.limits?.maxCli || '∞'} CLI | {Math.floor((data?.limits?.voiceUsedSeconds || 0) / 60)}/{data?.limits?.maxVoiceSeconds === '∞' ? '∞' : Math.floor(data?.limits?.maxVoiceSeconds / 60)}м голос]
           </Text>
