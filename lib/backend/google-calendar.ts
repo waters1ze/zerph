@@ -12,13 +12,13 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '140430721803-o7nopfthi
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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'
 
 export function getRedirectUri(requestOrigin?: string): string {
-  if (process.env.GOOGLE_REDIRECT_URI) {
-    return process.env.GOOGLE_REDIRECT_URI
-  }
   if (requestOrigin) {
     return `${requestOrigin.replace(/\/$/, '')}/api/calendar/token`
   }
-  return 'https://zerph.ru/api/calendar/token'
+  if (process.env.GOOGLE_REDIRECT_URI) {
+    return process.env.GOOGLE_REDIRECT_URI
+  }
+  return 'https://zeprh.vercel.app/api/calendar/token'
 }
 
 /**
