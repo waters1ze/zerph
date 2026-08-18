@@ -228,7 +228,7 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
           <main
             className={
               isFullHeight
-                ? 'app-main flex-1 min-w-0 overflow-hidden p-0 sm:p-2 flex flex-col'
+                ? 'app-main app-main-full flex-1 min-w-0 overflow-hidden p-0 flex flex-col'
                 : 'app-main flex-1 min-w-0 overflow-y-auto px-3.5 sm:px-6 py-3.5 sm:py-5'
             }
           >

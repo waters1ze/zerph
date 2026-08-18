@@ -892,7 +892,7 @@ export function SettingsView() {
   const activeItem = SECTIONS.flatMap(s => s.items).find(i => i.id === activeTab)
 
   return (
-    <div className="w-full h-full min-h-full flex-1 bg-background flex flex-col md:flex-row font-sans">
+    <div className="settings-view w-full h-full min-h-full flex-1 bg-background flex flex-col md:flex-row font-sans">
       
       {/* ── Left Sidebar Navigation (Desktop Obsidian Style) ── */}
       <div className="hidden md:flex md:w-64 border-r border-border/70 bg-card/40 p-4 flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
