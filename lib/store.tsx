@@ -497,6 +497,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deadSessionStrikesRef = useRef(0)
   // Prevents overlapping sync requests from piling up on a slow backend
   const syncInFlightRef = useRef(false)
+  const lastSyncTimeRef = useRef<number>(0)
+  const lastUserFetchTimeRef = useRef<number>(0)
 
   // Latest-state ref for background sync (avoids stale closures / callback churn)
   const stateRef = useRef(state)
@@ -674,9 +676,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
 
-  // Core Sync Function
+  // Core Sync Function with strict throttling to prevent function invocation burnout
   const syncBackendData = useCallback(async (showIndicator = false) => {
     if (syncInFlightRef.current) return
+    const now = Date.now()
+    // Throttle automatic background sync to at most once per 25 seconds unless explicitly requested by user action
+    if (!showIndicator && (now - lastSyncTimeRef.current < 25_000)) {
+      return
+    }
+    lastSyncTimeRef.current = now
     syncInFlightRef.current = true
     if (showIndicator) setIsSyncing(true)
     try {
@@ -684,7 +692,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const chatId = headers['x-chat-id']
 
       // Purge deleted/added IDs older than 60 seconds
-      const now = Date.now()
       for (const [id, timestamp] of recentlyDeletedIdsRef.current.entries()) {
         if (now - timestamp > 60000) {
           recentlyDeletedIdsRef.current.delete(id)
@@ -699,13 +706,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/tasks', {
         headers,
         cache: 'no-store',
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(15000),
       }).catch(() => null)
 
       if (res) {
         if (res.status === 401 && (headers['x-auth-token'] || headers['x-tg-init-data'] || headers['x-vk-launch'])) {
-          // Real credentials were rejected. Require TWO consecutive 401s before
-          // logging out — one can slip through on a race or stale secondary tab.
           deadSessionStrikesRef.current += 1
           if (deadSessionStrikesRef.current >= 2) {
             forceLogoutOnDeadSession()
@@ -718,77 +723,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!res.ok) return
         const data = await res.json()
 
-      if (data && data.tasks !== undefined) {
-        if (data._dbOffline && (!data.tasks || data.tasks.length === 0)) {
-          // DB is temporarily offline or quota exceeded — keep local cache intact
-          return
-        }
-
-        // Keep freshly created optimistic items that the server list doesn't
-        // know about yet (their POST is still in flight) — prevents the
-        // "added -> vanished -> reappeared" flicker on background sync.
-        const keepFresh = <T extends { id: string }>(serverList: T[], localList: T[]): T[] => {
-          const fresh = localList.filter(
-            l => recentlyAddedIdsRef.current.has(l.id) && !serverList.some(srv => srv.id === l.id)
-          )
-          return [...serverList, ...fresh]
-        }
-        const filteredTasks = keepFresh(data.tasks || [], stateRef.current.tasks).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
-        const filteredGoals = keepFresh(data.goals || [], stateRef.current.goals).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
-        const filteredNotes = keepFresh(data.notes || [], stateRef.current.notes).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))
-        const filteredFriends = (data.friends || []).filter((f: Friend) => !recentlyDeletedIdsRef.current.has(f.id))
-        const filteredHabits = keepFresh(data.habits || [], stateRef.current.habits).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
-
-        dispatch({
-          type: 'LOAD_STATE',
-          state: {
-            tasks: filteredTasks,
-            goals: filteredGoals,
-            notes: filteredNotes,
-            friends: filteredFriends,
-            habits: filteredHabits,
-          },
-        })
-      }
-
-      // Check connected Telegram profile from Neon DB for active user
-      const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
-      fetch(userUrl, { headers, cache: 'no-store', signal: AbortSignal.timeout(20000) })
-        .then(r => r.json())
-        .then(user => {
-          if (user.connected) {
-            const curSettings = stateRef.current.settings
-            const updates: Partial<UserSettings> = {}
-            if (user.plan && user.plan !== curSettings.userPlan) {
-              updates.userPlan = user.plan
-            }
-            if (user.name && user.name !== 'Kirill Perekatnov' && user.name !== 'Пользователь Zerf' && (!curSettings.name || curSettings.name === 'Kirill Perekatnov')) {
-              updates.name = user.name
-            }
-            if (user.reminderIntervalMinutes !== undefined || user.reminderRepeatCount !== undefined) {
-              updates.notifications = {
-                ...curSettings.notifications,
-                reminderIntervalMinutes: user.reminderIntervalMinutes ?? curSettings.notifications.reminderIntervalMinutes ?? 5,
-                reminderRepeatCount: user.reminderRepeatCount ?? curSettings.notifications.reminderRepeatCount ?? 3,
-              }
-            }
-            if (user.ttsEnabled !== undefined) {
-              updates.voiceSettings = {
-                ...curSettings.voiceSettings,
-                ttsResponseEnabled: Boolean(user.ttsEnabled)
-              }
-            }
-            if (Object.keys(updates).length > 0) {
-              dispatch({ type: 'UPDATE_SETTINGS', updates })
-            }
+        if (data && data.tasks !== undefined) {
+          if (data._dbOffline && (!data.tasks || data.tasks.length === 0)) {
+            return
           }
-        })
-        .catch(() => {})
 
-      if (chatId) {
-        fetch(`/api/birthdays?chatId=${chatId}`, { headers, signal: AbortSignal.timeout(20000) }).catch(() => {})
+          const keepFresh = <T extends { id: string }>(serverList: T[], localList: T[]): T[] => {
+            const fresh = localList.filter(
+              l => recentlyAddedIdsRef.current.has(l.id) && !serverList.some(srv => srv.id === l.id)
+            )
+            return [...serverList, ...fresh]
+          }
+          const filteredTasks = keepFresh(data.tasks || [], stateRef.current.tasks).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
+          const filteredGoals = keepFresh(data.goals || [], stateRef.current.goals).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
+          const filteredNotes = keepFresh(data.notes || [], stateRef.current.notes).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))
+          const filteredFriends = (data.friends || []).filter((f: Friend) => !recentlyDeletedIdsRef.current.has(f.id))
+          const filteredHabits = keepFresh(data.habits || [], stateRef.current.habits).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
+
+          dispatch({
+            type: 'LOAD_STATE',
+            state: {
+              tasks: filteredTasks,
+              goals: filteredGoals,
+              notes: filteredNotes,
+              friends: filteredFriends,
+              habits: filteredHabits,
+            },
+          })
+        }
+
+        // Throttle profile and birthdays fetch to at most once per 2 minutes
+        if (showIndicator || (now - lastUserFetchTimeRef.current > 120_000)) {
+          lastUserFetchTimeRef.current = now
+          const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
+          fetch(userUrl, { headers, cache: 'no-store', signal: AbortSignal.timeout(15000) })
+            .then(r => r.json())
+            .then(user => {
+              if (user.connected) {
+                const curSettings = stateRef.current.settings
+                const updates: Partial<UserSettings> = {}
+                if (user.plan && user.plan !== curSettings.userPlan) {
+                  updates.userPlan = user.plan
+                }
+                if (user.name && user.name !== 'Kirill Perekatnov' && user.name !== 'Пользователь Zerf' && (!curSettings.name || curSettings.name === 'Kirill Perekatnov')) {
+                  updates.name = user.name
+                }
+                if (user.reminderIntervalMinutes !== undefined || user.reminderRepeatCount !== undefined) {
+                  updates.notifications = {
+                    ...curSettings.notifications,
+                    reminderIntervalMinutes: user.reminderIntervalMinutes ?? curSettings.notifications.reminderIntervalMinutes ?? 5,
+                    reminderRepeatCount: user.reminderRepeatCount ?? curSettings.notifications.reminderRepeatCount ?? 3,
+                  }
+                }
+                if (user.ttsEnabled !== undefined) {
+                  updates.voiceSettings = {
+                    ...curSettings.voiceSettings,
+                    ttsResponseEnabled: Boolean(user.ttsEnabled)
+                  }
+                }
+                if (Object.keys(updates).length > 0) {
+                  dispatch({ type: 'UPDATE_SETTINGS', updates })
+                }
+              }
+            })
+            .catch(() => {})
+
+          if (chatId) {
+            fetch(`/api/birthdays?chatId=${chatId}`, { headers, signal: AbortSignal.timeout(15000) }).catch(() => {})
+          }
+        }
       }
-      } // end if (res)
     } catch {} finally {
       syncInFlightRef.current = false
       if (showIndicator) {
@@ -797,7 +801,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Sync from backend DB on mount, focus, visibility change, pageshow, and fast live interval
+  // Sync from backend DB on mount, focus, visibility change, pageshow, and throttled live interval
   useEffect(() => {
     // Initial sync
     syncBackendData(false)
@@ -827,19 +831,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
-    // Background fallback sync (every 10 minutes). Primary sync is event-driven (focus, visibility, actions)
+    // Background fallback sync (every 15 minutes). Primary sync is event-driven (focus, visibility, actions)
     const syncInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         syncBackendData(false)
       }
-    }, 10 * 60 * 1000)
-
-    // Check reminders periodically (every 10 minutes when tab is visible)
-    const reminderInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetch('/api/reminders/check').catch(() => {})
-      }
-    }, 10 * 60 * 1000)
+    }, 15 * 60 * 1000)
 
     // Hydrate currentView safely on client mount
     try {
@@ -856,7 +853,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('zerf:sync', handleSyncWithSpinner)
       document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(syncInterval)
-      clearInterval(reminderInterval)
       try { channel?.close() } catch {}
     }
   }, [syncBackendData, state.currentView])

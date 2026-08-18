@@ -44,6 +44,12 @@ interface SidebarProps {
   onToggleCollapse?: () => void
 }
 
+// Client-side in-memory request cache to minimize Vercel function invocations
+let cachedAdminCheck: { isAdmin: boolean; timestamp: number } | null = null
+let cachedUserProfile: { data: any; timestamp: number } | null = null
+let cachedPendingCount: { count: number; timestamp: number } | null = null
+let cachedInstalledExts: { exts: ExtensionItem[]; timestamp: number } | null = null
+
 export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: externalToggle }: SidebarProps) {
   const { state, dispatch } = useApp()
   const { currentView, tasks, notes, settings } = state
@@ -111,10 +117,11 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   }, [])
 
   useEffect(() => {
-    // Check if user is Admin
+    const now = Date.now()
+
+    // Check if user is Admin with cache
     const checkAdmin = async () => {
       try {
-        const headers = getAuthHeaders()
         const cid = typeof window !== 'undefined' ? (localStorage.getItem('zerf_chat_id') || '') : ''
         const tgCid = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id : null
         if (cid === '6136950061' || cid === '5078516086' || String(tgCid) === '6136950061' || String(tgCid) === '5078516086') {
@@ -122,8 +129,15 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           return
         }
 
+        if (cachedAdminCheck && now - cachedAdminCheck.timestamp < 300_000) {
+          setIsAdmin(cachedAdminCheck.isAdmin)
+          return
+        }
+
+        const headers = getAuthHeaders()
         const res = await fetch(`/api/admin/check`, { headers: { 'Content-Type': 'application/json', ...headers } })
         const data = await res.json()
+        cachedAdminCheck = { isAdmin: Boolean(data.isAdmin), timestamp: Date.now() }
         if (data.isAdmin) {
           setIsAdmin(true)
         }
@@ -131,13 +145,30 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     checkAdmin()
 
-    // Fetch real profile from DB
+    // Fetch real profile from DB with cache
     const fetchUserProfile = async () => {
       try {
+        if (cachedUserProfile && now - cachedUserProfile.timestamp < 120_000) {
+          const data = cachedUserProfile.data
+          if (data.connected && data.name) {
+            setTgUser({ name: data.name, username: data.username || 'Telegram', photoUrl: undefined })
+            if (data.isAdmin) setIsAdmin(true)
+            dispatch({
+              type: 'UPDATE_SETTINGS',
+              updates: {
+                name: data.name,
+                integrations: { ...settings.integrations, telegram: true },
+              },
+            })
+            return
+          }
+        }
+
         const headers = getAuthHeaders()
         if (Object.keys(headers).length > 0) {
           const res = await fetch('/api/telegram/user', { headers })
           const data = await res.json()
+          cachedUserProfile = { data, timestamp: Date.now() }
           if (data.connected && data.name) {
             setTgUser({
               name: data.name,
@@ -181,14 +212,20 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchUserProfile()
 
-    // Fetch pending team invites count
+    // Fetch pending team invites count with cache
     const fetchPendingTeamRequests = async () => {
       try {
+        if (cachedPendingCount && Date.now() - cachedPendingCount.timestamp < 180_000) {
+          setPendingTeamRequestsCount(cachedPendingCount.count)
+          return
+        }
+
         const headers = getAuthHeaders()
         if (Object.keys(headers).length > 0) {
           const res = await fetch('/api/friends', { headers })
           const data = await res.json()
           if (Array.isArray(data.pendingRequests)) {
+            cachedPendingCount = { count: data.pendingRequests.length, timestamp: Date.now() }
             setPendingTeamRequestsCount(data.pendingRequests.length)
           }
         }
@@ -196,9 +233,14 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchPendingTeamRequests()
 
-    // Fetch installed and enabled extensions for sidebar
-    const fetchInstalledExts = async () => {
+    // Fetch installed and enabled extensions for sidebar with cache
+    const fetchInstalledExts = async (force = false) => {
       try {
+        if (!force && cachedInstalledExts && Date.now() - cachedInstalledExts.timestamp < 120_000) {
+          setInstalledExts(cachedInstalledExts.exts)
+          return
+        }
+
         const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
         const data = await res.json()
         if (data.success && Array.isArray(data.catalog)) {
@@ -207,20 +249,22 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           const activeExts = data.catalog.filter((e: ExtensionItem) =>
             enabledIds.includes(e.id) || (e.id === 'ext_entropy_search' && installedIds.includes(e.id))
           )
+          cachedInstalledExts = { exts: activeExts, timestamp: Date.now() }
           setInstalledExts(activeExts)
         }
       } catch {}
     }
     fetchInstalledExts()
 
-    window.addEventListener('zerf_sidebar_config_changed', fetchInstalledExts)
-    window.addEventListener('zerf_sync', fetchInstalledExts)
+    const handleExtsChanged = () => fetchInstalledExts(true)
+    window.addEventListener('zerf_sidebar_config_changed', handleExtsChanged)
+    window.addEventListener('zerf_sync', handleExtsChanged)
 
     const interval = setInterval(fetchPendingTeamRequests, 10 * 60 * 1000)
     return () => {
       clearInterval(interval)
-      window.removeEventListener('zerf_sidebar_config_changed', fetchInstalledExts)
-      window.removeEventListener('zerf_sync', fetchInstalledExts)
+      window.removeEventListener('zerf_sidebar_config_changed', handleExtsChanged)
+      window.removeEventListener('zerf_sync', handleExtsChanged)
     }
   }, [dispatch])
 
