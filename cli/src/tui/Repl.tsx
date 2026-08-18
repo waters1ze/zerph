@@ -599,6 +599,47 @@ export function Repl({ initialData }: { initialData?: any }) {
   const todayTasks = (data?.tasks || []).filter((t: any) => !t.dueDate || t.dueDate.startsWith(new Date().toISOString().slice(0, 10)))
   const overdueTasks = (data?.tasks || []).filter((t: any) => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10) && t.status !== 'done')
 
+  const userStreak = (() => {
+    const completedDates = new Set<string>()
+    ;(data?.tasks || []).forEach((t: any) => {
+      if (t && t.status === 'done') {
+        if (t.completedAt) {
+          try { completedDates.add(new Date(t.completedAt).toISOString().slice(0, 10)) } catch {}
+        }
+        if (t.dueDate) completedDates.add(String(t.dueDate).slice(0, 10))
+      }
+    })
+    ;(data?.habits || []).forEach((h: any) => {
+      if (h && h.lastCompletedAt) {
+        try { completedDates.add(new Date(h.lastCompletedAt).toISOString().slice(0, 10)) } catch {}
+      }
+    })
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10)
+    const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().slice(0, 10)
+    let streak = 0
+    const hasToday = completedDates.has(todayStr)
+    const hasYesterday = completedDates.has(yesterdayStr)
+    if (hasToday || hasYesterday) {
+      let cur = new Date(hasToday ? now : new Date(now.getTime() - 86400000))
+      while (true) {
+        const dStr = cur.toISOString().slice(0, 10)
+        if (completedDates.has(dStr)) {
+          streak++
+          cur = new Date(cur.getTime() - 86400000)
+        } else {
+          break
+        }
+      }
+    }
+    const maxHabit = (data?.habits || []).reduce((m: number, h: any) => Math.max(m, Number(h?.streak) || 0), 0)
+    const base = Math.max(streak, maxHabit)
+    if (base === 0 && (data?.tasks || []).filter((t: any) => t?.status === 'done').length > 0 && hasToday) {
+      return 1
+    }
+    return base
+  })()
+
   return (
     <Box flexDirection="column" paddingX={1} width={90}>
       {/* ── Top Bar ── */}
@@ -612,7 +653,7 @@ export function Repl({ initialData }: { initialData?: any }) {
           <Text color="gray">·</Text>
           <Text bold color="cyanBright">{planTag}</Text>
           <Text color="gray">·</Text>
-          <Text color="white">стрик 12 дн.</Text>
+          <Text color="white">стрик {userStreak} дн.</Text>
         </Box>
       </Box>
 
@@ -653,7 +694,7 @@ export function Repl({ initialData }: { initialData?: any }) {
             <Text color="white">
               ❖ Задач: {todayTasks.length} {overdueTasks.length > 0 ? `(${overdueTasks.length} просрочено)` : ''}
             </Text>
-            <Text color="white">● Стрик: 12 дней</Text>
+            <Text color="white">● Стрик: {userStreak} {userStreak === 1 ? 'день' : userStreak < 5 && userStreak > 0 ? 'дня' : 'дней'}</Text>
           </Box>
         </Box>
       </Box>

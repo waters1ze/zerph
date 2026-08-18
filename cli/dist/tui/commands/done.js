@@ -20,10 +20,37 @@ export async function handleDoneCommand(rawText, tasks, creds) {
             action: 'toggle_task',
             id: match.id,
         });
-        const streak = 5; // Default active streak
+        // Calculate real streak
+        const completedDates = new Set();
+        tasks.forEach(t => {
+            if (t.status === 'done' || t.id === match.id) {
+                if (t.completedAt) {
+                    try {
+                        completedDates.add(new Date(t.completedAt).toISOString().slice(0, 10));
+                    }
+                    catch { }
+                }
+                if (t.dueDate)
+                    completedDates.add(String(t.dueDate).slice(0, 10));
+            }
+        });
+        completedDates.add(new Date().toISOString().slice(0, 10));
+        let streak = 0;
+        let cur = new Date();
+        while (true) {
+            const dStr = cur.toISOString().slice(0, 10);
+            if (completedDates.has(dStr)) {
+                streak++;
+                cur = new Date(cur.getTime() - 86400000);
+            }
+            else {
+                break;
+            }
+        }
+        const realStreak = Math.max(1, streak);
         return {
             ok: true,
-            message: `${GLYPH.mascotJoy} Задача «${match.title}» закрыта! Стрик: ${streak} дн.`,
+            message: `${GLYPH.mascotJoy} Задача «${match.title}» закрыта! Стрик: ${realStreak} дн.`,
             details: [`Выполнено в ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`],
         };
     }

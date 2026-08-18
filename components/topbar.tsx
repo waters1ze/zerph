@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cn } from '@/lib/utils'
+import { cn, calculateRealStreak } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import { NotificationsPanel } from '@/components/notifications-panel'
 import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw } from 'lucide-react'
@@ -255,13 +255,18 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
         </motion.button>
 
         {/* Streak Flame Badge */}
-        <div
-          title="Стрик продуктивности: выполняйте задачи каждый день, чтобы получать бонусы!"
-          className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-muted/60 border border-border text-foreground text-xs font-bold shrink-0 cursor-default"
-        >
-          <span className="text-sm mono-emoji">🔥</span>
-          <span>{state.tasks.filter(t => t.status === 'done').length > 0 ? Math.max(1, state.tasks.filter(t => t.status === 'done').length) : 0}</span>
-        </div>
+        {(() => {
+          const realStreak = calculateRealStreak(state.tasks, state.habits)
+          return (
+            <div
+              title={`Стрик продуктивности: ${realStreak} ${realStreak === 1 ? 'день' : realStreak < 5 && realStreak > 0 ? 'дня' : 'дней'} подряд`}
+              className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-muted/60 border border-border text-foreground text-xs font-bold shrink-0 cursor-default"
+            >
+              <span className="text-sm mono-emoji">🔥</span>
+              <span>{realStreak}</span>
+            </div>
+          )
+        })()}
 
         {/* Voice */}
         <motion.button
