@@ -1404,20 +1404,23 @@ export function SettingsView() {
                 {/* 4. Google Card */}
                 <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center font-bold text-xs">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center font-bold text-xs shrink-0">
                         G
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground">Google Вход</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {profileData.googleEmail ? profileData.googleEmail : 'Быстрый вход в 1 клик'}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-foreground">Google Аккаунт</p>
+                        </div>
+                        <p className="text-[11px] text-emerald-400 font-medium truncate mt-0.5">
+                          {profileData.googleEmail ? `✓ ${profileData.googleEmail}` : 'Быстрый вход через Google'}
                         </p>
                       </div>
                     </div>
                     {profileData.googleEmail ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
-                        Привязан
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>Привязан</span>
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
@@ -1425,12 +1428,33 @@ export function SettingsView() {
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={openGoogleModal}
-                    className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>{profileData.googleEmail ? 'Изменить Google Email' : 'Привязать Google'}</span>
-                  </button>
+                  
+                  {profileData.googleEmail ? (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href="/api/auth/google"
+                        className="flex-1 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                      >
+                        <span>Сменить Google</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleUnlinkGoogle}
+                        disabled={authLoading}
+                        className="px-3 py-1.5 rounded-xl bg-muted hover:bg-rose-500/15 hover:text-rose-400 text-muted-foreground text-xs font-semibold border border-border transition-colors cursor-pointer"
+                        title="Отвязать Google"
+                      >
+                        Отвязать
+                      </button>
+                    </div>
+                  ) : (
+                    <a
+                      href="/api/auth/google"
+                      className="w-full py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <span>⚡ Привязать через Google OAuth</span>
+                    </a>
+                  )}
                 </div>
 
                 {/* 5. GitHub Card */}

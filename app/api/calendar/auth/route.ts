@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const origin = `${protocol}://${host}`
 
     const redirectUri = getRedirectUri(origin)
-    const url = getGoogleAuthUrl(authUser.chatId, redirectUri)
+    const url = getGoogleAuthUrl(authUser.chatId, redirectUri, true)
 
     return NextResponse.json({ url })
   } catch (err: any) {

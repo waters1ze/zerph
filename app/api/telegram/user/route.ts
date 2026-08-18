@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
             avatarEmoji,
             hasPassword: Boolean(chat.passwordHash),
             vkId: chat.vkId || null,
-            googleEmail: chat.googleEmail || null,
+            googleEmail: chat.googleEmail || (chat.authProvider === 'google' ? chat.email : null),
             githubUsername,
             authProvider: chat.authProvider || 'telegram',
             birthday: chat.birthday || null,

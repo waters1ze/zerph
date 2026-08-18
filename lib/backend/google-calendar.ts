@@ -23,23 +23,40 @@ export function getRedirectUri(requestOrigin?: string): string {
 
 /**
  * Generate Google OAuth 2.0 authorization URL
+ * By default requests ONLY standard non-sensitive scopes (openid, email, profile)
+ * Sensitive calendar scopes are requested only when includeCalendar=true
  */
-export function getGoogleAuthUrl(chatId: string | number | bigint, redirectUri: string): string {
-  const scopes = [
-    'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/calendar.readonly',
-    'https://www.googleapis.com/auth/userinfo.email',
-  ].join(' ')
+export function getGoogleAuthUrl(
+  chatId: string | number | bigint,
+  redirectUri: string,
+  includeCalendar: boolean = false
+): string {
+  const scopes = includeCalendar
+    ? [
+        'openid',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/calendar.readonly',
+      ]
+    : [
+        'openid',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+      ]
 
-  const state = Buffer.from(JSON.stringify({ chatId: String(chatId) })).toString('base64url')
+  const state = Buffer.from(JSON.stringify({
+    chatId: String(chatId),
+    includeCalendar: Boolean(includeCalendar),
+  })).toString('base64url')
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: scopes,
+    scope: scopes.join(' '),
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: includeCalendar ? 'consent' : 'select_account',
     state,
   })
 

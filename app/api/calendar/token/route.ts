@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
       if (userInfo.name) googleName = userInfo.name
     } catch {}
 
+    const isCalendarRequested = Boolean(decodedState.includeCalendar)
     let targetChatId = decodedState.chatId
 
     // If web OAuth login or guest mode without valid chatId
@@ -83,8 +84,12 @@ export async function GET(req: NextRequest) {
               googleEmail: googleEmail,
               authProvider: 'google',
               firstName: googleName || googleEmail.split('@')[0],
-              googleCalendarToken: JSON.stringify(tokens),
-              googleCalendarSync: true,
+              ...(isCalendarRequested ? {
+                googleCalendarToken: JSON.stringify(tokens),
+                googleCalendarSync: true,
+              } : {
+                googleCalendarSync: false,
+              }),
               lastActiveAt: new Date(),
             }
           })
@@ -93,8 +98,10 @@ export async function GET(req: NextRequest) {
             where: { chatId: user.chatId },
             data: {
               googleEmail: googleEmail,
-              googleCalendarToken: JSON.stringify(tokens),
-              googleCalendarSync: true,
+              ...(isCalendarRequested ? {
+                googleCalendarToken: JSON.stringify(tokens),
+                googleCalendarSync: true,
+              } : {}),
               lastActiveAt: new Date(),
             }
           })
@@ -103,15 +110,17 @@ export async function GET(req: NextRequest) {
         targetChatId = String(user.chatId)
       }
     } else {
-      // Existing user linking calendar
+      // Existing user linking Google
       try {
         const cid = BigInt(targetChatId)
         await prisma.telegramChat.update({
           where: { chatId: cid },
           data: {
-            googleCalendarToken: JSON.stringify(tokens),
-            googleCalendarSync: true,
             ...(googleEmail ? { googleEmail } : {}),
+            ...(isCalendarRequested ? {
+              googleCalendarToken: JSON.stringify(tokens),
+              googleCalendarSync: true,
+            } : {}),
           },
         })
       } catch {}
@@ -119,8 +128,9 @@ export async function GET(req: NextRequest) {
 
     if (targetChatId && !targetChatId.startsWith('guest_') && targetChatId !== 'web') {
       const cid = BigInt(targetChatId)
-      // Perform initial calendar sync asynchronously
-      syncGoogleCalendar(targetChatId).catch(() => {})
+      if (isCalendarRequested) {
+        syncGoogleCalendar(targetChatId).catch(() => {})
+      }
 
       const sessionToken = await createServerSession(
         cid,
