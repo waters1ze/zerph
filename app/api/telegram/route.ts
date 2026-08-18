@@ -65,21 +65,38 @@ async function tgApi(method: string, body: object) {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body, (_, v) => typeof v === 'bigint' ? v.toString() : v),
     })
     return await res.json()
-  } catch {
+  } catch (e) {
+    console.error(`tgApi [${method}] error:`, e)
     return null
   }
 }
 
-async function send(chatId: number, text: string, extra?: object) {
-  return await tgApi('sendMessage', {
-    chat_id: chatId,
+async function send(chatId: number | bigint | string, text: string, extra?: object) {
+  const targetChatId = typeof chatId === 'bigint' ? String(chatId) : chatId
+  const res = await tgApi('sendMessage', {
+    chat_id: targetChatId,
     text,
     parse_mode: 'Markdown',
     ...extra,
   })
+  if (!res?.ok) {
+    console.warn(`[tgApi send (Markdown) failed for ${targetChatId}]:`, res?.description || res)
+    // Fallback: retry without parse_mode and with sanitized text
+    const plainText = text.replace(/[*_`\[\]]/g, '')
+    const fallbackRes = await tgApi('sendMessage', {
+      chat_id: targetChatId,
+      text: plainText,
+      ...extra,
+    })
+    if (!fallbackRes?.ok) {
+      console.error(`[tgApi send (plain) failed for ${targetChatId}]:`, fallbackRes?.description || fallbackRes)
+    }
+    return fallbackRes
+  }
+  return res
 }
 
 async function editMessageText(chatId: number, messageId: number, text: string, extra?: object) {
@@ -1987,9 +2004,13 @@ async function handleFriendRequestIntent(chatId: number, targetUsername: string,
     return
   }
 
-  const targetUser = await prisma.telegramChat.findFirst({
+  // Look up user by username (case-insensitive) or chatId
+  let targetUser = await prisma.telegramChat.findFirst({
     where: { username: { equals: cleanUsername, mode: 'insensitive' } }
   })
+  if (!targetUser && !isNaN(Number(cleanUsername))) {
+    targetUser = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(cleanUsername) } })
+  }
 
   const myUser = await prisma.telegramChat.findUnique({
     where: { chatId: BigInt(chatId) }
@@ -2023,33 +2044,58 @@ async function handleFriendRequestIntent(chatId: number, targetUsername: string,
       create: { userChatId: BigInt(chatId), friendChatId: targetUser.chatId, status: 'pending' }
     })
 
-    await send(friendId,
-      `🤝 *Новый запрос в друзья в Zerf AI!*\n\n` +
-      `Пользователь *${escMd(myName)}*${myUser?.username ? ` (@${myUser.username})` : ''} отправил(а) вам запрос в друзья!`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '✅ Принять', callback_data: `friend_accept_${chatId}` },
-              { text: '❌ Отклонить', callback_data: `friend_decline_${chatId}` }
-            ]
-          ]
-        }
-      }
-    )
+    const senderHandle = myUser?.username ? ` (@${escMd(myUser.username)})` : ''
+    const notificationText =
+      `🤝 *Новый запрос в друзья в Zerf!*\n\n` +
+      `Пользователь *${escMd(myName)}*${senderHandle} отправил(а) вам запрос в друзья!\n\n` +
+      `Нажмите кнопку ниже, чтобы принять:`
 
-    await send(chatId,
-      `🤝 *Запрос в друзья успешно отправлен @${targetUser.username || cleanUsername} (${escMd(targetUser.firstName || '')})!* 🎉\n\n` +
-      `Пользователь получил уведомление в Telegram с кнопками подтверждения. Как только он нажмет «Принять», он появится в вашем списке друзей на сайте и в CLI!`,
-      { reply_markup: miniAppKeyboard(chatId) }
-    )
+    const friendNoticeRes = await send(friendId, notificationText, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ Принять', callback_data: `friend_accept_${chatId}` },
+            { text: '❌ Отклонить', callback_data: `friend_decline_${chatId}` }
+          ]
+        ]
+      }
+    })
+
+    const targetDisplayName = targetUser.firstName ? `${targetUser.firstName} (@${targetUser.username || cleanUsername})` : `@${cleanUsername}`
+
+    if (friendNoticeRes?.ok) {
+      await send(chatId,
+        `🤝 *Запрос в друзья успешно отправлен ${escMd(targetDisplayName)}!* 🎉\n\n` +
+        `Пользователь получил уведомление в Telegram с кнопками подтверждения. Как только он нажмет «Принять», он появится в вашем списке друзей на сайте и в CLI!`,
+        { reply_markup: miniAppKeyboard(chatId) }
+      )
+    } else {
+      const inviteUrl = `https://t.me/Zerph_bot?start=invite_${chatId}`
+      await send(chatId,
+        `🤝 *Запрос в друзья зарегистрирован для ${escMd(targetDisplayName)}!*\n\n` +
+        `⚠️ Бот не смог отправить личное сообщение (возможно, пользователь остановил бота или ещё не нажал /start).\n\n` +
+        `Отправьте ему прямую ссылку для мгновенного добавления:`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: `↗ Переслать приглашение @${cleanUsername}`,
+                  url: `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent('Привет! Добавляйся ко мне в друзья в Zerf AI:')}`
+                }
+              ]
+            ]
+          }
+        }
+      )
+    }
   } else {
     const inviteUrl = `https://t.me/Zerph_bot?start=invite_${chatId}`
     await send(chatId,
-      `🤝 *Пользователь @${cleanUsername} пока не зарегистрирован в Zerf.*\n\n` +
+      `🤝 *Пользователь @${escMd(cleanUsername)} пока не зарегистрирован в Zerf.*\n\n` +
       `Отправьте ему персональную ссылку-приглашение:\n` +
-      `` + inviteUrl + `` + `\n\n` +
-      `_Как только @${cleanUsername} перейдет по ссылке и нажмет Start, вы автоматически станете друзьями!_`,
+      `${inviteUrl}\n\n` +
+      `_Как только @${escMd(cleanUsername)} перейдет по ссылке и нажмет Start, вы автоматически станете друзьями!_`,
       {
         reply_markup: {
           inline_keyboard: [
@@ -2068,50 +2114,30 @@ async function handleFriendRequestIntent(chatId: number, targetUsername: string,
 
 async function handleInviteCommand(chatId: number, senderName: string, param?: string) {
   if (!param) {
+    const inviteUrl = `https://t.me/Zerph_bot?start=invite_${chatId}`
     await send(chatId,
-      `🤝 *Приглашение друзей в Zerf AI*\n\n` +
-      `Чтобы добавить друга по юзернейму, введите:\n` +
-      `\`/invite @username\`\n\n` +
-      `Или отправьте другу ссылку:\n` +
-      `https://t.me/Zerph_bot?start=invite_${chatId}`,
-      { reply_markup: miniAppKeyboard(chatId) }
+      `🤝 *Приглашение друзей в Zerf*\n\n` +
+      `Чтобы добавить друга по юзернейму, напишите:\n` +
+      `\`/invite @username\` или \`кинь @username в друзья\`\n\n` +
+      `Или отправьте другу персональную ссылку:\n` +
+      `${inviteUrl}`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '📲 Поделиться ссылкой',
+                url: `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent('Привет! Добавляйся ко мне в друзья в Zerf AI:')}`
+              }
+            ]
+          ]
+        }
+      }
     )
     return
   }
 
-  const cleanUsername = param.replace('@', '').trim()
-  const targetUser = await prisma.telegramChat.findFirst({
-    where: { username: { equals: cleanUsername, mode: 'insensitive' } }
-  })
-
-  if (!targetUser) {
-    await send(chatId, `🔍 Пользователь *@${cleanUsername}* не найден в Zerf. Попроси его сначала запустить бота через /start!`)
-    return
-  }
-
-  const friendId = Number(targetUser.chatId)
-  await prisma.friendship.upsert({
-    where: { userChatId_friendChatId: { userChatId: BigInt(chatId), friendChatId: BigInt(friendId) } },
-    update: { status: 'pending' },
-    create: { userChatId: BigInt(chatId), friendChatId: BigInt(friendId), status: 'pending' }
-  })
-
-  await send(friendId,
-    `🤝 *Новое приглашение в друзья в Zerf AI!*\n\n` +
-    `Пользователь *${escMd(senderName)}* хочет добавить вас в друзья!`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: '✅ Принять', callback_data: `friend_accept_${chatId}` },
-            { text: '❌ Отклонить', callback_data: `friend_decline_${chatId}` }
-          ]
-        ]
-      }
-    }
-  )
-
-  await send(chatId, `✉️ Приглашение отправлено пользователю *@${cleanUsername}*! Ждём подтверждения.`)
+  await handleFriendRequestIntent(chatId, param, senderName)
 }
 
 // ── Send Task Command ──────────────────────────────────────────────────────────
