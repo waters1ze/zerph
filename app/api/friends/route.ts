@@ -39,26 +39,37 @@ async function sendTgMessage(chatId: string | number | bigint, htmlText: string,
 
 export async function GET(req: NextRequest) {
   const chatId = await getChatId(req)
-  if (!chatId) return NextResponse.json({ friends: [], pendingRequests: [] })
+  if (!chatId) return NextResponse.json({ friends: [], pendingRequests: [], outgoingRequests: [] })
 
   try {
     const friends = await getFriends(chatId)
 
-    // Find incoming pending friend requests (sent TO this user)
-    const pendingFriendships = await prisma.friendship.findMany({
+    // 1. Incoming pending friend requests (sent TO this user)
+    const incomingPending = await prisma.friendship.findMany({
       where: {
         friendChatId: chatId,
         status: 'pending',
       },
     })
 
-    const senderIds = pendingFriendships.map(f => f.userChatId)
-    const senderChats = await prisma.telegramChat.findMany({
-      where: { chatId: { in: senderIds } },
+    // 2. Outgoing pending friend requests (sent BY this user)
+    const outgoingPending = await prisma.friendship.findMany({
+      where: {
+        userChatId: chatId,
+        status: 'pending',
+      },
     })
 
-    const pendingRequests = pendingFriendships.map(f => {
-      const sender = senderChats.find(s => s.chatId === f.userChatId)
+    const senderIds = incomingPending.map(f => f.userChatId)
+    const targetIds = outgoingPending.map(f => f.friendChatId)
+    const allRelatedIds = Array.from(new Set([...senderIds, ...targetIds]))
+
+    const relatedChats = await prisma.telegramChat.findMany({
+      where: { chatId: { in: allRelatedIds } },
+    })
+
+    const pendingRequests = incomingPending.map(f => {
+      const sender = relatedChats.find(s => s.chatId === f.userChatId)
       const fullName = [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || 'Пользователь Telegram'
       return {
         id: f.id,
@@ -69,9 +80,21 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ friends, pendingRequests })
+    const outgoingRequests = outgoingPending.map(f => {
+      const target = relatedChats.find(s => s.chatId === f.friendChatId)
+      const fullName = [target?.firstName, target?.lastName].filter(Boolean).join(' ') || 'Пользователь Telegram'
+      return {
+        id: f.id,
+        toChatId: f.friendChatId.toString(),
+        toName: fullName,
+        toUsername: target?.username ? `@${target.username.replace(/^@/, '')}` : null,
+        status: f.status,
+      }
+    })
+
+    return NextResponse.json({ friends, pendingRequests, outgoingRequests })
   } catch (err) {
-    return NextResponse.json({ friends: [], pendingRequests: [], error: String(err) })
+    return NextResponse.json({ friends: [], pendingRequests: [], outgoingRequests: [], error: String(err) })
   }
 }
 

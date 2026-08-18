@@ -240,6 +240,7 @@ export function FriendsView() {
   const [sendingInvite, setSendingInvite] = useState(false)
   const [copied, setCopied] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
+  const [outgoingRequests, setOutgoingRequests] = useState<Array<{ id: string; toChatId: string; toName: string; toUsername: string | null; status: string }>>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
   const [scheduleModal, setScheduleModal] = useState<{
@@ -300,6 +301,9 @@ export function FriendsView() {
       const data = await res.json()
       if (data.pendingRequests) {
         setPendingRequests(data.pendingRequests)
+      }
+      if (data.outgoingRequests) {
+        setOutgoingRequests(data.outgoingRequests)
       }
       if (data.friends && Array.isArray(data.friends)) {
         dispatch({
@@ -381,6 +385,23 @@ export function FriendsView() {
       }
     } catch {
       showNotification('error', 'Ошибка ответа на запрос')
+    }
+  }
+
+  // Handle Cancel Outgoing Request
+  const handleCancelOutgoing = async (toChatId: string) => {
+    try {
+      const res = await fetch(`/api/friends?id=${encodeURIComponent(toChatId)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showNotification('success', 'Приглашение отменено')
+        loadFriendsAndRequests()
+      }
+    } catch {
+      showNotification('error', 'Ошибка отмены приглашения')
     }
   }
 
@@ -514,7 +535,7 @@ export function FriendsView() {
             </button>
           </div>
 
-          {/* PENDING FRIEND REQUESTS SECTION */}
+          {/* PENDING INCOMING FRIEND REQUESTS SECTION */}
           {pendingRequests.length > 0 && (
             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3 shadow-xs">
               <div className="flex items-center justify-between">
@@ -526,7 +547,7 @@ export function FriendsView() {
                 </div>
                 <button
                   onClick={loadFriendsAndRequests}
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/60 transition-colors"
+                  className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/60 transition-colors cursor-pointer"
                   title="Обновить"
                 >
                   <RefreshCw className={cn('w-3.5 h-3.5', loadingRequests && 'animate-spin')} />
@@ -534,37 +555,93 @@ export function FriendsView() {
               </div>
 
               <div className="space-y-2">
-                {pendingRequests.map(req => (
-                  <div
-                    key={req.id}
-                    className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                        {req.fromName[0]}
+                {pendingRequests.map(req => {
+                  const unameDisplay = req.fromUsername
+                    ? (req.fromUsername.startsWith('@') ? req.fromUsername : `@${req.fromUsername}`)
+                    : `ID: ${req.fromChatId}`
+                  return (
+                    <div
+                      key={req.id}
+                      className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                          {req.fromName[0] || 'U'}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">{req.fromName}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{unameDisplay}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground truncate">{req.fromName}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{req.fromUsername ? `@${req.fromUsername}` : 'ID: ' + req.fromChatId}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() => handleRespondRequest(req.fromChatId, 'accept')}
-                        className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-all"
-                      >
-                        Принять
-                      </button>
-                      <button
-                        onClick={() => handleRespondRequest(req.fromChatId, 'decline')}
-                        className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground text-xs font-semibold transition-all"
-                      >
-                        Отклонить
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleRespondRequest(req.fromChatId, 'accept')}
+                          className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                        >
+                          Принять
+                        </button>
+                        <button
+                          onClick={() => handleRespondRequest(req.fromChatId, 'decline')}
+                          className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground text-xs font-semibold transition-all cursor-pointer"
+                        >
+                          Отклонить
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* OUTGOING SENT FRIEND REQUESTS SECTION */}
+          {outgoingRequests.length > 0 && (
+            <div className="p-4 rounded-2xl bg-muted/40 border border-border/70 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <p className="text-xs font-bold text-foreground">
+                    Отправленные приглашения ({outgoingRequests.length})
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {outgoingRequests.map(req => {
+                  const unameDisplay = req.toUsername
+                    ? (req.toUsername.startsWith('@') ? req.toUsername : `@${req.toUsername}`)
+                    : `ID: ${req.toChatId}`
+                  return (
+                    <div
+                      key={req.id}
+                      className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                          {req.toName[0] || 'U'}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">{req.toName}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{unameDisplay}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                          Ожидает подтверждения
+                        </span>
+                        <button
+                          onClick={() => handleCancelOutgoing(req.toChatId)}
+                          className="px-2 py-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-rose-400 text-xs font-medium transition-colors cursor-pointer"
+                          title="Отменить приглашение"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
