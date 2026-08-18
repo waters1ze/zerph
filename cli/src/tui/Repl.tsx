@@ -135,7 +135,15 @@ export function Repl({ initialData }: { initialData?: any }) {
     minPlan: c.minPlan !== 'free' ? c.minPlan.toUpperCase() : undefined,
   }))
 
-  const allMenuItems = [...baseMenuItems, ...customExtItems]
+  const seenCmds = new Set<string>()
+  const allMenuItems: MenuItem[] = []
+  for (const item of [...customExtItems, ...baseMenuItems]) {
+    const key = item.cmd.toLowerCase()
+    if (!seenCmds.has(key)) {
+      seenCmds.add(key)
+      allMenuItems.push(item)
+    }
+  }
 
   const isSlashOrTyping = (inputVal.startsWith('/') || menuForced || (inputVal.length >= 2 && !inputVal.includes(' '))) && !pickingModel && !pickingChatFriend
   const filterQuery = (menuForced || inputVal === '/menu' || inputVal === '/') ? '' : inputVal.toLowerCase().trim().replace(/^\//, '')
@@ -657,8 +665,8 @@ export function Repl({ initialData }: { initialData?: any }) {
         <Box flexDirection="column" width={42} paddingX={1}>
           <Text bold color="cyanBright">Советы & Шорткаты</Text>
           <Box flexDirection="column" marginTop={0}>
-            <Text color="gray">• <Text color="cyanBright">settings</Text> / <Text color="cyanBright">/settings</Text> — настройки</Text>
-            <Text color="gray">• <Text color="cyanBright">today</Text> — задачи · <Text color="cyanBright">cal</Text> — календарь</Text>
+            <Text color="gray">• <Text color="cyanBright">settings</Text> — настройки · <Text color="cyanBright">today</Text> — задачи</Text>
+            <Text color="gray">• <Text color="cyanBright">/search &lt;запрос&gt;</Text> — поиск Entropy AI</Text>
             <Text color="gray">• <Text color="cyanBright">add &lt;текст&gt;</Text> — создать задачу</Text>
             <Text color="gray">• <Text color="cyanBright">done &lt;имя&gt;</Text> — закрыть дело</Text>
           </Box>
@@ -872,7 +880,7 @@ export function Repl({ initialData }: { initialData?: any }) {
               if (!val) setMenuForced(false)
             }}
             onSubmit={executeCommand}
-            placeholder="Напишите задачу, вопрос ИИ, settings, today, /menu..."
+            placeholder="Напишите задачу, /search, /today, settings, /menu..."
           />
         </Box>
         <Text color="gray" dimColor>────────────────────────────────────────────────────────────────────────────</Text>

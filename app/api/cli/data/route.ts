@@ -96,20 +96,18 @@ export async function GET(req: NextRequest) {
     const maxVoice = user.planLimits.voiceSecondsPerDay
     const maxChat = user.planLimits.chatMessagesPerDay
 
-    // Fetch user extensions
-    const extRow = await prisma.config.findUnique({ where: { key: `user_extensions_${user.chatId}` } }).catch(() => null)
+    // Fetch user extensions from catalog
     let extensions: any[] = []
     try {
-      const extIds = extRow ? JSON.parse(extRow.value) : []
-      if (Array.isArray(extIds) && extIds.length > 0) {
-        const rows = await prisma.config.findMany({
-          where: { key: { in: extIds.map(id => `zerf_ext_${id}`) } }
-        })
-        extensions = rows.map(r => {
-          try { return JSON.parse(r.value) } catch { return null }
-        }).filter(Boolean)
-      }
-    } catch {}
+      const { getUserInstalledExtensions, loadExtensionsCatalog } = await import('@/lib/backend/extensions')
+      const [installedIds, catalog] = await Promise.all([
+        getUserInstalledExtensions(String(user.chatId)),
+        loadExtensionsCatalog(),
+      ])
+      extensions = catalog.filter((ext: any) => installedIds.includes(ext.id))
+    } catch (e) {
+      console.error('Error loading CLI user extensions:', e)
+    }
 
     const payload = {
       allowed: true,
