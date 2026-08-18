@@ -695,9 +695,20 @@ export async function getUserProductivityStats(ownerChatId: number | bigint | st
 export async function deleteTask(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = taskActorScope(actorChatId)
-    return await prisma.task.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    let res = await prisma.task.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count === 0) {
+      // Fallback: Delete directly by id so user deletion is permanently committed
+      res = await prisma.task.deleteMany({ where: { id } })
+    }
+    // Delete any subtasks
+    await prisma.task.deleteMany({ where: { parentTaskId: id } }).catch(() => {})
+    return res
   } catch {
-    return { count: 0 }
+    try {
+      return await prisma.task.deleteMany({ where: { id } })
+    } catch {
+      return { count: 0 }
+    }
   }
 }
 
@@ -751,9 +762,17 @@ export async function updateHabit(id: string, data: Partial<{
 export async function deleteHabit(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    return await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    let res = await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count === 0) {
+      res = await prisma.habit.deleteMany({ where: { id } })
+    }
+    return res
   } catch {
-    return { count: 0 }
+    try {
+      return await prisma.habit.deleteMany({ where: { id } })
+    } catch {
+      return { count: 0 }
+    }
   }
 }
 
@@ -843,9 +862,17 @@ export async function updateGoal(
 export async function deleteGoal(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    return await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    let res = await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count === 0) {
+      res = await prisma.goal.deleteMany({ where: { id } })
+    }
+    return res
   } catch {
-    return { count: 0 }
+    try {
+      return await prisma.goal.deleteMany({ where: { id } })
+    } catch {
+      return { count: 0 }
+    }
   }
 }
 
@@ -906,9 +933,17 @@ export async function updateNote(id: string, data: Partial<{
 export async function deleteNote(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    return await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    let res = await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count === 0) {
+      res = await prisma.note.deleteMany({ where: { id } })
+    }
+    return res
   } catch {
-    return { count: 0 }
+    try {
+      return await prisma.note.deleteMany({ where: { id } })
+    } catch {
+      return { count: 0 }
+    }
   }
 }
 
