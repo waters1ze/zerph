@@ -2961,8 +2961,9 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
 
     const limits = PLANS[planId]
 
-    const [siriLifetimeUsed, photoUsed, goalUsed, activeRemindersCount, storedNotesCount] = await Promise.all([
+    const [siriLifetimeUsed, siriDailyUsed, photoUsed, goalUsed, activeRemindersCount, storedNotesCount] = await Promise.all([
       getLifetimeCount(COUNTERS.siri, chatIdStr),
+      getDailyCount(COUNTERS.siri, chatIdStr),
       getDailyCount(COUNTERS.photo, chatIdStr),
       getDailyCount(COUNTERS.goal, chatIdStr),
       getActiveRemindersCount(cid),
@@ -2970,7 +2971,8 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
     ])
 
     const canSendVoice = chat.voiceSecondsToday < limits.voiceSecondsPerDay
-    const canUseSiri = planId === 'free' ? siriLifetimeUsed < limits.siriLifetimeRequests : true
+    const siriUsed = planId === 'free' ? siriLifetimeUsed : siriDailyUsed
+    const canUseSiri = siriUsed < limits.siriLifetimeRequests
     const canCreateNote = storedNotesCount < limits.maxStoredNotes
     const canCreateReminder = activeRemindersCount < limits.maxActiveReminders
     const canUsePhoto = limits.photosPerDay > 0 && photoUsed < limits.photosPerDay
@@ -2989,7 +2991,7 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       notes: { used: storedNotesCount, max: limits.maxStoredNotes },
       reminders: { used: activeRemindersCount, max: limits.maxActiveReminders },
       chat: { used: chat.chatMessagesToday, max: limits.chatMessagesPerDay },
-      siri: { used: siriLifetimeUsed, max: limits.siriLifetimeRequests },
+      siri: { used: siriUsed, max: limits.siriLifetimeRequests },
       photos: { used: photoUsed, max: limits.photosPerDay },
       goals: { used: goalUsed, max: limits.goalsPerDay },
       canSendVoice,

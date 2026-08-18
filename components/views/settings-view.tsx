@@ -17,6 +17,7 @@ import {
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PLAN_CATALOG, normalizePlan, PLANS, UNLIMITED } from '@/lib/plans'
+import { sendTestNotification, requestNotificationPermission } from '@/lib/notifications'
 import { GiftSection } from '@/components/settings/gift-section'
 import { ImportExportSection } from '@/components/settings/import-export-section'
 import { TeamsSection } from '@/components/settings/teams-section'
@@ -639,17 +640,30 @@ export function SettingsView() {
     setAuthLoading(true)
     setAuthError(null)
     try {
-      const res = await fetch('/api/telegram/user', {
+      const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ googleEmail: clean })
+        body: JSON.stringify({ email: clean })
       })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки Google')
-      setProfileData(prev => ({ ...prev, googleEmail: clean }))
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка входа через Google')
+
+      if (data.token) {
+        try {
+          localStorage.setItem('zerf_auth_token', data.token)
+          if (data.chatId) localStorage.setItem('zerf_chat_id', data.chatId)
+        } catch {}
+      }
+
+      setProfileData(prev => ({
+        ...prev,
+        googleEmail: clean,
+        name: data.firstName || prev.name,
+      }))
       setShowGoogleLinkModal(false)
-      setAuthSuccess('Google аккаунт успешно привязан к профилю!')
+      setAuthSuccess('Google аккаунт успешно подключен!')
       setTimeout(() => setAuthSuccess(null), 3000)
+      syncData()
     } catch (err: any) {
       setAuthError(err.message || 'Ошибка привязки Google')
     } finally {
@@ -1007,7 +1021,7 @@ export function SettingsView() {
         </div>
 
         {/* Main Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-7 space-y-6">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-7 pb-32 sm:pb-16 space-y-6">
 
       {/* ── TAB 1: Account & Profile ────────────────────────────────────────── */}
       {activeTab === 'account' && (
@@ -1687,7 +1701,7 @@ export function SettingsView() {
                       </p>
                     )}
 
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button
                         type="submit"
                         disabled={authLoading || !googleInput.trim()}
@@ -1695,6 +1709,12 @@ export function SettingsView() {
                       >
                         {authLoading ? 'Сохранение...' : 'Привязать Google'}
                       </button>
+                      <a
+                        href="/api/auth/google"
+                        className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <span>⚡ Войти через Google OAuth</span>
+                      </a>
                       {profileData.googleEmail && (
                         <button
                           type="button"
@@ -2188,27 +2208,20 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
 
             <Row
               label="Браузерные Push-уведомления (Desktop / Mobile Web)"
-              description="Всплывающие карточки напоминаний поверх всех окон браузера"
+              description="Всплывающие карточки напоминаний и звуковой сигнал на телефон и ПК"
             >
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={async () => {
-                    if (typeof window !== 'undefined' && 'Notification' in window) {
-                      const perm = await Notification.requestPermission()
-                      if (perm === 'granted') {
-                        new Notification('🔔 Тестовое уведомление Zerf Note', {
-                          body: 'Проверка работы уведомлений на сайте выполнена успешно!',
-                          icon: '/icon.png'
-                        })
-                      } else {
-                        alert('Уведомления заблокированы в браузере. Разрешите их в настройках сайта.')
-                      }
+                    const res = await sendTestNotification()
+                    if (!res.success) {
+                      alert(res.message)
                     }
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-xs"
                 >
-                  Тест пуша
+                  🔔 Тест пуша на телефон и ПК
                 </button>
                 <Toggle
                   checked={settings.notifications.web !== false}
@@ -2220,8 +2233,8 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                         desktop: v
                       }
                     })
-                    if (v && typeof window !== 'undefined' && 'Notification' in window) {
-                      await Notification.requestPermission()
+                    if (v) {
+                      await requestNotificationPermission()
                     }
                   }}
                 />
@@ -3918,6 +3931,40 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                 <span>Сбросить кэш</span>
               </button>
             </Row>
+          </Section>
+
+          <Section title="Правовая информация & Безопасность">
+            <div className="p-4 rounded-2xl bg-card border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <p className="font-bold text-foreground flex items-center gap-1.5">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <span>Google API Compliance & AI Disclaimer</span>
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Соответствие Google API Services User Data Policy, защита персональных данных и отказ от ответственности за генерации ИИ.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold flex items-center gap-1 transition-colors"
+                >
+                  <span>Политика конфиденциальности</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold flex items-center gap-1 transition-colors"
+                >
+                  <span>Terms</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
           </Section>
         </div>
       )}

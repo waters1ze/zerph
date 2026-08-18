@@ -85,7 +85,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxActiveReminders: 100,
     maxProjects: 25,
     maxExtensions: 10, // До 10 расширений на Plus
-    siriLifetimeRequests: 250,
+    siriLifetimeRequests: 100, // 100 запросов Siri в день
     voiceSecondsPerDay: 900, // 15 минут в день
     photosPerDay: 25,
     goalsPerDay: 25,
@@ -99,7 +99,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxActiveReminders: 1000,
     maxProjects: 100,
     maxExtensions: 50, // До 50 расширений на Pro
-    siriLifetimeRequests: 5000,
+    siriLifetimeRequests: 500, // 500 запросов Siri в день
     voiceSecondsPerDay: 7200, // 2 часа голоса в день
     photosPerDay: 200,
     goalsPerDay: 100,
@@ -166,7 +166,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '🧩 До 10 активных расширений и виджетов',
       '250 заметок в аккаунте',
       '100 активных напоминаний',
-      '250 запросов Siri',
+      '100 запросов Siri в день',
       '🎙 Голос: 15 минут в день',
       '📷 Vision OCR (распознавание фото/расписаний): 25 в день',
       '💬 ИИ-сообщения: 150 в день',
@@ -190,7 +190,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '🎛 Кастомизация моделей под каждую задачу (Siri, чат, аналитика)',
       '5 000 заметок в аккаунте',
       '1 000 активных напоминаний',
-      '5 000 запросов Siri',
+      '500 запросов Siri в день',
       '🎙 Голос: 2 часа (120 мин) в день',
       '📷 Vision OCR: 200 распознаваний в день',
       '💬 ИИ-сообщения: 1 000 в день',
@@ -216,7 +216,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '🤖 Персональный ИИ-менеджер и выделенная поддержка',
       '25 000 заметок в аккаунте',
       '5 000 активных напоминаний',
-      '25 000 запросов Siri',
+      '25 000 запросов Siri в день',
       '🎙 Голос: 8 часов (480 мин) в день',
       '💬 ИИ-сообщения: 4 000 в день',
       '💻 Zerf CLI: 8 000 операций в день',

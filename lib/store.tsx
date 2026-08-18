@@ -707,7 +707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/tasks', {
         headers,
         cache: 'no-store',
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(5000),
       }).catch(() => null)
 
       if (res) {
@@ -801,10 +801,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             })
             .catch(() => {})
-
-          if (chatId) {
-            fetch(`/api/birthdays?chatId=${chatId}`, { headers, signal: AbortSignal.timeout(15000) }).catch(() => {})
-          }
         }
       }
     } catch {} finally {

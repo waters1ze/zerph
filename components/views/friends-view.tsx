@@ -47,14 +47,8 @@ function FriendCard({
   const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
   const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.name || '').toLowerCase().includes('zerph')
   const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? (isBot ? true : false))
-  // Auto-discover birthday: from friend.birthday OR existing birthday task in state.tasks
-  const existingBdayTask = state.tasks?.find((t: any) => 
-    (t.tags?.includes('день рождения') || t.title?.startsWith('🎂')) &&
-    (t.assignees?.includes(friend.id) || t.assignees?.includes(friend.chatId) || (friend.name && t.title?.toLowerCase().includes(friend.name.toLowerCase())))
-  )
-
   const normalizedBirthday = useMemo(() => {
-    const raw = friend.birthday || existingBdayTask?.dueDate || ''
+    const raw = friend.birthday || ''
     if (!raw) return ''
     const clean = raw.trim()
     // YYYY-MM-DD
@@ -67,29 +61,14 @@ function FriendCard({
     if (ruMatch) {
       return `${ruMatch[3]}-${ruMatch[2].padStart(2, '0')}-${ruMatch[1].padStart(2, '0')}`
     }
-    // DD.MM (Russian format: Day.Month e.g. 11.04)
-    const shortMatch = clean.match(/^(\d{1,2})[-/.](\d{1,2})$/)
-    if (shortMatch) {
-      const n1 = parseInt(shortMatch[1], 10)
-      const n2 = parseInt(shortMatch[2], 10)
-      let d = n1
-      let m = n2
-      if (n1 <= 12 && n2 > 12) {
-        m = n1
-        d = n2
-      }
-      return `2000-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    return ''
-  }, [friend.birthday, existingBdayTask?.dueDate])
+    return clean
+  }, [friend.birthday])
 
   const [birthday, setBirthday] = useState(normalizedBirthday)
   const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
-    if (normalizedBirthday && normalizedBirthday !== birthday) {
-      setBirthday(normalizedBirthday)
-    }
+    setBirthday(normalizedBirthday)
   }, [normalizedBirthday])
 
   const toggleAllowTasks = async () => {
@@ -114,7 +93,6 @@ function FriendCard({
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ friendId: friend.id, birthday: val }),
       })
-      fetch('/api/birthdays', { headers: getAuthHeaders() }).catch(() => {})
     } catch {}
   }
 

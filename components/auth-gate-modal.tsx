@@ -8,11 +8,12 @@ import { cn } from '@/lib/utils'
 
 export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const [isAuth, setIsAuth] = useState(true)
-  const [authTab, setAuthTab] = useState<'email' | 'tg' | 'vk'>('email')
+  const [authTab, setAuthTab] = useState<'google' | 'email' | 'tg' | 'vk'>('google')
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [googleEmail, setGoogleEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -20,8 +21,6 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
   useEffect(() => {
     const checkAuth = () => {
       const chatId = getTgChatId()
-      // Authenticated means: real chatId AND verifiable credentials
-      // (session token, Telegram initData, or signed VK launch params).
       const token = localStorage.getItem('zerf_auth_token')
       const initData = (window as any).Telegram?.WebApp?.initData
       const vkLaunch = localStorage.getItem('zerf_vk_launch')
@@ -36,6 +35,35 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
   const shouldOpen = open !== undefined ? open : !isAuth
 
   if (isAuth && open === undefined) return null
+
+  const handleGoogleDirectAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccessMsg(null)
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: googleEmail, firstName: name })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка входа через Google')
+
+      if (data.chatId) localStorage.setItem('zerf_chat_id', data.chatId)
+      if (data.token) localStorage.setItem('zerf_auth_token', data.token)
+      if (data.firstName) localStorage.setItem('zerf_user_name', data.firstName)
+
+      setSuccessMsg(data.message || 'Успешный вход!')
+      setTimeout(() => {
+        window.location.reload()
+      }, 700)
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сети')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,19 +135,30 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                   Вход в Zerf Note
                   <Sparkles className="w-4 h-4 text-amber-400 fill-amber-400" />
                 </h3>
-                    <p className="text-[12px] text-muted-foreground">
-                      Войдите по Email, Telegram или VK
-                    </p>
+                <p className="text-[12px] text-muted-foreground">
+                  Выберите удобный способ авторизации
+                </p>
               </div>
             </div>
 
             {/* Tab Selector */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-muted/60 border border-border/60">
+            <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-muted/60 border border-border/60">
+              <button
+                type="button"
+                onClick={() => { setAuthTab('google'); setError(null) }}
+                className={cn(
+                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all',
+                  authTab === 'google' ? 'bg-card text-rose-400 shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <span className="font-bold text-xs">G</span>
+                <span>Google</span>
+              </button>
               <button
                 type="button"
                 onClick={() => { setAuthTab('email'); setError(null) }}
                 className={cn(
-                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all',
                   authTab === 'email' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -130,7 +169,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                 type="button"
                 onClick={() => { setAuthTab('tg'); setError(null) }}
                 className={cn(
-                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all',
                   authTab === 'tg' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -141,16 +180,75 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                 type="button"
                 onClick={() => { setAuthTab('vk'); setError(null) }}
                 className={cn(
-                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all',
                   authTab === 'vk' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 <span className="font-bold text-xs text-[#0077FF]">VK</span>
-                <span>ВКонтакте</span>
+                <span>ВК</span>
               </button>
             </div>
 
             {/* Content per Tab */}
+            {authTab === 'google' && (
+              <div className="flex flex-col gap-3 pt-1">
+                <a
+                  href="/api/auth/google"
+                  className="w-full h-11 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-medium text-xs sm:text-[13px] transition-all flex items-center justify-center gap-2 shadow-md shadow-rose-500/20 active:scale-95"
+                >
+                  <span className="font-bold text-sm bg-white text-rose-500 rounded-full w-5 h-5 flex items-center justify-center">G</span>
+                  <span>Войти через Google в 1 клик</span>
+                </a>
+
+                <div className="flex items-center gap-2 my-1 text-muted-foreground text-[11px]">
+                  <div className="flex-1 h-px bg-border" />
+                  <span>или введите Google Email</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                <form onSubmit={handleGoogleDirectAuth} className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Ваш Google Email (Gmail)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        required
+                        value={googleEmail}
+                        onChange={e => setGoogleEmail(e.target.value)}
+                        placeholder="yourname@gmail.com"
+                        className="w-full h-10 pl-9 pr-3.5 rounded-xl bg-muted/60 border border-border text-xs focus:outline-none focus:border-rose-500 transition-colors text-foreground"
+                      />
+                    </div>
+                  </div>
+
+                  {error && (
+                    <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+                      {error}
+                    </p>
+                  )}
+
+                  {successMsg && (
+                    <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {successMsg}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading || !googleEmail.trim()}
+                    className="w-full h-10 rounded-xl bg-muted hover:bg-muted/80 border border-border text-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Войти по адресу Gmail</span>
+                  </button>
+                </form>
+              </div>
+            )}
+
             {authTab === 'email' && (
               <form onSubmit={handleEmailAuth} className="space-y-3 pt-1">
                 {isRegister && (

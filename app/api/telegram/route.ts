@@ -730,7 +730,7 @@ async function handleSubscribe(chatId: number) {
       `• 🎙 Голос: *${limits.plan === 'corp' ? '8 часов (480 мин)' : limits.plan === 'pro' ? '2 часа (120 мин)' : '15 минут'} в день*\n` +
       `• 📌 Заметки: *${limits.plan === 'corp' ? '25 000' : limits.plan === 'pro' ? '5 000' : '250'} в аккаунте*\n` +
       `• ⏰ Напоминания: *${limits.plan === 'corp' ? '5 000' : limits.plan === 'pro' ? '1 000' : '100'} активных*\n` +
-      `• 🍏 Siri и Быстрые команды: *${limits.plan === 'corp' ? '25 000' : limits.plan === 'pro' ? '5 000' : '250'} запросов*\n` +
+      `• 🍏 Siri и Быстрые команды: *${limits.plan === 'corp' ? '25 000' : limits.plan === 'pro' ? '500' : '100'} запросов в день*\n` +
       `• 📷 Vision OCR: *${limits.plan === 'corp' ? '500' : limits.plan === 'pro' ? '200' : '25'} фото в день*\n` +
       `• 💬 ИИ-сообщения: *${limits.plan === 'corp' ? '4 000' : limits.plan === 'pro' ? '1 000' : '150'} в день*\n` +
       `• 💻 Zerf CLI: *${limits.plan === 'corp' ? '8 000' : limits.plan === 'pro' ? '1 500' : '300'} операций в день*\n\n` +
@@ -761,11 +761,11 @@ async function handleSubscribe(chatId: number) {
     `✨ *Тариф Plus (99 ₽/мес | 1009 ₽/год):*\n` +
     `• 🤖 ИИ: Qwen 3.6 27B\n` +
     `• 🎙 Голос: 15 минут в день | 📌 Заметки: 250 | ⏰ Напоминания: 100\n` +
-    `• 🍏 Siri: 250 запросов | 📷 Vision OCR: 25 фото/день | 💻 CLI: 300/день\n\n` +
+    `• 🍏 Siri: 100 запросов в день | 📷 Vision OCR: 25 фото/день | 💻 CLI: 300/день\n\n` +
     `🚀 *Тариф Pro (299 ₽/мес | 3049 ₽/год):*\n` +
     `• 🧠 ИИ: OpenAI GPT-OSS 120B + Local CLI & своя нейросеть по API\n` +
     `• 🎙 Голос: 2 часа (120 мин)/день | 📌 Заметки: 5 000 | ⏰ Напоминания: 1 000\n` +
-    `• 🍏 Siri: 5 000 | 📷 Vision: 200/день | 💻 CLI: 1 500/день | ⚡ Smart Reschedule\n\n` +
+    `• 🍏 Siri: 500 запросов в день | 📷 Vision: 200/день | 💻 CLI: 1 500/день | ⚡ Smart Reschedule\n\n` +
     `🏢 *Тариф Corp (по запросу):*\n` +
     `• 🧠 GPT-OSS 120B + Local CLI Bridge + Персональный ИИ-менеджер\n` +
     `• ⚡ Наивысший приоритет запросов без очередей над всеми пользователями\n` +

@@ -6,26 +6,70 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 
   // Register service worker if supported
+  let swReg: ServiceWorkerRegistration | null = null
   if ('serviceWorker' in navigator) {
     try {
-      await navigator.serviceWorker.register('/sw.js')
+      swReg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
     } catch {}
   }
 
-  if (Notification.permission === 'granted') {
-    return true
-  }
+  let granted = Notification.permission === 'granted'
 
-  if (Notification.permission !== 'denied') {
+  if (!granted && Notification.permission !== 'denied') {
     try {
       const perm = await Notification.requestPermission()
-      return perm === 'granted'
+      granted = perm === 'granted'
     } catch {
-      return false
+      granted = false
     }
   }
 
-  return false
+  if (granted && swReg && 'pushManager' in swReg) {
+    try {
+      const sub = await swReg.pushManager.getSubscription()
+      const chatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
+      if (sub && chatId) {
+        fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: sub.toJSON(), chatId }),
+        }).catch(() => {})
+      }
+    } catch {}
+  }
+
+  return granted
+}
+
+export async function sendTestNotification(): Promise<{ success: boolean; message: string }> {
+  if (typeof window === 'undefined') return { success: false, message: 'Окно недоступно' }
+  if (!('Notification' in window)) {
+    return { success: false, message: 'Ваш браузер не поддерживает Push-уведомления' }
+  }
+
+  const granted = await requestNotificationPermission()
+  if (!granted) {
+    return {
+      success: false,
+      message: 'Уведомления заблокированы. Разрешите их в настройках браузера или сайта (значок замка в адресной строке).'
+    }
+  }
+
+  showWebNotification('🔔 Тестовый Пуш от Zerf Note', {
+    body: 'Ура! Пуш-уведомления успешно работают на вашем устройстве (ПК и телефон)! 🎉',
+    tag: 'zerf-test-push',
+    requireInteraction: true,
+  })
+
+  // Also hit the test endpoint for analytics
+  fetch('/api/push/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Тестовый пуш', message: 'Успешно доставлено' }),
+  }).catch(() => {})
+
+  return { success: true, message: 'Тестовый пуш успешно отправлен!' }
 }
 
 export function showWebNotification(
@@ -47,7 +91,7 @@ export function showWebNotification(
   if ('Notification' in window && Notification.permission === 'granted') {
     let shown = false
 
-    // Try service worker notification first (better background support on mobile & desktop)
+    // 1. Try service worker notification first (best background support on mobile & desktop)
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready
         .then(reg => {
@@ -57,6 +101,7 @@ export function showWebNotification(
             badge: defaultIcon,
             tag,
             renotify: true,
+            vibrate: [200, 100, 200, 100, 300],
             requireInteraction: options?.requireInteraction ?? true,
           } as any)
           shown = true

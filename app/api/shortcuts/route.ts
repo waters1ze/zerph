@@ -345,7 +345,9 @@ export async function POST(req: NextRequest) {
 
     // Limits check: Siri requests quota + voice seconds quota
     if (!limits.canUseSiri) {
-      const limitMsg = `❌ Лимит Siri-запросов исчерпан (${limits.siri.max} запросов за всё время на бесплатном тарифе). Оформите Zerf Plus или Pro в боте — там Siri без ограничений!`
+      const limitMsg = limits.plan === 'free'
+        ? `❌ Лимит Siri-запросов исчерпан (${limits.siri.max} запросов за всё время на бесплатном тарифе). Оформите Zerf Plus (100 в день) или Pro (500 в день)!`
+        : `❌ Дневной лимит Siri-запросов исчерпан (${limits.siri.used}/${limits.siri.max} в день). Лимит обновится в 00:00 МСК.`
       if (format === 'json') {
         return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
       }
@@ -416,6 +418,7 @@ export async function POST(req: NextRequest) {
     ;(async () => {
       const estimatedSec = Math.max(5, Math.round(inputText.length / 15))
       await Promise.allSettled([
+        incrementDailyCount(COUNTERS.siri, chatId),
         incrementLifetimeCount(COUNTERS.siri, chatId),
         incrementUserUsage(chatId, 'voice', estimatedSec),
         (async () => {
@@ -548,7 +551,9 @@ export async function GET(req: NextRequest) {
 
   // Limits check
   if (!limits.canUseSiri) {
-    const limitMsg = `❌ Лимит Siri-запросов исчерпан (${limits.siri.max} запросов за всё время на бесплатном тарифе). Оформите Zerf Plus или Pro в боте — там Siri без ограничений!`
+    const limitMsg = limits.plan === 'free'
+      ? `❌ Лимит Siri-запросов исчерпан (${limits.siri.max} запросов за всё время на бесплатном тарифе). Оформите Zerf Plus (100 в день) или Pro (500 в день)!`
+      : `❌ Дневной лимит Siri-запросов исчерпан (${limits.siri.used}/${limits.siri.max} в день). Лимит обновится в 00:00 МСК.`
     if (format === 'json') {
       return NextResponse.json({ error: limitMsg, spokenResponse: limitMsg, text: limitMsg }, { status: 403, headers: NO_CACHE_HEADERS })
     }
@@ -597,6 +602,7 @@ export async function GET(req: NextRequest) {
   ;(async () => {
     const estimatedSec = Math.max(5, Math.round(text.length / 15))
     await Promise.allSettled([
+      incrementDailyCount(COUNTERS.siri, chatId),
       incrementLifetimeCount(COUNTERS.siri, chatId),
       incrementUserUsage(chatId, 'voice', estimatedSec),
       (async () => {
