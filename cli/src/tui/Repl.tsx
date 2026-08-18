@@ -706,56 +706,103 @@ export function Repl({ initialData }: { initialData?: any }) {
         </Box>
       ))}
 
-      {/* ── Interactive Friend Picker Modal (/chat) ── */}
+      {/* ── Interactive Friend Picker Modal (/chat) ─────────────────────── */}
       {pickingChatFriend && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">◈ Выберите друга для начала диалога (↑/↓, Enter):</Text>
             <Text color="gray">ESC отмена</Text>
           </Box>
-          {(data?.friends || []).map((f: any, idx: number) => {
-            const isSel = idx === selectedFriendIdx
-            const usernameTag = f.username ? `@${f.username}` : 'без юзернейма'
+          {(() => {
+            const friendsList = data?.friends || []
+            const VISIBLE_FRIEND_COUNT = 7
+            const startFriendIdx = friendsList.length <= VISIBLE_FRIEND_COUNT
+              ? 0
+              : Math.max(0, Math.min(selectedFriendIdx - Math.floor(VISIBLE_FRIEND_COUNT / 2), friendsList.length - VISIBLE_FRIEND_COUNT))
+            const endFriendIdx = Math.min(friendsList.length, startFriendIdx + VISIBLE_FRIEND_COUNT)
+            const visibleFriends = friendsList.slice(startFriendIdx, endFriendIdx)
+
             return (
-              <Box key={`friend_opt_${f.id || idx}_${idx}`} gap={1}>
-                <Text bold color={isSel ? 'cyanBright' : 'gray'}>
-                  {isSel ? '▶ ' : '  '}{f.name.padEnd(20)}
-                </Text>
-                <Text color={isSel ? 'white' : 'gray'}>
-                  — {usernameTag.padEnd(18)} [В сети] Начать диалог
-                </Text>
-              </Box>
+              <>
+                {visibleFriends.map((f: any, relIdx: number) => {
+                  const actualIdx = startFriendIdx + relIdx
+                  const isSel = actualIdx === selectedFriendIdx
+                  const usernameTag = f.username ? `@${f.username}` : 'без юзернейма'
+                  return (
+                    <Box key={`friend_opt_${f.id || actualIdx}_${actualIdx}`} gap={1}>
+                      <Text bold color={isSel ? 'cyanBright' : 'gray'}>
+                        {isSel ? '▶ ' : '  '}{f.name.padEnd(20)}
+                      </Text>
+                      <Text color={isSel ? 'white' : 'gray'}>
+                        — {usernameTag.padEnd(18)} [В сети] Начать диалог
+                      </Text>
+                    </Box>
+                  )
+                })}
+                {friendsList.length > VISIBLE_FRIEND_COUNT && (
+                  <Box justifyContent="space-between" marginTop={0}>
+                    <Text color="gray" dimColor>{startFriendIdx > 0 ? `▲ ещё ${startFriendIdx}` : ''}</Text>
+                    <Text color="gray" dimColor>
+                      {startFriendIdx + 1}–{endFriendIdx} из {friendsList.length} (листайте ↑/↓)
+                    </Text>
+                    <Text color="gray" dimColor>{endFriendIdx < friendsList.length ? `▼ ещё ${friendsList.length - endFriendIdx}` : ''}</Text>
+                  </Box>
+                )}
+              </>
             )
-          })}
+          })()}
         </Box>
       )}
 
-      {/* ── Interactive Model Picker Modal (/model) ── */}
+      {/* ── Interactive Model Picker Modal (/model) ─────────────────────── */}
       {pickingModel && (
         <Box flexDirection="column" borderStyle="double" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
             <Text bold color="cyanBright">◈ Выберите нейросеть или локальный CLI агент (↑/↓, Enter):</Text>
             <Text color="gray">ESC для закрытия</Text>
           </Box>
-          {allAvailableModels.map((m, idx) => {
-            const isSel = idx === selectedModelIdx
-            const isCurrent = config.model === m.id
-            const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]'
+          {(() => {
+            const VISIBLE_MODEL_COUNT = 7
+            const startModelIdx = allAvailableModels.length <= VISIBLE_MODEL_COUNT
+              ? 0
+              : Math.max(0, Math.min(selectedModelIdx - Math.floor(VISIBLE_MODEL_COUNT / 2), allAvailableModels.length - VISIBLE_MODEL_COUNT))
+            const endModelIdx = Math.min(allAvailableModels.length, startModelIdx + VISIBLE_MODEL_COUNT)
+            const visibleModels = allAvailableModels.slice(startModelIdx, endModelIdx)
+
             return (
-              <Box key={`model_opt_${m.id}_${idx}`} gap={1}>
-                <Text bold color={isSel ? 'cyanBright' : 'gray'}>
-                  {isSel ? '▶ ' : '  '}{m.name.padEnd(30)}
-                </Text>
-                <Text color={isSel ? 'white' : 'gray'}>
-                  — {tag} {m.desc} {isCurrent ? '(Текущий)' : ''}
-                </Text>
-              </Box>
+              <>
+                {visibleModels.map((m, relIdx) => {
+                  const actualIdx = startModelIdx + relIdx
+                  const isSel = actualIdx === selectedModelIdx
+                  const isCurrent = config.model === m.id
+                  const tag = m.type === 'local_cli' ? `[Локальный CLI ${m.status || ''}]` : '[Облако Zerf]'
+                  return (
+                    <Box key={`model_opt_${m.id}_${actualIdx}`} gap={1}>
+                      <Text bold color={isSel ? 'cyanBright' : 'gray'}>
+                        {isSel ? '▶ ' : '  '}{m.name.padEnd(30)}
+                      </Text>
+                      <Text color={isSel ? 'white' : 'gray'}>
+                        — {tag} {m.desc} {isCurrent ? '(Текущий)' : ''}
+                      </Text>
+                    </Box>
+                  )
+                })}
+                {allAvailableModels.length > VISIBLE_MODEL_COUNT && (
+                  <Box justifyContent="space-between" marginTop={0}>
+                    <Text color="gray" dimColor>{startModelIdx > 0 ? `▲ ещё ${startModelIdx}` : ''}</Text>
+                    <Text color="gray" dimColor>
+                      {startModelIdx + 1}–{endModelIdx} из {allAvailableModels.length} (листайте ↑/↓)
+                    </Text>
+                    <Text color="gray" dimColor>{endModelIdx < allAvailableModels.length ? `▼ ещё ${allAvailableModels.length - endModelIdx}` : ''}</Text>
+                  </Box>
+                )}
+              </>
             )
-          })}
+          })()}
         </Box>
       )}
 
-      {/* ── Interactive Command Autocomplete Dropdown ── */}
+      {/* ── Interactive Command Autocomplete Dropdown with Smooth Scrolling ── */}
       {isSlashOrTyping && filteredCommands.length > 0 && !pickingModel && !pickingChatFriend && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyanBright" paddingX={1} marginY={1}>
           <Box justifyContent="space-between" marginBottom={0}>
@@ -764,23 +811,43 @@ export function Repl({ initialData }: { initialData?: any }) {
             </Text>
             <Text color="gray">ESC для закрытия</Text>
           </Box>
-          {filteredCommands.slice(0, 10).map((item, idx) => {
-            const isSel = idx === selectedIdx
-            const planBadge = item.minPlan ? `[${item.minPlan}] ` : ''
+          {(() => {
+            const VISIBLE_CMD_COUNT = 8
+            const startCmdIdx = filteredCommands.length <= VISIBLE_CMD_COUNT
+              ? 0
+              : Math.max(0, Math.min(selectedIdx - Math.floor(VISIBLE_CMD_COUNT / 2), filteredCommands.length - VISIBLE_CMD_COUNT))
+            const endCmdIdx = Math.min(filteredCommands.length, startCmdIdx + VISIBLE_CMD_COUNT)
+            const visibleCommands = filteredCommands.slice(startCmdIdx, endCmdIdx)
+
             return (
-              <Box key={`cmd_opt_${item.cmd}_${idx}`} gap={1}>
-                <Text bold color={isSel ? 'cyanBright' : 'gray'}>
-                  {isSel ? '▶ ' : '  '}{item.label.padEnd(18)}
-                </Text>
-                <Text color={isSel ? 'white' : 'gray'}>
-                  — {planBadge}{item.desc}
-                </Text>
-              </Box>
+              <>
+                {visibleCommands.map((item, relIdx) => {
+                  const actualIdx = startCmdIdx + relIdx
+                  const isSel = actualIdx === selectedIdx
+                  const planBadge = item.minPlan ? `[${item.minPlan}] ` : ''
+                  return (
+                    <Box key={`cmd_opt_${item.cmd}_${actualIdx}`} gap={1}>
+                      <Text bold color={isSel ? 'cyanBright' : 'gray'}>
+                        {isSel ? '▶ ' : '  '}{item.label.padEnd(18)}
+                      </Text>
+                      <Text color={isSel ? 'white' : 'gray'}>
+                        — {planBadge}{item.desc}
+                      </Text>
+                    </Box>
+                  )
+                })}
+                {filteredCommands.length > VISIBLE_CMD_COUNT && (
+                  <Box justifyContent="space-between" marginTop={0}>
+                    <Text color="gray" dimColor>{startCmdIdx > 0 ? `▲ ещё ${startCmdIdx}` : ' '}</Text>
+                    <Text color="gray" dimColor>
+                      {startCmdIdx + 1}–{endCmdIdx} из {filteredCommands.length} · ↑/↓ прокрутка · Tab выбор
+                    </Text>
+                    <Text color="gray" dimColor>{endCmdIdx < filteredCommands.length ? `▼ ещё ${filteredCommands.length - endCmdIdx}` : ' '}</Text>
+                  </Box>
+                )}
+              </>
             )
-          })}
-          {filteredCommands.length > 10 && (
-            <Text color="gray" dimColor>  ... и ещё {filteredCommands.length - 10} команд (уточните поиск или листайте ↑/↓)</Text>
-          )}
+          })()}
         </Box>
       )}
 
