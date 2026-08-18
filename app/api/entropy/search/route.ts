@@ -106,12 +106,12 @@ export interface EntropySearchResult {
 export function getEntropyModelForPlan(userPlan?: string, isPro = false): { model: string; displayName: string } {
   const norm = String(userPlan || 'free').toLowerCase()
   if (norm === 'corp' || norm === 'creator' || norm === 'admin' || norm === 'pro' || isPro) {
-    return { model: 'deepseek-r1-distill-llama-70b', displayName: 'DeepSeek R1 Distill 70B' }
+    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Deep Reasoning' }
   }
   if (norm === 'plus') {
-    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B Reasoning' }
+    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' }
   }
-  return { model: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B Instant' }
+  return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B High Speed' }
 }
 
 // GET: Return user's daily search quotas and usage

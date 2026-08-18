@@ -1,6 +1,6 @@
 /**
  * Live Open Knowledge & Search Source Fetchers for Entropy AI Search
- * Queries Wikipedia, DuckDuckGo, arXiv, GitHub, HackerNews and OpenAlex
+ * Queries Google News RSS, DuckDuckGo HTML, Wikipedia, arXiv, GitHub, HackerNews and OpenAlex
  * without requiring paid API keys, delivering real-time factual grounding.
  */
 
@@ -13,12 +13,65 @@ export interface LiveSource {
 }
 
 /**
+ * Fetch real-time live news and recent articles via Google News RSS
+ */
+async function fetchGoogleNews(query: string): Promise<LiveSource[]> {
+  try {
+    const encoded = encodeURIComponent(query.trim())
+    // Russian news feed
+    const res = await fetch(
+      `https://news.google.com/rss/search?q=${encoded}&hl=ru&gl=RU&ceid=RU:ru`,
+      {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(4000),
+      }
+    )
+    if (!res.ok) return []
+    const xml = await res.text()
+
+    const items = xml.split('<item>')
+    const sources: LiveSource[] = []
+
+    for (let i = 1; i < Math.min(items.length, 5); i++) {
+      const chunk = items[i]
+      const titleMatch = chunk.match(/<title>([^<]+)<\/title>/)
+      const linkMatch = chunk.match(/<link>([^<]+)<\/link>/)
+      const sourceMatch = chunk.match(/<source[^>]*>([^<]+)<\/source>/)
+      const pubDateMatch = chunk.match(/<pubDate>([^<]+)<\/pubDate>/)
+
+      if (titleMatch && linkMatch) {
+        const fullTitle = titleMatch[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim()
+        const sourceName = sourceMatch ? sourceMatch[1].trim() : 'Новости'
+        const rawUrl = linkMatch[1].trim()
+        const pubDate = pubDateMatch ? new Date(pubDateMatch[1]).toLocaleDateString('ru-RU') : ''
+
+        let domain = 'news.google.com'
+        try {
+          if (sourceName) domain = sourceName.toLowerCase().replace(/\s+/g, '') + '.ru'
+        } catch {}
+
+        sources.push({
+          id: sources.length + 1,
+          title: fullTitle,
+          url: rawUrl,
+          domain,
+          snippet: `Актуальная новость (${pubDate || 'Свежее'}): ${fullTitle}`,
+        })
+      }
+    }
+
+    return sources
+  } catch {
+    return []
+  }
+}
+
+/**
  * Fetch encyclopedic summary from Wikipedia (RU + EN fallback)
  */
 async function fetchWikipedia(query: string): Promise<LiveSource[]> {
   try {
     const encoded = encodeURIComponent(query.trim())
-    // 1. Search for closest page title on Russian Wikipedia
     const searchRes = await fetch(
       `https://ru.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&format=json&utf8=1&srlimit=2`,
       { signal: AbortSignal.timeout(3500) }
@@ -28,7 +81,6 @@ async function fetchWikipedia(query: string): Promise<LiveSource[]> {
     const hits = searchData?.query?.search || []
 
     if (hits.length === 0) {
-      // Fallback to EN Wikipedia
       const enRes = await fetch(
         `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&format=json&utf8=1&srlimit=2`,
         { signal: AbortSignal.timeout(3500) }
@@ -58,39 +110,86 @@ async function fetchWikipedia(query: string): Promise<LiveSource[]> {
 }
 
 /**
- * Fetch instant answers and related topics from DuckDuckGo
+ * Fetch live search results via DuckDuckGo HTML / Instant Answers
  */
 async function fetchDuckDuckGo(query: string): Promise<LiveSource[]> {
   try {
     const encoded = encodeURIComponent(query.trim())
+    // Try DuckDuckGo Instant Answers API first
     const res = await fetch(
       `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=0`,
       { signal: AbortSignal.timeout(3500) }
     )
-    if (!res.ok) return []
-    const data = await res.json()
     const sources: LiveSource[] = []
 
-    if (data.Abstract && data.AbstractURL) {
-      sources.push({
-        id: 1,
-        title: data.Heading || query,
-        url: data.AbstractURL,
-        domain: new URL(data.AbstractURL).hostname.replace('www.', ''),
-        snippet: data.Abstract.slice(0, 300),
-      })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.Abstract && data.AbstractURL) {
+        sources.push({
+          id: 1,
+          title: data.Heading || query,
+          url: data.AbstractURL,
+          domain: new URL(data.AbstractURL).hostname.replace('www.', ''),
+          snippet: data.Abstract.slice(0, 300),
+        })
+      }
+
+      if (Array.isArray(data.RelatedTopics)) {
+        for (const topic of data.RelatedTopics.slice(0, 3)) {
+          if (topic.Text && topic.FirstURL) {
+            sources.push({
+              id: sources.length + 1,
+              title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 60),
+              url: topic.FirstURL,
+              domain: new URL(topic.FirstURL).hostname.replace('www.', ''),
+              snippet: topic.Text.slice(0, 250),
+            })
+          }
+        }
+      }
     }
 
-    if (Array.isArray(data.RelatedTopics)) {
-      for (const topic of data.RelatedTopics.slice(0, 3)) {
-        if (topic.Text && topic.FirstURL) {
-          sources.push({
-            id: sources.length + 1,
-            title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 60),
-            url: topic.FirstURL,
-            domain: new URL(topic.FirstURL).hostname.replace('www.', ''),
-            snippet: topic.Text.slice(0, 250),
-          })
+    // If zero results, query DuckDuckGo HTML Lite for rich organic search results
+    if (sources.length === 0) {
+      const liteRes = await fetch(`https://html.duckduckgo.com/html/?q=${encoded}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(3500),
+      })
+
+      if (liteRes.ok) {
+        const html = await liteRes.text()
+        const resultChunks = html.split('class="result__body')
+
+        for (let i = 1; i < Math.min(resultChunks.length, 4); i++) {
+          const chunk = resultChunks[i]
+          const titleMatch = chunk.match(/class="result__snippet[^>]*>([^<]+)<\/a>/i) || chunk.match(/class="result__title"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i)
+          const urlMatch = chunk.match(/class="result__url"[^>]*href="([^"]+)"/i) || chunk.match(/href="\/\/duckduckgo\.com\/l\/\?uddg=([^&"]+)/i)
+          const snippetMatch = chunk.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i)
+
+          if (titleMatch) {
+            const rawTitle = titleMatch[1].replace(/<[^>]+>/g, '').trim()
+            let rawUrl = urlMatch ? decodeURIComponent(urlMatch[1]) : `https://duckduckgo.com/?q=${encoded}`
+            if (rawUrl.startsWith('//')) rawUrl = 'https:' + rawUrl
+
+            let domain = 'web'
+            try {
+              domain = new URL(rawUrl).hostname.replace('www.', '')
+            } catch {}
+
+            const rawSnippet = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim() : rawTitle
+
+            if (rawTitle && !rawTitle.includes('DuckDuckGo')) {
+              sources.push({
+                id: sources.length + 1,
+                title: rawTitle,
+                url: rawUrl,
+                domain,
+                snippet: rawSnippet.slice(0, 300),
+              })
+            }
+          }
         }
       }
     }
@@ -237,6 +336,10 @@ export async function aggregateLiveKnowledgeSources(
 ): Promise<LiveSource[]> {
   const tasks: Promise<LiveSource[]>[] = []
 
+  // Always query Google News and DuckDuckGo for live facts
+  tasks.push(fetchGoogleNews(query))
+  tasks.push(fetchDuckDuckGo(query))
+
   if (mode === 'academic') {
     tasks.push(fetchArxiv(query))
     tasks.push(fetchOpenAlex(query))
@@ -244,11 +347,9 @@ export async function aggregateLiveKnowledgeSources(
   } else if (mode === 'code') {
     tasks.push(fetchGitHub(query))
     tasks.push(fetchHackerNews(query))
-    tasks.push(fetchDuckDuckGo(query))
   } else {
     // 'web', 'fast', or general
     tasks.push(fetchWikipedia(query))
-    tasks.push(fetchDuckDuckGo(query))
     if (isPro) {
       tasks.push(fetchArxiv(query))
       tasks.push(fetchGitHub(query))
@@ -263,7 +364,7 @@ export async function aggregateLiveKnowledgeSources(
   for (const r of results) {
     if (r.status === 'fulfilled' && Array.isArray(r.value)) {
       for (const s of r.value) {
-        if (s.url && !seenUrls.has(s.url)) {
+        if (s.url && !seenUrls.has(s.url) && s.title) {
           seenUrls.add(s.url)
           allSources.push(s)
         }
@@ -271,8 +372,8 @@ export async function aggregateLiveKnowledgeSources(
     }
   }
 
-  // Renumber IDs 1..N and cap to 6 (or 8 for Pro Search)
-  const maxSources = isPro ? 8 : 5
+  // Renumber IDs 1..N and cap to 8 (or 10 for Pro Search)
+  const maxSources = isPro ? 10 : 7
   return allSources.slice(0, maxSources).map((s, idx) => ({
     ...s,
     id: idx + 1,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { Sparkles, Bot } from 'lucide-react'
@@ -39,10 +39,41 @@ export function ZerfikMascot({
   const [currentMood, setCurrentMood] = useState<ZerfikMood>(mood)
   const [quoteIndex, setQuoteIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const [cursorVector, setCursorVector] = useState<{ dx: number; dy: number; facing: number; tilt: number }>({
+    dx: 0,
+    dy: 0,
+    facing: 1,
+    tilt: 0,
+  })
 
   useEffect(() => {
     setCurrentMood(mood)
   }, [mood])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      const dx = e.clientX - centerX
+      const dy = e.clientY - centerY
+      const maxDist = Math.max(window.innerWidth, window.innerHeight) || 1000
+
+      // Normalize offsets smoothly
+      const normX = Math.max(-10, Math.min(10, (dx / maxDist) * 32))
+      const normY = Math.max(-8, Math.min(8, (dy / maxDist) * 24))
+      const tilt = Math.max(-12, Math.min(12, (dx / maxDist) * 35))
+      const facing = dx < -25 ? -1 : 1
+
+      setCursorVector({ dx: normX, dy: normY, facing, tilt })
+    }
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
 
   const handleClick = () => {
     setQuoteIndex(prev => (prev + 1) % ZERFIK_QUOTES.length)
@@ -69,6 +100,7 @@ export function ZerfikMascot({
     <div className={cn('flex items-center gap-3.5 select-none relative', className)}>
       {/* ── Floating Seamless Spirit Figure (No Box, No Background, Pure Transparent Hologram) ── */}
       <div
+        ref={containerRef}
         className="relative cursor-pointer group shrink-0 flex items-center justify-center"
         onClick={handleClick}
         onMouseEnter={() => setIsHovered(true)}
@@ -126,18 +158,20 @@ export function ZerfikMascot({
           </>
         )}
 
-        {/* Floating Glowing Spirit Cutout with Thinking Flip */}
+        {/* Floating Glowing Spirit Cutout with Cursor Tracking & Thinking Flip */}
         <motion.div
           animate={{
-            y: isThinking ? [-4, 4, -4] : [-3, 3, -3],
-            rotate: isThinking ? [-3, 3, -3] : [-1.5, 1.5, -1.5],
-            scaleX: isThinking ? [1, -1, 1] : 1,
+            x: cursorVector.dx,
+            y: isThinking ? [-4, 4, -4] : cursorVector.dy,
+            rotate: isThinking ? [-3, 3, -3] : cursorVector.tilt,
+            scaleX: isThinking ? [1, -1, 1] : cursorVector.facing,
             scale: currentMood === 'celebrate' ? [1, 1.15, 1] : 1,
           }}
           transition={{
-            y: { duration: isThinking ? 1.0 : 3.4, repeat: Infinity, ease: 'easeInOut' },
-            rotate: { duration: isThinking ? 1.0 : 3.4, repeat: Infinity, ease: 'easeInOut' },
-            scaleX: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+            x: { type: 'spring', stiffness: 200, damping: 22 },
+            y: isThinking ? { duration: 1.0, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
+            rotate: { type: 'spring', stiffness: 180, damping: 18 },
+            scaleX: isThinking ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.25 },
             scale: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' },
           }}
           className="relative flex items-center justify-center transition-all pointer-events-auto select-none"
