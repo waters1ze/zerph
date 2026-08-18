@@ -61,6 +61,7 @@ export function EntropySearchView() {
   const { state, dispatch } = useApp()
   const [query, setQuery] = useState('')
   const [activeMode, setActiveMode] = useState<'web' | 'academic' | 'notes' | 'fast' | 'code'>('web')
+  const [searchDepth, setSearchDepth] = useState<'lite' | 'high' | 'max'>('high')
   const [isProSearch, setIsProSearch] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [searchStep, setSearchStep] = useState<number>(0)
@@ -263,6 +264,13 @@ export function EntropySearchView() {
           query: targetQuery,
           mode: activeMode,
           isPro: isProSearch,
+          depth: searchDepth,
+          userNotes: state.notes.slice(0, 20).map(n => ({
+            id: n.id,
+            title: n.title,
+            content: (n.content || '').slice(0, 400),
+            tags: n.tags,
+          })),
         }),
       })
 
@@ -270,19 +278,21 @@ export function EntropySearchView() {
       clearTimeout(stepTimer1)
       clearTimeout(stepTimer2)
 
-      if (data.success && data.result) {
-        const cleanComment = (data.result.tikhonyaComment || 'Зерфик завершил глубокое исследование первоисточников')
+      const rawResult = data.result || (data.answer ? data : null)
+
+      if (rawResult) {
+        const cleanComment = (rawResult.tikhonyaComment || 'Зерфик завершил глубокое исследование первоисточников')
           .replace(/тихоня/gi, 'Зерфик')
           .replace(/\[\s*[˘ˇ^]\s*[ᴗ◡‿_]\s*[˘ˇ^]\s*\]/g, '')
           .trim()
-        const sanitizedResult = { ...data.result, tikhonyaComment: cleanComment }
+        const sanitizedResult = { ...rawResult, tikhonyaComment: cleanComment }
 
         setResult(sanitizedResult)
         setZerfikMood('happy')
         setZerfikStatus(cleanComment)
 
-        if (data.result.usage) {
-          setUsageInfo(data.result.usage)
+        if (rawResult.usage) {
+          setUsageInfo(rawResult.usage)
         }
 
         // Save to local history
@@ -520,6 +530,31 @@ export function EntropySearchView() {
                 </button>
               )
             })}
+          </div>
+
+          {/* Depth / Length Selector */}
+          <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-xl border border-border shrink-0">
+            {[
+              { id: 'lite', label: 'Lite', limit: 'до 500 зн.', icon: '⚡', desc: 'Краткий блиц (до 500 символов)' },
+              { id: 'high', label: 'High', limit: 'до 1000 зн.', icon: '📊', desc: 'Стандартный анализ (до 1000 символов)' },
+              { id: 'max',  label: 'Max',  limit: 'до 2000 зн.', icon: '📚', desc: 'Глубокий отчет (до 2000 символов)' },
+            ].map(d => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setSearchDepth(d.id as any)}
+                title={`${d.desc} — ${d.limit}`}
+                className={cn(
+                  'px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1',
+                  searchDepth === d.id
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+              >
+                <span>{d.icon}</span>
+                <span>{d.label}</span>
+              </button>
+            ))}
           </div>
 
           <button
@@ -761,11 +796,22 @@ export function EntropySearchView() {
           <div className="p-6 md:p-8 rounded-3xl bg-card border border-border/80 shadow-xs space-y-5">
             {/* Header Action Bar */}
             <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3 flex-wrap">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <h3 className="font-bold text-sm text-foreground">Синтез ответа и фактологический отчет</h3>
+                
+                {/* Result Depth Mode Badge */}
+                <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold font-mono">
+                  {result.depth === 'lite' ? '⚡ Lite (до 500 зн.)' : result.depth === 'max' ? '📚 Max (до 2000 зн.)' : '📊 High (до 1000 зн.)'}
+                </span>
+
+                {result.isPro && (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-bold font-mono flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5" /> Pro Search
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -832,6 +878,45 @@ export function EntropySearchView() {
                     )
                   },
                   a: ({ href, children, title }) => {
+                    if (href?.startsWith('cite:') || href?.startsWith('#cite-')) {
+                      const sId = parseInt(href.replace(/^(cite:|#cite-)/, ''), 10)
+                      const source = result.sources?.find(s => s.id === sId)
+                      const isNote = source?.type === 'note' || Boolean(source?.noteId)
+                      const isTask = source?.type === 'task' || Boolean(source?.taskId)
+
+                      return (
+                        <button
+                          key={`cite-${sId}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (isNote && source?.noteId) {
+                              dispatch({ type: 'SET_VIEW', view: 'notes' })
+                              dispatch({ type: 'SELECT_NOTE', id: source.noteId })
+                            } else if (isTask && source?.taskId) {
+                              dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                              dispatch({ type: 'SELECT_TASK', id: source.taskId })
+                            } else if (source?.url) {
+                              window.open(source.url, '_blank', 'noopener,noreferrer')
+                            }
+                          }}
+                          onMouseEnter={() => source && setActiveSourceHover(source)}
+                          onMouseLeave={() => setActiveSourceHover(null)}
+                          title={source ? `[${sId}] ${source.title}\n(${source.domain})\n${source.snippet || ''}` : `Источник #${sId}`}
+                          className={cn(
+                            'inline-flex items-center justify-center px-1.5 py-0.5 mx-0.5 rounded-md font-mono text-[10px] font-bold border shadow-2xs transition-all cursor-pointer select-none align-baseline no-underline transform hover:scale-110 active:scale-95',
+                            isNote
+                              ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border-amber-500/40'
+                              : isTask
+                              ? 'bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border-emerald-500/40'
+                              : 'bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground border-primary/30'
+                          )}
+                        >
+                          [{sId}]
+                        </button>
+                      )
+                    }
                     return (
                       <a
                         href={href}
@@ -844,55 +929,6 @@ export function EntropySearchView() {
                       </a>
                     )
                   },
-                  text: ({ children }) => {
-                    if (typeof children === 'string' && /\[\d+\]/.test(children)) {
-                      const parts = children.split(/(\[\d+\])/g)
-                      return (
-                        <>
-                          {parts.map((part, pIdx) => {
-                            const match = part.match(/^\[(\d+)\]$/)
-                            if (match) {
-                              const sId = parseInt(match[1], 10)
-                              const source = result.sources?.find(s => s.id === sId)
-                              const isNote = source?.type === 'note' || Boolean(source?.noteId)
-                              const isTask = source?.type === 'task' || Boolean(source?.taskId)
-
-                              return (
-                                <button
-                                  key={pIdx}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isNote && source?.noteId) {
-                                      dispatch({ type: 'SET_VIEW', view: 'notes' })
-                                      dispatch({ type: 'SELECT_NOTE', id: source.noteId })
-                                    } else if (isTask && source?.taskId) {
-                                      dispatch({ type: 'SET_VIEW', view: 'tasks' })
-                                      dispatch({ type: 'SELECT_TASK', id: source.taskId })
-                                    } else if (source?.url) {
-                                      window.open(source.url, '_blank', 'noopener,noreferrer')
-                                    }
-                                  }}
-                                  title={source ? `${source.title} (${source.domain})` : `Источник #${sId}`}
-                                  className={cn(
-                                    'inline-flex items-center justify-center px-1.5 py-0.2 mx-0.5 rounded-md font-mono text-[10px] font-bold border shadow-2xs transition-all cursor-pointer select-none align-baseline no-underline transform hover:scale-105',
-                                    isNote
-                                      ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border-amber-500/40'
-                                      : isTask
-                                      ? 'bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border-emerald-500/40'
-                                      : 'bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground border-primary/30'
-                                  )}
-                                >
-                                  [{sId}]
-                                </button>
-                              )
-                            }
-                            return part
-                          })}
-                        </>
-                      )
-                    }
-                    return <>{children}</>
-                  }
                 }}
               >
                 {result.answer
@@ -900,7 +936,7 @@ export function EntropySearchView() {
                   .replace(/\\r/g, '')
                   .replace(/\\t/g, '  ')
                   .replace(/\\"/g, '"')
-                  .replace(/([^\s\[])(\[\d+\])/g, '$1 $2')}
+                  .replace(/\[(\d+)\]/g, '[[#$1]](cite:$1)')}
               </ReactMarkdown>
             </div>
 

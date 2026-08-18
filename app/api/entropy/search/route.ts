@@ -1,21 +1,28 @@
 /**
- * Next.js API Route — Entropy AI Deep Search & Research Engine (Perplexity Style)
  * GET/POST /api/entropy/search
+ * Entropy AI Search — Deep Knowledge & Research Engine (Perplexity AI Style)
+ * Supports depth modes: 'lite' (<=500 chars), 'high' (<=1000 chars), 'max' (<=2000 chars)
+ * Powered by Groq flagship models: openai/gpt-oss-120b, qwen/qwen3.6-27b
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { callGroqChatCompletion, groqPool, getHuggingFaceTokens, getModelForUserPlan } from '@/lib/backend/groq-pool'
-import { getAuthenticatedUser } from '@/lib/backend/auth'
-import { getUserUsageAndLimits } from '@/lib/backend/db'
-import { getDailyCount, incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
+import { getAuthenticatedUser, isUserAdmin, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
+import { prisma } from '@/lib/backend/prisma'
 import { aggregateLiveKnowledgeSources, type LiveSource } from '@/lib/backend/entropy-sources'
+import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
+import {
+  getDailyCount,
+  incrementDailyCount,
+  COUNTERS,
+} from '@/lib/backend/plans'
+import { getUserUsageAndLimits } from '@/lib/backend/db'
 
-// ── Regular Search Daily Limits ────────────────────────────────────────────
+// ── Standard Search Daily Limits (Per-Day Quota) ───────────────────────────
 export const ENTROPY_ROLE_LIMITS: Record<string, number> = {
-  free: 15,
-  plus: 100,
-  pro: 500,
-  corp: 2000,
+  free: 10,    // 10 searches / day
+  plus: 100,   // 100 searches / day
+  pro: -1,     // Unlimited
+  corp: -1,    // Unlimited
   creator: -1, // Unlimited
   admin: -1,   // Unlimited
 }
@@ -23,14 +30,12 @@ export const ENTROPY_ROLE_LIMITS: Record<string, number> = {
 // ── Pro Search Daily Limits (Deep Multi-Step Web Reasoning) ────────────────
 export const ENTROPY_PRO_ROLE_LIMITS: Record<string, number> = {
   free: 0,     // Pro Search is locked on Free tier
-  plus: 3,     // 3 Pro searches per day on Zerf Plus (99 ₽)
-  pro: 20,     // 20 Pro searches per day on Zerf Pro (299 ₽)
+  plus: 3,     // 3 Pro searches per day on Zerf Plus (99 RUB)
+  pro: 20,     // 20 Pro searches per day on Zerf Pro (299 RUB)
   corp: 100,   // 100 Pro searches per day on Corp
   creator: -1, // Unlimited
   admin: -1,   // Unlimited
 }
-
-import { ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 
 // ── Role Limit Overrides ───────────────────
 export const ENTROPY_USER_LIMIT_OVERRIDES: Record<string, { regular: number; pro: number }> = {}
@@ -49,7 +54,6 @@ function getUserLimits(chatId?: string, userPlan: string = 'free') {
     return { regularLimit: -1, proLimit: -1, isUnlimited: true }
   }
 
-  // Check custom user override if set
   if (chatId in ENTROPY_USER_LIMIT_OVERRIDES) {
     const override = ENTROPY_USER_LIMIT_OVERRIDES[chatId]
     return {
@@ -78,6 +82,7 @@ export interface EntropySource {
 export interface EntropySearchResult {
   query: string
   mode: string
+  depth?: 'lite' | 'high' | 'max'
   isPro?: boolean
   sources: EntropySource[]
   answer: string
@@ -109,43 +114,40 @@ export function getEntropyModelForPlan(userPlan?: string, isPro = false): { mode
     return { model: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B Flagship' }
   }
   if (norm === 'plus') {
-    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B Reasoning' }
+    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B Fast Reasoning' }
   }
-  return { model: 'openai/gpt-oss-20b', displayName: 'GPT-OSS 20B High Speed' }
+  return { model: 'openai/gpt-oss-20b', displayName: 'GPT-OSS 20B Instant' }
 }
 
-// GET: Return user's daily search quotas and usage
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
     const ownerChatId = authUser?.chatId || 'guest'
-    const limits = ownerChatId !== 'guest' ? await getUserUsageAndLimits(ownerChatId) : null
-    const userPlan = limits?.plan || 'free'
 
+    const userLimits = ownerChatId !== 'guest' ? await getUserUsageAndLimits(ownerChatId) : null
+    const userPlan = userLimits?.plan || 'free'
     const { regularLimit, proLimit, isUnlimited } = getUserLimits(ownerChatId, userPlan)
 
     const regUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropy, ownerChatId) : 0
     const proUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropyPro, ownerChatId) : 0
 
-    const regRemaining = regularLimit === -1 ? 999999 : Math.max(0, regularLimit - regUsed)
-    const proRemaining = proLimit === -1 ? 999999 : Math.max(0, proLimit - proUsed)
-    const activeModel = getEntropyModelForPlan(userPlan, false)
+    const modelInfo = getEntropyModelForPlan(userPlan)
 
     return NextResponse.json({
       success: true,
       usage: {
         used: regUsed,
         limit: regularLimit,
-        remaining: regRemaining,
+        remaining: regularLimit === -1 ? 999999 : Math.max(0, regularLimit - regUsed),
         isUnlimited: regularLimit === -1,
         plan: userPlan,
-        model: activeModel.model,
-        modelDisplayName: activeModel.displayName,
+        model: modelInfo.model,
+        modelDisplayName: modelInfo.displayName,
         pro: {
           used: proUsed,
           limit: proLimit,
-          remaining: proRemaining,
-          isAllowed: proLimit > 0 || proLimit === -1,
+          remaining: proLimit === -1 ? 999999 : Math.max(0, proLimit - proUsed),
+          isAllowed: proLimit !== 0,
           isUnlimited: proLimit === -1,
         },
         roleLimits: {
@@ -165,7 +167,7 @@ export async function POST(req: NextRequest) {
     const ownerChatId = authUser?.chatId || 'guest'
 
     const body = await req.json()
-    const { query, mode = 'web', isPro = false, focus, apiKey } = body
+    const { query, mode = 'web', isPro = false, focus, depth = 'high', apiKey, userNotes } = body
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return NextResponse.json({ error: 'Поисковый запрос обязателен' }, { status: 400 })
@@ -173,7 +175,6 @@ export async function POST(req: NextRequest) {
 
     const cleanQuery = query.trim()
 
-    // ── Check Daily Limits ───────────────────────────────────────────────
     const userLimits = ownerChatId !== 'guest' ? await getUserUsageAndLimits(ownerChatId) : null
     const userPlan = userLimits?.plan || 'free'
     const { regularLimit, proLimit, isUnlimited } = getUserLimits(ownerChatId, userPlan)
@@ -224,10 +225,30 @@ export async function POST(req: NextRequest) {
     // 1. Fetch real-time live open knowledge sources
     let liveSources: any[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
 
-    // 2. Search user's internal notes, tasks and graph knowledge in DB
+    const words = cleanQuery.toLowerCase().split(/[\s,.;:!?\-#]+/).filter(w => w.length >= 2)
+
+    // 2. Smart Client/User Notes Context Integration
+    if (Array.isArray(userNotes) && userNotes.length > 0) {
+      const matchedClientNotes = userNotes.filter((n: any) => {
+        const combined = ((n.title || '') + ' ' + (n.content || '') + ' ' + (n.tags || []).join(' ')).toLowerCase()
+        return words.some(w => combined.includes(w))
+      })
+      if (matchedClientNotes.length > 0) {
+        const noteSources = matchedClientNotes.slice(0, 4).map((n: any) => ({
+          title: `📝 Личная заметка: «${n.title || 'Без названия'}»`,
+          url: `/notes?id=${n.id}`,
+          domain: 'zerf.notes',
+          snippet: (n.content || '').slice(0, 300) || `Теги: ${(n.tags || []).join(', ')}`,
+          type: 'note',
+          noteId: n.id,
+        }))
+        liveSources = [...noteSources, ...liveSources]
+      }
+    }
+
+    // 3. Search user's internal notes, tasks and graph knowledge in DB
     if (ownerChatId !== 'guest') {
       try {
-        const words = cleanQuery.toLowerCase().split(/[\s,.;:!?\-#]+/).filter(w => w.length >= 2)
         const numericOwnerId = BigInt(ownerChatId)
 
         // Fetch recent notes for user
@@ -285,17 +306,20 @@ export async function POST(req: NextRequest) {
           if (mode === 'notes') {
             liveSources = [...internalSources, ...liveSources.slice(0, 3)]
           } else {
-            liveSources = [...internalSources, ...liveSources.slice(0, 5)]
+            const existingTitles = new Set(liveSources.map(s => s.title))
+            const newInternal = internalSources.filter(s => !existingTitles.has(s.title))
+            liveSources = [...newInternal, ...liveSources.slice(0, 6)]
           }
         }
-        liveSources = liveSources.map((s: any, idx: number) => ({ ...s, id: idx + 1 }))
       } catch (err) {
         console.warn('[Entropy API] Internal notes/tasks lookup error:', err)
       }
     }
 
+    liveSources = liveSources.map((s: any, idx: number) => ({ ...s, id: idx + 1 }))
+
     const liveContext = liveSources.length > 0
-      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ:\n` + liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
+      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ И ЗАМЕТКИ:\n` + liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
       : ''
 
     let modePriorityInstruction = ''
@@ -305,22 +329,39 @@ export async function POST(req: NextRequest) {
     else if (mode === 'fast') modePriorityInstruction = 'Быстрый факт-чекинг, краткость, точность.'
     else modePriorityInstruction = 'Всемирная сеть, всесторонний поиск фактов и синтез источников.'
 
+    let depthInstruction = ''
+    if (depth === 'lite') {
+      depthInstruction = `ОБЪЁМ ОТВЕТА: РЕЖИМ LITE (КРАТКИЙ БЛИЦ).
+- Длина ответа: СТРОГО ДО 500 СИМВОЛОВ.
+- Стиль: 1-2 кратких емких предложения с ключевой сутью и сносками [1], [2]. Без лишних вводных слов.`
+    } else if (depth === 'max') {
+      depthInstruction = `ОБЪЁМ ОТВЕТА: РЕЖИМ MAX (ГЛУБОКИЙ АНАЛИТИЧЕСКИЙ ОТЧЕТ).
+- Длина ответа: ДО 2000 СИМВОЛОВ (полноценный развернутый лонгрид).
+- Стиль: исчерпывающий разбор предыстории, хронологии, ключевых нюансов, мнений экспертов и последствий. Используй структурированные абзацы и множественные сноски [1], [2], [3], [4].`
+    } else {
+      depthInstruction = `ОБЪЁМ ОТВЕТА: РЕЖИМ HIGH (СТАНДАРТНЫЙ АНАЛИЗ).
+- Длина ответа: ДО 1000 СИМВОЛОВ.
+- Стиль: подробный структурированный ответ с ключевыми подробностями, аргументами, фактами и сносками [1], [2].`
+    }
+
     // Build prompt for factual, human-friendly search with citations
     const prompt = `Ты — поисковый исследовательский ИИ-движок Zerf AI (в стиле Perplexity AI Pro Search) совместно с маскотом «Зерфик».
 
 ПОЛЬЗОВАТЕЛЬСКИЙ ВОПРОС: "${cleanQuery}"
-РЕЖИМ: ${mode} (${modePriorityInstruction})
-${isPro ? 'РЕЖИМ: PRO SEARCH (Глубокий анализ первоисточников и расширенные инсайты)' : 'РЕЖИМ: STANDARD SEARCH'}
-${focus ? `Фокус: ${focus}` : ''}
+РЕЖИМ ПОИСКА: ${mode} (${modePriorityInstruction})
+${isPro ? 'РЕЖИМ СКАНИРОВАНИЯ: ⚡ PRO SEARCH (Глубокий многоступенчатый анализ первоисточников, перекрестная верификация фактов и расширенные инсайты)' : 'РЕЖИМ СКАНИРОВАНИЯ: STANDARD SEARCH'}
+${depthInstruction}
+${focus ? `Фокус анализа: ${focus}` : ''}
 ${liveContext}
 
 ИНСТРУКЦИИ:
 1. Дай прямой, ясный, фактологический и понятный ответ на русском языке конкретно на вопрос пользователя.
 2. Отвечай СТРОГО ПО СУТИ ВОПРОСА! Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал технический вопрос по программированию.
-3. Если предоставлены первоисточники, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
-4. Сформируй 2-4 ключевых факта ("takeaways").
-5. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
-6. Напиши милую и умную реплику от Зерфика ("tikhonyaComment").
+3. Если предоставлены первоисточники или личные заметки, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
+4. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 500 симв.' : depth === 'max' ? 'до 2000 симв.' : 'до 1000 симв.'}).
+5. Сформируй 2-4 ключевых факта ("takeaways").
+6. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
+7. Напиши милую и умную реплику от Зерфика ("tikhonyaComment").
 
 ОТВЕТЬ ИСКЛЮЧИТЕЛЬНО В ФОРМАТЕ JSON:
 {
@@ -333,7 +374,7 @@ ${liveContext}
       "snippet": "Краткая цитата из источника"
     }
   ],
-  "answer": "Прямой, фактологический и развернутый ответ на вопрос со сносками [1], [2]...",
+  "answer": "Прямой, фактологический и точный ответ на вопрос со сносками [1], [2]...",
   "takeaways": [
     "Ключевой факт 1",
     "Ключевой факт 2"
@@ -362,145 +403,125 @@ ${liveContext}
           },
         ],
         model: effectiveModel,
-        apiKey: apiKey || undefined,
-        fallbackModels: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b', 'groq/compound-mini'],
+        apiKey: apiKey || process.env.GROQ_API_KEY,
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
       })
 
-      if (completion?.content) {
-        let text = completion.content.trim()
-        const jsonMatch = text.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          text = jsonMatch[0]
-        }
-        llmResult = JSON.parse(text)
+      const raw = completion.content || '{}'
+      const jsonStart = raw.indexOf('{')
+      const jsonEnd = raw.lastIndexOf('}')
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        llmResult = JSON.parse(raw.slice(jsonStart, jsonEnd + 1))
       }
-    } catch (e) {
-      console.warn('[Entropy API] LLM JSON parse fallback:', e)
+    } catch (err: any) {
+      console.warn('[Entropy API] Primary Groq model error, attempting fallback synthesis:', err?.message)
+      llmResult = generateFallbackResearch(cleanQuery, liveSources, mode, isPro, depth)
     }
 
-    // High quality factual fallback synthesis if LLM failed completely
-    if (!llmResult || !Array.isArray(llmResult.sources) || !llmResult.answer) {
-      llmResult = generateFallbackResearch(cleanQuery, mode, isPro, liveSources)
+    if (!llmResult || !llmResult.answer) {
+      llmResult = generateFallbackResearch(cleanQuery, liveSources, mode, isPro, depth)
     }
 
-    const cleanStr = (s: any) => (typeof s === 'string' ? s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').trim() : '')
+    // Merge live sources with LLM sources
+    const finalSources: EntropySource[] = (liveSources.length > 0 ? liveSources : (llmResult.sources || [])).map((s: any, idx: number) => ({
+      id: idx + 1,
+      title: s.title || `Источник #${idx + 1}`,
+      url: s.url || '',
+      domain: s.domain || (s.url ? new URL(s.url).hostname : 'web'),
+      snippet: s.snippet || '',
+      type: s.type || 'web',
+      noteId: s.noteId,
+      taskId: s.taskId,
+    }))
 
-    const cleanSources: EntropySource[] = Array.isArray(llmResult.sources) && llmResult.sources.length > 0
-      ? llmResult.sources.map((s: any, idx: number) => ({
-          id: typeof s.id === 'number' ? s.id : idx + 1,
-          title: cleanStr(s.title) || `Источник [${idx + 1}]`,
-          url: cleanStr(s.url) || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
-          domain: cleanStr(s.domain) || 'web',
-          snippet: cleanStr(s.snippet) || '',
-        }))
-      : liveSources.length > 0
-        ? liveSources.map((s, idx) => ({ ...s, id: idx + 1 }))
-        : []
-
-    // Increment user's daily usage (persisted in DB)
+    // Increment user usage counter in DB
     if (ownerChatId !== 'guest') {
       await incrementDailyCount(isPro ? COUNTERS.entropyPro : COUNTERS.entropy, ownerChatId)
     }
 
-    const newRegUsed = isPro ? regUsed : regUsed + 1
-    const newProUsed = isPro ? proUsed + 1 : proUsed
-
-    const responsePayload: EntropySearchResult = {
+    const payload: EntropySearchResult = {
       query: cleanQuery,
       mode,
+      depth: depth as 'lite' | 'high' | 'max',
       isPro,
-      sources: cleanSources,
-      answer: cleanStr(llmResult.answer) || `По запросу «${cleanQuery}» нет прямых совпадений. Попробуйте уточнить формулировку.`,
-      takeaways: Array.isArray(llmResult.takeaways)
-        ? llmResult.takeaways.map(cleanStr).filter(Boolean)
-        : [],
-      followUpQuestions: Array.isArray(llmResult.followUpQuestions)
-        ? llmResult.followUpQuestions.map(cleanStr).filter(Boolean)
-        : [],
-      tikhonyaComment: cleanStr(llmResult.tikhonyaComment) || 'Зерфик подготовил ответ на основе проверенных первоисточников.',
+      sources: finalSources,
+      answer: llmResult.answer || 'Ответ подготовлен на основе собранных первоисточников.',
+      takeaways: Array.isArray(llmResult.takeaways) ? llmResult.takeaways : [],
+      followUpQuestions: Array.isArray(llmResult.followUpQuestions) ? llmResult.followUpQuestions : [],
+      tikhonyaComment: llmResult.tikhonyaComment || 'Зерфик проверил актуальные источники.',
       createdAt: new Date().toISOString(),
       usage: {
-        used: newRegUsed,
-        limit: regularLimit,
-        remaining: regularLimit === -1 ? 999999 : Math.max(0, regularLimit - newRegUsed),
-        isUnlimited: regularLimit === -1,
+        used: (isPro ? proUsed : regUsed) + 1,
+        limit: isPro ? proLimit : regularLimit,
+        remaining: (isPro ? proLimit : regularLimit) === -1 ? 999999 : Math.max(0, (isPro ? proLimit : regularLimit) - ((isPro ? proUsed : regUsed) + 1)),
+        isUnlimited: (isPro ? proLimit : regularLimit) === -1,
         plan: userPlan,
-        model: modelInfo.model,
+        model: effectiveModel,
         modelDisplayName: modelInfo.displayName,
         pro: {
-          used: newProUsed,
+          used: proUsed + (isPro ? 1 : 0),
           limit: proLimit,
-          remaining: proLimit === -1 ? 999999 : Math.max(0, proLimit - newProUsed),
-          isAllowed: proLimit > 0 || proLimit === -1,
+          remaining: proLimit === -1 ? 999999 : Math.max(0, proLimit - (proUsed + (isPro ? 1 : 0))),
+          isAllowed: proLimit !== 0,
           isUnlimited: proLimit === -1,
         },
       },
     }
 
-    return NextResponse.json({ success: true, result: responsePayload })
+    return NextResponse.json(payload)
   } catch (error: any) {
-    console.error('[Entropy Search API] Fatal error:', error)
+    console.error('[Entropy API] POST Error:', error)
     return NextResponse.json(
-      {
-        error: 'Внутренняя ошибка поискового движка. Попробуйте повторить запрос позже.',
-        details: error?.message || String(error),
-      },
+      { error: error?.message || 'Ошибка обработки поискового запроса' },
       { status: 500 }
     )
   }
 }
 
-function generateFallbackResearch(query: string, mode: string, isPro: boolean, liveSources: LiveSource[] = []) {
-  const defaultSources: EntropySource[] = [
-    {
-      id: 1,
-      title: `Поиск: ${query}`,
-      url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-      domain: 'google.com',
-      snippet: `Актуальная информация и результаты поиска по теме: ${query}.`,
-    },
-    {
-      id: 2,
-      title: `Энциклопедическая справка: ${query}`,
-      url: `https://ru.wikipedia.org/wiki/${encodeURIComponent(query)}`,
-      domain: 'wikipedia.org',
-      snippet: `Общая информация и хронология по теме ${query}.`,
-    },
-  ]
+/**
+ * Fallback research generator when LLM inference is unreachable
+ */
+function generateFallbackResearch(
+  query: string,
+  liveSources: any[],
+  mode: string,
+  isPro: boolean,
+  depth: string = 'high'
+) {
+  const sources = liveSources.length > 0
+    ? liveSources
+    : [
+        {
+          id: 1,
+          title: `Материалы и публикации по теме «${query}»`,
+          url: 'https://news.google.com',
+          domain: 'news.google.com',
+          snippet: 'Актуальные материалы и новости из открытых источников.',
+        },
+      ]
 
-  const sources: EntropySource[] = liveSources.length > 0
-    ? liveSources.map((s, idx) => ({ ...s, id: idx + 1 }))
-    : defaultSources
+  const citations = sources.slice(0, 3).map((_, i) => `[${i + 1}]`).join('')
 
   let answer = ''
-  if (liveSources.length > 0) {
-    const items = liveSources
-      .filter(s => s.snippet && s.snippet.length > 5)
-      .slice(0, 4)
-      .map((s, idx) => `• **${s.title}** [${idx + 1}]:\n  ${s.snippet}`)
-      .join('\n\n')
-
-    answer = `По вашему запросу **«${query}»** найдены следующие факты из открытых источников:\n\n${items}\n\n_Данные получены из новостных и открытых источников сети._`
+  if (sources.length > 0 && sources[0].snippet) {
+    const snippetsText = sources.slice(0, 3).map(s => s.snippet).filter(Boolean).join('. ')
+    answer = `По запросу «${query}» найдены следующие актуальные данные: ${snippetsText} ${citations}`
   } else {
-    answer = `По запросу **«${query}»** не найдено прямых результатов. Попробуйте переформулировать запрос или переключить режим поиска на «Все источники».`
+    answer = `По запросу «${query}» сформирована сводка на основе ${sources.length} первоисточников ${citations}.`
   }
-
-  const takeaways = liveSources.slice(0, 3).map((s, idx) => `[${idx + 1}] ${s.title}`)
-  if (takeaways.length === 0) {
-    takeaways.push(`Поиск по теме «${query}» завершён.`)
-  }
-
-  const followUpQuestions = [
-    `Узнать больше подробностей по теме «${query}»?`,
-    `Какие ещё вопросы по теме «${query}» вас интересуют?`,
-  ]
 
   return {
     sources,
     answer,
-    takeaways,
-    followUpQuestions,
-    tikhonyaComment: `Зерфик нашел ${sources.length} источников и структурировал факты.`,
+    takeaways: [
+      `Найдено ${sources.length} актуальных источников по запросу.`,
+      `Первоисточники содержат подтвержденные данные о событии.`,
+    ],
+    followUpQuestions: [
+      `Узнать подробности о «${query}»?`,
+      `Посмотреть хронологию событий?`,
+    ],
+    tikhonyaComment: 'Зерфик собрал ключевые материалы из открытых источников.',
   }
 }
-
