@@ -892,10 +892,10 @@ export function SettingsView() {
   const activeItem = SECTIONS.flatMap(s => s.items).find(i => i.id === activeTab)
 
   return (
-    <div className="w-full h-full min-h-full flex-1 rounded-none sm:rounded-3xl bg-card border-0 sm:border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row font-sans">
+    <div className="w-full h-full min-h-full flex-1 bg-background flex flex-col md:flex-row font-sans">
       
       {/* ── Left Sidebar Navigation (Desktop Obsidian Style) ── */}
-      <div className="hidden md:flex md:w-64 border-r border-border/70 bg-muted/20 p-4 flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
+      <div className="hidden md:flex md:w-64 border-r border-border/70 bg-card/40 p-4 flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
         <div className="space-y-4">
           
           {/* Header */}
@@ -911,27 +911,27 @@ export function SettingsView() {
             )}
           </div>
 
-          {/* Search bar inside settings */}
+          {/* Search Box */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchFilter}
               onChange={e => setSearchFilter(e.target.value)}
-              placeholder="Поиск по настройкам…"
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-card border border-border/80 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Поиск по настройкам..."
+              className="w-full h-8 pl-8 pr-3 rounded-xl bg-card border border-border/80 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary transition-colors"
             />
           </div>
 
-          {/* Navigation Groups */}
-          <div className="space-y-4">
-            {filteredSections.map(sec => (
-              <div key={sec.group} className="space-y-1">
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-2">
-                  {sec.group}
-                </h3>
+          {/* Nav Categories */}
+          <div className="space-y-4 pt-1">
+            {filteredSections.map(s => (
+              <div key={s.group} className="space-y-1">
+                <p className="text-[10px] font-bold text-muted-foreground/60 tracking-wider px-2 uppercase">
+                  {s.group}
+                </p>
                 <div className="space-y-0.5">
-                  {sec.items.map(item => {
+                  {s.items.map(item => {
                     const isSel = activeTab === item.id
                     const Icon = item.icon
                     return (
@@ -939,14 +939,17 @@ export function SettingsView() {
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
                         className={cn(
-                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer',
+                          'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none text-left',
                           isSel
-                            ? 'bg-primary text-primary-foreground shadow-sm font-bold'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                            ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                         )}
                       >
-                        <Icon className={cn('w-4 h-4 shrink-0', isSel ? 'text-primary-foreground' : 'text-primary')} />
-                        <span className="truncate">{item.label}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Icon className={cn('w-3.5 h-3.5 shrink-0', isSel ? 'text-primary-foreground' : 'text-muted-foreground')} />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                        {isSel && <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-80" />}
                       </button>
                     )
                   })}
@@ -967,10 +970,10 @@ export function SettingsView() {
       </div>
 
       {/* ── Right Content Pane ── */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-card">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-background">
         
         {/* Mobile Horizontal Tabs Selector */}
-        <div className="md:hidden flex items-center gap-1.5 overflow-x-auto px-3 py-2 border-b border-border/60 bg-muted/20 shrink-0 [scrollbar-width:none]">
+        <div className="md:hidden flex items-center gap-1.5 overflow-x-auto px-3 py-2.5 border-b border-border/60 bg-card/60 backdrop-blur-md shrink-0 [scrollbar-width:none] sticky top-0 z-20">
           {SECTIONS.flatMap(s => s.items).map(item => {
             const isSel = activeTab === item.id
             const Icon = item.icon
@@ -979,10 +982,10 @@ export function SettingsView() {
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={cn(
-                  'px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer select-none',
+                  'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer select-none touch-manipulation',
                   isSel
-                    ? 'bg-primary text-primary-foreground shadow-xs font-bold'
-                    : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50'
+                    ? 'bg-primary text-primary-foreground shadow-sm font-bold'
+                    : 'bg-card hover:bg-muted text-muted-foreground hover:text-foreground border border-border/60'
                 )}
               >
                 <Icon className={cn('w-3.5 h-3.5', isSel ? 'text-primary-foreground' : 'text-primary')} />
@@ -992,14 +995,14 @@ export function SettingsView() {
           })}
         </div>
         
-        {/* Header of the Active Section */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-border/60 bg-muted/10 shrink-0">
+        {/* Desktop Header of the Active Section */}
+        <div className="hidden md:flex items-center justify-between px-6 py-3.5 border-b border-border/60 bg-card/20 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
               <h2 className="text-base font-bold text-foreground truncate">
                 {activeItem?.label || 'Настройки'}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 {activeItem?.desc || 'Параметры и конфигурация системы'}
               </p>
             </div>
@@ -1021,7 +1024,7 @@ export function SettingsView() {
         </div>
 
         {/* Main Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-7 pb-32 sm:pb-16 space-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-7 pb-36 space-y-4 sm:space-y-6 w-full max-w-5xl mx-auto">
 
       {/* ── TAB 1: Account & Profile ────────────────────────────────────────── */}
       {activeTab === 'account' && (
