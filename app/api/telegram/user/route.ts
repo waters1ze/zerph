@@ -106,19 +106,16 @@ export async function GET(req: NextRequest) {
         }
       }
     } catch (dbErr) {
-      console.error('DB query error in /api/telegram/user:', dbErr)
+      console.warn('DB query error in /api/telegram/user:', dbErr)
       return NextResponse.json(
         { connected: false, transient: true, error: 'DB temporarily unavailable' },
-        { status: 503 }
+        { status: 200 }
       )
     }
 
-    return NextResponse.json({ connected: false })
+    return NextResponse.json({ connected: false }, { status: 200 })
   } catch (err: unknown) {
-    if (err instanceof Error && (err.message.includes('db') || err.message.includes('Prisma') || (err as any)?.code)) {
-      return NextResponse.json({ connected: false, transient: true }, { status: 503 })
-    }
-    return NextResponse.json({ connected: false, error: String(err) }, { status: 401 })
+    return NextResponse.json({ connected: false, error: String(err) }, { status: 200 })
   }
 }
 

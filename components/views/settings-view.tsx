@@ -892,7 +892,7 @@ export function SettingsView() {
   const activeItem = SECTIONS.flatMap(s => s.items).find(i => i.id === activeTab)
 
   return (
-    <div className="w-full h-full flex-1 rounded-none sm:rounded-3xl bg-card border-0 sm:border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row font-sans">
+    <div className="w-full h-full min-h-full flex-1 rounded-none sm:rounded-3xl bg-card border-0 sm:border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row font-sans">
       
       {/* ── Left Sidebar Navigation (Desktop Obsidian Style) ── */}
       <div className="hidden md:flex md:w-64 border-r border-border/70 bg-muted/20 p-4 flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
@@ -967,7 +967,7 @@ export function SettingsView() {
       </div>
 
       {/* ── Right Content Pane ── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-background/40">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-card">
         
         {/* Mobile Horizontal Tabs Selector */}
         <div className="md:hidden flex items-center gap-1.5 overflow-x-auto px-3 py-2 border-b border-border/60 bg-muted/20 shrink-0 [scrollbar-width:none]">

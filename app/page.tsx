@@ -232,7 +232,7 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
                 : 'app-main flex-1 min-w-0 overflow-y-auto px-3.5 sm:px-6 py-3.5 sm:py-5'
             }
           >
-            <PullToRefresh onRefresh={syncData}>
+            <PullToRefresh onRefresh={syncData} className={isFullHeight ? 'h-full flex-1' : undefined}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={state.currentView}
@@ -240,7 +240,7 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                  className={isFullHeight ? 'flex-1 flex flex-col overflow-hidden h-full' : undefined}
+                  className={isFullHeight ? 'flex-1 flex flex-col overflow-hidden h-full min-h-full' : undefined}
                 >
                   {VIEW_MAP[state.currentView] ?? <TodayView />}
                 </motion.div>
