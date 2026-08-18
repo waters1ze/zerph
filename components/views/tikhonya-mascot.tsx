@@ -39,6 +39,7 @@ export function ZerfikMascot({
   const [currentMood, setCurrentMood] = useState<ZerfikMood>(mood)
   const [quoteIndex, setQuoteIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
+  const [idleGesture, setIdleGesture] = useState<'none' | 'spread' | 'wave' | 'happy'>('none')
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [cursorVector, setCursorVector] = useState<{ dx: number; dy: number; rawDx: number; rawDy: number; facing: number; tilt: number }>({
@@ -53,6 +54,33 @@ export function ZerfikMascot({
   useEffect(() => {
     setCurrentMood(mood)
   }, [mood])
+
+  // Random periodic lively gestures (stretching arms, waving, flapping wings) every 12s - 45s
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+
+    const scheduleNextGesture = () => {
+      const delay = Math.floor(Math.random() * 28000) + 12000
+      timer = setTimeout(() => {
+        if (!isHovered && currentMood === 'normal') {
+          const gestures: Array<'spread' | 'wave' | 'happy'> = ['spread', 'wave', 'spread', 'happy']
+          const chosen = gestures[Math.floor(Math.random() * gestures.length)]
+          setIdleGesture(chosen)
+
+          // Hold the stretch/wave for 2.2 seconds, then return to calm hanging arms
+          setTimeout(() => {
+            setIdleGesture('none')
+            scheduleNextGesture()
+          }, 2200)
+        } else {
+          scheduleNextGesture()
+        }
+      }, delay)
+    }
+
+    scheduleNextGesture()
+    return () => clearTimeout(timer)
+  }, [isHovered, currentMood])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -92,13 +120,22 @@ export function ZerfikMascot({
 
   const isThinking = currentMood === 'thinking'
   const isHappy = currentMood === 'celebrate' || currentMood === 'happy' || isHovered
+  const isGesturing = idleGesture !== 'none'
 
-  // Determine active sprite based on posture, cursor direction, and mood
+  // Determine active sprite based on posture, cursor direction, periodic gestures and mood
   let activeSprite = '/images/zerfik_idle.png'
   if (isThinking) {
     activeSprite = '/images/zerfik_thinking.png'
   } else if (isHappy) {
     // Raises arms high, joyfully moves and cheers!
+    activeSprite = '/images/zerfik_happy.png'
+  } else if (idleGesture === 'spread') {
+    // Stretches arms/wings wide out to the sides!
+    activeSprite = '/images/zerfik_spread.png'
+  } else if (idleGesture === 'wave') {
+    // Waves friendly to the user!
+    activeSprite = '/images/zerfik_wave.png'
+  } else if (idleGesture === 'happy') {
     activeSprite = '/images/zerfik_happy.png'
   } else if (cursorVector.rawDy > 35 && Math.abs(cursorVector.rawDy) >= Math.abs(cursorVector.rawDx) * 0.7) {
     // Cursor is below (e.g. in search bar or cards below) -> looks down at cursor
@@ -181,14 +218,14 @@ export function ZerfikMascot({
         <motion.div
           animate={{
             x: cursorVector.dx,
-            y: isThinking ? [-3, 3, -3] : isHappy ? [-8, 0, -4, 0] : cursorVector.dy,
-            rotate: isThinking ? [-2, 4, -2] : isHappy ? [-4, 4, -4] : cursorVector.tilt,
-            scale: isHappy ? [1, 1.15, 1.05] : 1,
+            y: isThinking ? [-3, 3, -3] : isHappy ? [-8, 0, -4, 0] : isGesturing ? [-5, 0, -5] : cursorVector.dy,
+            rotate: isThinking ? [-2, 4, -2] : isHappy ? [-4, 4, -4] : isGesturing ? [-3, 3, -3] : cursorVector.tilt,
+            scale: isHappy ? [1, 1.15, 1.05] : isGesturing ? [1, 1.08, 1] : 1,
           }}
           transition={{
             x: { type: 'spring', stiffness: 200, damping: 22 },
-            y: isThinking ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : isHappy ? { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
-            rotate: isThinking ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : isHappy ? { duration: 0.6, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 180, damping: 18 },
+            y: isThinking ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : isHappy ? { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } : isGesturing ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
+            rotate: isThinking ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : isHappy ? { duration: 0.6, repeat: Infinity, ease: 'easeInOut' } : isGesturing ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 180, damping: 18 },
             scale: { duration: 0.4, ease: 'easeOut' },
           }}
           className="relative flex items-center justify-center transition-all pointer-events-auto select-none"

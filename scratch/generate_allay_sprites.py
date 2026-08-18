@@ -1,16 +1,16 @@
 from PIL import Image
 import numpy as np
 
-# Color Palette matching authentic Minecraft Allay
+# Authentic Palette
 C_TRANS = (0, 0, 0, 0)
 C_HEAD_TOP = (165, 230, 255, 255)    # Top highlight #a5e6ff
 C_MAIN = (104, 192, 232, 255)        # Main cyan #68c0e8
 C_SHADOW = (64, 154, 204, 255)       # Shadow cyan #409acc
 C_DARK = (45, 120, 165, 255)         # Dark shadow #2d78a5
 C_EYE_WHITE = (255, 255, 255, 255)   # Pure glowing white eyes
-C_WING_MAIN = (104, 192, 232, 220)   # Translucent wing
-C_WING_LIGHT = (180, 235, 255, 240)  # Wing highlight
-C_WING_DARK = (55, 140, 185, 220)    # Wing edge
+C_WING_MAIN = (104, 192, 232, 200)   # Translucent wing
+C_WING_LIGHT = (180, 235, 255, 220)  # Wing highlight
+C_WING_DARK = (55, 140, 185, 200)    # Wing edge
 
 def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
     grid = np.zeros((32, 32, 4), dtype=np.uint8)
@@ -28,49 +28,41 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
     hx1, hy1, hx2, hy2 = 11, 5, 20, 14
 
     if pose == 'down':
-        # Head tilted slightly down
         hy1 += 1
         hy2 += 1
     elif pose == 'up' or pose == 'thinking':
-        # Head tilted slightly up
         hy1 -= 1
         hy2 -= 1
 
-    # 1. Stepped Minecraft Wings
-    if pose == 'happy' or pose == 'celebrate':
-        # Wings raised up high in celebration
-        fill_rect(5, 6, 10, 7, C_WING_MAIN)
-        fill_rect(3, 8, 6, 9, C_WING_MAIN)
-        fill_rect(1, 10, 4, 11, C_WING_MAIN)
-        fill_rect(5, 6, 10, 6, C_WING_LIGHT)
-
-        fill_rect(21, 6, 26, 7, C_WING_MAIN)
-        fill_rect(25, 8, 28, 9, C_WING_MAIN)
-        fill_rect(27, 10, 30, 11, C_WING_MAIN)
-        fill_rect(21, 6, 26, 6, C_WING_LIGHT)
-    elif pose == 'look_left':
-        fill_rect(3, 11, 10, 12, C_WING_MAIN)
-        fill_rect(1, 13, 5, 14, C_WING_MAIN)
-        fill_rect(3, 11, 10, 11, C_WING_LIGHT)
-        fill_rect(21, 12, 26, 13, C_WING_MAIN)
-        fill_rect(25, 14, 28, 15, C_WING_DARK)
-    elif pose == 'look_right':
-        fill_rect(5, 12, 10, 13, C_WING_MAIN)
-        fill_rect(3, 14, 6, 15, C_WING_DARK)
-        fill_rect(21, 11, 28, 12, C_WING_MAIN)
-        fill_rect(26, 13, 30, 14, C_WING_MAIN)
-        fill_rect(21, 11, 28, 11, C_WING_LIGHT)
-    else:
-        # Downward stepped wings
-        fill_rect(4, 11, 10, 12, C_WING_MAIN)
-        fill_rect(2, 13, 6, 14, C_WING_MAIN)
-        fill_rect(1, 15, 3, 16, C_WING_DARK)
+    # 1. Wings Handling:
+    # - In default/calm postures (idle, down, up, left, right): WINGS ARE FOLDED BEHIND BACK, NO WIDE SIDE EXTENSIONS!
+    # - In 'spread' / 'happy' / 'wave': WINGS SPREAD OUT BEAUTIFULLY!
+    if pose == 'spread':
+        # Wide spread wings / arms flapping
+        fill_rect(4, 11, 10, 13, C_WING_MAIN)
+        fill_rect(2, 13, 6, 15, C_WING_MAIN)
         fill_rect(4, 11, 10, 11, C_WING_LIGHT)
-
-        fill_rect(21, 11, 27, 12, C_WING_MAIN)
-        fill_rect(25, 13, 29, 14, C_WING_MAIN)
-        fill_rect(28, 15, 30, 16, C_WING_DARK)
+        fill_rect(21, 11, 27, 13, C_WING_MAIN)
+        fill_rect(25, 13, 29, 15, C_WING_MAIN)
         fill_rect(21, 11, 27, 11, C_WING_LIGHT)
+    elif pose == 'happy' or pose == 'celebrate':
+        # Joyful wings raised high
+        fill_rect(5, 7, 10, 9, C_WING_MAIN)
+        fill_rect(3, 9, 7, 11, C_WING_MAIN)
+        fill_rect(5, 7, 10, 7, C_WING_LIGHT)
+        fill_rect(21, 7, 26, 9, C_WING_MAIN)
+        fill_rect(24, 9, 28, 11, C_WING_MAIN)
+        fill_rect(21, 7, 26, 7, C_WING_LIGHT)
+    elif pose == 'wave':
+        # Right wing flapping high, left wing resting
+        fill_rect(10, 14, 12, 18, C_WING_DARK)
+        fill_rect(21, 8, 27, 10, C_WING_MAIN)
+        fill_rect(25, 10, 29, 12, C_WING_MAIN)
+        fill_rect(21, 8, 27, 8, C_WING_LIGHT)
+    else:
+        # Default calm resting: Wings neatly folded behind spine (vertical contour, no side stickout)
+        fill_rect(11, 14, 12, 18, C_WING_DARK)
+        fill_rect(19, 14, 20, 18, C_WING_DARK)
 
     # 2. Torso (13..18, 15..19) -> 6x5 block
     fill_rect(13, 15, 18, 19, C_MAIN)
@@ -83,25 +75,40 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
     fill_rect(14, 22, 16, 23, C_SHADOW)
     fill_rect(15, 24, 15, 25, C_DARK)
 
-    # 4. Tiny Block Arms:
-    # - By default: resting flush and lowered DOWN against the torso (NOT sticking out!)
-    # - When happy: joyfully raised up high!
-    if pose == 'happy' or pose == 'celebrate':
+    # 4. Human-like Hanging Block Arms:
+    if pose == 'spread':
+        # Arms extended sideways
+        fill_rect(7, 14, 12, 16, C_MAIN)
+        fill_rect(7, 14, 12, 14, C_HEAD_TOP)
+        fill_rect(19, 14, 24, 16, C_MAIN)
+        fill_rect(19, 14, 24, 14, C_HEAD_TOP)
+    elif pose == 'happy' or pose == 'celebrate':
         # Arms raised joyfully up high!
-        fill_rect(10, 10, 12, 14, C_MAIN)
-        fill_rect(10, 10, 12, 10, C_HEAD_TOP)
-        fill_rect(19, 10, 21, 14, C_MAIN)
-        fill_rect(19, 10, 21, 10, C_HEAD_TOP)
+        fill_rect(10, 9, 12, 14, C_MAIN)
+        fill_rect(10, 9, 12, 9, C_HEAD_TOP)
+        fill_rect(19, 9, 21, 14, C_MAIN)
+        fill_rect(19, 9, 21, 9, C_HEAD_TOP)
+    elif pose == 'wave':
+        # Left arm down, right arm waving up
+        fill_rect(11, 15, 12, 20, C_MAIN)
+        fill_rect(11, 19, 12, 20, C_SHADOW)
+        fill_rect(19, 9, 21, 14, C_MAIN)
+        fill_rect(19, 9, 21, 9, C_HEAD_TOP)
     elif pose == 'thinking':
-        # Left arm down, right arm bent to cheek
-        fill_rect(12, 16, 13, 19, C_MAIN)
+        # Left arm hanging down, right arm touching cheek
+        fill_rect(11, 15, 12, 20, C_MAIN)
+        fill_rect(11, 19, 12, 20, C_SHADOW)
         fill_rect(18, 12, 19, 15, C_HEAD_TOP)
     else:
-        # Arms hanging completely down along torso (flush with body, vertically lowered)
-        fill_rect(12, 16, 13, 20, C_MAIN)
-        fill_rect(12, 19, 13, 20, C_SHADOW)
-        fill_rect(18, 16, 19, 20, C_MAIN)
-        fill_rect(18, 19, 19, 20, C_SHADOW)
+        # DEFAULT (Idle, Down, Up, Left, Right):
+        # Arms hang straight DOWN along the body like a human (2x6 blocks hanging vertically)
+        fill_rect(11, 15, 12, 20, C_MAIN)
+        fill_rect(11, 15, 12, 15, C_HEAD_TOP)
+        fill_rect(11, 19, 12, 20, C_SHADOW)
+
+        fill_rect(19, 15, 20, 20, C_MAIN)
+        fill_rect(19, 15, 20, 15, C_HEAD_TOP)
+        fill_rect(19, 19, 20, 20, C_SHADOW)
 
     # 5. Cubic Minecraft Head (10x10)
     fill_rect(hx1, hy1, hx2, hy2, C_MAIN)
@@ -139,8 +146,9 @@ def draw_allay_sprite(pose='idle', filename='public/images/zerfik_idle.png'):
     base_img = Image.fromarray(grid, 'RGBA')
     upscaled = base_img.resize((256, 256), Image.Resampling.NEAREST)
     upscaled.save(filename, 'PNG')
-    print(f"Generated Allay pose with lowered arms: {pose} -> {filename}")
+    print(f"Rendered Allay pose: {pose} -> {filename}")
 
+# Generate all poses
 draw_allay_sprite('idle', 'public/images/zerfik_idle.png')
 draw_allay_sprite('down', 'public/images/zerfik_down.png')
 draw_allay_sprite('up', 'public/images/zerfik_up.png')
@@ -148,4 +156,6 @@ draw_allay_sprite('look_left', 'public/images/zerfik_left.png')
 draw_allay_sprite('look_right', 'public/images/zerfik_right.png')
 draw_allay_sprite('thinking', 'public/images/zerfik_thinking.png')
 draw_allay_sprite('happy', 'public/images/zerfik_happy.png')
+draw_allay_sprite('spread', 'public/images/zerfik_spread.png')
+draw_allay_sprite('wave', 'public/images/zerfik_wave.png')
 draw_allay_sprite('idle', 'public/images/zerfik_spirit.png')
