@@ -8,6 +8,7 @@ import { callGroqChatCompletion, groqPool, getHuggingFaceTokens, getModelForUser
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
 import { getDailyCount, incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
+import { aggregateLiveKnowledgeSources, type LiveSource } from '@/lib/backend/entropy-sources'
 
 // ── Regular Search Daily Limits ────────────────────────────────────────────
 export const ENTROPY_ROLE_LIMITS: Record<string, number> = {
@@ -209,6 +210,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 1. Fetch real-time live open knowledge sources (Wikipedia, DuckDuckGo, arXiv, GitHub, HackerNews, OpenAlex)
+    const liveSources: LiveSource[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
+
+    const liveContext = liveSources.length > 0
+      ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ ИЗ СЕТИ:\n` +
+        liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
+      : ''
+
     // Build system prompt for Perplexity style synthesis with citations
     const prompt = `Ты — ведущий исследовательский ИИ-движок глубоких инсайтов Entropy AI Deep Search (в стиле Perplexity AI Pro Search) совместно с живым маскотом «Зерфик».
 
@@ -216,15 +225,17 @@ export async function POST(req: NextRequest) {
 Режим поиска: ${mode}
 ${isPro ? 'РЕЖИМ: PRO SEARCH (Глубокий многоступенчатый анализ первоисточников и фактов)' : 'РЕЖИМ: STANDARD SEARCH'}
 ${focus ? `Фокус: ${focus}` : ''}
+${liveContext}
 
 Твоя задача:
-1. Выполнить глубокий синтез фактов, современных концепций и первоисточников из интернета.
-2. Оформить ответ в формате строгого JSON (без markdown оберток вокруг json, чистый json объект).
-3. В тексте "answer" ОБЯЗАТЕЛЬНО расставляй числовые сноски на источники в квадратных скобках: [1], [2], [3], [4].
-4. Структурируй "answer" в красивый Markdown (заголовки, жирный шрифт, списки, если уместно — код или таблицы).
-5. Сформулируй 3-4 ключевых вывода ("takeaways").
-6. Предложи 3-4 глубоких уточняющих вопроса ("followUpQuestions").
-7. Сформулируй реплику Зерфика ("tikhonyaComment") — умную, доброжелательную, строго от имени Зерфика (например: "Зерфик проанализировал источники..."). Никогда не используй имя Тихоня.
+1. Выполнить глубокий синтез фактов, современных концепций и первоисточников из интернета на русском языке.
+2. Если предоставлены «ФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ ИЗ СЕТИ», обязательно опирайся на них и используй их точные URL, названия и домены в массиве "sources", а в тексте ответа расставляй соответствующие сноски [1], [2], [3].
+3. Оформить ответ в формате строгого JSON (без markdown оберток вокруг json, чистый json объект).
+4. В тексте "answer" ОБЯЗАТЕЛЬНО расставляй числовые сноски на источники в квадратных скобках: [1], [2], [3], [4].
+5. Структурируй "answer" в красивый Markdown (заголовки, жирный шрифт, списки, если уместно — код или таблицы).
+6. Сформулируй 3-4 ключевых вывода ("takeaways").
+7. Предложи 3-4 глубоких уточняющих вопроса ("followUpQuestions").
+8. Сформулируй реплику Зерфика ("tikhonyaComment") — умную, доброжелательную, строго от имени Зерфика (например: "Зерфик проанализировал источники..."). Никогда не используй имя Тихоня.
 
 JSON Схема:
 {
@@ -235,8 +246,7 @@ JSON Схема:
       "url": "https://domain.com/...",
       "domain": "domain.com",
       "snippet": "Краткая выжимка факта из источника..."
-    },
-    ... (3-6 авторитетных первоисточников)
+    }
   ],
   "answer": "Синтез данных с цитатами [1][2]...",
   "takeaways": [
@@ -301,12 +311,31 @@ JSON Схема:
 
     // High quality fallback synthesis if LLM returned malformed JSON or was offline
     if (!llmResult || !Array.isArray(llmResult.sources) || !llmResult.answer) {
-      llmResult = generateFallbackResearch(cleanQuery, mode, isPro)
+      llmResult = generateFallbackResearch(cleanQuery, mode, isPro, liveSources)
     }
 
     const cleanStr = (s: any) => (typeof s === 'string' ? s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').trim() : '')
 
-    const cleanSources: EntropySource[] = (llmResult.sources || []).map((s: any, idx: number) => ({
+    // Merge and ensure high quality verified sources (prefer live sources with real URLs)
+    let rawSources = Array.isArray(llmResult.sources) && llmResult.sources.length > 0
+      ? llmResult.sources
+      : liveSources
+
+    if (liveSources.length > 0 && rawSources !== liveSources) {
+      // If LLM returned generic/fake URLs, map them to our real live verified URLs
+      rawSources = rawSources.map((s: any, idx: number) => {
+        const matchingLive = liveSources[idx] || liveSources[0]
+        return {
+          id: idx + 1,
+          title: s.title || matchingLive?.title || `Источник ${idx + 1}`,
+          url: (s.url && s.url.startsWith('http') && !s.url.includes('domain.com')) ? s.url : (matchingLive?.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`),
+          domain: s.domain || matchingLive?.domain || 'web',
+          snippet: cleanStr(s.snippet || matchingLive?.snippet || ''),
+        }
+      })
+    }
+
+    const cleanSources: EntropySource[] = rawSources.map((s: any, idx: number) => ({
       id: typeof s.id === 'number' ? s.id : idx + 1,
       title: cleanStr(s.title || `Источник ${idx + 1}`),
       url: s.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
@@ -364,11 +393,11 @@ JSON Схема:
   }
 }
 
-function generateFallbackResearch(query: string, mode: string, isPro: boolean) {
+function generateFallbackResearch(query: string, mode: string, isPro: boolean, liveSources: LiveSource[] = []) {
   const qLower = query.toLowerCase()
   const slug = encodeURIComponent(query)
 
-  const sources: EntropySource[] = [
+  const defaultSources: EntropySource[] = [
     {
       id: 1,
       title: `${query} — Фундаментальное исследование и сравнительный анализ`,
@@ -399,15 +428,9 @@ function generateFallbackResearch(query: string, mode: string, isPro: boolean) {
     },
   ]
 
-  if (isPro) {
-    sources.push({
-      id: 5,
-      title: `${query} — Международные научные публикации и тренды`,
-      url: `https://nature.com/search?q=${slug}`,
-      domain: 'nature.com',
-      snippet: `Рецензируемые публикации и междисциплинарные исследования передового края технологий.`,
-    })
-  }
+  const sources: EntropySource[] = liveSources.length > 0
+    ? liveSources.map((s, idx) => ({ ...s, id: idx + 1 }))
+    : defaultSources
 
   const answer = `### 🔍 ${isPro ? '⚡ Pro Search Анализ' : 'Аналитический обзор'}: «${query}»
 
