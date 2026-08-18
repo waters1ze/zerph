@@ -242,10 +242,6 @@ export async function getUserInstalledExtensions(chatId: string | number): Promi
     if (row?.value) {
       return JSON.parse(row.value)
     }
-    // Admin accounts get Entropy Search enabled by default
-    if (await isUserAdmin(cid)) {
-      return ['ext_entropy_search']
-    }
     return []
   } catch {
     return []

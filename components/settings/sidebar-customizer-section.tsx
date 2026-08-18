@@ -59,7 +59,7 @@ export const DEFAULT_SIDEBAR_FOLDERS: SidebarFolder[] = [
   {
     id: 'workspace',
     title: 'Рабочее пространство',
-    itemIds: ['today', 'inbox', 'tasks', 'clock', 'notes', 'graph', 'ext_entropy_search'],
+    itemIds: ['today', 'inbox', 'tasks', 'clock', 'notes', 'graph'],
   },
   {
     id: 'planning',
@@ -246,7 +246,7 @@ export function SidebarCustomizerSection() {
           const installedIds = Array.isArray(data.installedIds) ? data.installedIds : []
           const enabledIds = Array.isArray(data.enabledIds) ? data.enabledIds : installedIds
           const activeExts = data.catalog.filter((e: ExtensionItem) =>
-            enabledIds.includes(e.id) || installedIds.includes(e.id) || e.id === 'ext_entropy_search'
+            enabledIds.includes(e.id) || installedIds.includes(e.id)
           )
           setInstalledExts(activeExts)
 

@@ -254,7 +254,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           const myIds = myExts.map((e: any) => e.id)
           // Keep ALL installed or user-owned extensions so they NEVER disappear from sidebar
           const activeExts = data.catalog.filter((e: ExtensionItem) =>
-            installedIds.includes(e.id) || enabledIds.includes(e.id) || myIds.includes(e.id) || e.id === 'ext_entropy_search'
+            installedIds.includes(e.id) || enabledIds.includes(e.id) || myIds.includes(e.id)
           )
           cachedInstalledExts = { exts: activeExts, timestamp: Date.now() }
           setInstalledExts(activeExts)
