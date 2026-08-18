@@ -752,8 +752,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })
         }
 
-        // Throttle profile and birthdays fetch to at most once per 2 minutes
-        if (showIndicator || (now - lastUserFetchTimeRef.current > 120_000)) {
+        // Throttle profile and birthdays fetch to at most once per day (24h) unless explicitly forced by user
+        const lastDailySync = typeof window !== 'undefined' ? Number(localStorage.getItem('zerf_last_daily_sync') || 0) : 0
+        const isPast24Hours = now - lastDailySync > 24 * 60 * 60 * 1000
+
+        if (showIndicator || isPast24Hours) {
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('zerf_last_daily_sync', String(now)) } catch {}
+          }
           lastUserFetchTimeRef.current = now
           const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
           fetch(userUrl, { headers, cache: 'no-store', signal: AbortSignal.timeout(15000) })

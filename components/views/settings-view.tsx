@@ -20,6 +20,7 @@ import { GiftSection } from '@/components/settings/gift-section'
 import { ImportExportSection } from '@/components/settings/import-export-section'
 import { TeamsSection } from '@/components/settings/teams-section'
 import { AiModelsSection } from '@/components/settings/ai-models-section'
+import { ApiKeysSection } from '@/components/settings/api-keys-section'
 import { SidebarCustomizerSection } from '@/components/settings/sidebar-customizer-section'
 import { InstalledExtensionsSettingsSection } from '@/components/settings/installed-extensions-section'
 import { EmojiPickerModal } from '@/components/ui/emoji-picker-modal'
@@ -80,7 +81,7 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
   { value: 3,  label: 'A' },
 ]
 
-type SettingsTab = 'account' | 'subscription' | 'ai' | 'teams' | 'notifications' | 'focus' | 'automation' | 'cli' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
+type SettingsTab = 'account' | 'subscription' | 'ai' | 'apikeys' | 'teams' | 'notifications' | 'focus' | 'automation' | 'cli' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
 
 export function SettingsView() {
   const { state, dispatch, syncData } = useApp()
@@ -604,6 +605,7 @@ export function SettingsView() {
         { id: 'account' as SettingsTab, label: 'Профиль & Вход', icon: User, desc: 'Имя, часовой пояс, Email, Telegram, VK' },
         { id: 'subscription' as SettingsTab, label: 'Тарифные планы & Подарки', icon: Sparkles, desc: 'Подписка Free, Plus, Pro, Corp, подарки' },
         { id: 'ai' as SettingsTab, label: 'ИИ & Нейросети', icon: Brain, desc: 'Выбор моделей для задач, чата, перепланирования' },
+        { id: 'apikeys' as SettingsTab, label: 'API Ключи & Провайдеры', icon: Key, desc: 'Groq, OpenAI, Anthropic, Gemini, Siri Token, Zerf CLI' },
         { id: 'teams' as SettingsTab, label: 'Команды & Проекты', icon: Users, desc: 'Совместная работа, роли участников, приглашения' },
       ],
     },
@@ -2993,6 +2995,21 @@ export function SettingsView() {
               <AiModelsSection
                 userPlan={normalizePlan(profileData.plan)}
                 onUpgradeClick={() => setActiveTab('subscription')}
+              />
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {/* ── TAB: API Keys & Providers ───────────────────────────────────── */}
+      {activeTab === 'apikeys' && (
+        <div className="space-y-6">
+          <Section title="API Ключи и Провайдеры">
+            <div className="p-5">
+              <ApiKeysSection
+                siriKey={profileData.siriKey}
+                chatId={currentChatId || undefined}
+                userPlan={normalizePlan(profileData.plan)}
               />
             </div>
           </Section>

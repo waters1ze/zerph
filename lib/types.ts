@@ -213,7 +213,11 @@ export interface UserSettings {
     telegramBotToken?: string
     aiApiKey?: string
     aiModel: string
+    apiKey?: string
     groqApiKey?: string
+    openaiKey?: string
+    anthropicKey?: string
+    geminiKey?: string
     customAiEnabled?: boolean
     customAiProvider?: string
     customAiApiKey?: string
