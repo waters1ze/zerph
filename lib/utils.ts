@@ -54,12 +54,25 @@ export function isYearlyEventTask(task: { title?: string; tags?: string[]; repea
   )
 }
 
-export function isSchoolTask(task: { title?: string; tags?: string[]; description?: string }): boolean {
+export function isSchoolTask(task: { title?: string; tags?: string[]; description?: string; projectId?: string; category?: string }): boolean {
   if (!task) return false
   const tags = (task.tags || []).map(x => String(x).toLowerCase())
-  if (tags.includes('школа') || tags.includes('расписание') || tags.includes('учеба')) return true
-  const schoolRegex = /(?:^|\s|\d\.)(?:урок|алгебр|геометр|физик|хим|биолог|русск|литератур|истори|обществознан|информатик|английск|немецк|французск|физкультур|физ-р|географ|астрономи|обж|труд|пар[аы]|школ|заняти)/i
-  return schoolRegex.test(task.title || '') || schoolRegex.test(task.description || '')
+  if (tags.includes('школа') || tags.includes('школьное расписание') || tags.includes('школьные уроки')) {
+    return true
+  }
+  const cat = String(task.category || '').toLowerCase()
+  if (cat === 'школа' || cat === 'школьное расписание') {
+    return true
+  }
+  const title = String(task.title || '').trim()
+  if (/^\[(?:школа|школьное расписание)\]/i.test(title)) {
+    return true
+  }
+  // School diary schedule imported with lesson number prefix e.g. "1. Алгебра", "2. Физика", "3. Химия"
+  if (/^\d+\s*[\.\)]\s*(?:алгебр|геометр|физик|хим|биолог|русск|литератур|обществознан|информатик|английск|немецк|французск|физкультур|географ|астрономи|обж)/i.test(title)) {
+    return true
+  }
+  return false
 }
 
 export function isTaskOnDate(t: { dueDate?: string | null; repeat?: string | null; title?: string; tags?: string[] }, targetDateStr: string, realTodayYMD: string): boolean {

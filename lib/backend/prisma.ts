@@ -10,10 +10,12 @@ function tunedDatabaseUrl(url: string | undefined): string | undefined {
   if (!url) return url
   try {
     const u = new URL(url)
-    if (!u.searchParams.has('connection_limit')) u.searchParams.set('connection_limit', '10')
-    if (!u.searchParams.has('pool_timeout')) u.searchParams.set('pool_timeout', '20')
-    if (!u.searchParams.has('connect_timeout')) u.searchParams.set('connect_timeout', '15')
-    if (!u.searchParams.has('pgbouncer') && (url.includes('pooler.supabase.com') || url.includes('6543') || url.includes('pgbouncer=true'))) {
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production')
+    const limit = isServerless ? '2' : '5'
+    u.searchParams.set('connection_limit', limit)
+    u.searchParams.set('pool_timeout', '30')
+    u.searchParams.set('connect_timeout', '30')
+    if (url.includes('pooler.supabase.com') || url.includes('6543') || url.includes('pgbouncer=true')) {
       u.searchParams.set('pgbouncer', 'true')
     }
     return u.toString()

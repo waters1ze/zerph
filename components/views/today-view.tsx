@@ -479,7 +479,7 @@ export function TodayView() {
               <div className="flex flex-col gap-2.5 p-3.5 rounded-2xl bg-card border border-border/80 shadow-2xs mb-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold mono-emoji">
+                    <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-sm shrink-0">
                       🏫
                     </div>
                     <h3 className="text-[13px] font-bold text-foreground">Школьное расписание</h3>

@@ -71,12 +71,24 @@ export function getDynamicSystemPrompt(existingItemsContext?: string, friendsCon
 Today's Date: ${mskDate} (YYYY-MM-DD)
 Current Time Right Now: ${mskTime} (24-hour HH:MM format, Europe/Moscow timezone)
 
-CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS:
-- All relative time phrases (e.g., "через минуту", "напиши мне через 1 минуту", "через 10 минут", "в 15:00", "завтра в 9 утра", "проснуться в 9 утра", "будильник на 8:00", "разбуди в 7 утра") MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
-- Example: "проснуться в 9 утра" or "будильник на 9 утра" -> ALWAYS extract "dueTime": "09:00"!
-- Example: "в 8 вечера" -> ALWAYS extract "dueTime": "20:00"!
-- If current time is past the mentioned time (e.g. at night 02:00 saying "проснуться в 9 утра"), set "dueDate" to the upcoming morning!
-- Example: If current Moscow time is "${mskTime}" and user says "через минуту" or "через 1 минуту", dueTime MUST be calculated as current minute + 1 minute (e.g. if current is 22:57, dueTime is 22:58). DO NOT SHIFT TIME OR ADD EXTRA HOURS!
+CRITICAL INSTRUCTIONS FOR TIME CALCULATIONS (HIGHEST PRIORITY):
+- All relative and specific time phrases MUST be calculated STRICTLY relative to CURRENT MOSCOW TIME ${mskTime} on ${mskDate}!
+- ⏰ УМНОЕ РАСПОЗНАВАНИЕ НЕОДНОЗНАЧНОГО ВРЕМЕНИ (НАПРИМЕР "В 6 ЧАСОВ", "В 6", "В 7 ЧАСОВ", "В 2 ЧАСА"):
+  1. Если пользователь говорит время от 1 до 12 БЕЗ явного слова "утра"/"вечера" (например «в 6», «в 6 часов», «в 7 часов», «в 8», «в 2 часа», «в 3», «в 5 часов»):
+     • Сравнивай с текущим временем ${mskTime}:
+     • Если утренний час (например 06:00) сегодня УЖЕ ПРОШЕЛ (текущее время ${mskTime} > 06:00), но вечерний час (например 18:00) еще ВПЕРЕДИ (${mskTime} < 18:00):
+       -> СТРОГО ставь "dueTime": "18:00", "dueDate": "${mskDate}" (сегодня)!
+       -> Пример: сейчас день/вечер и пользователь говорит «провести урок с детьми по шахматам в 6 часов» -> "dueTime": "18:00", "dueDate": "${mskDate}".
+     • Если И утренний (06:00), И вечерний (18:00) час сегодня уже прошли (${mskTime} > 18:00):
+       -> Ставь задачу на СЛЕДУЮЩИЙ ДЕНЬ ("dueDate": "дата завтрашнего дня YYYY-MM-DD", "dueTime": "18:00" или "06:00").
+     • Если утренний час еще впереди (например, сейчас 05:00 утра, а пользователь говорит «в 6 часов»):
+       -> Ставь "dueTime": "06:00" на СЕГОДНЯ ("dueDate": "${mskDate}").
+  2. Если указано явное "утра" / "вечера":
+     • "в 9 утра" -> "dueTime": "09:00"
+     • "в 6 вечера" -> "dueTime": "18:00"
+     • "в 8 вечера" -> "dueTime": "20:00"
+     • Если это время уже прошло сегодня, ставь "dueDate" на следующий день!
+  3. "через минуту", "через 10 минут": прибавляй к текущему времени ${mskTime}.
 - Always output "dueDate" in YYYY-MM-DD and "dueTime" in 24-hour HH:MM format.`
 
   if (extensionsContext) {
@@ -394,34 +406,41 @@ export async function parseIntentWithGroq(
 
           const effectiveType = (cleanRecName || item.type === 'delegate') ? 'delegate' : (item.type || 'task')
 
-          return {
-            action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
-            targetId: item.targetId || null,
-            type: effectiveType,
-            title: item.title || text.slice(0, 50),
-            summary: item.summary || text,
-            priority: item.priority || 'medium',
-            dueDate: item.dueDate || null,
-            dueTime: item.dueTime || null,
-            daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
-            recipientName: cleanRecName,
-            isBothShared: cleanIsBothShared,
-            repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
-            targetTitle: item.targetTitle || null,
-            projectId: item.projectId || null,
-            goalId: item.goalId || null,
-            folder: item.folder || null,
-            members: Array.isArray(item.members) ? item.members : null,
-            tags: Array.isArray(item.tags) ? item.tags : [],
-            subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
-            milestones: Array.isArray(item.milestones) ? item.milestones : [],
-            motivation: item.motivation || null,
-            rawText: text,
-            originalText: text,
-          }
-        })
+            const { dueDate: smartDueDate, dueTime: smartDueTime } = normalizeSmartTimeAndDate(
+              item.dueDate,
+              item.dueTime,
+              text
+            )
+
+            return {
+              action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
+              targetId: item.targetId || null,
+              type: effectiveType,
+              title: item.title || text.slice(0, 50),
+              summary: item.summary || text,
+              priority: item.priority || 'medium',
+              dueDate: smartDueDate,
+              dueTime: smartDueTime,
+              daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
+              recipientName: cleanRecName,
+              isBothShared: cleanIsBothShared,
+              repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+              targetTitle: item.targetTitle || null,
+              projectId: item.projectId || null,
+              goalId: item.goalId || null,
+              folder: item.folder || null,
+              members: Array.isArray(item.members) ? item.members : null,
+              tags: Array.isArray(item.tags) ? item.tags : [],
+              subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
+              milestones: Array.isArray(item.milestones) ? item.milestones : [],
+              motivation: item.motivation || null,
+              rawText: text,
+              originalText: text,
+            }
+          })
       } catch {
         const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(text)
+        const { dueDate: smartDueDate, dueTime: smartDueTime } = normalizeSmartTimeAndDate(null, null, text)
         return [{
           type: cleanRecName ? 'delegate' : 'task',
           recipientName: cleanRecName,
@@ -429,11 +448,114 @@ export async function parseIntentWithGroq(
           title: text.slice(0, 50),
           summary: text,
           priority: 'medium',
+          dueDate: smartDueDate,
+          dueTime: smartDueTime,
           tags: ['voice-input'],
           rawText: text,
           originalText: text,
         }]
       }
+}
+
+/**
+ * Normalizes ambiguous relative times (e.g. "в 6 часов" -> 18:00 if morning has passed, or tomorrow if evening passed)
+ */
+export function normalizeSmartTimeAndDate(
+  dueDate: string | null | undefined,
+  dueTime: string | null | undefined,
+  rawText: string = '',
+  referenceDate: Date = new Date()
+): { dueDate: string | null; dueTime: string | null } {
+  // Format reference date in Europe/Moscow timezone
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(referenceDate)
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+  const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+  const curHour = parseInt(getPart('hour'), 10)
+  const curMin = parseInt(getPart('minute'), 10)
+
+  // Calculate tomorrow's date string
+  const tomorrowDate = new Date(referenceDate.getTime() + 24 * 60 * 60 * 1000)
+  const tmParts = formatter.formatToParts(tomorrowDate)
+  const getTmPart = (type: string) => tmParts.find(p => p.type === type)?.value || '00'
+  const tomorrowStr = `${getTmPart('year')}-${getTmPart('month')}-${getTmPart('day')}`
+
+  let finalDate = dueDate || todayStr
+  let finalTime = dueTime ? dueTime.trim() : null
+
+  // If no dueTime was extracted by LLM, check if rawText mentions a time like "в 6", "в 6 часов", "в 18:00", "в 7:30"
+  if (!finalTime && rawText) {
+    const timeMatch = rawText.match(/(?:^|\s)в\s*(\d{1,2})(?::(\d{2}))?\s*(?:час(?:а|ов|ом)?)?(?:\s*(утра|вечера|дня|ночи))?/i)
+    if (timeMatch) {
+      let h = parseInt(timeMatch[1], 10)
+      const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0
+      const period = (timeMatch[3] || '').toLowerCase()
+      if (period.includes('вечер') || period.includes('дня')) {
+        if (h < 12) h += 12
+      } else if (period.includes('ноч') || period.includes('утр')) {
+        if (h === 12) h = 0
+      }
+      finalTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+  }
+
+  if (!finalTime) {
+    return { dueDate: dueDate || null, dueTime: null }
+  }
+
+  // Check for simple HH:MM time format
+  const match = finalTime.match(/^(\d{1,2}):(\d{2})$/)
+  if (match) {
+    let hour = parseInt(match[1], 10)
+    const min = parseInt(match[2], 10)
+    const textLower = rawText.toLowerCase()
+    const hasExplicitMorning = textLower.includes('утра') || textLower.includes('утром') || textLower.includes('ночи') || textLower.includes('am')
+    const hasExplicitEvening = textLower.includes('вечера') || textLower.includes('вечером') || textLower.includes('дня') || textLower.includes('pm')
+    const hasTomorrow = textLower.includes('завтра') || textLower.includes('послезавтра')
+
+    // If hour <= 12 and no explicit morning indicator, resolve ambiguity (e.g. 6 o'clock)
+    if (hour <= 12 && !hasExplicitMorning) {
+      if (hasExplicitEvening) {
+        if (hour < 12) hour += 12
+      } else {
+        // Ambiguous hour (e.g. "в 6", "в 6 часов", "в 7", "в 2")
+        // Check if morning hour has already passed today
+        const morningPassed = curHour > hour || (curHour === hour && curMin >= min)
+        const pmHour = hour === 12 ? 12 : hour + 12
+        const pmPassed = curHour > pmHour || (curHour === pmHour && curMin >= min)
+
+        if (morningPassed && !pmPassed) {
+          // e.g. currently 16:00, user said "в 6" -> 18:00 today!
+          hour = pmHour
+        } else if (morningPassed && pmPassed) {
+          // e.g. currently 19:30, user said "в 6" -> both passed today -> 18:00 tomorrow!
+          hour = pmHour
+          if (!dueDate || dueDate === todayStr) {
+            finalDate = tomorrowStr
+          }
+        }
+      }
+    }
+
+    // Check if the scheduled time is in the past for today (and user didn't specify a future date or recurring)
+    const targetPassedToday = curHour > hour || (curHour === hour && curMin > min)
+    if (targetPassedToday && (!dueDate || dueDate === todayStr) && !hasTomorrow) {
+      // Time has already passed today -> schedule for tomorrow
+      finalDate = tomorrowStr
+    }
+
+    finalTime = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+  }
+
+  return { dueDate: finalDate, dueTime: finalTime }
 }
 
 /**

@@ -26,19 +26,25 @@ export function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
 }
 
 /**
- * Compresses and downscales an image file to a tiny square avatar (80x80 WebP/JPEG)
- * resulting in minimal storage footprint (< 3 KB).
+ * Compresses and downscales an image file to a tiny square avatar (96x96 WebP/JPEG)
+ * resulting in minimal storage footprint (< 3 KB) and crisp Retina display.
  */
-export async function compressExtensionImage(file: File, maxSize = 80, quality = 0.55): Promise<string> {
+export async function compressExtensionImage(file: File, maxSize = 96, quality = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('Пожалуйста, выберите файл изображения (PNG, JPG, WebP)'))
+    const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(file.name)
+    if (!isImg) {
+      reject(new Error('Пожалуйста, выберите файл изображения (PNG, JPG, WebP, GIF)'))
       return
     }
 
     const reader = new FileReader()
     reader.onload = (e) => {
       const src = e.target?.result as string
+      if (!src) {
+        reject(new Error('Не удалось прочитать файл изображения'))
+        return
+      }
+
       const img = new Image()
       img.onload = () => {
         try {
@@ -67,7 +73,14 @@ export async function compressExtensionImage(file: File, maxSize = 80, quality =
           resolve(src)
         }
       }
-      img.onerror = () => reject(new Error('Не удалось обработать изображение'))
+      img.onerror = () => {
+        // In case of SVG/Canvas issues, resolve with data URL directly
+        if (src.startsWith('data:image/svg')) {
+          resolve(src)
+        } else {
+          reject(new Error('Не удалось обработать изображение'))
+        }
+      }
       img.src = src
     }
     reader.onerror = () => reject(new Error('Не удалось прочитать файл'))
@@ -78,13 +91,18 @@ export async function compressExtensionImage(file: File, maxSize = 80, quality =
 export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: string; className?: string }) {
   const [hasError, setHasError] = useState(false)
 
-  const isImage = !hasError && icon && (
-    icon.startsWith('http://') ||
-    icon.startsWith('https://') ||
-    icon.startsWith('data:image') ||
-    icon.startsWith('data:') ||
-    icon.startsWith('/') ||
-    icon.startsWith('blob:')
+  // Reset error when icon changes
+  useEffect(() => {
+    setHasError(false)
+  }, [icon])
+
+  const isImage = !hasError && Boolean(icon) && (
+    icon!.startsWith('http://') ||
+    icon!.startsWith('https://') ||
+    icon!.startsWith('data:image') ||
+    icon!.startsWith('data:') ||
+    icon!.startsWith('/') ||
+    icon!.startsWith('blob:')
   )
 
   if (isImage) {
@@ -92,7 +110,10 @@ export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: 
       <img
         src={icon}
         alt="Extension"
-        className={cn('w-full h-full object-cover rounded-xl shrink-0 select-none pointer-events-none', className)}
+        className={cn(
+          'w-full h-full object-cover rounded-xl shrink-0 select-none pointer-events-none grayscale contrast-125 brightness-95',
+          className
+        )}
         onError={() => setHasError(true)}
         loading="lazy"
       />
