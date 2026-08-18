@@ -654,8 +654,8 @@ export function SettingsView() {
   return (
     <div className="w-full h-full flex-1 rounded-none sm:rounded-3xl bg-card border-0 sm:border border-border/80 shadow-2xl overflow-hidden flex flex-col md:flex-row font-sans">
       
-      {/* ── Left Sidebar Navigation (Obsidian Style) ── */}
-      <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border/70 bg-muted/20 p-4 flex flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
+      {/* ── Left Sidebar Navigation (Desktop Obsidian Style) ── */}
+      <div className="hidden md:flex md:w-64 border-r border-border/70 bg-muted/20 p-4 flex-col justify-between shrink-0 overflow-y-auto no-scrollbar">
         <div className="space-y-4">
           
           {/* Header */}
@@ -717,7 +717,7 @@ export function SettingsView() {
         </div>
 
         {/* Bottom Status Info */}
-        <div className="pt-4 mt-4 border-t border-border/50 hidden md:flex items-center justify-between text-[11px] text-muted-foreground px-1">
+        <div className="pt-4 mt-4 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground px-1">
           <span>Синхронизация с БД</span>
           <span className="font-semibold text-emerald-500 flex items-center gap-1">
             <CheckCircle className="w-3 h-3" />
@@ -727,23 +727,46 @@ export function SettingsView() {
       </div>
 
       {/* ── Right Content Pane ── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-background/40">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-background/40">
+        
+        {/* Mobile Horizontal Tabs Selector */}
+        <div className="md:hidden flex items-center gap-1.5 overflow-x-auto px-3 py-2 border-b border-border/60 bg-muted/20 shrink-0 [scrollbar-width:none]">
+          {SECTIONS.flatMap(s => s.items).map(item => {
+            const isSel = activeTab === item.id
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  'px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer select-none',
+                  isSel
+                    ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                    : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50'
+                )}
+              >
+                <Icon className={cn('w-3.5 h-3.5', isSel ? 'text-primary-foreground' : 'text-primary')} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
         
         {/* Header of the Active Section */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 bg-muted/10 shrink-0">
-          <div className="flex items-center gap-3">
-            <div>
-              <h2 className="text-base font-bold text-foreground">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-border/60 bg-muted/10 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-foreground truncate">
                 {activeItem?.label || 'Настройки'}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
                 {activeItem?.desc || 'Параметры и конфигурация системы'}
               </p>
             </div>
             {settingsSavedBadge && (
-              <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in">
+              <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in shrink-0">
                 <Check className="w-3 h-3" />
-                <span>Сохранено в базе</span>
+                <span>Сохранено</span>
               </span>
             )}
           </div>

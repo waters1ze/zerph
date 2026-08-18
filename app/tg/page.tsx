@@ -10,16 +10,13 @@ export default function TgPage() {
   useEffect(() => {
     setMounted(true)
 
-    // Initialize Telegram WebApp SDK with full expansion and theme color
+    // Initialize Telegram WebApp SDK
     if (typeof window !== 'undefined') {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
         try {
           tg.ready?.()
           tg.expand?.()
-          if (typeof tg.requestFullscreen === 'function') {
-            try { tg.requestFullscreen() } catch {}
-          }
           if (typeof tg.enableClosingConfirmation === 'function') {
             try { tg.enableClosingConfirmation() } catch {}
           }

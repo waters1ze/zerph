@@ -151,10 +151,7 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
   const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings'
 
   return (
-    <div className={cn(
-      'app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative pb-[env(safe-area-inset-bottom,0px)]',
-      isTelegramMiniApp && 'w-full max-w-[500px] mx-auto border-x border-border/40 shadow-2xl justify-center'
-    )}>
+    <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative w-full pb-[env(safe-area-inset-bottom,0px)]">
       {/* ── Mobile sidebar overlay ── */}
       <AnimatePresence>
         {mobileSidebarOpen && (
