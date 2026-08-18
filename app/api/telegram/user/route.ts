@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
             if (cityConf?.value) city = cityConf.value
           } catch {}
 
-          let avatarEmoji = '👤'
+          let avatarEmoji = 'zerfik_spirit'
           try {
             const emojiConf = await prisma.config.findUnique({ where: { key: `user_emoji_${cid}` } })
             if (emojiConf?.value) avatarEmoji = emojiConf.value
@@ -156,8 +156,8 @@ export async function POST(req: NextRequest) {
       const cleanEmoji = String(avatarEmoji).trim()
       await prisma.config.upsert({
         where: { key: `user_emoji_${cid}` },
-        update: { value: cleanEmoji || '👤' },
-        create: { key: `user_emoji_${cid}`, value: cleanEmoji || '👤' },
+        update: { value: cleanEmoji || 'zerfik_spirit' },
+        create: { key: `user_emoji_${cid}`, value: cleanEmoji || 'zerfik_spirit' },
       }).catch(() => {})
     }
 

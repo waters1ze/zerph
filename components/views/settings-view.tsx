@@ -154,7 +154,7 @@ export function SettingsView() {
   const isAdmin = currentChatId === '6136950061' || currentChatId === '5078516086'
 
   // Avatar / Profile Emoji State (Telegram-style 1000+ emojis)
-  const cachedAvatarEmoji = typeof window !== 'undefined' ? localStorage.getItem('zerf_avatar_emoji') || '👤' : '👤'
+  const cachedAvatarEmoji = typeof window !== 'undefined' ? localStorage.getItem('zerf_avatar_emoji') || 'zerfik_spirit' : 'zerfik_spirit'
   const [userAvatarEmoji, setUserAvatarEmoji] = useState(profileData.avatarEmoji || cachedAvatarEmoji)
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false)
   const [showThemesModal, setShowThemesModal] = useState<boolean>(false)

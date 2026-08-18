@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { cn } from '@/lib/utils'
-import { isCustomZerfEmoji, getCustomZerfEmoji } from '@/lib/custom-emojis'
+import { getCustomZerfEmoji } from '@/lib/custom-emojis'
 
 interface ZerfAvatarProps {
   emoji?: string | null

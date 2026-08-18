@@ -63,9 +63,9 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   // User Avatar Emoji State
   const [userAvatarEmoji, setUserAvatarEmoji] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('zerf_avatar_emoji') || '👤'
+      return localStorage.getItem('zerf_avatar_emoji') || 'zerfik_spirit'
     }
-    return '👤'
+    return 'zerfik_spirit'
   })
 
   useEffect(() => {
@@ -336,7 +336,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           title={`Профиль: ${displayName} (кликните для настроек)`}
         >
           <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
-            {userAvatarEmoji && userAvatarEmoji !== '👤' ? (
+            {userAvatarEmoji ? (
               <ZerfAvatar emoji={userAvatarEmoji} size="sm" />
             ) : tgUser?.photoUrl ? (
               <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover grayscale contrast-125" />
