@@ -496,11 +496,11 @@ export function EntropySearchView() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {[
-              { id: 'web', label: '🌐 All Web & Факты', icon: Globe },
-              { id: 'academic', label: '🔬 Академический (arXiv)', icon: GraduationCap },
-              { id: 'notes', label: '📚 База Zerf Note', icon: BookOpen },
-              { id: 'code', label: '💻 Код & GitHub', icon: Code },
-              { id: 'fast', label: '⚡ Быстрый факт-чекинг', icon: Zap },
+              { id: 'web', label: 'All Web & Факты', icon: Globe },
+              { id: 'academic', label: 'Академический (arXiv)', icon: GraduationCap },
+              { id: 'notes', label: 'База Zerf Note', icon: BookOpen },
+              { id: 'code', label: 'Код & GitHub', icon: Code },
+              { id: 'fast', label: 'Быстрый факт-чекинг', icon: Zap },
             ].map(m => {
               const Icon = m.icon
               const active = activeMode === m.id
