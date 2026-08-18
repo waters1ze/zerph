@@ -138,6 +138,43 @@ export function StatsView() {
   const q3 = activeTasks.filter(t => (t.priority === 'medium' || t.priority === 'low') && t.dueDate && t.dueDate <= tomorrow)
   const q4 = activeTasks.filter(t => t.priority === 'low' && (!t.dueDate || t.dueDate > tomorrow))
 
+  // Comprehensive user activities log (tasks, notes, goals, focus)
+  const allActivities = useMemo(() => {
+    const list: Array<{ date: string; type: 'task' | 'note' | 'goal' | 'focus'; label: string }> = []
+
+    // 1. Done & created tasks
+    tasks.forEach(t => {
+      if (t.status === 'done') {
+        const d = (t.completedAt || t.updatedAt || t.createdAt || '').slice(0, 10)
+        if (d) list.push({ date: d, type: 'task', label: `Выполнена задача «${t.title}»` })
+      } else if (t.createdAt) {
+        list.push({ date: t.createdAt.slice(0, 10), type: 'task', label: `Создана задача «${t.title}»` })
+      }
+    })
+
+    // 2. Notes created and edited
+    state.notes.forEach(n => {
+      if (n.createdAt) {
+        list.push({ date: n.createdAt.slice(0, 10), type: 'note', label: `Заметка «${n.title || 'Без названия'}»` })
+      }
+      if (n.updatedAt && n.updatedAt.slice(0, 10) !== (n.createdAt || '').slice(0, 10)) {
+        list.push({ date: n.updatedAt.slice(0, 10), type: 'note', label: `Редактирование заметки «${n.title || 'Без названия'}»` })
+      }
+    })
+
+    // 3. Goals created and updated
+    state.goals.forEach(g => {
+      if (g.createdAt) {
+        list.push({ date: g.createdAt.slice(0, 10), type: 'goal', label: `Цель «${g.title}»` })
+      }
+      if (g.updatedAt && g.updatedAt.slice(0, 10) !== (g.createdAt || '').slice(0, 10)) {
+        list.push({ date: g.updatedAt.slice(0, 10), type: 'goal', label: `Прогресс цели «${g.title}»` })
+      }
+    })
+
+    return list
+  }, [tasks, state.notes, state.goals])
+
   return (
     <div className="flex flex-col gap-6 w-full max-w-none">
       {/* Header & Period selector */}
@@ -350,11 +387,7 @@ export function StatsView() {
 
       {/* 365-Day Activity Heatmap - Spanning 100% */}
       <div className="w-full">
-        <ActivityHeatmap
-          completedDates={tasks.filter(t => t.status === 'done' && t.completedAt).map(t => t.completedAt!)}
-          totalCompleted={done}
-          currentStreak={done > 0 ? Math.max(1, done) : 0}
-        />
+        <ActivityHeatmap activities={allActivities} />
       </div>
     </div>
   )

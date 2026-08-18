@@ -419,12 +419,22 @@ export function SettingsView() {
   }, [])
 
   const handleConnectGoogleCalendar = async () => {
+    const currentPlan = normalizePlan(profileData.plan || usage?.plan || state.settings?.userPlan || 'free')
+    const isProOrHigher = ['pro', 'corp', 'creator'].includes(currentPlan) || isAdmin
+
+    if (!isProOrHigher && !profileData.googleCalendarSync) {
+      alert('🔒 Интеграция с Google Календарём доступна только на тарифах Zerf Pro (299 ₽) и Corp.\n\nОформите подписку Pro во вкладке «Тариф и подписка» ниже!')
+      return
+    }
+
     setGcalLoading(true)
     try {
       const res = await fetch('/api/calendar/auth', { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.url) {
         window.location.href = data.url
+      } else if (data.proRequired) {
+        alert('🔒 Интеграция с Google Календарём доступна только на тарифах Zerf Pro (299 ₽) и Corp.\n\nОформите подписку Pro во вкладке «Тариф и подписка» ниже!')
       } else {
         alert(data.error || 'Ошибка при получении ссылки авторизации Google Календаря')
       }
@@ -1800,9 +1810,14 @@ export function SettingsView() {
                         Подключен (Синхронизация 2-way)
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border text-[10px] font-bold">
-                        Не подключен
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border text-[10px] font-bold">
+                          Не подключен
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+                          Тариф Pro / Corp
+                        </span>
+                      </div>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
@@ -1877,9 +1892,14 @@ export function SettingsView() {
                         Синхронизация активна
                       </span>
                     ) : (
-                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium border border-border">
-                        Не подключен
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium border border-border">
+                          Не подключен
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-xs font-bold">
+                          Тариф Pro / Corp
+                        </span>
+                      </div>
                     )}
                   </div>
                   <p className="text-xs sm:text-sm text-muted-foreground max-w-xl leading-relaxed">
