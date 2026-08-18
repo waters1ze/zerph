@@ -643,8 +643,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       density: (state.settings.density ?? 'default') as DensityMode,
       radius: (state.settings.borderRadius ?? 'default') as RadiusMode,
       roundShapes: state.settings.roundShapes !== false,
+      customCss: state.settings.customCss,
     })
-  }, [state.settings.theme, state.settings.accentColor, state.settings.textScale, state.settings.density, state.settings.borderRadius, state.settings.roundShapes])
+  }, [state.settings.theme, state.settings.accentColor, state.settings.textScale, state.settings.density, state.settings.borderRadius, state.settings.roundShapes, state.settings.customCss])
 
   // Persist settings to localStorage
   useEffect(() => {

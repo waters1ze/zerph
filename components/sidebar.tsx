@@ -396,7 +396,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         {activeFolders.map(folder => {
           const isFolderOpen = !collapsedFolders[folder.id]
           // Filter out items hidden by user
-          const visibleItemIds = (folder.itemIds || []).filter(id => !sidebarConfig.hiddenItems?.includes(id))
+          const visibleItemIds = (folder.itemIds || []).filter(id => id === 'settings' || !sidebarConfig.hiddenItems?.includes(id))
           if (visibleItemIds.length === 0) return null
 
           return (
@@ -577,6 +577,23 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
             </div>
           </div>
         )}
+
+        {/* Marketplace of Extensions & Themes Direct Link */}
+        <div className="pt-2 border-t border-border/40 mt-2">
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+            className={cn(
+              'w-full flex items-center rounded-xl text-xs font-semibold transition-all duration-150 font-sans cursor-pointer text-primary hover:bg-primary/10',
+              isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
+              currentView === 'extensions' && 'bg-primary/15 font-bold border border-primary/25 shadow-2xs'
+            )}
+            title="Магазин расширений и тем"
+          >
+            <Puzzle className="w-4 h-4 shrink-0 text-primary" />
+            {!isCollapsed && <span className="flex-1 text-left truncate">Магазин расширений</span>}
+          </motion.button>
+        </div>
 
         {/* Admin panel link at bottom for admins if not placed in folders */}
         {isAdmin && !sidebarConfig.hiddenItems?.includes('admin') && (

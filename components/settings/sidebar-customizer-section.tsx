@@ -9,7 +9,7 @@ import {
   RotateCcw, Check, Sparkles, FolderPlus, ArrowUp, ArrowDown, Move,
   ChevronDown, ChevronRight, Edit2, Save, X, ExternalLink,
   Share2, Download, Upload, Copy, CheckCheck, Heart, Crown, Search, ArrowRight,
-  GripVertical
+  GripVertical, Lock
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
@@ -170,7 +170,7 @@ export function getInitialSidebarConfig(): SidebarConfig {
 }
 
 export function SidebarCustomizerSection() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const confirmDialog = useConfirmDialog()
   const [config, setConfig] = useState<SidebarConfig>(getInitialSidebarConfig)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
@@ -289,10 +289,31 @@ export function SidebarCustomizerSection() {
   }, [])
 
   const saveConfig = (newConfig: SidebarConfig) => {
-    setConfig(newConfig)
+    // 🔒 PERMANENT PROTECTION: 'settings' MUST NEVER be hidden and MUST ALWAYS exist in folders!
+    const cleanHidden = (newConfig.hiddenItems || []).filter(id => id !== 'settings' && id !== 'extensions')
+    let folders = (newConfig.folders || []).map(f => ({
+      ...f,
+      itemIds: (f.itemIds || []).filter(id => id !== 'extensions'),
+    }))
+
+    const hasSettings = folders.some(f => f.itemIds.includes('settings'))
+    if (!hasSettings) {
+      if (folders.length > 0) {
+        folders[folders.length - 1].itemIds.push('settings')
+      } else {
+        folders = [{ id: 'account', title: 'Аккаунт', itemIds: ['settings'] }]
+      }
+    }
+
+    const sanitized: SidebarConfig = {
+      hiddenItems: cleanHidden,
+      folders,
+    }
+
+    setConfig(sanitized)
     try {
-      localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(newConfig))
-      localStorage.setItem('zerf_sidebar_config', JSON.stringify(newConfig))
+      localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(sanitized))
+      localStorage.setItem('zerf_sidebar_config', JSON.stringify(sanitized))
       window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
       setSavedBadge(true)
       setTimeout(() => setSavedBadge(false), 2000)
@@ -561,8 +582,9 @@ export function SidebarCustomizerSection() {
     return map
   }, [installedExts])
 
-  // Toggle single item visibility
+  // Toggle single item visibility (settings is permanently locked from hiding)
   const toggleItemVisibility = (itemId: string) => {
+    if (itemId === 'settings') return
     const isHidden = config.hiddenItems.includes(itemId)
     const nextHidden = isHidden
       ? config.hiddenItems.filter(id => id !== itemId)
@@ -853,7 +875,7 @@ export function SidebarCustomizerSection() {
                       <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
                       <span>{currentLikes}</span>
                     </button>
-                    <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[70px]">@{preset.author}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px]">@{preset.author}</span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -878,15 +900,28 @@ export function SidebarCustomizerSection() {
           })}
         </div>
 
-        {/* Big Action: Open All Presets Catalog */}
-        <button
-          onClick={() => setShowAllPresetsModal(true)}
-          className="w-full py-3 px-4 rounded-2xl bg-muted/60 hover:bg-muted border border-border/80 hover:border-primary/40 text-foreground font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs group"
-        >
-          <LayoutGrid className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-          <span>📂 Открыть полный каталог ВСЕХ пресетов ({allPresets.length})</span>
-          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-        </button>
+        {/* Catalog & Marketplace Action Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            onClick={() => setShowAllPresetsModal(true)}
+            className="w-full py-3 px-4 rounded-2xl bg-muted/60 hover:bg-muted border border-border/80 hover:border-primary/40 text-foreground font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs group"
+          >
+            <LayoutGrid className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            <span>📂 Все пресеты ({allPresets.length})</span>
+            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+          </button>
+          <button
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('zerf_open_marketplace'))
+              dispatch({ type: 'SET_VIEW', view: 'extensions' })
+            }}
+            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-primary/15 via-purple-500/15 to-primary/10 hover:from-primary/25 hover:via-purple-500/25 hover:to-primary/20 border border-primary/30 text-foreground font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs group"
+          >
+            <Puzzle className="w-4 h-4 text-primary group-hover:rotate-12 transition-transform" />
+            <span>✨ Магазин расширений и тем</span>
+            <ArrowRight className="w-3.5 h-3.5 text-primary group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
       </div>
 
       {/* Folders Creator Form */}
@@ -1126,19 +1161,28 @@ export function SidebarCustomizerSection() {
                             ))}
                           </select>
 
-                          {/* Toggle Item Visibility */}
-                          <button
-                            onClick={() => toggleItemVisibility(itemId)}
-                            className={cn(
-                              'p-1.5 rounded-lg transition-colors cursor-pointer',
-                              isHidden
-                                ? 'text-muted-foreground hover:text-foreground'
-                                : 'text-emerald-400 hover:bg-emerald-500/10'
-                            )}
-                            title={isHidden ? 'Показать' : 'Скрыть'}
-                          >
-                            {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          </button>
+                          {/* Toggle Item Visibility / Settings Lock */}
+                          {itemId === 'settings' ? (
+                            <span
+                              className="p-1.5 text-muted-foreground/60 cursor-not-allowed flex items-center justify-center"
+                              title="🔒 Раздел «Настройки» обязателен и не может быть скрыт"
+                            >
+                              <Lock className="w-3.5 h-3.5 text-muted-foreground/70" />
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => toggleItemVisibility(itemId)}
+                              className={cn(
+                                'p-1.5 rounded-lg transition-colors cursor-pointer',
+                                isHidden
+                                  ? 'text-muted-foreground hover:text-foreground'
+                                  : 'text-emerald-400 hover:bg-emerald-500/10'
+                              )}
+                              title={isHidden ? 'Показать' : 'Скрыть'}
+                            >
+                              {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </div>
                     )

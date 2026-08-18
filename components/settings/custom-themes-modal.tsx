@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Palette, Plus, X, Check, Upload, Sliders,
-  Sparkles, Trash2, Eye, Paintbrush, FileCode2
+  Sparkles, Trash2, Eye, Paintbrush, FileCode2,
+  Copy, CheckCheck, Download, ExternalLink, Code2, Globe
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { THEME_PRESETS, normalizeTheme, type ThemePresetMeta } from '@/lib/theme-presets'
@@ -15,7 +16,11 @@ export interface CustomTheme {
   tagline: string
   isDark: boolean
   preview: { bg: string; surface: string; accent: string }
-  variables: Record<string, string>
+  variables?: Record<string, string>
+  customCss?: string
+  githubUrl?: string
+  author?: string
+  i18nOverrides?: Record<string, any>
 }
 
 export const EXTENDED_THEME_LIBRARY: Array<{
@@ -116,11 +121,11 @@ export const EXTENDED_THEME_LIBRARY: Array<{
   },
 ]
 
-interface CustomThemesModalProps {
+export interface CustomThemesModalProps {
   isOpen: boolean
   onClose: () => void
   currentTheme: string
-  onApplyTheme: (themeId: string, customVars?: Record<string, string>) => void
+  onApplyTheme: (themeId: string, customVars?: Record<string, string>, customCss?: string, githubUrl?: string) => void
 }
 
 export function CustomThemesModal({
@@ -129,7 +134,7 @@ export function CustomThemesModal({
   currentTheme,
   onApplyTheme,
 }: CustomThemesModalProps) {
-  const [activeTab, setActiveTab] = useState<'library' | 'create' | 'css'>('library')
+  const [activeTab, setActiveTab] = useState<'library' | 'create' | 'css' | 'github'>('library')
   const [customThemes, setCustomThemes] = useState<CustomTheme[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -153,6 +158,12 @@ export function CustomThemesModal({
   // CSS Input state
   const [cssCode, setCssCode] = useState('')
   const [cssParseError, setCssParseError] = useState<string | null>(null)
+
+  // GitHub integration states
+  const [githubUrlInput, setGithubUrlInput] = useState('')
+  const [githubLoading, setGithubLoading] = useState(false)
+  const [githubError, setGithubError] = useState<string | null>(null)
+  const [copiedFile, setCopiedFile] = useState<string | null>(null)
 
   const handleSaveCustomTheme = () => {
     if (!themeTitle.trim()) {
@@ -317,7 +328,19 @@ export function CustomThemesModal({
               )}
             >
               <FileCode2 className="w-3.5 h-3.5" />
-              <span>Загрузить CSS</span>
+              <span>CSS & Анимации</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('github')}
+              className={cn(
+                'px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                activeTab === 'github'
+                  ? 'bg-primary/15 text-primary border border-primary/30 shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              )}
+            >
+              <Globe className="w-3.5 h-3.5 text-primary" />
+              <span>GitHub Репозиторий</span>
             </button>
           </div>
 
@@ -493,6 +516,170 @@ export function CustomThemesModal({
                   <Upload className="w-4 h-4" />
                   <span>Импортировать CSS и применить</span>
                 </button>
+              </div>
+            )}
+
+            {activeTab === 'github' && (
+              <div className="space-y-4 max-w-xl mx-auto">
+                {/* Section 1: Import Theme from GitHub */}
+                <div className="p-4 rounded-2xl bg-muted/20 border border-border space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-primary" />
+                    <h4 className="text-xs font-bold text-foreground">Импорт темы с GitHub</h4>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Введите ссылку на репозиторий GitHub или прямой URL к файлу <code className="font-mono text-primary font-bold">zerf-theme.json</code>:
+                  </p>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      value={githubUrlInput}
+                      onChange={e => setGithubUrlInput(e.target.value)}
+                      placeholder="https://github.com/waters1ze/zerf-theme-cyberpunk"
+                      className="flex-1 h-9 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      disabled={githubLoading || !githubUrlInput.trim()}
+                      onClick={async () => {
+                        setGithubError(null)
+                        setGithubLoading(true)
+                        try {
+                          let targetUrl = githubUrlInput.trim()
+                          if (targetUrl.includes('github.com') && !targetUrl.includes('raw.githubusercontent.com') && !targetUrl.endsWith('.json')) {
+                            const clean = targetUrl.replace(/\/$/, '')
+                            targetUrl = `${clean.replace('github.com', 'raw.githubusercontent.com')}/main/zerf-theme.json`
+                          }
+
+                          const res = await fetch(targetUrl)
+                          if (!res.ok) throw new Error(`HTTP ${res.status}: не удалось загрузить zerf-theme.json из ${targetUrl}`)
+                          const data = await res.json()
+                          const cfg = data.themeConfig || data.content || data
+
+                          const importedTheme: CustomTheme = {
+                            id: data.id || `github_${Date.now()}`,
+                            label: data.title || data.label || 'GitHub Theme',
+                            tagline: data.description || data.tagline || 'Импортировано с GitHub',
+                            isDark: cfg.theme !== 'blue' && cfg.theme !== 'paper',
+                            preview: data.preview || { bg: '#09090b', surface: '#18181b', accent: '#10b981' },
+                            variables: cfg.variables,
+                            customCss: cfg.customCss,
+                            githubUrl: githubUrlInput.trim(),
+                            author: data.author || '@github',
+                            i18nOverrides: cfg.i18nOverrides,
+                          }
+
+                          const updated = [importedTheme, ...customThemes]
+                          setCustomThemes(updated)
+                          try {
+                            localStorage.setItem('zerf_custom_themes', JSON.stringify(updated))
+                          } catch {}
+
+                          onApplyTheme(importedTheme.id, importedTheme.variables, importedTheme.customCss, importedTheme.githubUrl)
+                          setActiveTab('library')
+                        } catch (err: any) {
+                          setGithubError(err.message || 'Ошибка загрузки темы с GitHub. Убедитесь, что репозиторий публичный и содержит zerf-theme.json.')
+                        } finally {
+                          setGithubLoading(false)
+                        }
+                      }}
+                      className="px-4 h-9 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {githubLoading ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      <span>Импорт</span>
+                    </button>
+                  </div>
+
+                  {githubError && (
+                    <p className="text-xs text-rose-400 font-medium">{githubError}</p>
+                  )}
+                </div>
+
+                {/* Section 2: GitHub Theme Creator & Export Kit */}
+                <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Code2 className="w-4 h-4 text-primary" />
+                      <h4 className="text-xs font-bold text-foreground">Создать тему на GitHub (Экспорт)</h4>
+                    </div>
+                    <a
+                      href="https://github.com/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <span>Создать репозиторий</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    Вы можете хостить свои темы на GitHub и делиться ими с сообществом. Скопируйте готовый манифест <code className="font-mono text-foreground font-bold">zerf-theme.json</code>:
+                  </p>
+
+                  <div className="relative">
+                    <pre className="p-3 rounded-xl bg-muted/40 border border-border text-[10px] font-mono text-foreground overflow-x-auto max-h-48 leading-relaxed">
+{JSON.stringify({
+  name: "zerf-theme-community",
+  title: "My Custom Zerf Theme",
+  version: "1.0.0",
+  description: "Пользовательская тема оформления для Zerf Note с поддержкой CSS анимаций и переопределения интерфейса",
+  author: "zerf-creator",
+  githubUrl: "https://github.com/username/zerf-theme-community",
+  type: "theme",
+  category: "Темы & Стили",
+  icon: "🌌",
+  preview: {
+    bg: "#09090b",
+    surface: "#18181b",
+    accent: "#10b981"
+  },
+  themeConfig: {
+    theme: "strict",
+    accentColor: "emerald",
+    density: "compact",
+    borderRadius: "rounded",
+    customCss: "@keyframes glow { 0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); } }",
+    i18nOverrides: {
+      ru: { brandTag: "Zerf // Custom Style" }
+    }
+  }
+}, null, 2)}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const jsonStr = JSON.stringify({
+                          name: "zerf-theme-community",
+                          title: "My Custom Zerf Theme",
+                          version: "1.0.0",
+                          description: "Пользовательская тема оформления для Zerf Note",
+                          author: "zerf-creator",
+                          githubUrl: "https://github.com/username/zerf-theme-community",
+                          type: "theme",
+                          category: "Темы & Стили",
+                          icon: "🌌",
+                          preview: { bg: "#09090b", surface: "#18181b", accent: "#10b981" },
+                          themeConfig: {
+                            theme: "strict",
+                            accentColor: "emerald",
+                            density: "compact",
+                            borderRadius: "rounded",
+                            customCss: "@keyframes glow { 0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); } }",
+                          }
+                        }, null, 2)
+                        navigator.clipboard.writeText(jsonStr)
+                        setCopiedFile('json')
+                        setTimeout(() => setCopiedFile(null), 2000)
+                      }}
+                      className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-card/90 hover:bg-card border border-border text-[10px] font-bold text-foreground flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                    >
+                      {copiedFile === 'json' ? <CheckCheck className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedFile === 'json' ? 'Скопировано!' : 'Копировать JSON'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

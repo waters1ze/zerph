@@ -167,11 +167,13 @@ export interface ApplyVisualsOptions {
   radius: RadiusMode
   /** true = круглые элементы (по умолчанию), false = сглаженно-квадратные */
   roundShapes: boolean
+  /** Кастомный CSS из расширения темы / GitHub */
+  customCss?: string
 }
 
 /**
  * Применяет весь визуальный слой: классы на <html>/<body> + инлайн-переопределение
- * акцента. Вызывается из эффекта сторы при любом изменении настроек внешнего вида.
+ * акцента + инъекция кастомных CSS стилей/анимаций из тем.
  */
 export function applyVisualsToDocument(opts: ApplyVisualsOptions) {
   if (typeof document === 'undefined') return
@@ -229,5 +231,18 @@ export function applyVisualsToDocument(opts: ApplyVisualsOptions) {
       el.style.removeProperty('--ring')
       el.style.removeProperty('--chart-1')
     }
+  }
+
+  // Custom CSS & Animations Injection (from GitHub themes or custom styles)
+  let styleEl = document.getElementById('zerf-custom-theme-style') as HTMLStyleElement | null
+  if (opts.customCss && opts.customCss.trim()) {
+    if (!styleEl) {
+      styleEl = document.createElement('style')
+      styleEl.id = 'zerf-custom-theme-style'
+      document.head.appendChild(styleEl)
+    }
+    styleEl.textContent = opts.customCss
+  } else if (styleEl) {
+    styleEl.remove()
   }
 }

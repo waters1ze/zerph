@@ -11,7 +11,8 @@ import {
   Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
-  Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen
+  Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen,
+  Share2, Heart
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -234,6 +235,36 @@ export function SettingsView() {
   const [nameSavedStatus, setNameSavedStatus] = useState<boolean>(false)
   const [settingsSavedBadge, setSettingsSavedBadge] = useState<boolean>(false)
   const nameSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Liked themes state
+  const [likedThemeIds, setLikedThemeIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('zerf_liked_themes')
+        return saved ? new Set(JSON.parse(saved)) : new Set()
+      } catch {}
+    }
+    return new Set()
+  })
+
+  const toggleLikeTheme = async (themeId: string) => {
+    setLikedThemeIds(prev => {
+      const next = new Set(prev)
+      if (next.has(themeId)) next.delete(themeId)
+      else next.add(themeId)
+      try {
+        localStorage.setItem('zerf_liked_themes', JSON.stringify(Array.from(next)))
+      } catch {}
+      return next
+    })
+    try {
+      await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'like', extensionId: themeId }),
+      })
+    } catch {}
+  }
 
   // Generic DB preference updater
   const syncPreferenceToServer = async (payload: Record<string, any>) => {
@@ -2379,61 +2410,237 @@ export function SettingsView() {
             </Row>
           </Section>
 
-          {/* Section: Custom Theme Extensions */}
-          <Section title="Расширения тем оформления">
-            <div className="p-4 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
+          {/* Section: Custom Theme Extensions & GitHub Themes */}
+          <Section title="Расширения тем оформления и GitHub стили">
+            <div className="p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-3.5">
                 <div>
-                  <div className="text-[13px] font-medium text-foreground">Кастомные темы сообщества</div>
-                  <p className="text-[12px] text-muted-foreground">Темы оформления от создателей или ваши собственные стили</p>
+                  <div className="text-[13px] font-bold text-foreground flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span>Темы оформления сообщества и GitHub</span>
+                  </div>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    Кастомные CSS стили, анимации свечения, палитры и переопределения интерфейса
+                  </p>
                 </div>
-                <button
-                  onClick={() => {
-                    const extTheme = {
-                      theme: settings.theme,
-                      accentColor: settings.accentColor,
-                      density: settings.density,
-                      borderRadius: settings.borderRadius,
-                      textScale: settings.textScale,
-                    }
-                    const payload = JSON.stringify(extTheme, null, 2)
-                    navigator.clipboard.writeText(payload)
-                    alert('✓ Конфигурация текущей темы скопирована в буфер обмена! Вы можете вставить её в Студии создания расширений.')
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Экспорт стиля в расширение</span>
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowThemesModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Создать тему</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const extTheme = {
+                        name: `zerf-theme-${settings.accentColor || 'custom'}`,
+                        title: `Моя тема Zerf (${settings.theme})`,
+                        version: '1.0.0',
+                        description: 'Пользовательская тема оформления Zerf Note для GitHub',
+                        author: name || 'zerf-creator',
+                        githubUrl: 'https://github.com/username/zerf-theme-name',
+                        type: 'theme',
+                        category: 'Темы & Стили',
+                        icon: '🌌',
+                        preview: {
+                          bg: '#09090b',
+                          surface: '#18181b',
+                          accent: settings.accentColor ? '#10b981' : '#fafafa'
+                        },
+                        themeConfig: {
+                          theme: settings.theme,
+                          accentColor: settings.accentColor,
+                          density: settings.density,
+                          borderRadius: settings.borderRadius,
+                          roundShapes: settings.roundShapes !== false,
+                          customCss: settings.customCss || '',
+                        }
+                      }
+                      navigator.clipboard.writeText(JSON.stringify(extTheme, null, 2))
+                      alert('✓ Манифест zerf-theme.json скопирован в буфер обмена! Вы можете создать репозиторий на GitHub и загрузить его.')
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Экспорт в GitHub</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                <div
-                  onClick={() => update({ theme: 'strict', accentColor: 'emerald', density: 'compact', borderRadius: 'rounded' })}
-                  className="p-3.5 rounded-2xl border border-border/80 bg-muted/20 hover:border-primary/40 cursor-pointer transition-all space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                      <span>🌌</span> Cyberpunk Neon Emerald
-                    </span>
-                    <span className="text-[9px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-mono">Theme Plugin</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">Изумрудный строгий неон для максимальной концентрации в темноте.</p>
-                </div>
+              {/* Grid of Community Themes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[
+                  {
+                    id: 'ext_theme_cyberpunk',
+                    title: 'Cyberpunk Neon Emerald',
+                    icon: '🌌',
+                    author: 'waters1ze',
+                    githubUrl: 'https://github.com/waters1ze/zerf-theme-cyberpunk',
+                    description: 'Изумрудный строгий неон для максимальной концентрации в темноте: мягкое свечение и анимация фокуса.',
+                    preview: { bg: '#09090b', surface: '#14171f', accent: '#10b981' },
+                    theme: 'strict',
+                    accentColor: 'emerald',
+                    density: 'compact',
+                    borderRadius: 'rounded',
+                    likesCount: 28,
+                    customCss: '@keyframes pulse-emerald-glow { 0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.25); } 50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.45); } } .theme-strict .bg-primary { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }',
+                  },
+                  {
+                    id: 'ext_theme_royal_gold',
+                    title: 'Royal Gold Luxe',
+                    icon: '👑',
+                    author: 'waters1ze',
+                    githubUrl: 'https://github.com/waters1ze/zerf-theme-royal-gold',
+                    description: 'Тёплый бархатный чёрный с элементами шампанского золота, градиентами роскоши и плавными переходами.',
+                    preview: { bg: '#12100e', surface: '#1c1917', accent: '#eab308' },
+                    theme: 'warm',
+                    accentColor: 'gold',
+                    density: 'comfortable',
+                    borderRadius: 'default',
+                    likesCount: 35,
+                    customCss: '.theme-warm .bg-primary { background-image: linear-gradient(135deg, #eab308 0%, #fde047 50%, #ca8a04 100%) !important; }',
+                  },
+                  {
+                    id: 'ext_theme_tokyo_night',
+                    title: 'Tokyo Nightfall Neon',
+                    icon: '🗼',
+                    author: 'waters1ze',
+                    githubUrl: 'https://github.com/waters1ze/zerf-theme-tokyo-night',
+                    description: 'Глубокий ночной Токио: неоновый фиолетовый и индиго с мягким свечением и чистой типографикой.',
+                    preview: { bg: '#0b0b14', surface: '#141424', accent: '#a855f7' },
+                    theme: 'vivid',
+                    accentColor: 'violet',
+                    density: 'default',
+                    borderRadius: 'rounded',
+                    likesCount: 22,
+                    customCss: '.theme-vivid .bg-card { backdrop-filter: blur(12px); }',
+                  },
+                ].map(item => {
+                  const isLiked = likedThemeIds.has(item.id)
+                  const currentLikes = (item.likesCount || 0) + (isLiked ? 1 : 0)
+                  const isActive = settings.theme === item.theme && (settings.accentColor === item.accentColor || !settings.accentColor)
 
-                <div
-                  onClick={() => update({ theme: 'warm', accentColor: 'gold', density: 'comfortable', borderRadius: 'default' })}
-                  className="p-3.5 rounded-2xl border border-border/80 bg-muted/20 hover:border-primary/40 cursor-pointer transition-all space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                      <span>👑</span> Royal Gold Luxe
-                    </span>
-                    <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-mono">Theme Plugin</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">Тёплый бархатный чёрный с элементами шампанского золота.</p>
-                </div>
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        'p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 bg-card shadow-2xs group',
+                        isActive
+                          ? 'border-primary ring-2 ring-primary/30'
+                          : 'border-border hover:border-primary/40 hover:shadow-md'
+                      )}
+                    >
+                      <div className="space-y-2.5">
+                        {/* Mini Visual Preview Swatch */}
+                        <div
+                          className="h-14 rounded-xl border border-border/40 p-2.5 relative overflow-hidden flex flex-col justify-center gap-1.5 shadow-inner"
+                          style={{ background: item.preview.bg }}
+                        >
+                          <div className="h-2 w-3/4 rounded-sm" style={{ background: item.preview.surface }} />
+                          <div className="flex items-center gap-2">
+                            <div className="h-2.5 w-2.5 rounded-full" style={{ background: item.preview.accent }} />
+                            <div className="h-2 w-1/2 rounded-sm" style={{ background: item.preview.surface }} />
+                          </div>
+                          {isActive && (
+                            <span
+                              className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold text-white shadow-xs flex items-center gap-1"
+                              style={{ background: item.preview.accent }}
+                            >
+                              <Check className="w-2.5 h-2.5" /> Активна
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5 truncate">
+                            <span className="text-base">{item.icon}</span>
+                            <span className="truncate">{item.title}</span>
+                          </h4>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-400 font-mono shrink-0">
+                            GitHub
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                          {item.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleLikeTheme(item.id)}
+                            className={cn(
+                              'px-2 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer',
+                              isLiked
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                : 'bg-muted/50 text-muted-foreground hover:text-foreground border-border'
+                            )}
+                            title="Поставить сердечко теме"
+                          >
+                            <Heart className={cn('w-3 h-3', isLiked ? 'fill-rose-400 text-rose-400' : '')} />
+                            <span>{currentLikes}</span>
+                          </button>
+
+                          <a
+                            href={item.githubUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-muted-foreground hover:text-primary font-mono flex items-center gap-0.5 truncate max-w-[90px]"
+                            title="Репозиторий темы на GitHub"
+                          >
+                            <span>@{item.author}</span>
+                            <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                          </a>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            update({
+                              theme: item.theme as any,
+                              accentColor: item.accentColor,
+                              density: item.density as any,
+                              borderRadius: item.borderRadius as any,
+                              customCss: item.customCss,
+                              activeThemeExtensionId: item.id,
+                              activeThemeGithubUrl: item.githubUrl,
+                            })
+                            window.dispatchEvent(new CustomEvent('zerf_sync'))
+                          }}
+                          className={cn(
+                            'px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs',
+                            isActive
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          )}
+                        >
+                          {isActive ? <Check className="w-3.5 h-3.5" /> : null}
+                          <span>{isActive ? 'Активна' : 'Применить'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
+
+              {/* Action: Open Marketplace */}
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('zerf_open_marketplace'))
+                  dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                }}
+                className="w-full py-3 px-4 rounded-2xl bg-muted/60 hover:bg-muted border border-border hover:border-primary/40 text-foreground font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs group"
+              >
+                <Sparkles className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+                <span>✨ Открыть каталог тем и расширений в Магазине Сообщества</span>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+              </button>
             </div>
           </Section>
         </div>
@@ -3210,8 +3417,13 @@ export function SettingsView() {
         isOpen={showThemesModal}
         currentTheme={settings.theme || 'strict'}
         onClose={() => setShowThemesModal(false)}
-        onApplyTheme={(themeId, customVars) => {
-          update({ theme: themeId as any })
+        onApplyTheme={(themeId: string, customVars?: Record<string, string>, customCss?: string, githubUrl?: string) => {
+          update({
+            theme: themeId as any,
+            customCss: customCss || undefined,
+            activeThemeExtensionId: themeId,
+            activeThemeGithubUrl: githubUrl,
+          })
           if (customVars && typeof window !== 'undefined') {
             try {
               Object.entries(customVars).forEach(([k, v]) => {

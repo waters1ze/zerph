@@ -196,6 +196,14 @@ export interface UserSettings {
   borderRadius?: 'sharp' | 'default' | 'rounded'
   /** true — круглые элементы (по умолчанию), false — сглаженно-квадратные */
   roundShapes?: boolean
+  /** Кастомный CSS код (анимации, glow-эффекты, переопределения переменных) из GitHub тем */
+  customCss?: string
+  /** ID активного расширения темы (если выбрана тема из маркетплейса/GitHub) */
+  activeThemeExtensionId?: string
+  /** URL репозитория GitHub темы */
+  activeThemeGithubUrl?: string
+  /** Локализация / переопределения текстов из темы */
+  themeI18n?: Record<string, any>
   notifications: {
     desktop: boolean
     web?: boolean
