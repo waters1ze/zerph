@@ -42,8 +42,8 @@ export async function GET(req: NextRequest) {
           
           if (data?.ok && data.result) {
             const fetchedBirthday = data.result.birthdate
-            if (fetchedBirthday) {
-              const bdayStr = `${fetchedBirthday.day.toString().padStart(2, '0')}-${fetchedBirthday.month.toString().padStart(2, '0')}${fetchedBirthday.year ? `-${fetchedBirthday.year}` : ''}`
+            if (fetchedBirthday && fetchedBirthday.day && fetchedBirthday.month) {
+              const bdayStr = `${fetchedBirthday.year || 2000}-${fetchedBirthday.month.toString().padStart(2, '0')}-${fetchedBirthday.day.toString().padStart(2, '0')}`
               birthday = bdayStr
               
               // Save to DB
@@ -59,11 +59,14 @@ export async function GET(req: NextRequest) {
       }
 
       if (birthday) {
+        const { parseBirthday } = await import('@/lib/backend/db')
+        const parsed = parseBirthday(birthday)
+        const normalizedBirthday = parsed ? parsed.iso : birthday
         const name = [friend.firstName, friend.lastName].filter(Boolean).join(' ') || (friend.username ? `@${friend.username}` : `Участник #${friend.chatId.toString().slice(-4)}`)
         results.push({
           chatId: Number(friend.chatId),
           name,
-          birthday,
+          birthday: normalizedBirthday,
           username: friend.username,
         })
       }

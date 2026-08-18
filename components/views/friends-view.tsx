@@ -47,8 +47,50 @@ function FriendCard({
   const sc = STATUS_CONFIG[friend.status] || STATUS_CONFIG.offline
   const isBot = (friend.username || '').toLowerCase().includes('bot') || (friend.name || '').toLowerCase().includes('zerph')
   const [allowTasks, setAllowTasks] = useState(friend.allowTasks ?? (isBot ? true : false))
-  const [birthday, setBirthday] = useState(friend.birthday || '')
+  // Auto-discover birthday: from friend.birthday OR existing birthday task in state.tasks
+  const existingBdayTask = state.tasks?.find((t: any) => 
+    (t.tags?.includes('день рождения') || t.title?.startsWith('🎂')) &&
+    (t.assignees?.includes(friend.id) || t.assignees?.includes(friend.chatId) || (friend.name && t.title?.toLowerCase().includes(friend.name.toLowerCase())))
+  )
+
+  const normalizedBirthday = useMemo(() => {
+    const raw = friend.birthday || existingBdayTask?.dueDate || ''
+    if (!raw) return ''
+    const clean = raw.trim()
+    // YYYY-MM-DD
+    const isoMatch = clean.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`
+    }
+    // DD.MM.YYYY
+    const ruMatch = clean.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+    if (ruMatch) {
+      return `${ruMatch[3]}-${ruMatch[2].padStart(2, '0')}-${ruMatch[1].padStart(2, '0')}`
+    }
+    // DD.MM (Russian format: Day.Month e.g. 11.04)
+    const shortMatch = clean.match(/^(\d{1,2})[-/.](\d{1,2})$/)
+    if (shortMatch) {
+      const n1 = parseInt(shortMatch[1], 10)
+      const n2 = parseInt(shortMatch[2], 10)
+      let d = n1
+      let m = n2
+      if (n1 <= 12 && n2 > 12) {
+        m = n1
+        d = n2
+      }
+      return `2000-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    }
+    return ''
+  }, [friend.birthday, existingBdayTask?.dueDate])
+
+  const [birthday, setBirthday] = useState(normalizedBirthday)
   const [updating, setUpdating] = useState(false)
+
+  useEffect(() => {
+    if (normalizedBirthday && normalizedBirthday !== birthday) {
+      setBirthday(normalizedBirthday)
+    }
+  }, [normalizedBirthday])
 
   const toggleAllowTasks = async () => {
     const next = !allowTasks
@@ -72,6 +114,7 @@ function FriendCard({
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ friendId: friend.id, birthday: val }),
       })
+      fetch('/api/birthdays', { headers: getAuthHeaders() }).catch(() => {})
     } catch {}
   }
 
@@ -430,12 +473,34 @@ export function FriendsView() {
     }> = []
 
     for (const f of state.friends) {
-      if (!f.birthday) continue
-      const parts = f.birthday.split('-')
-      if (parts.length < 2) continue
-      const bMonth = parseInt(parts[parts.length - 2], 10)
-      const bDay = parseInt(parts[parts.length - 1], 10)
-      if (isNaN(bMonth) || isNaN(bDay)) continue
+      const bdayRaw = f.birthday || state.tasks?.find((t: any) => 
+        (t.tags?.includes('день рождения') || t.title?.startsWith('🎂')) &&
+        (t.assignees?.includes(f.id) || t.assignees?.includes(f.chatId) || (f.name && t.title?.toLowerCase().includes(f.name.toLowerCase())))
+      )?.dueDate
+      if (!bdayRaw) continue
+
+      let bDay = 0
+      let bMonth = 0
+
+      // YYYY-MM-DD
+      const isoMatch = bdayRaw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+      if (isoMatch) {
+        bMonth = parseInt(isoMatch[2], 10)
+        bDay = parseInt(isoMatch[3], 10)
+      } else {
+        const ruMatch = bdayRaw.match(/^(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{4}))?$/)
+        if (ruMatch) {
+          bDay = parseInt(ruMatch[1], 10)
+          bMonth = parseInt(ruMatch[2], 10)
+          if (bDay <= 12 && bMonth > 12) {
+            const tmp = bDay
+            bDay = bMonth
+            bMonth = tmp
+          }
+        }
+      }
+
+      if (!bMonth || !bDay || bMonth < 1 || bMonth > 12 || bDay < 1 || bDay > 31) continue
 
       let nextBDate = new Date(now.getFullYear(), bMonth - 1, bDay)
       if (nextBDate < new Date(now.getFullYear(), currentMonth - 1, currentDay)) {
@@ -452,7 +517,7 @@ export function FriendsView() {
     }
 
     return list.sort((a, b) => a.diffDays - b.diffDays)
-  }, [state.friends])
+  }, [state.friends, state.tasks])
 
   if (!mounted) {
     return (

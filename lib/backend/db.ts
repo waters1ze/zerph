@@ -2096,7 +2096,7 @@ export function autoCategorizeTags(title: string, summary: string = '', currentT
   return Array.from(tagsSet)
 }
 
-async function fetchTelegramUserProfile(chatId: bigint | number): Promise<{ firstName?: string; lastName?: string; username?: string } | null> {
+async function fetchTelegramUserProfile(chatId: bigint | number): Promise<{ firstName?: string; lastName?: string; username?: string; birthday?: string } | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) return null
   try {
@@ -2111,22 +2111,33 @@ async function fetchTelegramUserProfile(chatId: bigint | number): Promise<{ firs
       const firstName = u.first_name || ''
       const lastName = u.last_name || ''
       const username = u.username || ''
-      if (firstName || username) {
+      
+      let birthdayStr: string | undefined
+      if (u.birthdate && u.birthdate.day && u.birthdate.month) {
+        const bYear = u.birthdate.year || 2000
+        const bMonth = String(u.birthdate.month).padStart(2, '0')
+        const bDay = String(u.birthdate.day).padStart(2, '0')
+        birthdayStr = `${bYear}-${bMonth}-${bDay}`
+      }
+
+      if (firstName || username || birthdayStr) {
         await prisma.telegramChat.upsert({
           where: { chatId: BigInt(chatId) },
           update: {
             firstName: firstName || undefined,
             lastName: lastName || undefined,
             username: username || undefined,
+            birthday: birthdayStr || undefined,
           },
           create: {
             chatId: BigInt(chatId),
             firstName: firstName || null,
             lastName: lastName || null,
             username: username || null,
+            birthday: birthdayStr || null,
           },
         }).catch(() => {})
-        return { firstName, lastName, username }
+        return { firstName, lastName, username, birthday: birthdayStr }
       }
     }
   } catch {}
@@ -2185,7 +2196,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               authProvider: null,
               vkId: null,
               googleEmail: null,
-              birthday: chat?.birthday || null,
+              birthday: fetched.birthday || chat?.birthday || null,
               reminderIntervalMinutes: 5,
               reminderRepeatCount: 3,
               plan: 'free',
@@ -2227,6 +2238,32 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
 
         const isBot = (chat?.username || '').toLowerCase().includes('bot') || name.toLowerCase().includes('zerph')
         
+        let friendBirthday = chat?.birthday ? (parseBirthday(chat.birthday)?.iso || chat.birthday) : null
+
+        if (!friendBirthday) {
+          const bdayTask = await prisma.task.findFirst({
+            where: {
+              ownerChatId: cid,
+              tags: { has: 'день рождения' },
+              OR: [
+                { assignees: { has: fidStr } },
+                { title: { contains: name, mode: 'insensitive' } },
+              ],
+            },
+            select: { dueDate: true }
+          })
+          if (bdayTask?.dueDate) {
+            const parsed = parseBirthday(bdayTask.dueDate)
+            if (parsed) {
+              friendBirthday = parsed.iso
+              await prisma.telegramChat.update({
+                where: { chatId: fid },
+                data: { birthday: parsed.iso },
+              }).catch(() => {})
+            }
+          }
+        }
+
         return {
           id: fidStr,
           name,
@@ -2235,7 +2272,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
           username: chat?.username || '',
           status,
           addedAt: new Date().toISOString(),
-          birthday: chat?.birthday || null,
+          birthday: friendBirthday,
           allowTasks: myFriendship ? myFriendship.allowTasks : (isBot ? true : false),
           friendAllowedMe: theirFriendship ? theirFriendship.allowTasks : (isBot ? true : false),
         }
@@ -2265,39 +2302,45 @@ export async function touchUserLastActive(chatId: number | bigint | string) {
   } catch {}
 }
 
-export function parseBirthday(input: string | null | undefined): { month: number; day: number; year?: number; iso: string } | null {
+export function parseBirthday(input: string | null | undefined): { month: number; day: number; year?: number; iso: string; display: string } | null {
   if (!input) return null
   const cleaned = input.trim()
 
-  // 1. Check YYYY-MM-DD (e.g. 2010-04-03)
+  // 1. Check YYYY-MM-DD (e.g. 2000-04-11, 2026-04-11, 2010-04-03)
   const isoMatch = cleaned.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
   if (isoMatch) {
     const year = parseInt(isoMatch[1], 10)
     const month = parseInt(isoMatch[2], 10)
     const day = parseInt(isoMatch[3], 10)
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const monthStr = String(month).padStart(2, '0')
+      const dayStr = String(day).padStart(2, '0')
       return {
         year, month, day,
-        iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        iso: `${year}-${monthStr}-${dayStr}`,
+        display: `${dayStr}.${monthStr}${year && year !== 2000 ? '.' + year : ''}`
       }
     }
   }
 
-  // 2. Check DD.MM.YYYY or DD-MM-YYYY or DD/MM/YYYY (e.g. 03.04.2010 or 03-04-2010)
+  // 2. Check DD.MM.YYYY or DD-MM-YYYY or DD/MM/YYYY (e.g. 11.04.2000 or 11-04-2000 or 03.04.2010)
   const ruMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
   if (ruMatch) {
     const day = parseInt(ruMatch[1], 10)
     const month = parseInt(ruMatch[2], 10)
     const year = parseInt(ruMatch[3], 10)
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const monthStr = String(month).padStart(2, '0')
+      const dayStr = String(day).padStart(2, '0')
       return {
         year, month, day,
-        iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        iso: `${year}-${monthStr}-${dayStr}`,
+        display: `${dayStr}.${monthStr}.${year}`
       }
     }
   }
 
-  // 3. Check DD.MM or DD-MM (e.g. 03.04 or 03-04)
+  // 3. Check DD.MM or DD-MM (Russian format: Day.Month e.g. 11.04 = 11 апреля)
   const shortMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})$/)
   if (shortMatch) {
     const n1 = parseInt(shortMatch[1], 10)
@@ -2309,14 +2352,17 @@ export function parseBirthday(input: string | null | undefined): { month: number
       day = n2
     }
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const monthStr = String(month).padStart(2, '0')
+      const dayStr = String(day).padStart(2, '0')
       return {
         month, day,
-        iso: `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        iso: `2000-${monthStr}-${dayStr}`,
+        display: `${dayStr}.${monthStr}`
       }
     }
   }
 
-  // 4. Natural text in Russian: "3 апреля", "3 апреля 2010", "15 мая", "20 декабря 1995"
+  // 4. Natural text in Russian: "11 апреля", "11 апреля 2000", "15 мая", "20 декабря 1995"
   const ruMonths: Record<string, number> = {
     январ: 1, янв: 1,
     феврал: 2, фев: 2,
@@ -2339,13 +2385,14 @@ export function parseBirthday(input: string | null | undefined): { month: number
     for (const [prefix, mNum] of Object.entries(ruMonths)) {
       if (monthWord.startsWith(prefix)) {
         if (mNum >= 1 && mNum <= 12 && day >= 1 && day <= 31) {
+          const monthStr = String(mNum).padStart(2, '0')
+          const dayStr = String(day).padStart(2, '0')
           return {
             year,
             month: mNum,
             day,
-            iso: year
-              ? `${year}-${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-              : `${String(mNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+            iso: `${year || 2000}-${monthStr}-${dayStr}`,
+            display: `${dayStr}.${monthStr}${year ? '.' + year : ''}`
           }
         }
       }
@@ -2446,6 +2493,7 @@ export async function broadcastMyBirthdayToFriends(myChatId: number | bigint | s
         ],
       },
     })
+
     const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
     for (const friendId of friendChatIds) {
       await syncFriendBirthdays(friendId)
@@ -2560,7 +2608,7 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
         const updates: any = {}
         if (existing.title !== taskTitle) updates.title = taskTitle
         if (existing.dueTime !== '00:00') updates.dueTime = '00:00'
-        if (existing.dueDate && existing.dueDate < targetDueDate) {
+        if (existing.dueDate !== targetDueDate) {
           updates.dueDate = targetDueDate
           updates.status = 'todo'
           updates.reminderSent = false
