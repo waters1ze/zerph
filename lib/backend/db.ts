@@ -55,7 +55,10 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
             OR: [
               { ownerChatId: cid },
               { authorChatId: cid },
-              { assignees: { has: strId } }
+              {
+                assignees: { has: strId },
+                NOT: { tags: { has: 'день рождения' } }
+              }
             ]
           },
           orderBy: { createdAt: 'desc' },
@@ -69,6 +72,7 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       })
     }
 
+    const strOwnerId = ownerChatId ? String(ownerChatId) : null
     const seenIds = new Set<string>()
     const seenSharedKeys = new Set<string>()
     const uniqueTasks = allTasks.filter(t => {
@@ -76,6 +80,8 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
       seenIds.add(t.id)
 
       if (isBirthdayTitle(t.title)) {
+        // A birthday reminder belongs ONLY to the owner of that task
+        if (strOwnerId && t.ownerChatId && String(t.ownerChatId) !== strOwnerId) return false
         const normKey = t.title.replace(/^🎂\s*/, '').trim().toLowerCase()
         if (seenSharedKeys.has(`bday_${normKey}`)) return false
         seenSharedKeys.add(`bday_${normKey}`)
@@ -2340,16 +2346,38 @@ export function parseBirthday(input: string | null | undefined): { month: number
     }
   }
 
-  // 3. Check DD.MM or DD-MM (Russian format: Day.Month e.g. 11.04 = 11 апреля)
-  const shortMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})$/)
-  if (shortMatch) {
-    const n1 = parseInt(shortMatch[1], 10)
-    const n2 = parseInt(shortMatch[2], 10)
+  // 3a. Russian format with dots: DD.MM (e.g. 11.04 -> Day 11, Month 4 = 11 апреля)
+  const dotMatch = cleaned.match(/^(\d{1,2})\.(\d{1,2})$/)
+  if (dotMatch) {
+    const n1 = parseInt(dotMatch[1], 10)
+    const n2 = parseInt(dotMatch[2], 10)
     let day = n1
     let month = n2
     if (n1 <= 12 && n2 > 12) {
       month = n1
       day = n2
+    }
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const monthStr = String(month).padStart(2, '0')
+      const dayStr = String(day).padStart(2, '0')
+      return {
+        month, day,
+        iso: `2000-${monthStr}-${dayStr}`,
+        display: `${dayStr}.${monthStr}`
+      }
+    }
+  }
+
+  // 3b. Hyphen format: MM-DD or DD-MM (e.g. 04-11 from legacy ISO -> Month 4, Day 11 = 11 апреля)
+  const hyphenMatch = cleaned.match(/^(\d{1,2})-(\d{1,2})$/)
+  if (hyphenMatch) {
+    const n1 = parseInt(hyphenMatch[1], 10)
+    const n2 = parseInt(hyphenMatch[2], 10)
+    let month = n1
+    let day = n2
+    if (n1 > 12 && n2 <= 12) {
+      day = n1
+      month = n2
     }
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       const monthStr = String(month).padStart(2, '0')
@@ -2407,7 +2435,7 @@ export async function syncMyOwnBirthday(ownerChatId: number | bigint | string): 
     const cid = BigInt(ownerChatId)
     const userChat = await prisma.telegramChat.findUnique({
       where: { chatId: cid },
-      select: { birthday: true, firstName: true }
+      select: { birthday: true, firstName: true, lastName: true, username: true }
     })
 
     const ownBdayTasks = await prisma.task.findMany({
@@ -2420,6 +2448,31 @@ export async function syncMyOwnBirthday(ownerChatId: number | bigint | string): 
         ]
       }
     })
+
+    const myFullName = [userChat?.firstName, userChat?.lastName].filter(Boolean).join(' ')
+
+    // Clean up any old duplicate friend-style tasks for MYSELF on my own account
+    const duplicateFriendTasks = await prisma.task.findMany({
+      where: {
+        ownerChatId: cid,
+        tags: { has: 'день рождения' },
+        NOT: {
+          OR: [
+            { tags: { has: 'мой день рождения' } },
+            { title: { startsWith: '🎂 Мой день рождения' } },
+          ]
+        },
+        OR: [
+          ...(myFullName ? [{ title: { contains: myFullName, mode: 'insensitive' as const } }] : []),
+          ...(userChat?.username ? [{ title: { contains: `@${userChat.username}`, mode: 'insensitive' as const } }] : []),
+          { assignees: { equals: [String(cid)] } },
+          { assignees: { equals: [] } },
+        ]
+      }
+    })
+    for (const t of duplicateFriendTasks) {
+      await prisma.task.delete({ where: { id: t.id } }).catch(() => {})
+    }
 
     if (!userChat?.birthday) {
       for (const t of ownBdayTasks) {
@@ -2522,10 +2575,10 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
 
     const friendChatIds = friendships.map(f => f.userChatId === cid ? f.friendChatId : f.userChatId)
 
-    // 2. Find friend profiles with birthday set
+    // 2. Find friend profiles with birthday set (excluding self)
     const friendChats = friendChatIds.length > 0
       ? await prisma.telegramChat.findMany({
-          where: { chatId: { in: friendChatIds }, birthday: { not: null } },
+          where: { chatId: { in: friendChatIds.filter(id => id !== cid) } },
         })
       : []
 
@@ -2535,8 +2588,17 @@ export async function syncFriendBirthdays(ownerChatId: number | bigint | string)
     // 3. Upsert birthday tasks for each accepted friend — one task per friend chatId
     for (const friend of friendChats) {
       if (friend.chatId === cid) continue // handled by syncMyOwnBirthday
-      if (!friend.birthday) continue
-      const parsed = parseBirthday(friend.birthday)
+      
+      let friendBday = friend.birthday
+      if ((!friendBday || friendBday.length < 10) && process.env.TELEGRAM_BOT_TOKEN) {
+        const fetched = await fetchTelegramUserProfile(friend.chatId)
+        if (fetched?.birthday) {
+          friendBday = fetched.birthday
+        }
+      }
+
+      if (!friendBday) continue
+      const parsed = parseBirthday(friendBday)
       if (!parsed) continue
 
       const monthStr = String(parsed.month).padStart(2, '0')
