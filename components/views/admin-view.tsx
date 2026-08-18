@@ -994,15 +994,15 @@ export function AdminView() {
                           </button>
                         )}
 
-                        {/* Admin Role Toggle (Visible ONLY to root / owner admin) */}
-                        {isViewerRoot && !u.isRoot && (
+                        {/* Admin Role Toggle */}
+                        {!u.isRoot && (
                           <button
                             onClick={() => handleToggleAdminRole(u)}
                             disabled={isActionRunning}
                             className={cn(
-                              'px-3 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-95',
+                              'px-3 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-95 cursor-pointer',
                               u.isAdmin
-                                ? 'bg-muted/80 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 border-border hover:border-rose-500/30'
+                                ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 border-rose-500/30'
                                 : 'bg-primary/10 hover:bg-primary/20 text-primary border-primary/30'
                             )}
                             title={u.isAdmin ? 'Снять права админа' : 'Назначить администратором'}
@@ -1423,6 +1423,32 @@ export function AdminView() {
                   </button>
                 </div>
               </div>
+
+              {/* Admin Role Toggle in Modal */}
+              {!premiumModalUser.isRoot && (
+                <div className="pt-2 border-t border-border/60 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs font-medium text-foreground">Роль администратора:</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleToggleAdminRole(premiumModalUser)
+                      setPremiumModalUser(null)
+                    }}
+                    className={cn(
+                      'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border',
+                      premiumModalUser.isAdmin
+                        ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                        : 'bg-primary/15 hover:bg-primary/25 text-primary border-primary/40'
+                    )}
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>{premiumModalUser.isAdmin ? 'Снять права админа' : 'Выдать админку'}</span>
+                  </button>
+                </div>
+              )}
 
               {/* Danger Zone: Revoke */}
               {premiumModalUser.isPremiumActive && !premiumModalUser.isRoot && (

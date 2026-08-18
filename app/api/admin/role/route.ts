@@ -22,8 +22,8 @@ async function sendTgMessage(chatId: string | number, text: string) {
 export async function POST(req: NextRequest) {
   try {
     const { isAdmin, isRoot, callerChatId } = await isCallerAdmin(req)
-    if (!isAdmin || !isRoot) {
-      return NextResponse.json({ error: 'Access Denied: Only Owner / Root Admin can change admin roles' }, { status: 403 })
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Access Denied: Only Admin can change admin roles' }, { status: 403 })
     }
 
     const body = await req.json()
