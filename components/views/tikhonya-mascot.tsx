@@ -197,7 +197,7 @@ export function ZerfikMascot({
               fill
               sizes="140px"
               className="object-contain transition-all duration-200"
-              style={{ imageRendering: 'auto' }}
+              style={{ imageRendering: 'pixelated' }}
               priority
             />
           </div>
