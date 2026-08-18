@@ -578,15 +578,16 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           </div>
         )}
 
-        {/* Marketplace of Extensions & Themes Direct Link */}
+        {/* Marketplace of Extensions & Themes Direct Link (Modal Overlay) */}
         <div className="pt-2 border-t border-border/40 mt-2">
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('zerf_open_marketplace'))
+            }}
             className={cn(
               'w-full flex items-center rounded-xl text-xs font-semibold transition-all duration-150 font-sans cursor-pointer text-primary hover:bg-primary/10',
-              isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5',
-              currentView === 'extensions' && 'bg-primary/15 font-bold border border-primary/25 shadow-2xs'
+              isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5'
             )}
             title="Магазин расширений и тем"
           >

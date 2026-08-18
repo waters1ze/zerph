@@ -25,7 +25,7 @@ const VIEW_LABELS: Record<string, string> = {
   stats:      'Аналитика',
   friends:    'Друзья',
   teams:      'Команды',
-  extensions: 'Расширения',
+  extensions: 'Магазин расширений',
   entropy:    'Entropy AI Search',
   settings:   'Настройки',
   admin:      'Админ-панель',

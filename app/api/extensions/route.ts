@@ -340,7 +340,7 @@ export async function POST(req: NextRequest) {
 
       let finalTitle = title
       let finalDesc = description
-      let finalIcon = icon
+      let finalIcon = icon || '🧩'
       let finalType = type
       let finalCategory = category
       let finalMinPlan = minPlan
@@ -348,19 +348,22 @@ export async function POST(req: NextRequest) {
       let finalVersion = version
       let manifestContent = content
 
-      if (githubUrl && githubUrl.includes('github.com')) {
+      // Only fetch from GitHub if title/description were empty (initial import)
+      if (githubUrl && githubUrl.includes('github.com') && (!id || !title || !description)) {
         const ghData = await fetchManifestFromGithub(githubUrl)
         if (ghData) {
           const m = ghData.manifest
-          if (m.name || m.title) finalTitle = m.name || m.title
-          if (m.description) finalDesc = m.description
-          if (m.icon) finalIcon = m.icon
-          if (m.type) finalType = m.type
-          if (m.category) finalCategory = m.category
-          if (m.version) finalVersion = m.version
+          if (!finalTitle && (m.name || m.title)) finalTitle = m.name || m.title
+          if (!finalDesc && m.description) finalDesc = m.description
+          if ((!finalIcon || finalIcon === '🧩') && m.icon) finalIcon = m.icon
+          if (!finalType && m.type) finalType = m.type
+          if (!finalCategory && m.category) finalCategory = m.category
+          if (!finalVersion && m.version) finalVersion = m.version
           if (m.minPlan && ['free', 'plus', 'pro', 'corp'].includes(m.minPlan)) finalMinPlan = m.minPlan
-          if (m.price !== undefined) finalPrice = Math.max(0, Math.min(5000, Number(m.price) || 0))
-          manifestContent = m.content || m.config || manifestContent
+          if (m.price !== undefined && price === undefined) finalPrice = Math.max(0, Math.min(5000, Number(m.price) || 0))
+          if (!manifestContent || Object.keys(manifestContent).length === 0) {
+            manifestContent = m.content || m.config || manifestContent
+          }
         }
       }
 

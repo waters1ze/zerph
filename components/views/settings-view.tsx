@@ -3375,7 +3375,7 @@ export function SettingsView() {
                 </p>
                 <div className="pt-2 flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={() => dispatch({ type: 'SET_VIEW', view: 'extensions' })}
+                    onClick={() => window.dispatchEvent(new CustomEvent('zerf_open_marketplace'))}
                     className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     <Puzzle className="w-3.5 h-3.5" />

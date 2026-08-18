@@ -10,7 +10,7 @@ import {
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
   Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus,
   Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown,
-  CreditCard, Wallet, Banknote
+  CreditCard, Wallet, Banknote, CheckCircle2, X
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -76,10 +76,13 @@ export async function compressExtensionImage(file: File, maxSize = 80, quality =
 }
 
 export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: string; className?: string }) {
-  const isImage = icon && (
+  const [hasError, setHasError] = useState(false)
+
+  const isImage = !hasError && icon && (
     icon.startsWith('http://') ||
     icon.startsWith('https://') ||
     icon.startsWith('data:image') ||
+    icon.startsWith('data:') ||
     icon.startsWith('/') ||
     icon.startsWith('blob:')
   )
@@ -90,9 +93,7 @@ export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: 
         src={icon}
         alt="Extension"
         className={cn('w-full h-full object-cover rounded-xl shrink-0 select-none pointer-events-none', className)}
-        onError={(e) => {
-          (e.target as HTMLElement).style.display = 'none'
-        }}
+        onError={() => setHasError(true)}
         loading="lazy"
       />
     )
@@ -100,7 +101,7 @@ export function ExtensionIcon({ icon, className = 'w-7 h-7 text-xl' }: { icon?: 
 
   return (
     <span className={cn('flex items-center justify-center shrink-0 select-none font-sans', className)}>
-      {icon || '🧩'}
+      {icon && !icon.startsWith('data:') && !icon.startsWith('http') ? icon : '🧩'}
     </span>
   )
 }
@@ -292,10 +293,27 @@ const getInitialExtensionsData = () => {
   }
 }
 
-export function ExtensionsView() {
+export interface ExtensionsViewProps {
+  isModal?: boolean
+  onClose?: () => void
+}
+
+export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const { dispatch, syncData } = useApp()
   const confirmDialog = useConfirmDialog()
   const initialCache = getInitialExtensionsData()
+
+  // In-app sleek toast notification state (replaces native browser alert popups)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast({ message, type })
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null)
+    }, 3500)
+  }
 
   const [catalog, setCatalog] = useState<ExtensionItem[]>(initialCache.catalog)
   const [installedIds, setInstalledIds] = useState<string[]>(initialCache.installedIds)
@@ -440,7 +458,7 @@ export function ExtensionsView() {
         window.history.replaceState({}, '', cleanUrl)
         setTimeout(() => {
           fetchExtensions()
-          alert('🎉 Оплата прошла успешно! Расширение активировано и установлено в ваш аккаунт.')
+          showToast('🎉 Оплата прошла успешно! Расширение активировано и установлено в ваш аккаунт.', 'success')
         }, 800)
       }
     }
@@ -501,16 +519,16 @@ export function ExtensionsView() {
       const data = await res.json()
       if (data.success) {
         await syncData()
-        alert(`🎉 Шаблон «${ext.title}» успешно применён! В ваш список задач добавлено +${data.createdCount} пунктов.`)
+        showToast(`🎉 Шаблон «${ext.title}» успешно применён! В ваш список задач добавлено +${data.createdCount} пунктов.`, 'success')
       } else {
         if (data.requiresPlus) {
           promptUpgradeToPlus('импорта шаблонов')
         } else {
-          alert(data.error || 'Ошибка применения шаблона')
+          showToast(data.error || 'Ошибка применения шаблона', 'error')
         }
       }
     } catch {
-      alert('Ошибка применения шаблона')
+      showToast('Ошибка применения шаблона', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -545,7 +563,7 @@ export function ExtensionsView() {
   const handlePublishFromGithub = async () => {
     if (!parsedManifest) return
     if (!hasReadDocs) {
-      alert('Пожалуйста, ознакомьтесь с документацией разработчика SDK и подтвердите чекбокс перед публикацией расширения.')
+      showToast('Пожалуйста, ознакомьтесь с документацией разработчика SDK перед публикацией.', 'info')
       return
     }
     try {
@@ -575,12 +593,12 @@ export function ExtensionsView() {
         setParsedManifest(null)
         fetchExtensions()
         setActiveTab('my')
-        alert(`✓ Репозиторий «${parsedManifest.title}» успешно добавлен в ваши плагины как черновик! Откройте настройки расширения для управления версиями и публикации в Store.`)
+        showToast(`✓ Репозиторий «${parsedManifest.title}» успешно добавлен в ваши плагины как черновик!`, 'success')
       } else {
-        alert(data.error || 'Ошибка загрузки репозитория')
+        showToast(data.error || 'Ошибка загрузки репозитория', 'error')
       }
     } catch {
-      alert('Ошибка при импорте из GitHub')
+      showToast('Ошибка при импорте из GitHub', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -597,12 +615,12 @@ export function ExtensionsView() {
       const data = await res.json()
       if (data.success) {
         fetchExtensions()
-        alert(`✓ Манифест успешно обновлен из последнего коммита GitHub!`)
+        showToast(`✓ Манифест успешно обновлен из последнего коммита GitHub!`, 'success')
       } else {
-        alert(data.error || 'Ошибка синхронизации')
+        showToast(data.error || 'Ошибка синхронизации', 'error')
       }
     } catch {
-      alert('Ошибка синхронизации')
+      showToast('Ошибка синхронизации', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -621,11 +639,12 @@ export function ExtensionsView() {
       if (data.success) {
         setCatalog(prev => prev.map(e => e.id === ext.id ? { ...e, isPublished: nextState } : e))
         fetchExtensions()
+        showToast(nextState ? `✓ Расширение «${ext.title}» опубликовано в Store!` : `✓ Расширение «${ext.title}» переведено в черновик`, 'success')
       } else {
-        alert(data.error || 'Ошибка изменения статуса публикации')
+        showToast(data.error || 'Ошибка изменения статуса публикации', 'error')
       }
     } catch {
-      alert('Ошибка изменения статуса')
+      showToast('Ошибка изменения статуса', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -655,7 +674,7 @@ export function ExtensionsView() {
       const compressedDataUrl = await compressExtensionImage(file, 80, 0.55)
       setFormIcon(compressedDataUrl)
     } catch (err: any) {
-      alert(err.message || 'Ошибка обработки картинки')
+      showToast(err.message || 'Ошибка обработки картинки', 'error')
     } finally {
       setIsCompressingImage(false)
       if (e.target) e.target.value = ''
@@ -670,7 +689,7 @@ export function ExtensionsView() {
       const compressedDataUrl = await compressExtensionImage(file, 80, 0.55)
       setParsedManifest({ ...parsedManifest, icon: compressedDataUrl })
     } catch (err: any) {
-      alert(err.message || 'Ошибка обработки картинки')
+      showToast(err.message || 'Ошибка обработки картинки', 'error')
     } finally {
       setIsCompressingImage(false)
       if (e.target) e.target.value = ''
@@ -713,9 +732,9 @@ export function ExtensionsView() {
     try {
       const parsed = JSON.parse(formCode)
       setFormCode(JSON.stringify(parsed, null, 2))
-      alert('✓ JSON успешно отформатирован и проверен!')
+      showToast('✓ JSON успешно отформатирован и проверен!', 'success')
     } catch (e: any) {
-      alert(`Ошибка в JSON: ${e.message || 'неверный синтаксис'}`)
+      showToast(`Ошибка в JSON: ${e.message || 'неверный синтаксис'}`, 'error')
     }
   }
 
@@ -776,11 +795,12 @@ export function ExtensionsView() {
       if (data.success) {
         setBoundCard(data.boundCard)
         setShowCardModal(false)
+        showToast('✓ Реквизиты для выплат успешно сохранены!', 'success')
       } else {
-        alert(data.error || 'Ошибка при сохранении реквизитов')
+        showToast(data.error || 'Ошибка при сохранении реквизитов', 'error')
       }
     } catch {
-      alert('Ошибка при сохранении реквизитов')
+      showToast('Ошибка при сохранении реквизитов', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -806,9 +826,10 @@ export function ExtensionsView() {
       const data = await res.json()
       if (data.success) {
         setBoundCard(null)
+        showToast('✓ Реквизиты выплат успешно отвязаны', 'info')
       }
     } catch {
-      alert('Ошибка при отвязке карты')
+      showToast('Ошибка при отвязке карты', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -825,16 +846,16 @@ export function ExtensionsView() {
     e.preventDefault()
     const amount = Number(payoutAmountInput) || authorStats.balance
     if (amount < payoutConfig.minPayoutRub) {
-      alert(`Минимальная сумма для вывода: ${payoutConfig.minPayoutRub} ₽`)
+      showToast(`Минимальная сумма для вывода: ${payoutConfig.minPayoutRub} ₽`, 'error')
       return
     }
     if (amount > authorStats.balance) {
-      alert('Запрошенная сумма превышает ваш доступный баланс')
+      showToast('Запрошенная сумма превышает ваш доступный баланс', 'error')
       return
     }
 
     if (!boundCard) {
-      alert('Сначала привяжите банковскую карту или телефон СБП для выплат')
+      showToast('Сначала привяжите банковскую карту или телефон СБП для выплат', 'info')
       setShowPayoutModal(false)
       setShowCardModal(true)
       return
@@ -857,11 +878,12 @@ export function ExtensionsView() {
         setPayoutResult(data.payout)
         setPayoutSuccess(true)
         fetchExtensions()
+        showToast('🎉 Заявка на вывод средств успешно отправлена!', 'success')
       } else {
-        alert(data.error || 'Ошибка при оформлении заявки на вывод')
+        showToast(data.error || 'Ошибка при оформлении заявки на вывод', 'error')
       }
     } catch {
-      alert('Ошибка при оформлении заявки на вывод')
+      showToast('Ошибка при оформлении заявки на вывод', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -952,7 +974,7 @@ export function ExtensionsView() {
 
   const handleSaveCustomExtension = async () => {
     if (!formTitle.trim() || !formDescription.trim()) {
-      alert('Заполните название и описание расширения')
+      showToast('Заполните название и описание расширения', 'error')
       return
     }
 
@@ -961,7 +983,7 @@ export function ExtensionsView() {
       try {
         parsedContent = JSON.parse(formCode)
       } catch {
-        alert('Ошибка синтаксиса JSON в поле конфигурации/кода')
+        showToast('Ошибка синтаксиса JSON в поле конфигурации/кода', 'error')
         return
       }
     }
@@ -999,12 +1021,17 @@ export function ExtensionsView() {
         setShowEditorModal(false)
         setEditingExt(null)
         fetchExtensions()
-        alert(editingExt ? `✓ Настройки и версия расширения «${formTitle}» успешно сохранены!` : `✓ Расширение «${formTitle}» успешно сохранено!`)
+        showToast(
+          editingExt
+            ? `✓ Настройки и версия расширения «${formTitle}» успешно сохранены!`
+            : `✓ Расширение «${formTitle}» успешно сохранено!`,
+          'success'
+        )
       } else {
-        alert(data.error || 'Ошибка сохранения')
+        showToast(data.error || 'Ошибка сохранения', 'error')
       }
     } catch {
-      alert('Ошибка при сохранении')
+      showToast('Ошибка при сохранении', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1034,10 +1061,10 @@ export function ExtensionsView() {
         setEnabledIds(prev =>
           isCurrentlyEnabled ? [...prev, extensionId] : prev.filter(id => id !== extensionId)
         )
-        alert(data.error || 'Ошибка изменения статуса расширения')
+        showToast(data.error || 'Ошибка изменения статуса расширения', 'error')
       }
     } catch {
-      alert('Ошибка сети при изменении статуса расширения')
+      showToast('Ошибка сети при изменении статуса расширения', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1074,6 +1101,7 @@ export function ExtensionsView() {
       if (data.success) {
         setInstalledIds(data.installedIds || [])
         if (data.enabledIds) setEnabledIds(data.enabledIds)
+        showToast('✓ Расширение успешно установлено!', 'success')
       } else {
         // Rollback
         setInstalledIds(prev => prev.filter(id => id !== extensionId))
@@ -1089,7 +1117,7 @@ export function ExtensionsView() {
           })
           if (ok) dispatch({ type: 'SET_VIEW', view: 'settings' })
         } else {
-          alert(data.error || 'Ошибка при установке расширения')
+          showToast(data.error || 'Ошибка при установке расширения', 'error')
         }
       }
     } catch {
@@ -1097,7 +1125,7 @@ export function ExtensionsView() {
       setInstalledIds(prev => prev.filter(id => id !== extensionId))
       setEnabledIds(prev => prev.filter(id => id !== extensionId))
       setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
-      alert('Ошибка при установке')
+      showToast('Ошибка при установке', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1120,19 +1148,20 @@ export function ExtensionsView() {
       if (data.success) {
         setInstalledIds(data.installedIds || [])
         if (data.enabledIds) setEnabledIds(data.enabledIds)
+        showToast('✓ Расширение удалено из вашего списка', 'info')
       } else {
         // Rollback
         setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
         setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
         setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
-        alert(data.error || 'Ошибка при удалении')
+        showToast(data.error || 'Ошибка при удалении', 'error')
       }
     } catch {
       // Rollback
       setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
       setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
       setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
-      alert('Ошибка при удалении')
+      showToast('Ошибка при удалении', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1166,13 +1195,13 @@ export function ExtensionsView() {
           window.location.href = data.paymentUrl
         } else if (data.installedIds) {
           setInstalledIds(data.installedIds)
-          alert(`🎉 Расширение «${ext.title}» успешно установлено!`)
+          showToast(`🎉 Расширение «${ext.title}» успешно установлено!`, 'success')
         }
       } else {
-        alert(data.error || 'Ошибка при покупке')
+        showToast(data.error || 'Ошибка при покупке', 'error')
       }
     } catch {
-      alert('Ошибка покупки')
+      showToast('Ошибка покупки', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1211,11 +1240,12 @@ export function ExtensionsView() {
           }
         } catch {}
         fetchExtensions()
+        showToast('✓ Расширение удалено из каталога', 'info')
       } else {
-        alert(data.error || 'Не удалось удалить расширение')
+        showToast(data.error || 'Не удалось удалить расширение', 'error')
       }
     } catch {
-      alert('Ошибка при удалении')
+      showToast('Ошибка при удалении', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1280,7 +1310,7 @@ export function ExtensionsView() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
             onClick={() => setShowSpecModal(true)}
             className="px-3.5 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-all cursor-pointer"
@@ -1313,6 +1343,16 @@ export function ExtensionsView() {
             >
               <Crown className="w-3.5 h-3.5" />
               <span>Публикация (Тариф Plus)</span>
+            </button>
+          )}
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-2.5 rounded-xl bg-muted/80 hover:bg-muted text-foreground/80 hover:text-foreground border border-border transition-all cursor-pointer ml-1"
+              title="Закрыть магазин (Esc)"
+            >
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -2623,7 +2663,7 @@ export function ExtensionsView() {
                 </div>
                 <div className="flex items-center justify-center gap-2">
                   <button
-                    onClick={() => alert('Интервальный таймер запущен!')}
+                    onClick={() => showToast('⏱️ Интервальный таймер запущен!', 'success')}
                     className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold cursor-pointer"
                   >
                     Старт интервала
@@ -4014,6 +4054,37 @@ export function ExtensionsView() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating In-App Toast Notification (Replaces native browser alert popups) */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key="zerf-toast"
+            initial={{ opacity: 0, y: -25, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className={cn(
+              'fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2.5 max-w-md pointer-events-auto backdrop-blur-xl transition-all',
+              toast.type === 'success' && 'bg-emerald-950/90 border-emerald-500/40 text-emerald-100 shadow-[0_0_25px_rgba(16,185,129,0.35)]',
+              toast.type === 'error' && 'bg-rose-950/90 border-rose-500/40 text-rose-100 shadow-[0_0_25px_rgba(244,63,94,0.35)]',
+              toast.type === 'info' && 'bg-card/95 border-border text-foreground shadow-xl'
+            )}
+          >
+            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+            {toast.type === 'info' && <Sparkles className="w-4 h-4 text-primary shrink-0" />}
+            <span className="flex-1 leading-snug">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="p-1 hover:bg-white/10 rounded-lg text-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

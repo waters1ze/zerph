@@ -38,6 +38,14 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [marketplaceModalOpen, setMarketplaceModalOpen] = useState(false)
+
+  // Listen to marketplace open events from anywhere in the app
+  useEffect(() => {
+    const handleOpenMarketplace = () => setMarketplaceModalOpen(true)
+    window.addEventListener('zerf_open_marketplace', handleOpenMarketplace)
+    return () => window.removeEventListener('zerf_open_marketplace', handleOpenMarketplace)
+  }, [])
 
   // Detect Telegram Mini App environment (via prop, path, WebApp SDK, or body class)
   const [isTelegramMiniApp, setIsTelegramMiniApp] = useState<boolean>(() => {
@@ -280,6 +288,32 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
 
       {/* Telegram Auth Gate Modal */}
       <AuthGateModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+
+      {/* ── Marketplace Modal Overlay (Floating Pop-up on top of workspace) ── */}
+      <AnimatePresence>
+        {marketplaceModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-background/80 backdrop-blur-md">
+            <motion.div
+              key="marketplace-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMarketplaceModalOpen(false)}
+              className="fixed inset-0 bg-black/60 z-0"
+            />
+            <motion.div
+              key="marketplace-container"
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full max-w-6xl h-[92vh] max-h-[920px] bg-card border border-border rounded-3xl shadow-2xl overflow-y-auto z-10 relative flex flex-col no-scrollbar"
+            >
+              <ExtensionsView isModal onClose={() => setMarketplaceModalOpen(false)} />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -6,7 +6,7 @@ import {
   Puzzle, Search, ChevronDown, ChevronUp, Trash2,
   Check, Sparkles, Sliders, Play, CheckSquare,
   ExternalLink, Plus, RefreshCw, X, Shield, Crown,
-  Code2, Info, Eye, AlertCircle, ArrowRight
+  Code2, Info, Eye, AlertCircle, ArrowRight, CheckCircle2
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -153,6 +153,16 @@ export function InstalledExtensionsSettingsSection() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [savedToastId, setSavedToastId] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const toastTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast({ message, type })
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null)
+    }, 3500)
+  }
 
   // Local storage persisted configurations per extension: { [extId]: { [key]: value } }
   const [extConfigs, setExtConfigs] = useState<Record<string, Record<string, any>>>({})
@@ -258,10 +268,10 @@ export function InstalledExtensionsSettingsSection() {
         setEnabledIds(prev =>
           isCurrentlyEnabled ? [...prev, ext.id] : prev.filter(id => id !== ext.id)
         )
-        alert(data.error || 'Ошибка изменения статуса расширения')
+        showToast(data.error || 'Ошибка изменения статуса расширения', 'error')
       }
     } catch {
-      alert('Ошибка сети при изменении статуса расширения')
+      showToast('Ошибка сети при изменении статуса расширения', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -288,9 +298,10 @@ export function InstalledExtensionsSettingsSection() {
       if (data.success) {
         setInstalledIds(data.installedIds || [])
         if (data.enabledIds) setEnabledIds(data.enabledIds)
+        showToast(`✓ Расширение «${ext.title}» успешно удалено`, 'info')
       }
     } catch {
-      alert('Ошибка при удалении расширения')
+      showToast('Ошибка при удалении расширения', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -307,12 +318,12 @@ export function InstalledExtensionsSettingsSection() {
       const data = await res.json()
       if (data.success) {
         await syncData()
-        alert(`🎉 Шаблон «${ext.title}» применён! Добавлено +${data.createdCount} задач.`)
+        showToast(`🎉 Шаблон «${ext.title}» применён! Добавлено +${data.createdCount} задач.`, 'success')
       } else {
-        alert(data.error || 'Ошибка применения шаблона')
+        showToast(data.error || 'Ошибка применения шаблона', 'error')
       }
     } catch {
-      alert('Ошибка применения шаблона')
+      showToast('Ошибка применения шаблона', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -827,6 +838,37 @@ export function InstalledExtensionsSettingsSection() {
           })}
         </div>
       )}
+
+      {/* Floating In-App Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key="installed-ext-toast"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className={cn(
+              'fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-4 py-2.5 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2.5 max-w-md pointer-events-auto backdrop-blur-xl',
+              toast.type === 'success' && 'bg-emerald-950/90 border-emerald-500/40 text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.3)]',
+              toast.type === 'error' && 'bg-rose-950/90 border-rose-500/40 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)]',
+              toast.type === 'info' && 'bg-card/95 border-border text-foreground shadow-lg'
+            )}
+          >
+            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+            {toast.type === 'info' && <Sparkles className="w-4 h-4 text-primary shrink-0" />}
+            <span className="flex-1 leading-snug">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="p-1 hover:bg-white/10 rounded-lg text-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
