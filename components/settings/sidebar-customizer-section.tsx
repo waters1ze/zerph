@@ -28,6 +28,7 @@ export interface SidebarFolder {
 export interface SidebarConfig {
   hiddenItems: string[]
   folders: SidebarFolder[]
+  showMarketplace?: boolean
 }
 
 export interface MenuItemMeta {
@@ -307,6 +308,13 @@ export function SidebarCustomizerSection() {
       window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
       setSavedBadge(true)
       setTimeout(() => setSavedBadge(false), 2000)
+
+      // Sync to cloud database for mobile & cross-device consistency
+      fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sidebarConfig: sanitized }),
+      }).catch(() => {})
     } catch {}
   }
 

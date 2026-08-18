@@ -70,6 +70,9 @@ export interface EntropySource {
   url: string
   domain: string
   snippet: string
+  type?: 'web' | 'note' | 'task'
+  noteId?: string
+  taskId?: string
 }
 
 export interface EntropySearchResult {
@@ -219,33 +222,76 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Fetch real-time live open knowledge sources
-    let liveSources: LiveSource[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
+    let liveSources: any[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
 
-    // If mode is 'notes', search user's internal notes in Prisma DB
-    if (mode === 'notes' && ownerChatId !== 'guest') {
+    // 2. Search user's internal notes, tasks and graph knowledge in DB
+    if (ownerChatId !== 'guest') {
       try {
-        const words = cleanQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+        const words = cleanQuery.toLowerCase().split(/[\s,.;:!?\-#]+/).filter(w => w.length >= 2)
+        const numericOwnerId = BigInt(ownerChatId)
+
+        // Fetch recent notes for user
         const notes = await prisma.note.findMany({
-          where: { userChatId: BigInt(ownerChatId) },
-          take: 12,
+          where: { ownerChatId: numericOwnerId },
+          take: 35,
           orderBy: { updatedAt: 'desc' },
         })
-        const matched = notes.filter((n: any) => {
-          const combined = (n.title + ' ' + (n.content || '')).toLowerCase()
+
+        // Fetch recent tasks & reminders for user
+        const tasks = await prisma.task.findMany({
+          where: { ownerChatId: numericOwnerId },
+          take: 35,
+          orderBy: { updatedAt: 'desc' },
+        })
+
+        const matchedNotes = notes.filter((n: any) => {
+          const tagsStr = (n.tags || []).join(' ').toLowerCase()
+          const combined = (n.title + ' ' + (n.content || '') + ' ' + tagsStr).toLowerCase()
           return words.some(w => combined.includes(w))
         })
-        const chosen = matched.length > 0 ? matched.slice(0, 4) : notes.slice(0, 3)
-        const noteSources: LiveSource[] = chosen.map((n: any, idx: number) => ({
-          id: idx + 1,
-          title: `Заметка: «${n.title}»`,
-          url: `https://zerf.app/notes?id=${n.id}`,
-          domain: 'zerf-note.internal',
-          snippet: (n.content || '').slice(0, 300) || 'Заметка в базе знаний Zerf Note',
-        }))
-        if (noteSources.length > 0) {
-          liveSources = [...noteSources, ...liveSources.slice(0, 4)].map((s: any, idx: number) => ({ ...s, id: idx + 1 }))
+
+        const matchedTasks = tasks.filter((t: any) => {
+          const tagsStr = (t.tags || []).join(' ').toLowerCase()
+          const combined = (t.title + ' ' + (t.description || '') + ' ' + tagsStr).toLowerCase()
+          return words.some(w => combined.includes(w))
+        })
+
+        const chosenNotes = mode === 'notes' && matchedNotes.length === 0
+          ? notes.slice(0, 4)
+          : matchedNotes.slice(0, 4)
+
+        const chosenTasks = matchedTasks.slice(0, 3)
+
+        const internalSources: any[] = [
+          ...chosenNotes.map((n: any) => ({
+            title: `📝 Заметка: «${n.title}»`,
+            url: `/notes?id=${n.id}`,
+            domain: 'zerf.note',
+            snippet: (n.content || '').slice(0, 300) || `Заметка с тегами: ${(n.tags || []).join(', ')}`,
+            type: 'note',
+            noteId: n.id,
+          })),
+          ...chosenTasks.map((t: any) => ({
+            title: `✓ Задача: «${t.title}»`,
+            url: `/tasks?id=${t.id}`,
+            domain: 'zerf.task',
+            snippet: (t.description || t.title) + (t.dueDate ? ` (Срок: ${t.dueDate} ${t.dueTime || ''})` : ''),
+            type: 'task',
+            taskId: t.id,
+          })),
+        ]
+
+        if (internalSources.length > 0) {
+          if (mode === 'notes') {
+            liveSources = [...internalSources, ...liveSources.slice(0, 3)]
+          } else {
+            liveSources = [...internalSources, ...liveSources.slice(0, 5)]
+          }
         }
-      } catch {}
+        liveSources = liveSources.map((s: any, idx: number) => ({ ...s, id: idx + 1 }))
+      } catch (err) {
+        console.warn('[Entropy API] Internal notes/tasks lookup error:', err)
+      }
     }
 
     const liveContext = liveSources.length > 0
@@ -364,20 +410,29 @@ JSON Схема:
         return {
           id: idx + 1,
           title: s.title || matchingLive?.title || `Источник ${idx + 1}`,
-          url: (s.url && s.url.startsWith('http') && !s.url.includes('domain.com')) ? s.url : (matchingLive?.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`),
+          url: (s.url && (s.url.startsWith('http') || s.url.startsWith('/')) && !s.url.includes('domain.com')) ? s.url : (matchingLive?.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`),
           domain: s.domain || matchingLive?.domain || 'web',
           snippet: cleanStr(s.snippet || matchingLive?.snippet || ''),
+          type: matchingLive?.type || s.type || 'web',
+          noteId: matchingLive?.noteId || s.noteId,
+          taskId: matchingLive?.taskId || s.taskId,
         }
       })
     }
 
-    const cleanSources: EntropySource[] = rawSources.map((s: any, idx: number) => ({
-      id: typeof s.id === 'number' ? s.id : idx + 1,
-      title: cleanStr(s.title || `Источник ${idx + 1}`),
-      url: s.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
-      domain: s.domain || (s.url ? new URL(s.url).hostname : 'web'),
-      snippet: cleanStr(s.snippet || ''),
-    }))
+    const cleanSources: EntropySource[] = rawSources.map((s: any, idx: number) => {
+      const matchingLive = liveSources.find((l: any) => l.id === s.id || l.title === s.title)
+      return {
+        id: typeof s.id === 'number' ? s.id : idx + 1,
+        title: cleanStr(s.title || `Источник ${idx + 1}`),
+        url: s.url || `https://google.com/search?q=${encodeURIComponent(cleanQuery)}`,
+        domain: s.domain || (s.url && s.url.startsWith('http') ? new URL(s.url).hostname : 'zerf.app'),
+        snippet: cleanStr(s.snippet || ''),
+        type: s.type || matchingLive?.type || (s.noteId ? 'note' : s.taskId ? 'task' : 'web'),
+        noteId: s.noteId || matchingLive?.noteId,
+        taskId: s.taskId || matchingLive?.taskId,
+      }
+    })
 
     const cleanAnswer = cleanStr(llmResult.answer)
     const cleanTakeaways = Array.isArray(llmResult.takeaways)

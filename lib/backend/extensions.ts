@@ -109,7 +109,7 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     isPublished: true,
     rating: 5.0,
     ratingCount: 14,
-    likesCount: 28,
+    likesCount: 0,
     installCount: 154,
     content: {
       theme: 'strict',
@@ -153,7 +153,7 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     isPublished: true,
     rating: 4.9,
     ratingCount: 19,
-    likesCount: 35,
+    likesCount: 0,
     installCount: 210,
     content: {
       theme: 'warm',
@@ -193,7 +193,7 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     isPublished: true,
     rating: 5.0,
     ratingCount: 11,
-    likesCount: 22,
+    likesCount: 0,
     installCount: 98,
     content: {
       theme: 'vivid',

@@ -1,80 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
-import crypto from 'crypto'
+import { exchangeCodeForTokens, getRedirectUri, syncGoogleCalendar } from '@/lib/backend/google-calendar'
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = await getAuthenticatedUser(req)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { searchParams } = new URL(req.url)
+    const code = searchParams.get('code')
+    const state = searchParams.get('state')
+    const error = searchParams.get('error')
+
+    const host = req.headers.get('host') || 'zerph.ru'
+    const protocol = host.includes('localhost') ? 'http' : 'https'
+    const origin = `${protocol}://${host}`
+
+    if (error || !code) {
+      return NextResponse.redirect(`${origin}/settings?google_calendar_error=${encodeURIComponent(error || 'no_code')}`)
     }
 
-    const chatIdStr = authUser.chatId
-    const configKey = `cal_feed_token_${chatIdStr}`
-
-    let feedConfig = await prisma.config.findUnique({
-      where: { key: configKey },
-    })
-
-    if (!feedConfig) {
-      const token = crypto.randomBytes(16).toString('hex')
-      feedConfig = await prisma.config.create({
-        data: {
-          key: configKey,
-          value: token,
-        },
-      })
+    let chatId: string | null = null
+    if (state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8'))
+        chatId = decoded.chatId
+      } catch {}
     }
 
-    const token = feedConfig.value
-    const origin = req.nextUrl.origin || 'https://zerph.ru'
-    const httpsUrl = `${origin}/api/calendar/feed/${token}.ics`
-    const webcalUrl = httpsUrl.replace(/^https?:\/\//, 'webcal://')
-
-    return NextResponse.json({
-      success: true,
-      token,
-      httpsUrl,
-      webcalUrl,
-    })
-  } catch (error: any) {
-    console.error('[Calendar Token GET] Error:', error)
-    return NextResponse.json({ error: 'Ошибка получения токена календаря' }, { status: 500 })
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const authUser = await getAuthenticatedUser(req)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!chatId) {
+      return NextResponse.redirect(`${origin}/settings?google_calendar_error=invalid_state`)
     }
 
-    const chatIdStr = authUser.chatId
-    const configKey = `cal_feed_token_${chatIdStr}`
+    const redirectUri = getRedirectUri(origin)
+    const tokens = await exchangeCodeForTokens(code, redirectUri)
 
-    // Reset/regenerate token
-    const newToken = crypto.randomBytes(16).toString('hex')
-    await prisma.config.upsert({
-      where: { key: configKey },
-      update: { value: newToken },
-      create: { key: configKey, value: newToken },
+    // Save tokens and enable sync
+    await prisma.telegramChat.update({
+      where: { chatId: BigInt(chatId) },
+      data: {
+        googleCalendarToken: JSON.stringify(tokens),
+        googleCalendarSync: true,
+      },
     })
 
-    const origin = req.nextUrl.origin || 'https://zerph.ru'
-    const httpsUrl = `${origin}/api/calendar/feed/${newToken}.ics`
-    const webcalUrl = httpsUrl.replace(/^https?:\/\//, 'webcal://')
+    // Perform initial 2-way sync asynchronously
+    syncGoogleCalendar(chatId).catch(err => console.error('Initial Google Calendar sync error:', err))
 
-    return NextResponse.json({
-      success: true,
-      token: newToken,
-      httpsUrl,
-      webcalUrl,
-      message: 'Токен синхронизации обновлён',
-    })
-  } catch (error: any) {
-    console.error('[Calendar Token POST] Error:', error)
-    return NextResponse.json({ error: 'Ошибка генерации нового токена' }, { status: 500 })
+    return NextResponse.redirect(`${origin}/settings?google_calendar_success=1`)
+  } catch (err: any) {
+    console.error('Google Calendar OAuth callback error:', err)
+    const host = req.headers.get('host') || 'zerph.ru'
+    const protocol = host.includes('localhost') ? 'http' : 'https'
+    const origin = `${protocol}://${host}`
+    return NextResponse.redirect(`${origin}/settings?google_calendar_error=${encodeURIComponent(String(err.message || err))}`)
   }
 }

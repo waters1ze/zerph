@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
-import { syncGoogleCalendar } from '@/lib/backend/google-calendar'
+import { prisma } from '@/lib/backend/prisma'
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,10 +9,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const result = await syncGoogleCalendar(authUser.chatId)
-    return NextResponse.json(result)
+    await prisma.telegramChat.update({
+      where: { chatId: BigInt(authUser.chatId) },
+      data: {
+        googleCalendarToken: null,
+        googleCalendarSync: false,
+      },
+    })
+
+    return NextResponse.json({ success: true, disconnected: true })
   } catch (err: any) {
-    console.error('Error syncing Google Calendar:', err)
+    console.error('Error disconnecting Google Calendar:', err)
     return NextResponse.json({ error: String(err), success: false }, { status: 500 })
   }
 }

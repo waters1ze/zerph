@@ -788,6 +788,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     ttsResponseEnabled: Boolean(user.ttsEnabled)
                   }
                 }
+                if (user.sidebarConfig && typeof window !== 'undefined') {
+                  try {
+                    localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(user.sidebarConfig))
+                    localStorage.setItem('zerf_sidebar_config', JSON.stringify(user.sidebarConfig))
+                    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+                  } catch {}
+                }
                 if (Object.keys(updates).length > 0) {
                   dispatch({ type: 'UPDATE_SETTINGS', updates })
                 }

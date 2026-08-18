@@ -174,6 +174,13 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
             if (data.isAdmin) {
               setIsAdmin(true)
             }
+            if (data.sidebarConfig && typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(data.sidebarConfig))
+                localStorage.setItem('zerf_sidebar_config', JSON.stringify(data.sidebarConfig))
+                window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+              } catch {}
+            }
             dispatch({
               type: 'UPDATE_SETTINGS',
               updates: {
@@ -630,23 +637,25 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           </div>
         )}
 
-        {/* Marketplace of Extensions & Themes Direct Link (Modal Overlay) */}
-        <div className="pt-2 border-t border-border/40 mt-2">
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('zerf_open_marketplace'))
-            }}
-            className={cn(
-              'w-full flex items-center rounded-xl text-xs font-semibold transition-all duration-150 font-sans cursor-pointer text-primary hover:bg-primary/10',
-              isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5'
-            )}
-            title="Магазин расширений и тем"
-          >
-            <Puzzle className="w-4 h-4 shrink-0 text-primary" />
-            {!isCollapsed && <span className="flex-1 text-left truncate">Магазин расширений</span>}
-          </motion.button>
-        </div>
+        {/* Marketplace of Extensions & Themes Direct Link (Modal Overlay, hidden by default) */}
+        {sidebarConfig.showMarketplace === true && (
+          <div className="pt-2 border-t border-border/40 mt-2">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('zerf_open_marketplace'))
+              }}
+              className={cn(
+                'w-full flex items-center rounded-xl text-xs font-semibold transition-all duration-150 font-sans cursor-pointer text-primary hover:bg-primary/10',
+                isCollapsed ? 'p-2.5 justify-center relative' : 'gap-2 px-2.5 py-1.5'
+              )}
+              title="Магазин расширений и тем"
+            >
+              <Puzzle className="w-4 h-4 shrink-0 text-primary" />
+              {!isCollapsed && <span className="flex-1 text-left truncate">Магазин расширений</span>}
+            </motion.button>
+          </div>
+        )}
 
         {/* Admin panel link at bottom for admins if not placed in folders */}
         {isAdmin && !sidebarConfig.hiddenItems?.includes('admin') && (

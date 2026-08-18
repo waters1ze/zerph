@@ -85,7 +85,7 @@ export function ZerfikMascot({
           className="absolute inset-0 rounded-full bg-radial from-cyan-400/35 via-primary/20 to-transparent blur-xl pointer-events-none"
         />
 
-        {/* Orbiting Thinking Rings */}
+        {/* Orbiting Thinking Rings & Thought Particles */}
         {isThinking && (
           <>
             <motion.div
@@ -103,20 +103,42 @@ export function ZerfikMascot({
               transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
               className="absolute inset-0 rounded-full border border-cyan-300/40 pointer-events-none"
             />
+
+            {/* Orbiting Floating Thought Particles around Zerfik */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            >
+              <div className="absolute -top-1 left-1/2 -translate-x-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
+                💭
+              </div>
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]">
+                💡
+              </div>
+              <div className="absolute top-1/2 -left-1 -translate-y-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]">
+                ✦
+              </div>
+              <div className="absolute top-1/2 -right-1 -translate-y-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]">
+                🔮
+              </div>
+            </motion.div>
           </>
         )}
 
-        {/* Floating Glowing Spirit Cutout */}
+        {/* Floating Glowing Spirit Cutout with Thinking Flip */}
         <motion.div
           animate={{
             y: isThinking ? [-4, 4, -4] : [-3, 3, -3],
-            rotate: isThinking ? [-2, 2, -2] : [-1.5, 1.5, -1.5],
+            rotate: isThinking ? [-3, 3, -3] : [-1.5, 1.5, -1.5],
+            scaleX: isThinking ? [1, -1, 1] : 1,
             scale: currentMood === 'celebrate' ? [1, 1.15, 1] : 1,
           }}
           transition={{
-            duration: isThinking ? 1.0 : 3.4,
-            repeat: Infinity,
-            ease: 'easeInOut',
+            y: { duration: isThinking ? 1.0 : 3.4, repeat: Infinity, ease: 'easeInOut' },
+            rotate: { duration: isThinking ? 1.0 : 3.4, repeat: Infinity, ease: 'easeInOut' },
+            scaleX: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+            scale: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' },
           }}
           className="relative flex items-center justify-center transition-all pointer-events-auto select-none"
           style={{

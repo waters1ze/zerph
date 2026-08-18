@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
+import { PLANS, normalizePlan } from '@/lib/plans'
 
 interface ProjectMember { chatId: string; name: string }
 interface ProjectTask {
@@ -1900,8 +1901,10 @@ export function ProjectsView() {
 
           <button
             onClick={() => {
-              if (state.settings.userPlan === 'free' && projects.length >= 5) {
-                alert('В бесплатной версии доступно 5 проектов. Оформите Zerf Plus в Настройках для безлимита!')
+              const userPlan = normalizePlan(state.settings.userPlan)
+              const maxProjects = PLANS[userPlan]?.maxProjects ?? 5
+              if (projects.length >= maxProjects) {
+                alert(`В тарифе ${userPlan.toUpperCase()} доступно до ${maxProjects} проектов. Оформите тариф Plus/Pro в Настройках для расширения!`)
                 return
               }
               setShowModal(true)

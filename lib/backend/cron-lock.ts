@@ -103,6 +103,47 @@ export async function markCronDoneToday(taskKey: string, todayStr: string): Prom
 }
 
 /**
+ * Optimistic atomic lock for global cron tasks.
+ * Returns true if this process successfully acquired the lock (is the only sender today),
+ * returns false if another instance or process already ran or is running today.
+ */
+export async function tryAcquireCronLock(taskKey: string, todayStr: string): Promise<boolean> {
+  const fullKey = `${taskKey}:${todayStr}`
+
+  // In-memory quick check
+  if (sentKeys.has(fullKey)) return false
+  sentKeys.add(fullKey)
+
+  try {
+    // Check DB first
+    const existing = await prisma.config.findUnique({
+      where: { key: `cron_last_${taskKey}_date` },
+    })
+    if (existing && existing.value === todayStr) {
+      return false
+    }
+
+    // Persist lock immediately to prevent other concurrent serverless lambdas from running
+    await prisma.config.upsert({
+      where: { key: `cron_last_${taskKey}_date` },
+      update: { value: todayStr },
+      create: { key: `cron_last_${taskKey}_date`, value: todayStr },
+    })
+
+    try {
+      const fileLock = loadFileLock()
+      fileLock[fullKey] = Date.now()
+      saveFileLock(fileLock)
+    } catch {}
+
+    return true
+  } catch (err) {
+    console.error(`[tryAcquireCronLock] Error acquiring lock for ${fullKey}:`, err)
+    return false
+  }
+}
+
+/**
  * Check if a per-user cron task (Evening Review, Morning Greeting) was already sent to this user today
  */
 export async function isUserCronDoneToday(taskKey: string, userId: string | number | bigint, todayStr: string): Promise<boolean> {

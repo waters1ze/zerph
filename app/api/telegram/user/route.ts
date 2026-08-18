@@ -51,17 +51,22 @@ export async function GET(req: NextRequest) {
           let aiTaskModels: Record<string, string> = {}
           let siriMode = 'fast'
           let githubUsername: string | null = null
+          let sidebarConfig: any = null
           try {
-            const [modelConf, taskModelsConf, siriModeConf, githubConf] = await Promise.all([
+            const [modelConf, taskModelsConf, siriModeConf, githubConf, sidebarConf] = await Promise.all([
               prisma.config.findUnique({ where: { key: `user_ai_model_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_ai_task_models_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_siri_mode_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_github_${cid}` } }),
+              prisma.config.findUnique({ where: { key: `user_sidebar_config_${cid}` } }),
             ])
             if (modelConf?.value) aiModel = modelConf.value
             if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value)
             if (siriModeConf?.value) siriMode = siriModeConf.value
             if (githubConf?.value) githubUsername = githubConf.value
+            if (sidebarConf?.value) {
+              try { sidebarConfig = JSON.parse(sidebarConf.value) } catch {}
+            }
           } catch {}
 
           const siriKey = getSiriUserKey(chat.chatId)
@@ -90,6 +95,8 @@ export async function GET(req: NextRequest) {
             aiModel,
             aiTaskModels,
             siriMode,
+            sidebarConfig,
+            googleCalendarSync: Boolean(chat.googleCalendarSync),
             plan: activePlan,
             isPremium,
             subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
@@ -124,9 +131,17 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail, githubUsername, githubToken, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled, avatarEmoji, aiModel, aiTaskModels, siriMode } = await req.json()
+    const { birthday, name, email, password, currentPassword, vkId, googleEmail, githubUsername, githubToken, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled, avatarEmoji, aiModel, aiTaskModels, siriMode, sidebarConfig } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
+
+    if (sidebarConfig !== undefined) {
+      await prisma.config.upsert({
+        where: { key: `user_sidebar_config_${cid}` },
+        update: { value: JSON.stringify(sidebarConfig) },
+        create: { key: `user_sidebar_config_${cid}`, value: JSON.stringify(sidebarConfig) },
+      }).catch(() => {})
+    }
 
     if (githubUsername !== undefined) {
       const cleanGh = githubUsername ? String(githubUsername).trim().replace(/^@/, '').replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').trim() : ''

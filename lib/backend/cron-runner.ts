@@ -17,6 +17,7 @@ import { sendCommentReportToAdminsTelegram } from './comment-analyzer'
 import {
   isCronAlreadyDoneToday,
   markCronDoneToday,
+  tryAcquireCronLock,
   isUserCronDoneToday,
   markUserCronDoneToday,
   isReminderInCooldown,
@@ -29,6 +30,7 @@ import {
   postDailyEveningPostToChannel,
   generateAndSendFridayAiProposal
 } from './channel-poster'
+import { syncGoogleCalendar } from './google-calendar'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
@@ -659,27 +661,26 @@ export async function runChannelAndAiCron() {
 
     // 2. Daily (Every day Mon-Sun) 08:00-14:00 MSK: Morning News Digest
     if (hour >= 8 && hour < 14) {
-      const isDone = await isCronAlreadyDoneToday('channel_morning_post', todayStr)
-      if (!isDone) {
-        await postDailyMorningPostToChannel()
+      const acquired = await tryAcquireCronLock('channel_morning_post', todayStr)
+      if (acquired) {
+        await postDailyMorningPostToChannel(undefined, true)
       }
     }
 
     // 3. Friday 21:00-23:59 MSK: Close Weekly Poll
     if (day === 'fri' && hour >= 21) {
-      const isDone = await isCronAlreadyDoneToday('channel_close_poll', todayStr)
-      if (!isDone) {
+      const acquired = await tryAcquireCronLock('channel_close_poll', todayStr)
+      if (acquired) {
         await closeDailyPollAndNotifyAdmins()
-        await markCronDoneToday('channel_close_poll', todayStr)
         await sendCommentReportToAdminsTelegram().catch(() => {})
       }
     }
 
     // 4. Every Day 20:00 (8 PM) - 23:59 MSK: Evening News Digest & Daily Reflection
     if (hour >= 20) {
-      const isDone = await isCronAlreadyDoneToday('channel_evening_post', todayStr)
-      if (!isDone) {
-        await postDailyEveningPostToChannel()
+      const acquired = await tryAcquireCronLock('channel_evening_post', todayStr)
+      if (acquired) {
+        await postDailyEveningPostToChannel(undefined, true)
       }
     }
 
@@ -800,6 +801,19 @@ export async function runForceMorningGreeting() {
   }
 }
 
+export async function runGoogleCalendarPeriodicSync() {
+  try {
+    const gcalUsers = await prisma.telegramChat.findMany({
+      where: { googleCalendarSync: true },
+      select: { chatId: true },
+      take: 50,
+    })
+    for (const u of gcalUsers) {
+      await syncGoogleCalendar(u.chatId).catch(() => {})
+    }
+  } catch {}
+}
+
 /**
  * Main Cron Entrypoint — Called by /api/cron/reminders
  */
@@ -811,6 +825,7 @@ export async function runAllCronTasks() {
     runEveningReview(),
     runWeeklySundayReport(),
     runChannelAndAiCron(),
+    runGoogleCalendarPeriodicSync(),
   ])
 }
 
@@ -832,7 +847,8 @@ if (process.env.RUN_CRON_DAEMON === 'true' && !globalObj.__reminderCronStarted) 
   setInterval(() => {
     runEveningReview().catch(() => {})
     runWeeklySundayReport().catch(() => {})
-  }, 30_000)
+    runGoogleCalendarPeriodicSync().catch(() => {})
+  }, 60_000)
 
   setInterval(() => {
     runChannelAndAiCron().catch(() => {})

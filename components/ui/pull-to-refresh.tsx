@@ -19,15 +19,35 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
   const [isRefreshing, setIsRefreshing] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const startYRef = useRef<number | null>(null)
+  const startXRef = useRef<number | null>(null)
   const isPullingRef = useRef(false)
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isRefreshing) return
     const container = containerRef.current
+    if (!container) return
+
+    // Do not trigger on interactive or form elements
+    const target = e.target as HTMLElement | null
+    if (target?.closest('input, textarea, select, [role="slider"], .no-pull, button, .slider, .sidebar-customizer, [data-no-pull]')) {
+      return
+    }
+
+    // Check if container or any parent scrollable container has scrollTop > 0
+    let parent: HTMLElement | null = container
+    let isScrolled = false
+    while (parent && parent !== document.body) {
+      if (parent.scrollTop > 1) {
+        isScrolled = true
+        break
+      }
+      parent = parent.parentElement
+    }
+
     const scrollY = typeof window !== 'undefined' ? window.scrollY : 0
-    // Only allow pull-down if strictly at the very top of both container and window
-    if ((!container || container.scrollTop === 0) && scrollY === 0) {
+    if (!isScrolled && scrollY <= 1) {
       startYRef.current = e.touches[0].clientY
+      startXRef.current = e.touches[0].clientX
       isPullingRef.current = true
     }
   }
@@ -35,11 +55,32 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isPullingRef.current || startYRef.current === null || isRefreshing) return
     const currentY = e.touches[0].clientY
+    const currentX = e.touches[0].clientX
     const diff = currentY - startYRef.current
+    const diffX = Math.abs(currentX - (startXRef.current ?? currentX))
 
-    // Require positive pull-down with clear intent (> 10px)
-    if (diff > 10) {
-      const distance = Math.min(MAX_PULL, Math.pow(diff - 10, 0.8))
+    // If horizontal swipe is more dominant, cancel pull
+    if (diffX > Math.abs(diff) && diff < 30) {
+      isPullingRef.current = false
+      setPullDistance(0)
+      return
+    }
+
+    // Check again if any parent is scrolled during touchmove
+    const container = containerRef.current
+    let parent: HTMLElement | null = container
+    while (parent && parent !== document.body) {
+      if (parent.scrollTop > 1) {
+        isPullingRef.current = false
+        setPullDistance(0)
+        return
+      }
+      parent = parent.parentElement
+    }
+
+    // Require positive pull-down with clear intent (> 15px)
+    if (diff > 15) {
+      const distance = Math.min(MAX_PULL, Math.pow(diff - 15, 0.8))
       setPullDistance(distance)
     } else {
       setPullDistance(0)

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/store'
-import { cn, isBirthdayVisible } from '@/lib/utils'
+import { cn, isBirthdayVisible, isBirthdayTask, isHolidayTask } from '@/lib/utils'
 import type { StatPeriod } from '@/lib/types'
 import {
   CheckCircle2, Clock, AlertCircle, TrendingUp,
@@ -75,7 +75,10 @@ export function StatsView() {
   const { state } = useApp()
   const [period, setPeriod] = useState<StatPeriod>('30d')
 
-  const tasks = state.tasks
+  // Filter out birthday and yearly holiday reminders from analytics statistics
+  const tasks = useMemo(() => {
+    return state.tasks.filter(t => !isBirthdayTask(t) && !isHolidayTask(t))
+  }, [state.tasks])
   const done = tasks.filter(t => t.status === 'done').length
   const inProgress = tasks.filter(t => t.status === 'inprogress').length
   const overdue = tasks.filter(t => t.status === 'overdue' || (t.dueDate && t.dueDate < dayKey(new Date()) && t.status !== 'done')).length
@@ -348,7 +351,7 @@ export function StatsView() {
       {/* 365-Day Activity Heatmap - Spanning 100% */}
       <div className="w-full">
         <ActivityHeatmap
-          completedDates={state.tasks.filter(t => t.status === 'done' && t.completedAt).map(t => t.completedAt!)}
+          completedDates={tasks.filter(t => t.status === 'done' && t.completedAt).map(t => t.completedAt!)}
           totalCompleted={done}
           currentStreak={done > 0 ? Math.max(1, done) : 0}
         />

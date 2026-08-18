@@ -57,6 +57,9 @@ export interface PlanLimits {
   /** CLI requests / mutations per day */
   cliRequestsPerDay: number
   /** Shared tasks/reminders with friends require one plus+ participant */
+  /** Maximum active projects */
+  maxProjects: number
+  /** Shared tasks/reminders with friends require one plus+ participant */
   sharedRequiresPlan: PlanId | null
   /** Can disable daily news digests (morning/evening) */
   canDisableNews: boolean
@@ -66,6 +69,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   free: {
     maxStoredNotes: 20,
     maxActiveReminders: 10,
+    maxProjects: 5,
     maxExtensions: 5, // До 5 расширений на Базовом тарифе
     siriLifetimeRequests: 10,
     voiceSecondsPerDay: 90, // 1 мин 30 сек в день
@@ -79,6 +83,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   plus: {
     maxStoredNotes: 250,
     maxActiveReminders: 100,
+    maxProjects: 25,
     maxExtensions: 10, // До 10 расширений на Plus
     siriLifetimeRequests: 250,
     voiceSecondsPerDay: 900, // 15 минут в день
@@ -92,6 +97,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   pro: {
     maxStoredNotes: 5000,
     maxActiveReminders: 1000,
+    maxProjects: 100,
     maxExtensions: 50, // До 50 расширений на Pro
     siriLifetimeRequests: 5000,
     voiceSecondsPerDay: 7200, // 2 часа голоса в день
@@ -105,6 +111,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
   corp: {
     maxStoredNotes: 25000,
     maxActiveReminders: 5000,
+    maxProjects: UNLIMITED,
     maxExtensions: UNLIMITED, // Безлимитно на Corp
     siriLifetimeRequests: 25000,
     voiceSecondsPerDay: 28800, // 8 часов голоса в день (на команду из ~4 человек)

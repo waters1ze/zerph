@@ -879,3 +879,11 @@ span.text-2xl:not(.color-exempt) {
 [data-emoji] {
   filter: grayscale(100%) contrast(110%);
 }
+
+/* Prevent accidental browser pull-to-refresh overscroll */
+html,
+body,
+.app-main,
+.workspace-scroll {
+  overscroll-behavior-y: contain;
+}

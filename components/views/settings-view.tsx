@@ -12,7 +12,7 @@ import {
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
   Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen,
-  Share2, Heart
+  Share2, Heart, Calendar
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -147,7 +147,11 @@ export function SettingsView() {
     reminderIntervalMinutes?: number
     reminderRepeatCount?: number
     subscriptionExpiry?: string | null
+    googleCalendarSync?: boolean
   }>({})
+  const [gcalLoading, setGcalLoading] = useState(false)
+  const [gcalSyncing, setGcalSyncing] = useState(false)
+  const [gcalStatusMsg, setGcalStatusMsg] = useState<string | null>(null)
   const [newsToggleLoading, setNewsToggleLoading] = useState(false)
   const [showEmailLinkModal, setShowEmailLinkModal] = useState(false)
   const [linkEmail, setLinkEmail] = useState('')
@@ -367,6 +371,7 @@ export function SettingsView() {
               reminderIntervalMinutes: d.reminderIntervalMinutes,
               reminderRepeatCount: d.reminderRepeatCount,
               subscriptionExpiry: d.subscriptionExpiry,
+              googleCalendarSync: Boolean(d.googleCalendarSync),
             })
             if (d.email) setLinkEmail(d.email)
             if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf' && !settings.name) {
@@ -394,6 +399,84 @@ export function SettingsView() {
     fetchProfile()
     fetchUsage()
   }, [currentChatId, activeTab])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('google_calendar_success') === '1') {
+        setGcalStatusMsg('✅ Google Календарь успешно подключен и синхронизирован!')
+        setProfileData(prev => ({ ...prev, googleCalendarSync: true }))
+        setTimeout(() => setGcalStatusMsg(null), 5000)
+        window.history.replaceState({}, '', window.location.pathname)
+      } else if (params.get('google_calendar_error')) {
+        const err = params.get('google_calendar_error')
+        setGcalStatusMsg(`❌ Ошибка подключения: ${err}`)
+        setTimeout(() => setGcalStatusMsg(null), 5000)
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    }
+  }, [])
+
+  const handleConnectGoogleCalendar = async () => {
+    setGcalLoading(true)
+    try {
+      const res = await fetch('/api/calendar/auth', { headers: getAuthHeaders() })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        alert(data.error || 'Ошибка при получении ссылки авторизации Google Календаря')
+      }
+    } catch {
+      alert('Ошибка соединения с сервером')
+    } finally {
+      setGcalLoading(false)
+    }
+  }
+
+  const handleSyncGoogleCalendarNow = async () => {
+    setGcalSyncing(true)
+    try {
+      const res = await fetch('/api/calendar/sync', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setGcalStatusMsg(`Синхронизировано: получено ${data.pulled}, отправлено ${data.pushed} событий`)
+        setTimeout(() => setGcalStatusMsg(null), 4000)
+      } else {
+        alert('Не удалось синхронизировать календарь. Попробуйте переподключить.')
+      }
+    } catch {
+      alert('Ошибка сети')
+    } finally {
+      setGcalSyncing(false)
+    }
+  }
+
+  const handleDisconnectGoogleCalendar = async () => {
+    const ok = await confirm({
+      title: 'Отключение Google Календаря',
+      description: 'Вы уверены, что хотите отключить 2-way синхронизацию с Google Календарем?',
+      confirmText: 'Отключить',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    })
+    if (!ok) return
+    try {
+      const res = await fetch('/api/calendar/disconnect', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setProfileData(prev => ({ ...prev, googleCalendarSync: false }))
+        setGcalStatusMsg('Google Календарь отключен')
+        setTimeout(() => setGcalStatusMsg(null), 3000)
+      }
+    } catch {}
+  }
 
   const handleUserBirthdayChange = async (val: string) => {
     setUserBirthday(val)
@@ -1699,6 +1782,72 @@ export function SettingsView() {
             </div>
           </Section>
 
+          {/* ── GOOGLE CALENDAR 2-WAY SYNC SECTION ── */}
+          <Section title="Google Календарь и Двусторонняя Синхронизация">
+            <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-lg shrink-0">
+                  📅
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-foreground">Google Календарь</h4>
+                    {profileData.googleCalendarSync ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Подключен (Синхронизация 2-way)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border text-[10px] font-bold">
+                        Не подключен
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                    Двусторонний обмен событиями: ваши задачи со сроками экспортируются в Google Календарь, а события из Google автоматически импортируются в Zerf Note с тегом #календарь.
+                  </p>
+                  {gcalStatusMsg && (
+                    <p className="text-xs text-primary font-medium mt-1 animate-pulse">
+                      {gcalStatusMsg}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                {profileData.googleCalendarSync ? (
+                  <>
+                    <button
+                      onClick={handleSyncGoogleCalendarNow}
+                      disabled={gcalSyncing}
+                      className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold border border-primary/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Запустить синхронизацию событий прямо сейчас"
+                    >
+                      <RefreshCw className={cn('w-3.5 h-3.5', gcalSyncing ? 'animate-spin' : '')} />
+                      <span>{gcalSyncing ? 'Синхронизация...' : 'Синхронизировать'}</span>
+                    </button>
+                    <button
+                      onClick={handleDisconnectGoogleCalendar}
+                      className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold border border-rose-500/20 transition-all cursor-pointer"
+                      title="Отключить Google Календарь"
+                    >
+                      Отключить
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleConnectGoogleCalendar}
+                    disabled={gcalLoading}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{gcalLoading ? 'Подключение...' : 'Подключить Google Календарь'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </Section>
+
           {currentChatId && !currentChatId.startsWith('guest_') && (
             <Section title="Безопасность и активные сессии">
               <SessionsPanel />
@@ -2715,7 +2864,7 @@ export function SettingsView() {
                     accentColor: 'emerald',
                     density: 'compact',
                     borderRadius: 'rounded',
-                    likesCount: 28,
+                    likesCount: 0,
                     customCss: '@keyframes pulse-emerald-glow { 0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.25); } 50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.45); } } .theme-strict .bg-primary { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }',
                   },
                   {
@@ -2730,7 +2879,7 @@ export function SettingsView() {
                     accentColor: 'gold',
                     density: 'comfortable',
                     borderRadius: 'default',
-                    likesCount: 35,
+                    likesCount: 0,
                     customCss: '.theme-warm .bg-primary { background-image: linear-gradient(135deg, #eab308 0%, #fde047 50%, #ca8a04 100%) !important; }',
                   },
                   {
@@ -2745,7 +2894,7 @@ export function SettingsView() {
                     accentColor: 'violet',
                     density: 'default',
                     borderRadius: 'rounded',
-                    likesCount: 22,
+                    likesCount: 0,
                     customCss: '.theme-vivid .bg-card { backdrop-filter: blur(12px); }',
                   },
                 ].map(item => {

@@ -8,7 +8,7 @@ import {
   Clock, Share2, Layers, MessageSquare, ChevronRight, CornerDownLeft,
   AlertCircle, ShieldCheck, Terminal, Heart, Eye, ArrowUpRight,
   FileText, Lightbulb, Compass, Database, Hash, HelpCircle,
-  SlidersHorizontal, Flame, Cpu, GraduationCap, Bot
+  SlidersHorizontal, Flame, Cpu, GraduationCap, Bot, Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp, getAuthHeaders } from '@/lib/store'
@@ -397,6 +397,16 @@ export function EntropySearchView() {
     setZerfikStatus(cleanComment)
   }
 
+  const handleDeleteHistoryItem = (indexToDelete: number) => {
+    setHistory(prev => {
+      const nextHistory = prev.filter((_, idx) => idx !== indexToDelete)
+      try {
+        localStorage.setItem('zerf_entropy_search_history', JSON.stringify(nextHistory))
+      } catch {}
+      return nextHistory
+    })
+  }
+
   const handleResetSearch = () => {
     setQuery('')
     setResult(null)
@@ -677,36 +687,72 @@ export function EntropySearchView() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-                {result.sources.map(source => (
-                  <a
-                    key={source.id}
-                    href={source.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onMouseEnter={() => setActiveSourceHover(source)}
-                    onMouseLeave={() => setActiveSourceHover(null)}
-                    className="p-3 rounded-2xl bg-card border border-border hover:border-primary/50 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between gap-2 group cursor-pointer"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold font-mono">
-                          [{source.id}]
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
-                          {source.domain}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                        {source.title}
-                      </p>
-                    </div>
+                {result.sources.map(source => {
+                  const isInternalNote = source.type === 'note' || Boolean(source.noteId)
+                  const isInternalTask = source.type === 'task' || Boolean(source.taskId)
 
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                      <span className="truncate max-w-[130px]">{source.snippet || 'Статья'}</span>
-                      <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
-                    </div>
-                  </a>
-                ))}
+                  const handleClick = (e: React.MouseEvent) => {
+                    if (isInternalNote && source.noteId) {
+                      e.preventDefault()
+                      dispatch({ type: 'SET_VIEW', view: 'notes' })
+                      dispatch({ type: 'SELECT_NOTE', id: source.noteId })
+                    } else if (isInternalTask && source.taskId) {
+                      e.preventDefault()
+                      dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                      dispatch({ type: 'SELECT_TASK', id: source.taskId })
+                    }
+                  }
+
+                  return (
+                    <a
+                      key={source.id}
+                      href={source.url}
+                      target={isInternalNote || isInternalTask ? '_self' : '_blank'}
+                      rel="noopener noreferrer"
+                      onClick={handleClick}
+                      onMouseEnter={() => setActiveSourceHover(source)}
+                      onMouseLeave={() => setActiveSourceHover(null)}
+                      className={cn(
+                        'p-3 rounded-2xl border shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between gap-2 group cursor-pointer',
+                        isInternalNote
+                          ? 'bg-amber-500/5 border-amber-500/30 hover:border-amber-500/60'
+                          : isInternalTask
+                          ? 'bg-emerald-500/5 border-emerald-500/30 hover:border-emerald-500/60'
+                          : 'bg-card border-border hover:border-primary/50'
+                      )}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={cn(
+                            'px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono',
+                            isInternalNote
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : isInternalTask
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : 'bg-primary/10 text-primary'
+                          )}>
+                            [{source.id}] {isInternalNote ? '📝 Заметка' : isInternalTask ? '✓ Задача' : ''}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
+                            {source.domain}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+                          {source.title}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                        <span className="truncate max-w-[130px]">{source.snippet || (isInternalNote ? 'Открыть заметку' : isInternalTask ? 'Открыть задачу' : 'Статья')}</span>
+                        {isInternalNote || isInternalTask ? (
+                          <ArrowRight className="w-3 h-3 text-primary shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        ) : (
+                          <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                        )}
+                      </div>
+                    </a>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -808,17 +854,36 @@ export function EntropySearchView() {
                             if (match) {
                               const sId = parseInt(match[1], 10)
                               const source = result.sources?.find(s => s.id === sId)
+                              const isNote = source?.type === 'note' || Boolean(source?.noteId)
+                              const isTask = source?.type === 'task' || Boolean(source?.taskId)
+
                               return (
-                                <a
+                                <button
                                   key={pIdx}
-                                  href={source?.url || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                  type="button"
+                                  onClick={() => {
+                                    if (isNote && source?.noteId) {
+                                      dispatch({ type: 'SET_VIEW', view: 'notes' })
+                                      dispatch({ type: 'SELECT_NOTE', id: source.noteId })
+                                    } else if (isTask && source?.taskId) {
+                                      dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                                      dispatch({ type: 'SELECT_TASK', id: source.taskId })
+                                    } else if (source?.url) {
+                                      window.open(source.url, '_blank', 'noopener,noreferrer')
+                                    }
+                                  }}
                                   title={source ? `${source.title} (${source.domain})` : `Источник #${sId}`}
-                                  className="inline-flex items-center justify-center px-1.5 py-0.2 mx-0.5 rounded-md bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-mono text-[10px] font-bold border border-primary/30 shadow-2xs transition-all cursor-pointer select-none align-baseline no-underline transform hover:scale-105"
+                                  className={cn(
+                                    'inline-flex items-center justify-center px-1.5 py-0.2 mx-0.5 rounded-md font-mono text-[10px] font-bold border shadow-2xs transition-all cursor-pointer select-none align-baseline no-underline transform hover:scale-105',
+                                    isNote
+                                      ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border-amber-500/40'
+                                      : isTask
+                                      ? 'bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border-emerald-500/40'
+                                      : 'bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground border-primary/30'
+                                  )}
                                 >
                                   [{sId}]
-                                </a>
+                                </button>
                               )
                             }
                             return part
@@ -971,19 +1036,32 @@ export function EntropySearchView() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {history.map((hItem, hIdx) => (
-                  <button
+                  <div
                     key={hIdx}
                     onClick={() => handleSelectHistoryItem(hItem)}
-                    className="p-3 rounded-2xl bg-muted/40 hover:bg-muted border border-border hover:border-primary/40 text-left transition-all cursor-pointer space-y-1 group"
+                    className="p-3 rounded-2xl bg-muted/40 hover:bg-muted border border-border hover:border-primary/40 text-left transition-all cursor-pointer space-y-1.5 group flex flex-col justify-between"
                   >
-                    <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                      {hItem.query}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors flex-1 min-w-0">
+                        {hItem.query}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteHistoryItem(hIdx)
+                        }}
+                        className="p-1 rounded-lg hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 transition-colors shrink-0 cursor-pointer"
+                        title="Удалить этот поиск из истории"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      </button>
+                    </div>
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
                       <span>{hItem.sources.length} источников</span>
                       <span>{new Date(hItem.createdAt).toLocaleDateString('ru-RU')}</span>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
