@@ -106,7 +106,7 @@ export function ZerfikMascot({
           </>
         )}
 
-        {/* Floating Glowing Spirit Cutout (Seamless Screen Blending) */}
+        {/* Floating Glowing Spirit Cutout */}
         <motion.div
           animate={{
             y: isThinking ? [-4, 4, -4] : [-3, 3, -3],
@@ -118,32 +118,25 @@ export function ZerfikMascot({
             repeat: Infinity,
             ease: 'easeInOut',
           }}
-          className="relative flex items-center justify-center transition-all pointer-events-auto"
+          className="relative flex items-center justify-center transition-all pointer-events-auto select-none"
           style={{
             width: dimensions.width,
             height: dimensions.height,
             filter: isThinking
-              ? 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.85)) drop-shadow(0 0 4px rgba(6, 182, 212, 0.9))'
+              ? 'drop-shadow(0 0 18px rgba(34, 211, 238, 0.9)) drop-shadow(0 0 6px rgba(6, 182, 212, 0.95))'
               : isHovered
-              ? 'drop-shadow(0 0 14px rgba(34, 211, 238, 0.7))'
-              : 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.45))',
+              ? 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.8))'
+              : 'drop-shadow(0 0 10px rgba(34, 211, 238, 0.55))',
           }}
         >
-          {/* Transparent Blended Spirit Hologram with Seamless Radial Feathering */}
-          <div
-            className="relative w-full h-full rounded-full overflow-hidden select-none"
-            style={{
-              mixBlendMode: 'screen',
-              maskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 28%, rgba(0,0,0,0.85) 45%, rgba(0,0,0,0.25) 58%, rgba(0,0,0,0) 68%)',
-              WebkitMaskImage: 'radial-gradient(circle at center, rgba(0,0,0,1) 28%, rgba(0,0,0,0.85) 45%, rgba(0,0,0,0.25) 58%, rgba(0,0,0,0) 68%)',
-            }}
-          >
+          <div className="relative w-full h-full select-none">
             <Image
-              src="/tikhonya.jpg"
+              src="/images/zerfik_spirit.png"
               alt="Зерфик — Zerf AI Spirit"
               fill
-              sizes="120px"
-              className="object-cover scale-110 transition-transform duration-300 group-hover:scale-125"
+              sizes="140px"
+              className="object-contain transition-transform duration-300 group-hover:scale-110"
+              style={{ imageRendering: 'pixelated' }}
               priority
             />
           </div>

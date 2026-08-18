@@ -71,6 +71,8 @@ export function EntropySearchView() {
     remaining: number
     isUnlimited: boolean
     plan: string
+    model?: string
+    modelDisplayName?: string
     pro?: {
       used: number
       limit: number
@@ -78,7 +80,51 @@ export function EntropySearchView() {
       isAllowed: boolean
       isUnlimited: boolean
     }
-  } | null>(null)
+  }>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('zerf_entropy_usage_cache')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (parsed && typeof parsed === 'object') return parsed
+        }
+        const savedPlan = localStorage.getItem('zerf_user_plan') || 'creator'
+        const isUnlimited = savedPlan === 'pro' || savedPlan === 'corp' || savedPlan === 'creator' || savedPlan === 'admin'
+        return {
+          used: 0,
+          limit: isUnlimited ? -1 : 10,
+          remaining: isUnlimited ? 999999 : 10,
+          isUnlimited,
+          plan: savedPlan,
+          model: 'deepseek-r1-distill-llama-70b',
+          modelDisplayName: 'DeepSeek R1 Distill 70B',
+          pro: {
+            used: 0,
+            limit: isUnlimited ? -1 : 5,
+            remaining: isUnlimited ? 999999 : 5,
+            isAllowed: true,
+            isUnlimited,
+          }
+        }
+      } catch {}
+    }
+    return {
+      used: 0,
+      limit: -1,
+      remaining: 999999,
+      isUnlimited: true,
+      plan: 'creator',
+      model: 'deepseek-r1-distill-llama-70b',
+      modelDisplayName: 'DeepSeek R1 Distill 70B',
+      pro: {
+        used: 0,
+        limit: -1,
+        remaining: 999999,
+        isAllowed: true,
+        isUnlimited: true,
+      }
+    }
+  })
 
   const [history, setHistory] = useState<EntropySearchResult[]>(() => {
     if (typeof window !== 'undefined') {
@@ -151,7 +197,7 @@ export function EntropySearchView() {
     return suggestions.slice(0, 4)
   }, [isPlusOrHigher, history, state.notes, state.tasks])
 
-  // Fetch initial usage limits on mount
+  // Fetch initial usage limits on mount and persist
   useEffect(() => {
     const fetchUsage = async () => {
       try {
@@ -159,6 +205,12 @@ export function EntropySearchView() {
         const data = await res.json()
         if (data.success && data.usage) {
           setUsageInfo(data.usage)
+          try {
+            localStorage.setItem('zerf_entropy_usage_cache', JSON.stringify(data.usage))
+            if (data.usage.plan) {
+              localStorage.setItem('zerf_user_plan', data.usage.plan)
+            }
+          } catch {}
         }
       } catch {}
     }
@@ -377,10 +429,8 @@ export function EntropySearchView() {
             <Cpu className="w-3.5 h-3.5 text-primary" />
             <span>
               {(usageInfo as any)?.modelDisplayName || (
-                usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator' || usageInfo?.plan === 'admin'
-                  ? 'GPT-OSS 120B Flagship'
-                  : usageInfo?.plan === 'pro' || isProSearch
-                  ? 'Llama 3.3 70B Versatile'
+                usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator' || usageInfo?.plan === 'admin' || usageInfo?.plan === 'pro' || isProSearch
+                  ? 'DeepSeek R1 Distill 70B'
                   : usageInfo?.plan === 'plus'
                   ? 'Qwen 3.6 27B Reasoning'
                   : 'Llama 3.1 8B Instant'

@@ -218,7 +218,7 @@ export function EmojiPickerModal({
                       title={cat.name}
                     >
                       <span style={EMOJI_FONT_STYLE}>{cat.icon}</span>
-                      <span className="text-[11px] hidden sm:inline">{cat.name.split(' ')[0]}</span>
+                      <span className="text-[11px] hidden sm:inline">{cat.name.split(' ')[0].replace(/[,&]/g, '')}</span>
                     </button>
                   )
                 })}
@@ -323,21 +323,26 @@ export function EmojiPickerModal({
                 <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
                   {displayedEmojis.map((emoji, idx) => {
                     const isSelected = currentEmoji === emoji
+                    const isCustomOrAi = emoji.startsWith('ai_') || emoji.startsWith('zerfik_') || emoji.startsWith('zerf_')
                     return (
                       <button
                         key={idx}
                         onClick={() => handleEmojiClick(emoji)}
-                        style={EMOJI_FONT_STYLE}
+                        style={isCustomOrAi ? undefined : EMOJI_FONT_STYLE}
                         className={cn(
                           'h-10 rounded-xl flex items-center justify-center text-xl transition-all cursor-pointer hover:bg-muted/80 hover:scale-115 active:scale-95 select-none relative group touch-manipulation',
-                          'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
+                          !isCustomOrAi && 'grayscale contrast-125 opacity-80 hover:opacity-100 hover:grayscale-0',
                           isSelected
                             ? 'bg-primary/20 border-2 border-primary shadow-xs opacity-100'
                             : 'bg-muted/20 hover:bg-muted/50 border border-transparent'
                         )}
                         title={emoji}
                       >
-                        <span>{emoji}</span>
+                        {isCustomOrAi ? (
+                          <ZerfAvatar emoji={emoji} size="sm" monochrome={!isSelected} />
+                        ) : (
+                          <span>{emoji}</span>
+                        )}
                         {isSelected && (
                           <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary" />
                         )}

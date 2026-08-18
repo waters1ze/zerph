@@ -102,11 +102,8 @@ export interface EntropySearchResult {
 
 export function getEntropyModelForPlan(userPlan?: string, isPro = false): { model: string; displayName: string } {
   const norm = String(userPlan || 'free').toLowerCase()
-  if (norm === 'corp' || norm === 'creator' || norm === 'admin') {
-    return { model: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B Flagship' }
-  }
-  if (norm === 'pro' || isPro) {
-    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' }
+  if (norm === 'corp' || norm === 'creator' || norm === 'admin' || norm === 'pro' || isPro) {
+    return { model: 'deepseek-r1-distill-llama-70b', displayName: 'DeepSeek R1 Distill 70B' }
   }
   if (norm === 'plus') {
     return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B Reasoning' }
