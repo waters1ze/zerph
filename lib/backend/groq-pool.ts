@@ -336,9 +336,10 @@ export async function callGroqChatCompletion(options: {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
 
   const requestedModel = normalizeGroqChatModel(options.model)
-  const normalizedFallbacks = (options.fallbackModels !== undefined)
+  const defaultFallbacks = ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile']
+  const normalizedFallbacks = (options.fallbackModels !== undefined && options.fallbackModels.length > 0)
     ? options.fallbackModels.map(m => normalizeGroqChatModel(m))
-    : ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b']
+    : defaultFallbacks
 
   const models = [
     requestedModel,

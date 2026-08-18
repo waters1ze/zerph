@@ -861,7 +861,7 @@ Rules:
       max_tokens: 250,
       response_format: { type: 'json_object' },
       apiKey,
-      fallbackModels: [model || 'openai/gpt-oss-20b']
+      fallbackModels: ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b', 'llama-3.1-8b-instant']
     })
 
     const raw = result.content || '{}'
