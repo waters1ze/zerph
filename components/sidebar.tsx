@@ -589,46 +589,51 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         )}
       </nav>
 
-      {/* Bottom Daily Status Bar (Only Today's Metrics, No Profile) */}
-      <div className={cn('border-t border-border bg-card/60 transition-all pb-[max(0.75rem,env(safe-area-inset-bottom))]', isCollapsed ? 'p-2 flex justify-center' : 'p-3')}>
+      {/* Bottom Daily Status Bar (Strict Rectangular Card, No Profile) */}
+      <div className={cn('border-t border-border/60 bg-card/80 transition-all pb-[max(0.5rem,env(safe-area-inset-bottom))]', isCollapsed ? 'p-2 flex justify-center' : 'p-2.5')}>
         {!isCollapsed ? (
           <div
             onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
-            className="p-2.5 rounded-2xl bg-muted/40 hover:bg-muted/70 border border-border/50 transition-all cursor-pointer group shadow-2xs select-none touch-manipulation"
+            className="p-3 rounded-lg bg-muted/30 hover:bg-muted/60 border border-border/70 hover:border-primary/40 transition-all cursor-pointer group shadow-2xs select-none touch-manipulation"
             title="Открыть задачи на сегодня"
           >
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs animate-pulse" />
-                <span className="text-[11px] font-bold text-foreground">Задачи на сегодня</span>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-xs bg-emerald-500 shadow-xs shrink-0" />
+                <span className="text-[11px] font-bold text-foreground truncate uppercase tracking-wider font-sans">
+                  Сегодня
+                </span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-muted-foreground group-hover:text-primary transition-colors">
-                {completedTodayCount}/{todayCount + completedTodayCount} ({todayCount + completedTodayCount > 0 ? Math.round((completedTodayCount / (todayCount + completedTodayCount)) * 100) : 0}%)
+              <span className="text-[11px] font-mono font-bold text-muted-foreground group-hover:text-primary transition-colors shrink-0">
+                {completedTodayCount}/{todayCount + completedTodayCount}
+                <span className="text-[10px] opacity-70 ml-1 font-normal">
+                  ({todayCount + completedTodayCount > 0 ? Math.round((completedTodayCount / (todayCount + completedTodayCount)) * 100) : 0}%)
+                </span>
               </span>
             </div>
 
             {/* Daily Progress Bar */}
-            <div className="w-full h-1.5 rounded-full bg-muted/80 overflow-hidden mb-1.5 border border-border/40">
+            <div className="w-full h-1.5 rounded-xs bg-muted overflow-hidden mb-2 border border-border/50">
               <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                className="h-full bg-emerald-500 rounded-xs transition-all duration-300"
                 style={{ width: `${todayCount + completedTodayCount > 0 ? Math.round((completedTodayCount / (todayCount + completedTodayCount)) * 100) : 0}%` }}
               />
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span className="text-amber-500/90 font-medium">{todayCount} к исполнению</span>
-              <span className="text-emerald-500/90 font-medium">{completedTodayCount} сделано</span>
+            <div className="flex items-center justify-between text-[10px] font-mono leading-none">
+              <span className="text-amber-400 font-semibold">{todayCount} активных</span>
+              <span className="text-emerald-400 font-semibold">{completedTodayCount} сделано</span>
             </div>
           </div>
         ) : (
           <div
             onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
-            className="p-1.5 flex flex-col items-center justify-center cursor-pointer hover:bg-muted/60 rounded-xl transition-colors select-none"
+            className="w-10 h-10 rounded-lg border border-border/70 hover:border-primary/50 bg-muted/30 hover:bg-muted/60 flex flex-col items-center justify-center cursor-pointer transition-all select-none group"
             title={`Сегодня: ${todayCount} активных, ${completedTodayCount} сделано`}
           >
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex flex-col items-center justify-center font-mono text-[10px] font-bold">
+            <span className="text-xs font-mono font-bold text-emerald-400 group-hover:scale-105 transition-transform">
               {todayCount}
-            </div>
+            </span>
           </div>
         )}
       </div>
