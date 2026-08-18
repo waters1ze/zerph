@@ -98,8 +98,8 @@ export interface LayoutPreset {
 export const DEFAULT_OFFICIAL_PRESETS: LayoutPreset[] = [
   {
     id: 'preset_default_workspace',
-    title: 'Стандартная рабочая среда Zerf',
-    description: 'Базовая сбалансированная раскладка: задачи, заметки, календарь, граф и таймер фокуса.',
+    title: 'Основной',
+    description: 'Базовая сбалансированная раскладка по умолчанию: задачи, заметки, календарь, граф и таймер фокуса.',
     icon: '✨',
     author: 'Zerf Official',
     minPlan: 'free',
@@ -107,42 +107,6 @@ export const DEFAULT_OFFICIAL_PRESETS: LayoutPreset[] = [
     config: {
       hiddenItems: [],
       folders: DEFAULT_SIDEBAR_FOLDERS,
-    },
-  },
-  {
-    id: 'preset_extended_workspace',
-    title: 'Расширенная рабочая среда (Plus)',
-    description: 'Официальный пресет: ИИ-поиск инсайтов Entropy, Граф знаний, Аналитика и Планирование.',
-    icon: '🔮',
-    author: 'waters1ze',
-    minPlan: 'plus',
-    likesCount: 0,
-    recommendedExts: ['ext_entropy_search'],
-    config: {
-      hiddenItems: ['friends', 'teams'],
-      folders: [
-        { id: 'ai_hub', title: '🔮 AI & Исследования', itemIds: ['ext_entropy_search', 'graph', 'notes'] },
-        { id: 'workflow', title: '📋 Поток работы', itemIds: ['today', 'tasks', 'calendar'] },
-        { id: 'strategy', title: '🎯 Стратегия', itemIds: ['goals', 'projects', 'stats'] },
-        { id: 'system', title: '⚙️ Настройки', itemIds: ['settings'] },
-      ],
-    },
-  },
-  {
-    id: 'preset_focus_minimal',
-    title: 'Минималистичный фокус',
-    description: 'Максимальная концентрация: только задачи на сегодня, входящие и таймер.',
-    icon: '⚡',
-    author: 'Zerf Official',
-    minPlan: 'free',
-    likesCount: 0,
-    config: {
-      hiddenItems: ['graph', 'stats', 'friends', 'teams', 'goals'],
-      folders: [
-        { id: 'daily_focus', title: '⚡ Главное', itemIds: ['today', 'inbox', 'clock'] },
-        { id: 'notes_hub', title: '📝 Заметки', itemIds: ['notes', 'calendar', 'projects'] },
-        { id: 'config_hub', title: '⚙️ Система', itemIds: ['settings'] },
-      ],
     },
   },
 ]
