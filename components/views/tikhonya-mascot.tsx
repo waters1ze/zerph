@@ -90,6 +90,18 @@ export function ZerfikMascot({
 
   const isThinking = currentMood === 'thinking'
 
+  // Determine active sprite based on posture and mood
+  let activeSprite = '/images/zerfik_idle.png'
+  if (isThinking) {
+    activeSprite = '/images/zerfik_thinking.png'
+  } else if (currentMood === 'celebrate' || currentMood === 'happy') {
+    activeSprite = '/images/zerfik_happy.png'
+  } else if (cursorVector.dx < -3) {
+    activeSprite = '/images/zerfik_left.png'
+  } else if (cursorVector.dx > 3) {
+    activeSprite = '/images/zerfik_right.png'
+  }
+
   // Clean status text: ensure no old "Тихоня" mentions
   const displayStatus = (statusText || ZERFIK_QUOTES[quoteIndex])
     .replace(/тихоня/gi, 'Зерфик')
@@ -110,68 +122,61 @@ export function ZerfikMascot({
         {/* Ambient Radial Soft Glow */}
         <motion.div
           animate={{
-            scale: isThinking ? [1, 1.4, 1] : [1, 1.15, 1],
-            opacity: isThinking ? [0.6, 0.95, 0.6] : [0.2, 0.4, 0.2],
+            scale: isThinking ? [1, 1.35, 1] : [1, 1.15, 1],
+            opacity: isThinking ? [0.5, 0.9, 0.5] : [0.2, 0.35, 0.2],
           }}
-          transition={{ duration: isThinking ? 1.2 : 3.5, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute inset-0 rounded-full bg-radial from-cyan-400/35 via-primary/20 to-transparent blur-xl pointer-events-none"
+          transition={{ duration: isThinking ? 1.4 : 3.5, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute inset-0 rounded-full bg-radial from-cyan-400/30 via-primary/15 to-transparent blur-xl pointer-events-none"
         />
 
-        {/* Orbiting Thinking Rings & Thought Particles */}
+        {/* Orbiting Thinking Rings & Aesthetic Celestial Sparkles */}
         {isThinking && (
           <>
             <motion.div
               animate={{ rotate: 360 }}
-              transition={{ duration: 2.8, repeat: Infinity, ease: 'linear' }}
-              className="absolute inset-1 rounded-full border border-dashed border-cyan-400/60 pointer-events-none"
+              transition={{ duration: 3.2, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-1 rounded-full border border-dashed border-cyan-400/40 pointer-events-none"
             />
             <motion.div
               animate={{ rotate: -360 }}
-              transition={{ duration: 4.2, repeat: Infinity, ease: 'linear' }}
-              className="absolute inset-3 rounded-full border border-dotted border-primary/70 pointer-events-none"
-            />
-            <motion.div
-              animate={{ scale: [0.95, 1.25, 0.95], opacity: [0.2, 0.8, 0.2] }}
-              transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute inset-0 rounded-full border border-cyan-300/40 pointer-events-none"
+              transition={{ duration: 4.8, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-3 rounded-full border border-dotted border-primary/50 pointer-events-none"
             />
 
-            {/* Orbiting Floating Thought Particles around Zerfik */}
+            {/* Orbiting Floating Celestial Stars around Zerfik */}
             <motion.div
               animate={{ rotate: 360 }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+              transition={{ duration: 3.6, repeat: Infinity, ease: 'linear' }}
               className="absolute inset-0 flex items-center justify-center pointer-events-none"
             >
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
-                💭
-              </div>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]">
-                💡
-              </div>
-              <div className="absolute top-1/2 -left-1 -translate-y-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]">
+              <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 text-cyan-300 font-bold text-xs filter drop-shadow-[0_0_8px_rgba(34,211,238,0.9)]">
                 ✦
               </div>
-              <div className="absolute top-1/2 -right-1 -translate-y-1/2 text-xs filter drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]">
-                🔮
+              <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-amber-300 font-bold text-xs filter drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]">
+                ✧
+              </div>
+              <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 text-sky-200 font-bold text-xs filter drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]">
+                ✨
+              </div>
+              <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 text-cyan-300 font-bold text-xs filter drop-shadow-[0_0_8px_rgba(147,197,253,0.9)]">
+                ✦
               </div>
             </motion.div>
           </>
         )}
 
-        {/* Floating Glowing Spirit Cutout with Cursor Tracking & Thinking Flip */}
+        {/* Floating Glowing Spirit Cutout with Dynamic Multi-Sprite Poses */}
         <motion.div
           animate={{
             x: cursorVector.dx,
-            y: isThinking ? [-4, 4, -4] : cursorVector.dy,
-            rotate: isThinking ? [-3, 3, -3] : cursorVector.tilt,
-            scaleX: isThinking ? [1, -1, 1] : cursorVector.facing,
+            y: isThinking ? [-3, 3, -3] : cursorVector.dy,
+            rotate: isThinking ? [-2, 4, -2] : cursorVector.tilt,
             scale: currentMood === 'celebrate' ? [1, 1.15, 1] : 1,
           }}
           transition={{
             x: { type: 'spring', stiffness: 200, damping: 22 },
-            y: isThinking ? { duration: 1.0, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
-            rotate: { type: 'spring', stiffness: 180, damping: 18 },
-            scaleX: isThinking ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.25 },
+            y: isThinking ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 200, damping: 22 },
+            rotate: isThinking ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 180, damping: 18 },
             scale: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' },
           }}
           className="relative flex items-center justify-center transition-all pointer-events-auto select-none"
@@ -179,20 +184,20 @@ export function ZerfikMascot({
             width: dimensions.width,
             height: dimensions.height,
             filter: isThinking
-              ? 'drop-shadow(0 0 18px rgba(34, 211, 238, 0.9)) drop-shadow(0 0 6px rgba(6, 182, 212, 0.95))'
+              ? 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.85)) drop-shadow(0 0 4px rgba(6, 182, 212, 0.9))'
               : isHovered
-              ? 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.8))'
-              : 'drop-shadow(0 0 10px rgba(34, 211, 238, 0.55))',
+              ? 'drop-shadow(0 0 14px rgba(34, 211, 238, 0.75))'
+              : 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.5))',
           }}
         >
           <div className="relative w-full h-full select-none">
             <Image
-              src="/images/zerfik_spirit.png"
+              src={activeSprite}
               alt="Зерфик — Zerf AI Spirit"
               fill
               sizes="140px"
-              className="object-contain transition-transform duration-300 group-hover:scale-110"
-              style={{ imageRendering: 'pixelated' }}
+              className="object-contain transition-all duration-200"
+              style={{ imageRendering: 'auto' }}
               priority
             />
           </div>
