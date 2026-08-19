@@ -274,26 +274,31 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchInstalledExts()
 
-    const handleExtsChanged = () => {
+    const handleSidebarConfigChanged = (e?: any) => {
+      if (e?.detail) {
+        setSidebarConfig(e.detail)
+      } else {
+        setSidebarConfig(getInitialSidebarConfig())
+      }
       cachedInstalledExts = null
       fetchInstalledExts(true)
     }
-    const handleOpenZerficLive = () => setShowZerficLiveModal(true)
+    const handleOpenZerficLive = () => dispatch({ type: 'SET_VIEW', view: 'live' })
 
-    window.addEventListener('zerf_sidebar_config_changed', handleExtsChanged)
-    window.addEventListener('zerf_extensions_updated', handleExtsChanged)
-    window.addEventListener('zerf_extension_installed', handleExtsChanged)
+    window.addEventListener('zerf_sidebar_config_changed', handleSidebarConfigChanged)
+    window.addEventListener('zerf_extensions_updated', handleSidebarConfigChanged)
+    window.addEventListener('zerf_extension_installed', handleSidebarConfigChanged)
     window.addEventListener('zerf_open_zerfic_live', handleOpenZerficLive)
-    window.addEventListener('zerf_sync', handleExtsChanged)
+    window.addEventListener('zerf_sync', handleSidebarConfigChanged)
 
     const interval = setInterval(fetchPendingTeamRequests, 10 * 60 * 1000)
     return () => {
       clearInterval(interval)
-      window.removeEventListener('zerf_sidebar_config_changed', handleExtsChanged)
-      window.removeEventListener('zerf_extensions_updated', handleExtsChanged)
-      window.removeEventListener('zerf_extension_installed', handleExtsChanged)
+      window.removeEventListener('zerf_sidebar_config_changed', handleSidebarConfigChanged)
+      window.removeEventListener('zerf_extensions_updated', handleSidebarConfigChanged)
+      window.removeEventListener('zerf_extension_installed', handleSidebarConfigChanged)
       window.removeEventListener('zerf_open_zerfic_live', handleOpenZerficLive)
-      window.removeEventListener('zerf_sync', handleExtsChanged)
+      window.removeEventListener('zerf_sync', handleSidebarConfigChanged)
     }
   }, [dispatch])
 
@@ -327,11 +332,25 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   // Map of extensions for quick lookup strictly from user's installed extensions
   const extensionsMap = useMemo(() => {
     const map = new Map<string, Partial<ExtensionItem>>()
-    // Built-in starter extension fallback so custom folders with Entropy AI Search never render blank during network load
+    // Built-in starter extensions fallback
     map.set('ext_entropy_search', {
       id: 'ext_entropy_search',
       title: 'Entropy AI Search',
       icon: '🔮',
+      isPublished: true,
+      minPlan: 'free',
+    })
+    map.set('ext_zerfic_live', {
+      id: 'ext_zerfic_live',
+      title: 'Зерфик Live',
+      icon: '🎙️',
+      isPublished: true,
+      minPlan: 'free',
+    })
+    map.set('zerfic-live', {
+      id: 'zerfic-live',
+      title: 'Зерфик Live',
+      icon: '🎙️',
       isPublished: true,
       minPlan: 'free',
     })

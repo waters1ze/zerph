@@ -132,6 +132,21 @@ export function getInitialSidebarConfig(): SidebarConfig {
   }
 }
 
+function getItemDisplayName(itemId: string, metaTitle?: string): string {
+  if (metaTitle && !metaTitle.startsWith('ext_gh_') && !metaTitle.startsWith('ext_starter_') && metaTitle !== itemId) {
+    return metaTitle
+  }
+  if (itemId === 'ext_entropy_search') return 'Entropy AI Search'
+  if (itemId === 'ext_zerfic_live' || itemId === 'zerfic-live') return 'Зерфик Live'
+  if (itemId.startsWith('ext_gh_')) {
+    return 'GitHub Расширение'
+  }
+  if (itemId.startsWith('ext_')) {
+    return 'Расширение ' + itemId.replace(/^ext_/, '')
+  }
+  return metaTitle || itemId
+}
+
 export function SidebarCustomizerSection() {
   const { state, dispatch } = useApp()
   const confirmDialog = useConfirmDialog()
@@ -252,11 +267,20 @@ export function SidebarCustomizerSection() {
       try {
         const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
         const data = await res.json()
-        if (data.success && Array.isArray(data.catalog)) {
+        if (data.success) {
+          const catalog: ExtensionItem[] = Array.isArray(data.catalog) ? data.catalog : []
+          const myExts: ExtensionItem[] = Array.isArray(data.myExtensions) ? data.myExtensions : []
+          
+          const allExtsMap = new Map<string, ExtensionItem>()
+          catalog.forEach(e => allExtsMap.set(e.id, e))
+          myExts.forEach(e => allExtsMap.set(e.id, e))
+          const allExts = Array.from(allExtsMap.values())
+
           const installedIds = Array.isArray(data.installedIds) ? data.installedIds : []
           const enabledIds = Array.isArray(data.enabledIds) ? data.enabledIds : installedIds
-          const activeExts = data.catalog.filter((e: ExtensionItem) =>
-            enabledIds.includes(e.id) || installedIds.includes(e.id)
+          const myIds = myExts.map((e: any) => e.id)
+          const activeExts = allExts.filter((e: ExtensionItem) =>
+            enabledIds.includes(e.id) || installedIds.includes(e.id) || myIds.includes(e.id)
           )
           setInstalledExts(activeExts)
 
@@ -630,13 +654,40 @@ export function SidebarCustomizerSection() {
   // All known item metadata (built-in + installed extensions)
   const allItemMetas = useMemo<Record<string, { title: string; icon: any; isExt?: boolean }>>(() => {
     const map: Record<string, { title: string; icon: any; isExt?: boolean }> = { ...DEFAULT_MENU_ITEMS }
+    map['ext_entropy_search'] = { title: 'Entropy AI Search', icon: '🔮', isExt: true }
+    map['ext_zerfic_live'] = { title: 'Зерфик Live', icon: '🎙️', isExt: true }
+    map['zerfic-live'] = { title: 'Зерфик Live', icon: '🎙️', isExt: true }
+
     installedExts.forEach(ext => {
-      map[ext.id] = {
-        title: ext.title,
-        icon: ext.icon || '🧩',
-        isExt: true,
+      if (ext && ext.id) {
+        map[ext.id] = {
+          title: ext.title || (ext as any).name || ext.id,
+          icon: ext.icon || '🧩',
+          isExt: true,
+        }
       }
     })
+
+    // Check cached catalog in localStorage if an extension was recently added
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedRaw = localStorage.getItem('zerf_ext_catalog_cache')
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw)
+          const list = Array.isArray(parsed) ? parsed : (parsed.catalog || parsed.extensions || [])
+          list.forEach((e: any) => {
+            if (e && e.id && !map[e.id]) {
+              map[e.id] = {
+                title: e.title || e.name || e.id,
+                icon: e.icon || '🧩',
+                isExt: true,
+              }
+            }
+          })
+        }
+      } catch {}
+    }
+
     return map
   }, [installedExts])
 
@@ -1067,18 +1118,29 @@ export function SidebarCustomizerSection() {
                         type="text"
                         value={editingFolderTitle}
                         onChange={e => setEditingFolderTitle(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') saveRenameFolder(folder.id)
+                          if (e.key === 'Escape') setEditingFolderId(null)
+                        }}
+                        onBlur={() => {
+                          if (editingFolderTitle.trim() && editingFolderTitle.trim() !== folder.title) {
+                            saveRenameFolder(folder.id)
+                          }
+                        }}
                         className="h-7 px-2 rounded-lg bg-muted border border-border text-foreground text-xs font-bold outline-none focus:border-primary"
                         autoFocus
                       />
                       <button
                         onClick={() => saveRenameFolder(folder.id)}
-                        className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                        className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 cursor-pointer"
+                        title="Сохранить название"
                       >
                         <Check className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => setEditingFolderId(null)}
-                        className="p-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground"
+                        className="p-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                        title="Отмена"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1164,7 +1226,9 @@ export function SidebarCustomizerSection() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {folder.itemIds.map((itemId, itemIdx) => {
-                    const meta = allItemMetas[itemId] || { title: itemId, icon: Puzzle }
+                    const rawMeta = allItemMetas[itemId]
+                    const metaTitle = getItemDisplayName(itemId, rawMeta?.title)
+                    const meta = rawMeta ? { ...rawMeta, title: metaTitle } : { title: metaTitle, icon: Puzzle, isExt: itemId.startsWith('ext_') }
                     const isHidden = config.hiddenItems.includes(itemId)
                     const IconComp = typeof meta.icon === 'string' ? null : meta.icon
 
@@ -1333,7 +1397,9 @@ export function SidebarCustomizerSection() {
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {folder.itemIds.map(itemId => {
-                          const meta = allItemMetas[itemId] || { title: itemId, icon: Puzzle }
+                          const rawMeta = allItemMetas[itemId]
+                          const metaTitle = getItemDisplayName(itemId, rawMeta?.title)
+                          const meta = rawMeta ? { ...rawMeta, title: metaTitle } : { title: metaTitle, icon: Puzzle, isExt: itemId.startsWith('ext_') }
                           const IconC = typeof meta.icon === 'string' ? null : meta.icon
                           return (
                             <span
