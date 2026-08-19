@@ -22,7 +22,15 @@ export async function GET(req: NextRequest) {
     const userPlan = normalizePlan(limits?.plan || 'free')
 
     // 1. Fetch live models (with automatic cache and dynamic discovery of newly released Groq models)
-    const allModels = await getLiveGroqModels()
+    const rawLiveModels = await getLiveGroqModels()
+    const allModels = rawLiveModels.filter(m => 
+      !m.isExcluded && 
+      !m.isGuard && 
+      !m.id.toLowerCase().includes('guard') && 
+      !m.id.toLowerCase().includes('safeguard') && 
+      !m.id.toLowerCase().includes('orpheus') && 
+      !m.id.toLowerCase().includes('arabic')
+    )
 
     // 2. Filter allowed models for the active user's plan
     const allowedForUser = allModels.filter(m => isModelAllowedForPlan(m.id, userPlan))

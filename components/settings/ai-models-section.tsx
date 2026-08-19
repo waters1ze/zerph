@@ -39,13 +39,21 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
       .then(r => r.json())
       .then(d => {
         if (isMounted && Array.isArray(d.models) && d.models.length > 0) {
-          setModelsList(d.models.map((m: any) => ({
-            id: m.id,
-            name: m.name,
-            tier: m.minTier,
-            params: m.paramsBillions ? (m.paramsBillions >= 1 ? `${m.paramsBillions}B` : `${Math.round(m.paramsBillions * 1000)}M`) : 'Auto',
-            desc: m.desc || '',
-          })))
+          const chatOnly = d.models.filter((m: any) => 
+            !m.id.toLowerCase().includes('guard') &&
+            !m.id.toLowerCase().includes('safeguard') &&
+            !m.id.toLowerCase().includes('orpheus') &&
+            !m.id.toLowerCase().includes('arabic')
+          )
+          if (chatOnly.length > 0) {
+            setModelsList(chatOnly.map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              tier: m.minTier,
+              params: m.paramsBillions ? (m.paramsBillions >= 1 ? `${m.paramsBillions}B` : `${Math.round(m.paramsBillions * 1000)}M`) : 'Auto',
+              desc: m.desc || '',
+            })))
+          }
         }
       })
       .catch(() => {})
