@@ -256,8 +256,8 @@ export function EmojiPickerModal({
                             : 'bg-card/70 hover:bg-card border border-border/70 hover:border-primary/40 hover:scale-[1.02]'
                         )}
                       >
-                        <div className="w-8 h-8 rounded-lg bg-muted/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                          <ZerfAvatar emoji={item.id} size="sm" monochrome={!isSelected} />
+                        <div className="w-9 h-9 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                          <ZerfAvatar emoji={item.id} size="md" monochrome={!isSelected} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold text-foreground truncate leading-tight">

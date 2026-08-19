@@ -26,18 +26,18 @@ export function ZerfAvatar({
 
   const sizeClasses = {
     xs: 'w-4 h-4 text-[10px]',
-    sm: 'w-5 h-5 text-xs',
-    md: 'w-7 h-7 text-sm',
-    lg: 'w-10 h-10 text-xl',
-    xl: 'w-12 h-12 text-2xl',
+    sm: 'w-6 h-6 text-xs',
+    md: 'w-8 h-8 text-sm',
+    lg: 'w-11 h-11 text-xl',
+    xl: 'w-14 h-14 text-2xl',
   }[size]
 
   const iconSizes = {
-    xs: 14,
-    sm: 18,
-    md: 24,
-    lg: 34,
-    xl: 40,
+    xs: 16,
+    sm: 22,
+    md: 28,
+    lg: 40,
+    xl: 48,
   }[size]
 
   // Render Custom Hand-crafted Zerf Vector Graphic
@@ -78,33 +78,166 @@ export function ZerfAvatar({
 import Image from 'next/image'
 
 function renderCustomSvg(id: string, s: number, monochrome: boolean) {
-  // ── 1. Зерфик Пиксельный Дух Маскот (Screenshot 3) ──
-  if (id.startsWith('zerfik_')) {
-    const spiritAnimations: Record<string, string> = {
-      zerfik_spirit: 'animate-[bounce_3s_ease-in-out_infinite] drop-shadow-[0_0_6px_rgba(56,189,248,0.5)]',
-      zerfik_sapling: 'animate-[pulse_2.5s_ease-in-out_infinite] drop-shadow-[0_0_6px_rgba(74,222,128,0.6)]',
-      zerfik_flying: 'animate-[pulse_1.8s_ease-in-out_infinite] drop-shadow-[0_0_8px_rgba(96,165,250,0.7)]',
-      zerfik_magic: 'animate-[pulse_2s_ease-in-out_infinite] drop-shadow-[0_0_10px_rgba(192,132,252,0.8)]',
-      zerfik_happy: 'animate-[bounce_2s_ease-in-out_infinite] drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]',
-      zerfik_focus: 'drop-shadow-[0_0_8px_rgba(129,140,248,0.8)]',
-      zerfik_cyber: 'animate-[pulse_2s_ease-in-out_infinite] drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]',
-      zerfik_crystal: 'animate-[pulse_3s_ease-in-out_infinite] drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]',
-      zerfik_zen: 'animate-[pulse_4s_ease-in-out_infinite] drop-shadow-[0_0_5px_rgba(52,211,153,0.5)]',
-    }
-    const animClass = spiritAnimations[id] || 'animate-[bounce_3s_ease-in-out_infinite]'
-
+  // ── 1. Зерфик Пиксельный Дух Маскот (Увеличенный и четкий) ──
+  if (id === 'zerfik_spirit' || id.startsWith('zerfik_')) {
     return (
-      <div className={cn('relative flex items-center justify-center select-none overflow-visible', animClass)} style={{ width: s, height: s }}>
+      <div
+        className="relative flex items-center justify-center select-none overflow-visible animate-[bounce_3s_ease-in-out_infinite] drop-shadow-[0_0_8px_rgba(56,189,248,0.6)]"
+        style={{ width: s, height: s }}
+      >
         <img
           src="/images/zerfik_spirit.png"
           alt="Зерфик Дух"
           width={s}
           height={s}
-          className="w-full h-full object-contain pointer-events-none image-rendering-pixelated"
+          className="w-full h-full object-contain pointer-events-none image-rendering-pixelated scale-120 transform transition-transform"
           style={{ imageRendering: 'pixelated' }}
         />
       </div>
     )
+  }
+
+  // ── 2. Милые Лица в Кружочке (Аватары с глазами-звездочками, румянцем и эмоциями) ──
+  switch (id) {
+    case 'face_star_eyes':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Left Star Eye */}
+          <path d="M8 7.5L8.9 9.5L11 9.8L9.5 11.2L9.8 13.3L8 12.3L6.2 13.3L6.5 11.2L5 9.8L7.1 9.5L8 7.5Z" fill="currentColor" />
+          {/* Right Star Eye */}
+          <path d="M16 7.5L16.9 9.5L19 9.8L17.5 11.2L17.8 13.3L16 12.3L14.2 13.3L14.5 11.2L13 9.8L15.1 9.5L16 7.5Z" fill="currentColor" />
+          {/* Cute Smile */}
+          <path d="M9.5 15C10.2 16.5 13.8 16.5 14.5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          {/* Rosy Cheeks */}
+          <ellipse cx="6" cy="14" rx="1.4" ry="0.8" fill="currentColor" fillOpacity="0.45" />
+          <ellipse cx="18" cy="14" rx="1.4" ry="0.8" fill="currentColor" fillOpacity="0.45" />
+        </svg>
+      )
+
+    case 'face_sparkle_wink':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Left Star Eye */}
+          <path d="M8 7.5L8.9 9.5L11 9.8L9.5 11.2L9.8 13.3L8 12.3L6.2 13.3L6.5 11.2L5 9.8L7.1 9.5L8 7.5Z" fill="currentColor" />
+          {/* Right Winking Curved Eye */}
+          <path d="M14 10.5C15 9.2 17 9.2 18 10.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          {/* Cute Wink Smile */}
+          <path d="M9.5 14.5C10.5 16.8 13.5 16.8 14.5 14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          {/* Cheeks */}
+          <circle cx="6" cy="13.5" r="1.3" fill="currentColor" fillOpacity="0.4" />
+          <circle cx="18" cy="13.5" r="1.3" fill="currentColor" fillOpacity="0.4" />
+        </svg>
+      )
+
+    case 'face_cute_blush':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Happy Closed Eyes ^ ^ */}
+          <path d="M6.5 10.5C7.5 8.2 9.5 8.2 10.5 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M13.5 10.5C14.5 8.2 16.5 8.2 17.5 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          {/* Cute Cat-like Smile */}
+          <path d="M10 14.5C11 16 13 16 14 14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          {/* Blush Cheeks */}
+          <circle cx="5.8" cy="13.5" r="1.6" fill="currentColor" fillOpacity="0.45" />
+          <circle cx="18.2" cy="13.5" r="1.6" fill="currentColor" fillOpacity="0.45" />
+        </svg>
+      )
+
+    case 'face_heart_eyes':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Left Heart Eye */}
+          <path d="M8 8.5C6.5 7 5 8.5 5 10C5 12 8 13.5 8 13.5C8 13.5 11 12 11 10C11 8.5 9.5 7 8 8.5Z" fill="currentColor" />
+          {/* Right Heart Eye */}
+          <path d="M16 8.5C14.5 7 13 8.5 13 10C13 12 16 13.5 16 13.5C16 13.5 19 12 19 10C19 8.5 17.5 7 16 8.5Z" fill="currentColor" />
+          {/* Happy Open Smile */}
+          <path d="M9.5 15.5C10.5 17 13.5 17 14.5 15.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      )
+
+    case 'face_kitty_cute':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Cat Ears */}
+          <path d="M5.5 6L4 10.5L8.5 8.5L5.5 6Z" fill="currentColor" />
+          <path d="M18.5 6L20 10.5L15.5 8.5L18.5 6Z" fill="currentColor" />
+          {/* Big Sparkle Dot Eyes */}
+          <circle cx="8" cy="11.5" r="1.6" fill="currentColor" />
+          <circle cx="16" cy="11.5" r="1.6" fill="currentColor" />
+          {/* Cat Mouth :3 */}
+          <path d="M9.5 14C10.5 15.2 12 14.2 12 13.5C12 14.2 13.5 15.2 14.5 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          {/* Cute Whiskers */}
+          <line x1="3" y1="12" x2="5.5" y2="12.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="3" y1="14" x2="5.5" y2="13.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="21" y1="12" x2="18.5" y2="12.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="21" y1="14" x2="18.5" y2="13.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      )
+
+    case 'face_happy_smile':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Big Smiling Eyes */}
+          <path d="M7 10C8 8.5 10 8.5 11 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M13 10C14 8.5 16 8.5 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          {/* Joyful Open Mouth */}
+          <path d="M8.5 13.5C8.5 16.5 15.5 16.5 15.5 13.5Z" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          {/* Cheeks */}
+          <circle cx="6" cy="13" r="1.3" fill="currentColor" fillOpacity="0.4" />
+          <circle cx="18" cy="13" r="1.3" fill="currentColor" fillOpacity="0.4" />
+        </svg>
+      )
+
+    case 'face_sleepy_dream':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Peaceful Closed Eyes */}
+          <path d="M6.5 11C7.5 12.5 9.5 12.5 10.5 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M13.5 11C14.5 12.5 16.5 12.5 17.5 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          {/* Gentle Smile */}
+          <path d="M10.5 14.5C11.5 15.5 12.5 15.5 13.5 14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          {/* Little Star Sleep Sparkle */}
+          <path d="M16 6H18L16 8H18" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+
+    case 'face_cyber_pixel':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Pixel Eyes */}
+          <rect x="6" y="8" width="3" height="3" fill="currentColor" />
+          <rect x="15" y="8" width="3" height="3" fill="currentColor" />
+          {/* Pixel Blush */}
+          <rect x="5" y="12" width="2" height="1" fill="currentColor" fillOpacity="0.5" />
+          <rect x="17" y="12" width="2" height="1" fill="currentColor" fillOpacity="0.5" />
+          {/* Pixel Smile */}
+          <rect x="8" y="14" width="8" height="2" fill="currentColor" />
+          <rect x="7" y="13" width="2" height="1" fill="currentColor" />
+          <rect x="15" y="13" width="2" height="1" fill="currentColor" />
+        </svg>
+      )
+
+    case 'face_spark_hero':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+          {/* Cool eyes */}
+          <path d="M6 10L10 11.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M18 10L14 11.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="8" cy="12" r="1.5" fill="currentColor" />
+          <circle cx="16" cy="12" r="1.5" fill="currentColor" />
+          {/* Confident Smile */}
+          <path d="M10 15C11 16.5 13.5 16 14.5 14.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      )
   }
 
   // ── 2. Реальные нейросети (Ч/Б Монохромные) ──

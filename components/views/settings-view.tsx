@@ -1084,17 +1084,17 @@ export function SettingsView() {
 
                 {/* Quick Pick Chips (Horizontal Scrollable) */}
                 <div
-                  className="flex items-center gap-1.5 overflow-x-auto min-w-0 flex-1 py-0.5 [scrollbar-width:none]"
+                  className="flex items-center gap-2 overflow-x-auto min-w-0 flex-1 py-1 [scrollbar-width:none]"
                   style={{ msOverflowStyle: 'none' }}
                 >
-                  {ZERF_CUSTOM_EMOJIS.slice(0, 16).map(item => (
+                  {ZERF_CUSTOM_EMOJIS.slice(0, 18).map(item => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => handleSelectAvatarEmoji(item.id)}
                       className={cn(
-                        'w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer select-none touch-manipulation shrink-0',
-                        'opacity-80 hover:opacity-100',
+                        'w-9 h-9 rounded-2xl flex items-center justify-center transition-all cursor-pointer select-none touch-manipulation shrink-0',
+                        'opacity-85 hover:opacity-100',
                         userAvatarEmoji === item.id
                           ? 'bg-primary/25 border-2 border-primary scale-110 shadow-2xs opacity-100'
                           : 'bg-card hover:bg-muted border border-border/70 hover:scale-105'
