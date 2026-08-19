@@ -27,28 +27,50 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream({
     start(controller) {
+      let isClosed = false
+      const safeEnqueue = (chunk: Uint8Array) => {
+        if (isClosed) return
+        try {
+          controller.enqueue(chunk)
+        } catch {
+          isClosed = true
+        }
+      }
+
       // 1. Register with SSE manager
       addSseClient(chatId, controller, req.signal)
 
-      // 2. Send initial connected event
-      controller.enqueue(
-        encoder.encode(`event: connected\ndata: ${JSON.stringify({ status: 'connected', chatId, timestamp: Date.now() })}\n\n`)
+      // 2. Send initial connected event with retry header
+      safeEnqueue(
+        encoder.encode(`retry: 3000\nevent: connected\ndata: ${JSON.stringify({ status: 'connected', chatId, timestamp: Date.now() })}\n\n`)
       )
 
-      // 3. Keep-alive heartbeat every 20 seconds
+      // 3. Periodic keep-alive comments every 8 seconds
       const heartbeatInterval = setInterval(() => {
-        try {
-          controller.enqueue(
-            encoder.encode(`event: ping\ndata: ${JSON.stringify({ time: Date.now() })}\n\n`)
-          )
-        } catch {
+        if (isClosed) {
           clearInterval(heartbeatInterval)
+          return
         }
-      }, 20000)
+        safeEnqueue(encoder.encode(`: keep-alive\n\n`))
+      }, 8000)
 
-      // 4. Clean up on client disconnect / request abort
+      // 4. Graceful rotation after 25 seconds to prevent serverless socket aborts
+      const rotationTimeout = setTimeout(() => {
+        if (!isClosed) {
+          isClosed = true
+          clearInterval(heartbeatInterval)
+          try {
+            controller.enqueue(encoder.encode(`: graceful-close\n\n`))
+            controller.close()
+          } catch {}
+        }
+      }, 25000)
+
+      // 5. Clean up on client disconnect / request abort
       req.signal.addEventListener('abort', () => {
+        isClosed = true
         clearInterval(heartbeatInterval)
+        clearTimeout(rotationTimeout)
         try {
           controller.close()
         } catch {}
@@ -59,7 +81,7 @@ export async function GET(req: NextRequest) {
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
+      'Cache-Control': 'no-cache, no-transform, no-store, must-revalidate',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
     },

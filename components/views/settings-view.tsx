@@ -538,6 +538,9 @@ export function SettingsView() {
         setAuthError(`Ошибка привязки GitHub: ${err}`)
         setTimeout(() => setAuthError(null), 5000)
         window.history.replaceState({}, '', window.location.pathname)
+      } else if (params.get('open_github_modal') === '1') {
+        openGithubModal()
+        window.history.replaceState({}, '', window.location.pathname)
       }
 
       // 3. VK OAuth Linking
@@ -1654,21 +1657,13 @@ export function SettingsView() {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <a
-                      href="/api/auth/github"
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                    >
-                      <GithubIcon className="w-3.5 h-3.5" />
-                      <span>⚡ {profileData.githubUsername || userGithub ? 'OAuth' : 'Привязать через OAuth'}</span>
-                    </a>
-
                     <button
                       type="button"
                       onClick={openGithubModal}
-                      className="py-1.5 px-2.5 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs font-medium border border-border transition-colors cursor-pointer"
-                      title="Указать логин GitHub вручную"
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
                     >
-                      Вручную
+                      <GithubIcon className="w-3.5 h-3.5" />
+                      <span>{profileData.githubUsername || userGithub ? `Изменить @${profileData.githubUsername || userGithub}` : 'Привязать GitHub'}</span>
                     </button>
 
                     <button

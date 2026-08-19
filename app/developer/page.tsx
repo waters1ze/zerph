@@ -8,7 +8,8 @@ import {
   DollarSign, CheckCircle2, AlertCircle, Play, RefreshCw,
   FolderPlus, Download, Send, Globe, Key, Lock, Puzzle, Eye,
   FileText, Cpu, CheckSquare, Bookmark, Flame, Lightbulb, Box, Bot,
-  Package, HelpCircle, Laptop, Settings, ChevronRight, CheckCheck
+  Package, HelpCircle, Laptop, Settings, ChevronRight, CheckCheck,
+  CreditCard, Info, Activity, Radio, Award
 } from 'lucide-react'
 import { getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -67,6 +68,7 @@ export default function DeveloperPage() {
   const [boundCard, setBoundCard] = useState<any>(null)
   const [payoutAmount, setPayoutAmount] = useState<string>('')
   const [payoutLoading, setPayoutLoading] = useState(false)
+  const [userGh, setUserGh] = useState<string | null>(null)
 
   // Check URL query parameters for tab
   useEffect(() => {
@@ -76,6 +78,8 @@ export default function DeveloperPage() {
       if (tabParam === 'docs' || tabParam === 'manifest' || tabParam === 'sandbox' || tabParam === 'sdk' || tabParam === 'earnings') {
         setActiveTab(tabParam as any)
       }
+      const gh = localStorage.getItem('zerf_user_github')
+      if (gh) setUserGh(gh)
     }
   }, [])
 
@@ -163,40 +167,51 @@ export default function DeveloperPage() {
   }
 
   const handleDownloadStarterKit = () => {
-    handleDownloadManifest()
+    const starterKit = {
+      'zerf-extension.json': generatedManifest,
+      'README.md': `# ${mTitle}\n\n${mDescription}\n\n## Инструкция по установке\n1. Опубликуйте этот репозиторий на GitHub.\n2. В Zerf Note перейдите в «Магазин» → «Создать расширение».\n3. Вставьте URL вашего репозитория.`,
+      'index.js': `// Zerf Note TUI Plugin Entrypoint (ESM)\nexport default function init(zerf) {\n  zerf.onCommand('${mTriggers.split(',')[0]?.trim() || '/start'}', async (ctx) => {\n    ctx.reply('Привет из расширения ${mTitle}!');\n  });\n}`
+    }
+    const blob = new Blob([JSON.stringify(starterKit, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${mName || 'zerf-plugin'}-starter-kit.json`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
-  const handleSelectTemplate = (tpl: 'research' | 'voice' | 'habits' | 'calc') => {
+  const handleSelectSandboxTemplate = (tpl: 'research' | 'voice' | 'habits' | 'calc') => {
     setSandboxTemplate(tpl)
     if (tpl === 'research') {
-      setMName('zerf-plugin-research')
-      setMTitle('Deep Research & Synthesizer')
+      setMName('zerf-plugin-deep-research')
+      setMTitle('Глубокий исследовательский ассистент')
       setMType('widget')
       setMCategory('ИИ & Промпты')
       setMIcon('🔮')
       setMTriggers('/research, исследуй тему, найди факты')
-      setMAiInstructions('Когда пользователь запрашивает исследование темы, синтезируй проверенные источники и предложи создать структурированную задачу.')
+      setMAiInstructions('Анализируй научные и технические темы, извлекай главное и структурируй в 3 тезиса.')
       setSandboxCommand('/research ИИ тренды 2026')
     } else if (tpl === 'voice') {
-      setMName('zerf-plugin-voice-companion')
-      setMTitle('Голосовой собеседник AI')
+      setMName('zerf-plugin-voice-whisper')
+      setMTitle('Голосовой модуль Zerf Whisper')
       setMType('widget')
-      setMCategory('Виджеты & Фокус')
+      setMCategory('ИИ & Промпты')
       setMIcon('🎙️')
-      setMTriggers('/voice, поговори со мной, собеседник')
-      setMAiInstructions('Веди живой двусторонний диалог, отвечай дружелюбным мужским голосом и помогай планировать день.')
-      setSandboxCommand('/voice как спланировать сегодняшний день?')
+      setMTriggers('/voice, скажи вслух, озвучь')
+      setMAiInstructions('Озвучивай саммари дня и задачи живым голосом.')
+      setSandboxCommand('/voice Озвучь главное на сегодня')
     } else if (tpl === 'habits') {
-      setMName('zerf-plugin-habit-tracker')
-      setMTitle('Трекер привычек и спорта')
+      setMName('zerf-plugin-habit-streaks')
+      setMTitle('Трекер супер-серий привычек')
       setMType('template')
       setMCategory('Привычки & Здоровье')
-      setMIcon('🏋️')
-      setMTriggers('/workout, /habit, спорт, привычка')
-      setMAiInstructions('Формируй персональный план тренировок и привычек, автоматически рассчитывай калории и время отдыха.')
-      setSandboxCommand('/workout 30 минут кардио')
+      setMIcon('🔥')
+      setMTriggers('/streak, серия, привычка')
+      setMAiInstructions('Отслеживай прогресс серий привычек и мотивируй пользователя не сбивать темп.')
+      setSandboxCommand('/streak Проверить медитацию')
     } else if (tpl === 'calc') {
-      setMName('zerf-plugin-smart-calculator')
+      setMName('zerf-plugin-smart-calc')
       setMTitle('Умный финансовый калькулятор')
       setMType('integration')
       setMCategory('Интеграции & API')
@@ -320,38 +335,41 @@ Rules:
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/20">
       {/* Topbar */}
       <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md px-4 md:px-8 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <a
             href="/"
-            className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-semibold"
+            className="p-2 rounded-xl bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-all flex items-center gap-1.5 text-xs font-semibold border border-border"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>В приложение</span>
           </a>
-          <div className="h-4 w-px bg-border" />
+          <div className="h-4 w-px bg-border hidden sm:block" />
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30">
+            <div className="p-1.5 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-xs">
               <Code2 className="w-4 h-4" />
             </div>
-            <h1 className="font-bold text-sm md:text-base">Zerf Extensions Developer Hub</h1>
+            <div>
+              <h1 className="font-bold text-sm md:text-base leading-tight">Zerf Developer Studio</h1>
+              <p className="text-[10px] text-muted-foreground hidden sm:block">Платформа создания расширений, виджетов и тем</p>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyAiSkill}
-            className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs font-bold font-mono flex items-center gap-1.5 border border-purple-500/25 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs font-bold font-mono flex items-center gap-1.5 border border-purple-500/25 transition-all cursor-pointer shadow-2xs"
             title="Скопировать системную инструкцию / Скилл для нейросети"
           >
             {copiedSkill ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Bot className="w-3.5 h-3.5" />}
             <span>{copiedSkill ? 'Скилл скопирован!' : 'Промпт для ИИ'}</span>
           </button>
 
-          <div className="px-3 py-1 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-bold font-mono flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="px-3 py-1 rounded-xl bg-muted/60 border border-border text-foreground text-xs font-bold font-mono flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span>SDK v2.0</span>
           </div>
         </div>
@@ -376,7 +394,7 @@ Rules:
                 'px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer',
                 active
                   ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/80'
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/80'
               )}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -386,335 +404,279 @@ Rules:
         })}
       </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 md:p-8 space-y-6">
-        {/* ── TAB 1: MANIFEST BUILDER ── */}
-        {activeTab === 'manifest' && (
-          <div className="space-y-4">
-            {/* Documentation Requirement Banner */}
-            <div className="p-4 rounded-3xl bg-purple-500/10 border border-purple-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-2xl bg-purple-500/20 text-purple-400 shrink-0">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-foreground text-xs md:text-sm">Перед созданием расширения изучите документацию</h4>
-                  <p className="text-[11px] text-muted-foreground">Узнайте все доступные permissions, Webhook API, схему настроек и правила безопасности</p>
-                </div>
-              </div>
+      {/* Main Content Area: Left Tabs Workspace + Right Sidebar Blocks */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* ── LEFT / CENTER COLUMN (8 cols): Main Interactive Workspace ── */}
+          <div className="lg:col-span-8 space-y-6">
 
-              <div className="flex items-center gap-2 flex-wrap shrink-0">
-                <button
-                  onClick={() => setActiveTab('docs')}
-                  className="px-3.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-semibold text-xs flex items-center gap-1.5 border border-purple-500/40 transition-colors cursor-pointer"
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>Открыть документацию SDK</span>
-                </button>
-
-                <button
-                  onClick={handleLoadUniversalTemplate}
-                  className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
-                  title="Заполнить форму всеми полями универсального шаблона"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Загрузить универсальный шаблон</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {/* Left Column: Interactive Form */}
-              <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                  <h3 className="font-bold text-sm flex items-center gap-2">
-                    <FolderPlus className="w-4 h-4 text-primary" />
-                    <span>Параметры расширения</span>
-                  </h3>
-                  <span className="text-[10px] text-muted-foreground font-mono">zerf-extension.json</span>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="font-semibold text-foreground">Package ID (name)</label>
-                      <input
-                        type="text"
-                        value={mName}
-                        onChange={e => setMName(e.target.value)}
-                        placeholder="zerf-plugin-name"
-                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
-                      />
+            {/* ── TAB 1: MANIFEST BUILDER ── */}
+            {activeTab === 'manifest' && (
+              <div className="space-y-4">
+                {/* Documentation Requirement Banner */}
+                <div className="p-4 rounded-3xl bg-purple-500/10 border border-purple-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-2xl bg-purple-500/20 text-purple-400 shrink-0">
+                      <BookOpen className="w-5 h-5" />
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="font-semibold text-foreground">Название (title)</label>
-                      <input
-                        type="text"
-                        value={mTitle}
-                        onChange={e => setMTitle(e.target.value)}
-                        placeholder="My Awesome Plugin"
-                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                      />
+                    <div>
+                      <h4 className="font-bold text-foreground text-xs md:text-sm">Перед созданием расширения изучите документацию</h4>
+                      <p className="text-[11px] text-muted-foreground">Узнайте все доступные permissions, Webhook API, схему настроек и правила безопасности</p>
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground">Описание</label>
-                    <textarea
-                      value={mDescription}
-                      onChange={e => setMDescription(e.target.value)}
-                      rows={2}
-                      placeholder="Краткое описание функционала..."
-                      className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary resize-none text-xs"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="font-semibold text-foreground">Тип</label>
-                      <select
-                        value={mType}
-                        onChange={e => setMType(e.target.value as any)}
-                        className="w-full h-9 px-2 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs cursor-pointer"
-                      >
-                        <option value="widget">Виджет</option>
-                        <option value="template">Шаблон</option>
-                        <option value="theme">Тема</option>
-                        <option value="integration">Интеграция</option>
-                        <option value="prompt">Промпт</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="font-semibold text-foreground">Иконка (Emoji)</label>
-                      <input
-                        type="text"
-                        value={mIcon}
-                        onChange={e => setMIcon(e.target.value)}
-                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-center text-xs"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="font-semibold text-foreground">Мин. тариф</label>
-                      <select
-                        value={mMinPlan}
-                        onChange={e => setMMinPlan(e.target.value as any)}
-                        className="w-full h-9 px-2 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs cursor-pointer"
-                      >
-                        <option value="free">Free</option>
-                        <option value="plus">Plus</option>
-                        <option value="pro">Pro</option>
-                        <option value="corp">Corp</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground">Триггеры команд (через запятую)</label>
-                    <input
-                      type="text"
-                      value={mTriggers}
-                      onChange={e => setMTriggers(e.target.value)}
-                      placeholder="/research, найди факты, исследуй"
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground">Инструкции для ИИ (AI Instructions)</label>
-                    <textarea
-                      value={mAiInstructions}
-                      onChange={e => setMAiInstructions(e.target.value)}
-                      rows={3}
-                      placeholder="Как нейросеть Zerf Note должна обрабатывать запросы пользователей..."
-                      className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary resize-none text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground flex items-center justify-between">
-                      <span>HTTPS AI Endpoint URL (Опционально)</span>
-                      <span className="text-[10px] text-muted-foreground">Внешний вебхук</span>
-                    </label>
-                    <input
-                      type="url"
-                      value={mEndpoint}
-                      onChange={e => setMEndpoint(e.target.value)}
-                      placeholder="https://api.yourdomain.com/v1/zerf-hook"
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Live Generated Code Preview */}
-              <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4 flex flex-col h-full">
-                <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Code2 className="w-4 h-4 text-emerald-400" />
-                    <h3 className="font-bold text-sm text-foreground">Сгенерированный zerf-extension.json</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                     <button
-                      onClick={handleCopyManifest}
-                      className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+                      onClick={() => setActiveTab('docs')}
+                      className="px-3.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-semibold text-xs flex items-center gap-1.5 border border-purple-500/40 transition-colors cursor-pointer"
                     >
-                      {copiedJson ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedJson ? 'Скопировано' : 'Копировать'}</span>
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Открыть документацию SDK</span>
                     </button>
+
                     <button
-                      onClick={handleDownloadManifest}
-                      className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                      onClick={handleLoadUniversalTemplate}
+                      className="px-3.5 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+                      title="Заполнить форму всеми полями универсального шаблона"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Скачать .json</span>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Универсальный шаблон</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="relative flex-1">
-                  <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 text-[11px] font-mono overflow-auto max-h-[480px] border border-border/60 leading-relaxed">
-                    {manifestJsonString}
-                  </pre>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                  {/* Form */}
+                  <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                      <h3 className="font-bold text-sm flex items-center gap-2">
+                        <FolderPlus className="w-4 h-4 text-primary" />
+                        <span>Параметры расширения</span>
+                      </h3>
+                      <span className="text-[10px] text-muted-foreground font-mono">zerf-extension.json</span>
+                    </div>
 
-        {/* ── TAB 2: INTERACTIVE EXTENSION SANDBOX ── */}
-        {activeTab === 'sandbox' && (
-          <div className="space-y-6">
-            <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
-                <div>
-                  <h3 className="font-bold text-base flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-amber-400" />
-                    <span>Интерактивная песочница & Эмулятор ядра Zerf</span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Тестируйте логику выполнения, вызовы RPC-методов, парсинг команд и генерацию задач в изолированной среде
-                  </p>
-                </div>
+                    <div className="space-y-3 text-xs">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="font-semibold text-foreground">Package ID (name)</label>
+                          <input
+                            type="text"
+                            value={mName}
+                            onChange={e => setMName(e.target.value)}
+                            placeholder="zerf-plugin-name"
+                            className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                          />
+                        </div>
 
-                <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-2xl border border-border">
-                  {[
-                    { id: 'research', label: '🔮 Deep Research', icon: Sparkles },
-                    { id: 'voice', label: '🎙️ Голос Zerfic', icon: Bot },
-                    { id: 'habits', label: '🏋️ Спорт & Привычки', icon: CheckSquare },
-                    { id: 'calc', label: '🧮 Калькулятор', icon: Cpu },
-                  ].map(tpl => (
-                    <button
-                      key={tpl.id}
-                      onClick={() => handleSelectTemplate(tpl.id as any)}
-                      className={cn(
-                        'px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1',
-                        sandboxTemplate === tpl.id
-                          ? 'bg-card text-foreground shadow-xs font-bold border border-border'
-                          : 'text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      <span>{tpl.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                        <div className="space-y-1">
+                          <label className="font-semibold text-foreground">Название (title)</label>
+                          <input
+                            type="text"
+                            value={mTitle}
+                            onChange={e => setMTitle(e.target.value)}
+                            placeholder="My Awesome Plugin"
+                            className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
+                          />
+                        </div>
+                      </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Left (5 cols): Trigger Input & Payload Config */}
-                <div className="lg:col-span-5 space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      <span>Команда или триггер для эмуляции:</span>
-                      <span className="text-[10px] text-muted-foreground font-mono">stdin/rpc</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={sandboxCommand}
-                        onChange={e => setSandboxCommand(e.target.value)}
-                        placeholder="/research ИИ тренды 2026"
-                        className="flex-1 h-10 px-3.5 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary font-mono"
-                      />
-                      <button
-                        onClick={handleRunSandbox}
-                        disabled={sandboxRunning || !sandboxCommand.trim()}
-                        className="h-10 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-xs disabled:opacity-40 cursor-pointer shrink-0 transition-all"
-                      >
-                        {sandboxRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                        <span>Запустить</span>
-                      </button>
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground">Описание</label>
+                        <textarea
+                          value={mDescription}
+                          onChange={e => setMDescription(e.target.value)}
+                          rows={2}
+                          placeholder="Краткое описание функционала..."
+                          className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary resize-none text-xs"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="font-semibold text-foreground">Тип</label>
+                          <select
+                            value={mType}
+                            onChange={e => setMType(e.target.value as any)}
+                            className="w-full h-9 px-2 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs cursor-pointer"
+                          >
+                            <option value="widget">Виджет</option>
+                            <option value="template">Шаблон</option>
+                            <option value="theme">Тема</option>
+                            <option value="integration">Интеграция</option>
+                            <option value="prompt">Промпт</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-semibold text-foreground">Иконка</label>
+                          <input
+                            type="text"
+                            value={mIcon}
+                            onChange={e => setMIcon(e.target.value)}
+                            className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-center text-xs"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-semibold text-foreground">Мин. тариф</label>
+                          <select
+                            value={mMinPlan}
+                            onChange={e => setMMinPlan(e.target.value as any)}
+                            className="w-full h-9 px-2 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs cursor-pointer"
+                          >
+                            <option value="free">Free</option>
+                            <option value="plus">Plus</option>
+                            <option value="pro">Pro</option>
+                            <option value="corp">Corp</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground">Триггеры команд (через запятую)</label>
+                        <input
+                          type="text"
+                          value={mTriggers}
+                          onChange={e => setMTriggers(e.target.value)}
+                          placeholder="/research, найди факты, исследуй"
+                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground">Инструкции для ИИ (AI Instructions)</label>
+                        <textarea
+                          value={mAiInstructions}
+                          onChange={e => setMAiInstructions(e.target.value)}
+                          rows={3}
+                          placeholder="Как нейросеть Zerf Note должна обрабатывать запросы пользователей..."
+                          className="w-full p-2.5 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary resize-none text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-semibold text-foreground flex items-center justify-between">
+                          <span>HTTPS AI Endpoint URL (Опционально)</span>
+                          <span className="text-[10px] text-muted-foreground">Внешний вебхук</span>
+                        </label>
+                        <input
+                          type="url"
+                          value={mEndpoint}
+                          onChange={e => setMEndpoint(e.target.value)}
+                          placeholder="https://api.yourdomain.com/v1/zerf-hook"
+                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-muted/30 border border-border/80 space-y-2 text-xs">
-                    <span className="font-bold text-foreground block">Текущий тестовый плагин:</span>
-                    <div className="flex items-center gap-2 text-muted-foreground font-mono text-[11px]">
-                      <span>ID: <b>{mName}</b></span>
-                      <span>•</span>
-                      <span>v{mVersion}</span>
-                      <span>•</span>
-                      <span>{mCategory}</span>
+                  {/* Live JSON Preview */}
+                  <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4 flex flex-col h-full">
+                    <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Code2 className="w-4 h-4 text-emerald-400" />
+                        <h3 className="font-bold text-sm text-foreground">Сгенерированный манифест</h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleCopyManifest}
+                          className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-colors cursor-pointer"
+                        >
+                          {copiedJson ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedJson ? 'Скопировано' : 'Копировать'}</span>
+                        </button>
+                        <button
+                          onClick={handleDownloadManifest}
+                          className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>.json</span>
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">
-                      {mAiInstructions}
+
+                    <div className="relative flex-1">
+                      <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 text-[11px] font-mono overflow-auto max-h-[440px] border border-border/60 leading-relaxed">
+                        {manifestJsonString}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── TAB 2: INTERACTIVE EXTENSION SANDBOX ── */}
+            {activeTab === 'sandbox' && (
+              <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
+                  <div>
+                    <h3 className="font-bold text-base flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-amber-400" />
+                      <span>Интерактивная песочница & Эмулятор ядра Zerf</span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Тестируйте логику выполнения, вызовы RPC-методов, парсинг команд и генерацию задач в изолированной среде
                     </p>
                   </div>
 
-                  {/* Widget Visual Preview Box */}
-                  <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-3">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Eye className="w-3.5 h-3.5 text-primary" />
-                      <span>Предпросмотр виджета в интерфейсе:</span>
-                    </span>
-
-                    <div className="p-3.5 rounded-xl bg-muted/40 border border-border flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-lg shrink-0">
-                        {mIcon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-foreground truncate">{mTitle}</h4>
-                          <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[9px] font-bold">
-                            {mType.toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground truncate">{mDescription}</p>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-xl border border-border shrink-0 text-xs">
+                    {(['research', 'voice', 'habits', 'calc'] as const).map(tpl => (
+                      <button
+                        key={tpl}
+                        onClick={() => handleSelectSandboxTemplate(tpl)}
+                        className={cn(
+                          'px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer capitalize',
+                          sandboxTemplate === tpl ? 'bg-card text-foreground shadow-2xs font-bold' : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        {tpl}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Right (7 cols): Live Sandbox Execution Console & Output */}
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-foreground">
-                      <span className="flex items-center gap-1.5 text-amber-400">
-                        <Terminal className="w-3.5 h-3.5" />
-                        <span>Консоль выполнения (Sandbox Runtime VM):</span>
-                      </span>
-                      {sandboxOutput && (
-                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Status {sandboxOutput.status} OK • {sandboxOutput.latencyMs}ms</span>
-                        </span>
-                      )}
-                    </div>
+                {/* Command Bar */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Terminal className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={sandboxCommand}
+                      onChange={e => setSandboxCommand(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleRunSandbox()}
+                      placeholder="Введите команду расширения (например, /research ИИ)..."
+                      className="w-full h-11 pl-10 pr-4 rounded-2xl bg-muted/40 border border-border text-foreground font-mono text-xs outline-none focus:border-primary"
+                    />
+                  </div>
 
-                    <div className="p-4 rounded-2xl bg-zinc-950 text-zinc-300 font-mono text-[11px] h-[200px] overflow-y-auto border border-border/60 space-y-1.5">
+                  <button
+                    onClick={handleRunSandbox}
+                    disabled={sandboxRunning}
+                    className="h-11 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {sandboxRunning ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                    <span>{sandboxRunning ? 'Выполнение...' : 'Запустить тест'}</span>
+                  </button>
+                </div>
+
+                {/* Terminal Logs & Output */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-border/60 flex flex-col h-[280px]">
+                    <p className="text-[11px] font-mono text-zinc-400 border-b border-zinc-800 pb-2 mb-2 flex items-center justify-between">
+                      <span>CONSOLE VM LOGS</span>
+                      <span className="text-emerald-400">ONLINE</span>
+                    </p>
+                    <div className="flex-1 overflow-auto space-y-1.5 font-mono text-[11px]">
                       {sandboxLogs.map(log => (
-                        <div key={log.id} className="flex items-start gap-2 leading-relaxed">
-                          <span className="text-zinc-500 shrink-0">[{log.time}]</span>
-                          <span
-                            className={cn(
-                              log.type === 'success' && 'text-emerald-400 font-semibold',
-                              log.type === 'rpc' && 'text-sky-400',
-                              log.type === 'warn' && 'text-amber-400',
-                              log.type === 'info' && 'text-zinc-300'
-                            )}
-                          >
+                        <div key={log.id} className="flex items-start gap-2">
+                          <span className="text-zinc-600 shrink-0">{log.time}</span>
+                          <span className={cn(
+                            log.type === 'success' ? 'text-emerald-400 font-bold' :
+                            log.type === 'rpc' ? 'text-cyan-400' :
+                            log.type === 'warn' ? 'text-amber-400' : 'text-zinc-300'
+                          )}>
                             {log.msg}
                           </span>
                         </div>
@@ -722,372 +684,400 @@ Rules:
                     </div>
                   </div>
 
-                  {/* Sandbox Simulated Action Output */}
-                  {sandboxOutput && (
-                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs space-y-2.5">
-                      <div className="flex items-center justify-between font-bold text-emerald-400">
-                        <span className="flex items-center gap-1.5">
-                          <CheckCheck className="w-4 h-4" />
-                          <span>Результат вызова Zerf Core API</span>
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border flex flex-col h-[280px]">
+                    <p className="text-[11px] font-bold text-foreground border-b border-border/60 pb-2 mb-2 flex items-center justify-between">
+                      <span>РЕЗУЛЬТАТ ЭМУЛЯТОРА ZERF NOTE</span>
+                      {sandboxOutput && (
+                        <span className="text-emerald-400 font-mono text-[10px]">
+                          HTTP {sandboxOutput.status} ({sandboxOutput.latencyMs}ms)
                         </span>
-                        <span className="font-mono text-[10px]">200 OK</span>
-                      </div>
-
-                      <p className="text-foreground font-medium text-xs leading-relaxed">
-                        {sandboxOutput.responseMessage}
-                      </p>
-
-                      {sandboxOutput.createdTasks && sandboxOutput.createdTasks.length > 0 && (
-                        <div className="pt-2 border-t border-emerald-500/20 space-y-1">
-                          <span className="text-[10px] uppercase font-bold text-emerald-400/90 tracking-wider">
-                            Созданные задачи в базе Zerf:
-                          </span>
-                          {sandboxOutput.createdTasks.map((t, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5 text-foreground text-[11px]">
-                              <CheckSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span>{t}</span>
-                            </div>
-                          ))}
-                        </div>
                       )}
-                    </div>
-                  )}
+                    </p>
+                    {sandboxOutput ? (
+                      <div className="flex-1 overflow-auto space-y-3 text-xs">
+                        <p className="text-foreground font-medium bg-card/80 p-3 rounded-xl border border-border">
+                          {sandboxOutput.responseMessage}
+                        </p>
+                        {sandboxOutput.createdTasks && (
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Созданные задачи:</span>
+                            {sandboxOutput.createdTasks.map((t, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-xs text-foreground bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-lg">
+                                <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                                <span>{t}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">
+                        Запустите тест для получения ответа
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* ── TAB 3: NPM PACKAGE @zerf/sdk & ARCHITECTURE ── */}
-        {activeTab === 'sdk' && (
-          <div className="space-y-6">
-            <div className="p-6 md:p-8 rounded-3xl bg-card border border-border shadow-xs space-y-6 leading-relaxed">
-              <div className="border-b border-border/60 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold flex items-center gap-2">
+            {/* ── TAB 3: NPM SDK @zerf/sdk ── */}
+            {activeTab === 'sdk' && (
+              <div className="p-6 md:p-8 rounded-3xl bg-card border border-border shadow-xs space-y-6">
+                <div className="border-b border-border/60 pb-4">
+                  <h3 className="font-bold text-base flex items-center gap-2">
                     <Package className="w-5 h-5 text-primary" />
-                    <span>NPM Пакет @zerf/sdk: Архитектура и Разработка</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Узнайте, как устроен официальный SDK, как расширения исполняются внутри Zerf Note и как писать надежный код на TypeScript
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="px-3.5 py-1.5 rounded-xl bg-zinc-950 border border-border/80 font-mono text-xs text-emerald-400 flex items-center gap-2">
-                    <span>npm i @zerf/sdk</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText('npm install @zerf/sdk')
-                        setCopiedInstallCmd(true)
-                        setTimeout(() => setCopiedInstallCmd(false), 2000)
-                      }}
-                      className="text-zinc-400 hover:text-white cursor-pointer"
-                    >
-                      {copiedInstallCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3 Key Concepts of SDK */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-5 rounded-2xl bg-muted/30 border border-border space-y-2">
-                  <div className="p-2 w-fit rounded-xl bg-primary/10 text-primary">
-                    <Cpu className="w-4 h-4" />
-                  </div>
-                  <h4 className="font-bold text-xs text-foreground">1. Изолированная Песочница</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Плагины исполняются в безопасном окружении (Web Workers & Secure Sandbox) без прямого доступа к приватным кукам или токенам авторизации других пользователей.
-                  </p>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-muted/30 border border-border space-y-2">
-                  <div className="p-2 w-fit rounded-xl bg-emerald-500/10 text-emerald-400">
-                    <Layers className="w-4 h-4" />
-                  </div>
-                  <h4 className="font-bold text-xs text-foreground">2. ZerfContext RPC API</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Через объект <code className="font-mono text-emerald-400">ctx</code> плагин получает доступ к методам создания заметок (<code className="font-mono">ctx.notes</code>), задач (<code className="font-mono">ctx.tasks</code>) и вызову ИИ (<code className="font-mono">ctx.ai</code>).
-                  </p>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-muted/30 border border-border space-y-2">
-                  <div className="p-2 w-fit rounded-xl bg-amber-500/10 text-amber-400">
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <h4 className="font-bold text-xs text-foreground">3. 100% Zero-Config на GitHub</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Вам не нужно настраивать собственный бэкенд: достаточно разместить <code className="font-mono text-amber-400">zerf-extension.json</code> в GitHub репозитории, и Zerf Note мгновенно подключит его в Каталог.
-                  </p>
-                </div>
-              </div>
-
-              {/* Code Example */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                    <Code2 className="w-4 h-4 text-emerald-400" />
-                    <span>Пример создания TypeScript-плагина с @zerf/sdk:</span>
+                    <span>Официальный SDK пакет: @zerf/sdk</span>
                   </h3>
-                  <span className="text-[10px] text-muted-foreground font-mono">src/index.ts</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Строгая типизация TypeScript, вспомогательные функции для триггеров и готовые клиенты RPC API
+                  </p>
                 </div>
 
-                <pre className="p-5 rounded-2xl bg-zinc-950 text-zinc-200 text-xs font-mono overflow-auto border border-border/60 leading-relaxed">
+                <div className="p-4 rounded-2xl bg-zinc-950 border border-border/60 flex items-center justify-between gap-3">
+                  <code className="text-xs font-mono text-emerald-400">npm install @zerf/sdk</code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText('npm install @zerf/sdk')
+                      setCopiedInstallCmd(true)
+                      setTimeout(() => setCopiedInstallCmd(false), 2000)
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 border border-zinc-800 transition-colors cursor-pointer"
+                  >
+                    {copiedInstallCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedInstallCmd ? 'Скопировано!' : 'Копировать'}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-foreground">Пример использования в TypeScript:</h4>
+                  <pre className="p-4 rounded-2xl bg-zinc-950 text-zinc-200 text-xs font-mono overflow-auto border border-border/60 leading-relaxed">
 {`import { defineExtension, type ZerfContext } from '@zerf/sdk'
 
 export default defineExtension({
-  name: 'zerf-plugin-fitness-coach',
-  title: 'Фитнес-тренер AI',
-  version: '1.0.0',
-  type: 'widget',
-  category: 'Привычки & Здоровье',
-  icon: '🏋️',
-  triggers: ['/workout', 'тренировка', 'спорт'],
-  aiInstructions: 'Анализируй цели пользователя и генерируй персональные тренировки с разминкой и подходами.',
-  
-  // Обработчик команд из чата или Telegram-бота
-  async onCommand(ctx: ZerfContext, cmd: string, args: string[]) {
-    const topic = args.join(' ') || 'силовая тренировка'
-    
-    // 1. Вызов нейросети через защищенный AI-прокси Zerf
-    const plan = await ctx.ai.generate(\`Составь тренировочный план на тему: \${topic}\`)
-    
-    // 2. Создание задачи в календаре / списке задач пользователя
-    const task = await ctx.tasks.create({
-      title: \`🏋️ Тренировка: \${topic}\`,
-      description: plan,
-      priority: 'high',
-      dueDate: new Date().toISOString()
-    })
-
-    return {
-      success: true,
-      message: \`✅ Тренировка создана и добавлена в задачи (ID: \${task.id})!\`
-    }
-  }
-})`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 4: AUTHOR EARNINGS & PAYOUT ── */}
-        {activeTab === 'earnings' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">Баланс автора к выводу</span>
-                <p className="text-2xl font-black text-foreground">{authorStats.balance} ₽</p>
-                <span className="text-[10px] text-emerald-400 font-semibold">80% от всех продаж</span>
-              </div>
-              <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">Всего заработано</span>
-                <p className="text-2xl font-black text-foreground">{authorStats.totalEarned} ₽</p>
-                <span className="text-[10px] text-muted-foreground font-mono">За всё время</span>
-              </div>
-              <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">Количество продаж</span>
-                <p className="text-2xl font-black text-foreground">{authorStats.salesCount}</p>
-                <span className="text-[10px] text-muted-foreground font-mono">В магазине Zerf</span>
-              </div>
-            </div>
-
-            {/* Payout Request Card */}
-            <div className="p-6 rounded-3xl bg-card border border-border shadow-xs space-y-4 max-w-xl">
-              <div className="border-b border-border/60 pb-3">
-                <h3 className="font-bold text-sm flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
-                  <span>Запрос выплаты средств</span>
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Вывод на Банковскую Карту РФ, СБП или ЮMoney (мин. 100 ₽)
-                </p>
-              </div>
-
-              {boundCard ? (
-                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border text-xs space-y-1">
-                  <p className="font-semibold text-foreground">
-                    Реквизиты: {boundCard.payoutType === 'sbp' ? `⚡ СБП: ${boundCard.phone}` : `💳 Карта: ${boundCard.cardNumber}`}
-                  </p>
-                  {boundCard.bankName && <p className="text-muted-foreground text-[11px]">Банк: {boundCard.bankName}</p>}
-                </div>
-              ) : (
-                <p className="text-xs text-amber-400">
-                  Привяжите реквизиты для выплат в разделе «Магазин расширений» на главной странице.
-                </p>
-              )}
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={payoutAmount}
-                  onChange={e => setPayoutAmount(e.target.value)}
-                  placeholder={`Сумма (макс. ${authorStats.balance} ₽)`}
-                  className="flex-1 h-10 px-3.5 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary"
-                />
-                <button
-                  onClick={handleRequestPayout}
-                  disabled={payoutLoading || authorStats.balance < 100}
-                  className="h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs disabled:opacity-40 cursor-pointer shrink-0"
-                >
-                  {payoutLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>Запросить вывод</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 5: COMPREHENSIVE SDK DOCUMENTATION ── */}
-        {activeTab === 'docs' && (
-          <div className="p-6 md:p-8 rounded-3xl bg-card border border-border shadow-xs space-y-6 leading-relaxed">
-            {/* Header & Quick Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
-              <div>
-                <h2 className="text-lg font-bold flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-primary" />
-                  <span>Полный справочник разработчика Zerf Note SDK</span>
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Спецификация манифестов, Webhook API, CLI-модулей, UI-настроек, лимитов и монетизации
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={handleCopyAiSkill}
-                  className="px-3.5 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 font-bold text-xs flex items-center gap-1.5 border border-purple-500/30 transition-colors cursor-pointer"
-                >
-                  {copiedSkill ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Bot className="w-3.5 h-3.5" />}
-                  <span>{copiedSkill ? 'Скилл скопирован!' : 'Скопировать Скилл для ИИ'}</span>
-                </button>
-
-                <button
-                  onClick={handleDownloadStarterKit}
-                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Скачать Starter Kit JSON</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Sub-Navigation for Documentation */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-border/40 text-xs">
-              {[
-                { id: 'quickstart', label: '🚀 Быстрый старт' },
-                { id: 'npm_sdk', label: '📦 @zerf/sdk' },
-                { id: 'manifest', label: '📜 zerf-extension.json' },
-                { id: 'permissions', label: '🔑 Разрешения' },
-                { id: 'settings', label: '⚙️ UI Настройки' },
-                { id: 'ai_webhook', label: '🧠 AI Webhook API' },
-                { id: 'cli', label: '💻 TUI CLI Плагины' },
-                { id: 'limits', label: '🛡️ Лимиты и Безопасность' },
-                { id: 'monetization', label: '💰 Монетизация 80/20' },
-                { id: 'skill', label: '🤖 AI Agent Skill' },
-              ].map(sub => (
-                <button
-                  key={sub.id}
-                  onClick={() => setDocSection(sub.id as any)}
-                  className={cn(
-                    'px-3 py-1 rounded-xl font-medium transition-all shrink-0 cursor-pointer',
-                    docSection === sub.id
-                      ? 'bg-primary/15 text-primary border border-primary/30 font-bold'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                  )}
-                >
-                  {sub.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Sub-Section Content */}
-            <div className="space-y-6 text-sm text-foreground/90 pt-2">
-              {/* 1. QUICKSTART */}
-              {docSection === 'quickstart' && (
-                <section className="space-y-4">
-                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                    <span>🚀 Быстрый старт за 2 минуты</span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Расширение для Zerf Note состоит из GitHub-репозитория с файлом <code className="font-mono text-primary font-bold">zerf-extension.json</code>.
-                  </p>
-
-                  <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-3">
-                    <h4 className="font-bold text-xs text-foreground">Пошаговый план публикации:</h4>
-                    <ol className="list-decimal list-inside space-y-2 text-xs text-muted-foreground">
-                      <li>Создайте публичный или приватный репозиторий на GitHub (например, <code className="font-mono text-foreground font-semibold">my-zerf-plugin</code>).</li>
-                      <li>Сгенерируйте и поместите в корень репозитория файл <code className="font-mono text-primary font-bold">zerf-extension.json</code>.</li>
-                      <li>Зайдите в Zerf Note в раздел <b>«Магазин расширений» → «+ Создать расширение»</b>.</li>
-                      <li>Вставьте ссылку на ваш GitHub-репозиторий — манифест автоматически спарсится, верифицируется и будет готов к публикации!</li>
-                    </ol>
-                  </div>
-                </section>
-              )}
-
-              {/* 2. NPM SDK */}
-              {docSection === 'npm_sdk' && (
-                <section className="space-y-4">
-                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                    <span>📦 Разработка с пакетом @zerf/sdk</span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Пакет <code className="font-mono text-primary font-bold">@zerf/sdk</code> даёт вам полную поддержку TypeScript, автодополнение типов для триггеров и безопасные RPC-клиенты.
-                  </p>
-                  <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 text-xs font-mono overflow-auto border border-border/60">
-{`npm install @zerf/sdk
-
-import { defineExtension } from '@zerf/sdk'
-
-export default defineExtension({
-  name: 'my-plugin',
-  title: 'Мой плагин',
+  name: 'my-custom-plugin',
+  title: 'Мое кастомное расширение',
   version: '1.0.0',
   type: 'widget',
   category: 'ИИ & Промпты',
   icon: '⚡',
-  triggers: ['/mycmd'],
-  aiInstructions: 'Выполняй команду по запросу пользователя'
+  triggers: ['/mycmd', 'запусти анализ'],
+  aiInstructions: 'Выполняй анализ по запросу и создавай задачи в Zerf Note',
+  async onExecute(ctx: ZerfContext) {
+    const query = ctx.command.args
+    const result = await ctx.ai.prompt(\`Сделай краткое резюме: \${query}\`)
+    
+    // Создаем задачу в аккаунте пользователя
+    await ctx.tasks.create({
+      title: \`Изучить: \${query}\`,
+      priority: 'high'
+    })
+
+    return { message: result }
+  }
 })`}
                   </pre>
-                </section>
-              )}
+                </div>
+              </div>
+            )}
 
-              {/* 3. MANIFEST SPEC */}
-              {docSection === 'manifest' && (
-                <section className="space-y-4">
-                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                    <span>📜 Спецификация zerf-extension.json</span>
+            {/* ── TAB 4: EARNINGS & MONETIZATION ── */}
+            {activeTab === 'earnings' && (
+              <div className="p-6 md:p-8 rounded-3xl bg-card border border-border shadow-xs space-y-6">
+                <div className="border-b border-border/60 pb-4">
+                  <h3 className="font-bold text-base flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-emerald-400" />
+                    <span>Монетизация расширений & Баланс автора (80/20)</span>
                   </h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Манифест определяет название, иконку, команды, права и точку входа расширения.
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Получайте 80% от каждой покупки вашего расширения с мгновенным выводом на карту РФ, СБП или ЮMoney
                   </p>
-                  <pre className="p-4 rounded-2xl bg-zinc-950 text-zinc-200 text-xs font-mono overflow-auto border border-border/60">
-{manifestJsonString}
-                  </pre>
-                </section>
-              )}
+                </div>
 
-              {/* 4. MONETIZATION */}
-              {docSection === 'monetization' && (
-                <section className="space-y-4">
-                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                    <span>💰 Монетизация и Выплаты (80/20)</span>
-                  </h3>
-                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-2 text-xs">
-                    <p className="font-bold text-emerald-400">80% от всех покупок вашего расширения начисляются автору!</p>
-                    <p className="text-muted-foreground">
-                      Выплаты осуществляются мгновенно или по запросу на привязанную карту РФ / СБП / ЮMoney.
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-2xl bg-muted/40 border border-border">
+                    <p className="text-[11px] text-muted-foreground">Доступный баланс</p>
+                    <p className="text-xl font-bold text-emerald-400 mt-1">{authorStats.balance} ₽</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-muted/40 border border-border">
+                    <p className="text-[11px] text-muted-foreground">Всего заработано</p>
+                    <p className="text-xl font-bold text-foreground mt-1">{authorStats.totalEarned} ₽</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-muted/40 border border-border">
+                    <p className="text-[11px] text-muted-foreground">Продажи</p>
+                    <p className="text-xl font-bold text-foreground mt-1">{authorStats.salesCount}</p>
+                  </div>
+                </div>
+
+                {/* Payout Form */}
+                <div className="p-5 rounded-2xl bg-muted/30 border border-border space-y-4">
+                  <h4 className="text-xs font-bold text-foreground">Запросить выплату средств</h4>
+                  {boundCard ? (
+                    <div className="p-3 rounded-xl bg-card border border-border text-xs">
+                      Реквизиты: {boundCard.payoutType === 'sbp' ? `⚡ СБП: ${boundCard.phone}` : `💳 Карта: ${boundCard.cardNumber}`}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-400">
+                      Привяжите карту в разделе «Магазин» на главной странице для вывода средств.
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={payoutAmount}
+                      onChange={e => setPayoutAmount(e.target.value)}
+                      placeholder={`Сумма (макс. ${authorStats.balance} ₽)`}
+                      className="flex-1 h-10 px-3.5 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
+                    />
+                    <button
+                      onClick={handleRequestPayout}
+                      disabled={payoutLoading || authorStats.balance < 100}
+                      className="h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs disabled:opacity-40 cursor-pointer shrink-0"
+                    >
+                      {payoutLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      <span>Запросить вывод</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── TAB 5: COMPREHENSIVE SDK DOCUMENTATION ── */}
+            {activeTab === 'docs' && (
+              <div className="p-6 md:p-8 rounded-3xl bg-card border border-border shadow-xs space-y-6 leading-relaxed">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
+                  <div>
+                    <h2 className="text-base font-bold flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-primary" />
+                      <span>Полный справочник разработчика Zerf Note SDK</span>
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Спецификация манифестов, Webhook API, CLI-модулей, UI-настроек, лимитов и монетизации
                     </p>
                   </div>
-                </section>
-              )}
-            </div>
+
+                  <button
+                    onClick={handleDownloadStarterKit}
+                    className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Скачать Starter Kit</span>
+                  </button>
+                </div>
+
+                {/* Sub-Navigation */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-border/40 text-xs">
+                  {[
+                    { id: 'quickstart', label: '🚀 Быстрый старт' },
+                    { id: 'npm_sdk', label: '📦 @zerf/sdk' },
+                    { id: 'manifest', label: '📜 Манифест' },
+                    { id: 'permissions', label: '🔑 Права' },
+                    { id: 'ai_webhook', label: '🧠 Webhook API' },
+                    { id: 'monetization', label: '💰 Монетизация' },
+                  ].map(sub => (
+                    <button
+                      key={sub.id}
+                      onClick={() => setDocSection(sub.id as any)}
+                      className={cn(
+                        'px-3 py-1 rounded-xl font-medium transition-all shrink-0 cursor-pointer',
+                        docSection === sub.id
+                          ? 'bg-primary/15 text-primary border border-primary/30 font-bold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                      )}
+                    >
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Section Content */}
+                <div className="space-y-4 text-xs text-foreground/90">
+                  {docSection === 'quickstart' && (
+                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-3">
+                      <h4 className="font-bold text-foreground">Пошаговый план публикации:</h4>
+                      <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                        <li>Создайте публичный или приватный репозиторий на GitHub.</li>
+                        <li>Сгенерируйте и поместите в корень репозитория файл <code className="font-mono text-primary font-bold">zerf-extension.json</code>.</li>
+                        <li>В Zerf Note перейдите в <b>«Магазин расширений» → «+ Создать расширение»</b>.</li>
+                        <li>Вставьте ссылку на ваш GitHub-репозиторий — манифест автоматически спарсится и будет опубликован!</li>
+                      </ol>
+                    </div>
+                  )}
+
+                  {docSection === 'manifest' && (
+                    <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 font-mono overflow-auto max-h-[380px] border border-border/60">
+                      {manifestJsonString}
+                    </pre>
+                  )}
+
+                  {docSection === 'monetization' && (
+                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-2">
+                      <p className="font-bold text-emerald-400">80% от всех покупок вашего расширения начисляются автору!</p>
+                      <p className="text-muted-foreground">
+                        Выплаты осуществляются мгновенно или по запросу на привязанную карту РФ / СБП / ЮMoney.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* ── RIGHT COLUMN (4 cols): Developer Control Blocks (как на сайте) ── */}
+          <div className="lg:col-span-4 space-y-4 sticky top-24">
+            
+            {/* Block 1: Author Balance Card */}
+            <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/25">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-xs text-foreground">Баланс автора</h3>
+                    <p className="text-[10px] text-muted-foreground">80% от продаж расширений</p>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                  Активен
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between pt-1">
+                <span className="text-2xl font-black text-foreground">{authorStats.balance} ₽</span>
+                <span className="text-xs text-muted-foreground">Продаж: {authorStats.salesCount}</span>
+              </div>
+
+              <button
+                onClick={() => setActiveTab('earnings')}
+                className="w-full py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <span>Вывести средства (СБП / Карта)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Block 2: Developer Profile & GitHub */}
+            <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-muted text-foreground flex items-center justify-center font-bold text-xs border border-border">
+                  <Award className="w-4 h-4 text-purple-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-xs text-foreground">Профиль разработчика</h3>
+                  <p className="text-[11px] text-emerald-400 font-medium truncate">
+                    {userGh ? `@${userGh}` : '@waters1ze'}
+                  </p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold border border-primary/20">
+                  Verified
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-muted/40 border border-border text-[11px] text-muted-foreground space-y-1">
+                <div className="flex justify-between">
+                  <span>Опубликовано:</span>
+                  <span className="font-bold text-foreground">{myExtensions.length} плагина</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Статус магазина:</span>
+                  <span className="font-bold text-emerald-400">Открыт</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Block 3: Quick Starters & Tools */}
+            <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-3">
+              <h3 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Быстрые инструменты</span>
+              </h3>
+
+              <div className="space-y-2">
+                <button
+                  onClick={handleLoadUniversalTemplate}
+                  className="w-full p-2.5 rounded-2xl bg-muted/40 hover:bg-muted/80 border border-border text-left text-xs font-semibold text-foreground transition-all flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🔮</span>
+                    <span>Универсальный шаблон</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+
+                <button
+                  onClick={handleCopyAiSkill}
+                  className="w-full p-2.5 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 text-left text-xs font-semibold text-purple-300 transition-all flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-3.5 h-3.5 text-purple-400" />
+                    <span>AI Prompt Skill (Cursor/GPT)</span>
+                  </div>
+                  <Copy className="w-3.5 h-3.5 text-purple-400" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('sandbox')
+                    setTimeout(() => handleRunSandbox(), 100)
+                  }}
+                  className="w-full p-2.5 rounded-2xl bg-muted/40 hover:bg-muted/80 border border-border text-left text-xs font-semibold text-foreground transition-all flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Быстрый тест песочницы</span>
+                  </div>
+                  <Play className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+
+            {/* Block 4: AI Rate Limits Quotas */}
+            <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Суточные квоты ИИ</span>
+                </h3>
+                <span className="text-[10px] text-muted-foreground font-mono">per user / day</span>
+              </div>
+
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center justify-between p-2 rounded-xl bg-muted/30 border border-border/60">
+                  <span className="text-muted-foreground">Тариф Free</span>
+                  <span className="font-bold text-foreground">10 вызовов / день</span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-muted/30 border border-border/60">
+                  <span className="text-primary font-semibold">Тариф Plus</span>
+                  <span className="font-bold text-primary">50 вызовов / день</span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                  <span className="text-purple-400 font-semibold">Тариф Pro</span>
+                  <span className="font-bold text-purple-300">150 вызовов / день</span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <span className="text-amber-400 font-bold">Тариф Corp</span>
+                  <span className="font-bold text-amber-300">300 вызовов / день</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Block 5: Security & Protocol Guard */}
+            <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-2.5">
+              <h3 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Стандарты безопасности</span>
+              </h3>
+              <ul className="text-[11px] text-muted-foreground space-y-1.5 list-disc list-inside">
+                <li>Все вебхуки строго по протоколу <code className="text-foreground font-mono">HTTPS</code></li>
+                <li>Таймаут выполнения: <code className="text-foreground font-mono">8000ms</code></li>
+                <li>Автоматическая SSRF защита от локальных IP</li>
+              </ul>
+            </div>
+
+          </div>
+
+        </div>
       </main>
     </div>
   )

@@ -1613,25 +1613,30 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {[
-                { id: 'core', label: '🌟 Системные' },
-                { id: 'all', label: 'Все расширения' },
-                { id: 'widget', label: '⏱️ Виджеты' },
-                { id: 'template', label: '🎯 Шаблоны' },
-                { id: 'integration', label: '🔌 Интеграции' },
-              ].map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors shrink-0 cursor-pointer select-none',
-                    selectedCategory === cat.id
-                      ? 'bg-card border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30'
-                      : 'bg-card/60 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  {cat.label}
-                </button>
-              ))}
+                { id: 'core', label: 'Системные', icon: Sparkles },
+                { id: 'all', label: 'Все расширения', icon: Puzzle },
+                { id: 'widget', label: 'Виджеты', icon: Layout },
+                { id: 'template', label: 'Шаблоны', icon: FileCode },
+                { id: 'integration', label: 'Интеграции', icon: Zap },
+              ].map(cat => {
+                const Icon = cat.icon
+                const isSelected = selectedCategory === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-xl text-xs font-medium border transition-all shrink-0 cursor-pointer select-none flex items-center gap-1.5',
+                      isSelected
+                        ? 'bg-card border-foreground/30 text-foreground font-bold shadow-xs ring-1 ring-foreground/20'
+                        : 'bg-card/40 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    )}
+                  >
+                    <Icon className={cn('w-3.5 h-3.5', isSelected ? 'text-foreground' : 'text-muted-foreground')} />
+                    <span>{cat.label}</span>
+                  </button>
+                )
+              })}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">

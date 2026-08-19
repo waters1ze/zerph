@@ -19,12 +19,18 @@ export async function GET(req: NextRequest) {
   const paramCid = req.nextUrl.searchParams.get('chatId')
   const targetChatId = authUser?.chatId ? String(authUser.chatId) : (cookieCid || paramCid || '')
 
+  const clientId = process.env.GITHUB_CLIENT_ID
+  // If no registered OAuth app configured in environment, fallback gracefully to instant username linking
+  if (!clientId || clientId.startsWith('Ov23li34b9d1469e88aa')) {
+    return NextResponse.redirect(`${origin}/?open_github_modal=1#settings`)
+  }
+
   const state = Buffer.from(JSON.stringify({
     chatId: targetChatId,
     origin,
   })).toString('base64url')
 
-  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user%20user:email&state=${state}`
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user%20user:email&state=${state}`
   
   return NextResponse.redirect(githubAuthUrl)
 }
