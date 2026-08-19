@@ -188,6 +188,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (action === 'get_reviews') {
+      const extensionId = searchParams.get('extensionId')
+      if (!extensionId) return NextResponse.json({ success: false, error: 'extensionId required' }, { status: 400 })
+      try {
+        const reviewsRow = await prisma.config.findUnique({ where: { key: `ext_reviews_${extensionId}` } })
+        const reviews = reviewsRow?.value ? JSON.parse(reviewsRow.value) : []
+        return NextResponse.json({ success: true, reviews })
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: err.message, reviews: [] })
+      }
+    }
+
     const allItems = await loadExtensionsCatalog()
     const isCreator = await isUserAdmin(chatId)
     const catalog = allItems.filter(ext => {
@@ -196,6 +208,32 @@ export async function GET(req: NextRequest) {
       }
       return true
     })
+
+    // Dynamic real-time installCount calculation from all users
+    try {
+      const userExtRows = await prisma.config.findMany({
+        where: { key: { startsWith: 'user_extensions_' } },
+      })
+      const installCountsMap = new Map<string, number>()
+      for (const row of userExtRows) {
+        try {
+          const ids = JSON.parse(row.value)
+          if (Array.isArray(ids)) {
+            ids.forEach((id: string) => {
+              installCountsMap.set(id, (installCountsMap.get(id) || 0) + 1)
+            })
+          }
+        } catch {}
+      }
+      catalog.forEach(ext => {
+        const dynamicInstalls = installCountsMap.get(ext.id)
+        if (dynamicInstalls !== undefined) {
+          ext.installCount = dynamicInstalls
+        }
+      })
+    } catch {}
+
+    const myExtensions = chatId ? allItems.filter(e => e.authorChatId === chatId) : []
 
     let installedIds: string[] = []
     let enabledIds: string[] = []
@@ -815,6 +853,112 @@ export async function POST(req: NextRequest) {
       })
 
       return NextResponse.json({ success: true, installedIds: installed, enabledIds: enabled })
+    }
+
+    // ── ACTION: RATE & REVIEW EXTENSION ──
+    if (action === 'rate_extension') {
+      const { extensionId, rating, comment } = body
+      if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
+      const numRating = Math.max(1, Math.min(5, Math.round(Number(rating) || 5)))
+      const textComment = typeof comment === 'string' ? comment.trim().slice(0, 1000) : ''
+
+      const authorName = [userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || (userRec?.username ? `@${userRec.username}` : 'Пользователь')
+
+      const reviewsRow = await prisma.config.findUnique({ where: { key: `ext_reviews_${extensionId}` } })
+      let reviews: any[] = reviewsRow?.value ? JSON.parse(reviewsRow.value) : []
+
+      const existingIdx = reviews.findIndex(r => String(r.chatId) === String(chatId))
+      const newReview = {
+        id: `rev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        chatId: String(chatId),
+        authorName,
+        authorUsername: userRec?.username || undefined,
+        rating: numRating,
+        comment: textComment,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      if (existingIdx !== -1) {
+        reviews[existingIdx] = { ...reviews[existingIdx], ...newReview, createdAt: reviews[existingIdx].createdAt }
+      } else {
+        reviews.unshift(newReview)
+      }
+
+      await prisma.config.upsert({
+        where: { key: `ext_reviews_${extensionId}` },
+        update: { value: JSON.stringify(reviews) },
+        create: { key: `ext_reviews_${extensionId}`, value: JSON.stringify(reviews) },
+      })
+
+      // Calculate new average rating
+      const totalScore = reviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0)
+      const avgRating = Math.round((totalScore / reviews.length) * 10) / 10
+      const ratingCount = reviews.length
+
+      // Update extension DB record if exists
+      const extRow = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+      if (extRow?.value) {
+        try {
+          const parsedExt = JSON.parse(extRow.value)
+          parsedExt.rating = avgRating
+          parsedExt.ratingCount = ratingCount
+          await prisma.config.update({
+            where: { key: `zerf_ext_${extensionId}` },
+            data: { value: JSON.stringify(parsedExt) },
+          })
+        } catch {}
+      }
+
+      return NextResponse.json({
+        success: true,
+        reviews,
+        rating: avgRating,
+        ratingCount,
+        userReview: newReview,
+      })
+    }
+
+    // ── ACTION: DELETE REVIEW ──
+    if (action === 'delete_review') {
+      const { extensionId, reviewId } = body
+      if (!extensionId || !reviewId) return NextResponse.json({ error: 'extensionId and reviewId required' }, { status: 400 })
+      const isCreator = await isUserAdmin(chatId)
+
+      const reviewsRow = await prisma.config.findUnique({ where: { key: `ext_reviews_${extensionId}` } })
+      let reviews: any[] = reviewsRow?.value ? JSON.parse(reviewsRow.value) : []
+
+      reviews = reviews.filter(r => {
+        if (r.id === reviewId) {
+          return !(String(r.chatId) === String(chatId) || isCreator)
+        }
+        return true
+      })
+
+      await prisma.config.upsert({
+        where: { key: `ext_reviews_${extensionId}` },
+        update: { value: JSON.stringify(reviews) },
+        create: { key: `ext_reviews_${extensionId}`, value: JSON.stringify(reviews) },
+      })
+
+      const totalScore = reviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0)
+      const avgRating = reviews.length > 0 ? Math.round((totalScore / reviews.length) * 10) / 10 : 5.0
+      const ratingCount = reviews.length
+
+      const extRow = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+      if (extRow?.value) {
+        try {
+          const parsedExt = JSON.parse(extRow.value)
+          parsedExt.rating = avgRating
+          parsedExt.ratingCount = ratingCount
+          await prisma.config.update({
+            where: { key: `zerf_ext_${extensionId}` },
+            data: { value: JSON.stringify(parsedExt) },
+          })
+        } catch {}
+      }
+
+      return NextResponse.json({ success: true, reviews, rating: avgRating, ratingCount })
     }
 
     // ── ACTION: BUY PAID GITHUB EXTENSION (Requires Zerf Plus, 80% Author / 20% Platform) ──

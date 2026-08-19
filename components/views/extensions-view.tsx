@@ -12,7 +12,7 @@ import {
   Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown,
   CreditCard, Wallet, Banknote, CheckCircle2, X
 } from 'lucide-react'
-import { useApp, getAuthHeaders } from '@/lib/store'
+import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { ExtensionItem } from '@/app/api/extensions/route'
@@ -386,6 +386,16 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   } | null>(null)
   const [payoutSuccess, setPayoutSuccess] = useState<boolean>(false)
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false)
+  const [selectedAuthorProfile, setSelectedAuthorProfile] = useState<string | null>(null)
+  
+  // Reviews & Ratings Modal State
+  const [reviewsExt, setReviewsExt] = useState<ExtensionItem | null>(null)
+  const [reviewsList, setReviewsList] = useState<any[]>([])
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(false)
+  const [userRatingInput, setUserRatingInput] = useState<number>(5)
+  const [hoverRating, setHoverRating] = useState<number>(0)
+  const [userCommentInput, setUserCommentInput] = useState<string>('')
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false)
   const [hasReadDocs, setHasReadDocs] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('zerf_has_read_docs') === 'true'
@@ -1344,6 +1354,92 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     }
   }
 
+  const openReviewsModal = async (ext: ExtensionItem) => {
+    setReviewsExt(ext)
+    setReviewsList([])
+    setUserCommentInput('')
+    setUserRatingInput(5)
+    setLoadingReviews(true)
+    try {
+      const res = await fetch(`/api/extensions?action=get_reviews&extensionId=${encodeURIComponent(ext.id)}`, {
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success && Array.isArray(data.reviews)) {
+        setReviewsList(data.reviews)
+        const myChatId = currentChatId
+        const myRev = data.reviews.find((r: any) => String(r.chatId) === String(myChatId))
+        if (myRev) {
+          setUserRatingInput(myRev.rating || 5)
+          setUserCommentInput(myRev.comment || '')
+        }
+      }
+    } catch {} finally {
+      setLoadingReviews(false)
+    }
+  }
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!reviewsExt) return
+    setSubmittingReview(true)
+    try {
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          action: 'rate_extension',
+          extensionId: reviewsExt.id,
+          rating: userRatingInput,
+          comment: userCommentInput,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setReviewsList(data.reviews || [])
+        setCatalog(prev => prev.map(item => item.id === reviewsExt.id ? { ...item, rating: data.rating, ratingCount: data.ratingCount } : item))
+        setReviewsExt(prev => prev ? { ...prev, rating: data.rating, ratingCount: data.ratingCount } : null)
+        showToast('✓ Ваш отзыв и оценка успешно сохранены!', 'success')
+      } else {
+        showToast(data.error || 'Не удалось сохранить оценку', 'error')
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Ошибка сети', 'error')
+    } finally {
+      setSubmittingReview(false)
+    }
+  }
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!reviewsExt) return
+    const ok = await confirmDialog({
+      title: 'Удалить отзыв?',
+      description: 'Ваш отзыв и оценка будут удалены.',
+      confirmText: 'Удалить',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    })
+    if (!ok) return
+    try {
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          action: 'delete_review',
+          extensionId: reviewsExt.id,
+          reviewId,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setReviewsList(data.reviews || [])
+        setCatalog(prev => prev.map(item => item.id === reviewsExt.id ? { ...item, rating: data.rating, ratingCount: data.ratingCount } : item))
+        setReviewsExt(prev => prev ? { ...prev, rating: data.rating, ratingCount: data.ratingCount } : null)
+        showToast('Отзыв удален', 'info')
+      }
+    } catch {}
+  }
+
   // Filtered and Sorted catalog
   const filteredCatalog = useMemo(() => {
     const seenGh = new Set<string>()
@@ -1710,29 +1806,33 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
                   <div className="space-y-3 pt-2 border-t border-border/60">
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      {ext.ratingCount && ext.ratingCount > 0 ? (
-                        <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                          <b className="text-foreground">{ext.rating ? ext.rating.toFixed(1) : '5.0'}</b> ({ext.ratingCount})
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-muted-foreground/70">
-                          <Star className="w-3 h-3 text-muted-foreground/50" />
-                          <span>0 оценок</span>
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openReviewsModal(ext)
+                        }}
+                        className="flex items-center gap-1 hover:text-amber-400 cursor-pointer transition-colors p-1 -m-1 rounded-lg hover:bg-amber-500/10"
+                        title="Посмотреть отзывы и поставить оценку"
+                      >
+                        <Star className={cn('w-3 h-3', (ext.ratingCount || 0) > 0 ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/60')} />
+                        <b className="text-foreground">{ext.rating ? ext.rating.toFixed(1) : '5.0'}</b>
+                        <span className="text-[10px] text-muted-foreground">({ext.ratingCount || 0})</span>
+                      </button>
                       <span>{ext.installCount || 0} {(ext.installCount || 0) === 1 ? 'установка' : (ext.installCount || 0) > 1 && (ext.installCount || 0) < 5 ? 'установки' : 'установок'}</span>
                       {ext.authorGithub || (ext.authorName && !ext.authorName.toLowerCase().includes('создатель') && !ext.authorName.includes(' ')) ? (
-                        <a
-                          href={`https://github.com/${ext.authorGithub || ext.authorName.replace(/^@/, '')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 font-medium text-foreground/90 hover:text-primary transition-colors truncate max-w-[120px]"
-                          title={`@${ext.authorGithub || ext.authorName} на GitHub`}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedAuthorProfile((ext.authorGithub || ext.authorName).replace(/^@/, ''))
+                          }}
+                          className="inline-flex items-center gap-1 font-medium text-foreground/90 hover:text-primary transition-colors truncate max-w-[120px] cursor-pointer"
+                          title={`Посмотреть все проекты автора @${ext.authorGithub || ext.authorName}`}
                         >
                           <GithubIcon className="w-2.5 h-2.5 text-muted-foreground shrink-0" />
                           <span>@{ext.authorGithub || ext.authorName.replace(/^@/, '')}</span>
-                        </a>
+                        </button>
                       ) : ext.isOfficial || ext.authorChatId === 'system' || ext.authorName?.toLowerCase().includes('создатель') ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold text-amber-400">
                           <Crown className="w-2.5 h-2.5" />
@@ -3041,16 +3141,18 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                       <span>•</span>
                       <span>Автор:</span>
                       {selectedExt.authorGithub || (selectedExt.authorName && !selectedExt.authorName.toLowerCase().includes('создатель') && !selectedExt.authorName.includes(' ')) ? (
-                        <a
-                          href={`https://github.com/${selectedExt.authorGithub || selectedExt.authorName.replace(/^@/, '')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 font-semibold text-primary hover:underline font-mono"
-                          title={`@${selectedExt.authorGithub || selectedExt.authorName} на GitHub`}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedExt(null)
+                            setSelectedAuthorProfile((selectedExt.authorGithub || selectedExt.authorName).replace(/^@/, ''))
+                          }}
+                          className="inline-flex items-center gap-1 font-semibold text-primary hover:underline font-mono cursor-pointer"
+                          title={`Посмотреть все проекты автора @${selectedExt.authorGithub || selectedExt.authorName}`}
                         >
                           <GithubIcon className="w-3 h-3 text-muted-foreground shrink-0" />
                           <span>@{selectedExt.authorGithub || selectedExt.authorName.replace(/^@/, '')}</span>
-                        </a>
+                        </button>
                       ) : selectedExt.isOfficial || selectedExt.authorChatId === 'system' || selectedExt.authorName?.toLowerCase().includes('создатель') ? (
                         <span className="inline-flex items-center gap-0.5 font-bold text-amber-400">
                           <Crown className="w-2.5 h-2.5" /> Официальное
@@ -3100,13 +3202,219 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-xs font-bold text-foreground">
-                  {selectedExt.price === 0 ? 'Бесплатное расширение' : `Цена: ${selectedExt.price} ₽`}
-                </span>
+              <div className="flex items-center justify-between pt-2 border-t border-border/60">
                 <button
-                  onClick={() => setSelectedExt(null)}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs cursor-pointer shadow-xs"
+                  type="button"
+                  onClick={() => {
+                    const ext = selectedExt
+                    setSelectedExt(null)
+                    openReviewsModal(ext)
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Star className="w-3.5 h-3.5 fill-amber-400" />
+                  <span>{selectedExt.rating ? selectedExt.rating.toFixed(1) : '5.0'} ({selectedExt.ratingCount || 0}) • Отзывы</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {selectedExt.price === 0 ? 'FREE' : `${selectedExt.price} ₽`}
+                  </span>
+                  <button
+                    onClick={() => setSelectedExt(null)}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs cursor-pointer shadow-xs"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: REVIEWS & RATINGS */}
+      <AnimatePresence>
+        {reviewsExt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 max-h-[88vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                    <ExtensionIcon icon={reviewsExt.icon} className="w-full h-full text-xl" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-foreground truncate">{reviewsExt.title}</h3>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1 text-amber-400 font-bold">
+                        <Star className="w-3 h-3 fill-amber-400" />
+                        {reviewsExt.rating ? reviewsExt.rating.toFixed(1) : '5.0'}
+                      </span>
+                      <span>•</span>
+                      <span>{reviewsList.length} {reviewsList.length === 1 ? 'отзыв' : reviewsList.length > 1 && reviewsList.length < 5 ? 'отзыва' : 'отзывов'}</span>
+                      <span>•</span>
+                      <span>{reviewsExt.installCount || 0} установок</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setReviewsExt(null)}
+                  className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+                {/* Submit / Edit My Review Form */}
+                <form onSubmit={handleSubmitReview} className="p-4 rounded-2xl bg-muted/30 border border-border/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground">Ваша оценка и отзыв:</span>
+                    {/* Interactive 5 stars */}
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setUserRatingInput(star)}
+                          onMouseEnter={() => setHoverRating(star)}
+                          onMouseLeave={() => setHoverRating(0)}
+                          className="p-1 text-base transition-transform hover:scale-125 cursor-pointer"
+                          title={`Поставить ${star} ${star === 1 ? 'звезду' : star < 5 ? 'звезды' : 'звезд'}`}
+                        >
+                          <Star
+                            className={cn(
+                              'w-5 h-5 transition-colors',
+                              (hoverRating || userRatingInput) >= star
+                                ? 'text-amber-400 fill-amber-400'
+                                : 'text-muted-foreground/40'
+                            )}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={userCommentInput}
+                    onChange={(e) => setUserCommentInput(e.target.value)}
+                    placeholder="Напишите, что вам понравилось или что можно улучшить в этом расширении..."
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-xs placeholder:text-muted-foreground/60 outline-none focus:border-primary resize-none"
+                  />
+
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="submit"
+                      disabled={submittingReview}
+                      className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {submittingReview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>Опубликовать отзыв</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* Community Reviews List */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-foreground flex items-center justify-between">
+                    <span>Отзывы сообщества:</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">
+                      {reviewsList.length} {reviewsList.length === 1 ? 'запись' : 'записей'}
+                    </span>
+                  </h4>
+
+                  {loadingReviews ? (
+                    <div className="p-8 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                      <span>Загрузка отзывов...</span>
+                    </div>
+                  ) : reviewsList.length === 0 ? (
+                    <div className="p-6 rounded-2xl bg-muted/20 border border-dashed border-border text-center text-xs text-muted-foreground">
+                      Пока нет отзывов к этому расширению. Будьте первым, кто поставит оценку!
+                    </div>
+                  ) : (
+                    reviewsList.map((rev) => {
+                      const isMyReview = String(rev.chatId) === String(currentChatId)
+                      return (
+                        <div
+                          key={rev.id}
+                          className="p-3 rounded-2xl bg-card border border-border/80 space-y-1.5 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                                {(rev.authorName || 'П')[0].toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex items-center gap-1.5">
+                                <span className="font-bold text-xs text-foreground truncate">
+                                  {rev.authorName || 'Пользователь Zerf'}
+                                </span>
+                                {rev.authorUsername && (
+                                  <span className="text-[10px] text-muted-foreground truncate">
+                                    @{rev.authorUsername}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Stars */}
+                              <div className="flex items-center gap-0.5 text-amber-400">
+                                {[...Array(5)].map((_, i) => (
+                                  <Star
+                                    key={i}
+                                    className={cn(
+                                      'w-3 h-3',
+                                      i < (rev.rating || 5)
+                                        ? 'fill-amber-400 text-amber-400'
+                                        : 'text-muted-foreground/30'
+                                    )}
+                                  />
+                                ))}
+                              </div>
+
+                              {isMyReview && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteReview(rev.id)}
+                                  className="p-1 text-muted-foreground hover:text-rose-400 transition-colors cursor-pointer rounded-lg"
+                                  title="Удалить мой отзыв"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {rev.comment && (
+                            <p className="text-xs text-foreground/90 leading-relaxed pt-0.5">
+                              {rev.comment}
+                            </p>
+                          )}
+
+                          <p className="text-[9px] text-muted-foreground font-mono pt-0.5">
+                            {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Недавно'}
+                          </p>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Close Footer */}
+              <div className="pt-2 border-t border-border/60 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setReviewsExt(null)}
+                  className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs cursor-pointer transition-colors"
                 >
                   Закрыть
                 </button>
@@ -4434,6 +4742,139 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               <X className="w-3.5 h-3.5" />
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL: AUTHOR PROFILE & PROJECTS SHOWCASE ── */}
+      <AnimatePresence>
+        {selectedAuthorProfile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-2xl bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto text-foreground font-sans"
+            >
+              {/* Author Header */}
+              <div className="flex items-center justify-between border-b border-border/60 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xl font-bold">
+                    👨‍💻
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-foreground">
+                        @{selectedAuthorProfile}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                        Разработчик Zerf
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Все проекты и плагины, созданные данным автором
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedAuthorProfile(null)}
+                  className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  title="Закрыть"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Author Projects Grid */}
+              {(() => {
+                const authorProjects = catalog.filter(e => {
+                  const author = (e.authorGithub || e.authorName || '').replace(/^@/, '').toLowerCase()
+                  return author === selectedAuthorProfile.toLowerCase()
+                })
+
+                if (authorProjects.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-muted-foreground text-xs space-y-2">
+                      <p>У данного автора пока нет опубликованных проектов.</p>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                      <span>Найдено проектов: <b>{authorProjects.length}</b></span>
+                      <span>Всего установок: <b>{authorProjects.reduce((acc, p) => acc + (p.installCount || 0), 0)}</b></span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {authorProjects.map(ext => {
+                        const isInstalled = installedIds.includes(ext.id)
+                        return (
+                          <div
+                            key={ext.id}
+                            className="p-4 rounded-2xl bg-muted/30 border border-border/80 hover:border-primary/40 transition-all flex flex-col justify-between gap-3 space-y-2"
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-xl bg-card border border-border flex items-center justify-center text-base">
+                                    <ExtensionIcon icon={ext.icon} className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs font-bold text-foreground line-clamp-1">{ext.title}</h4>
+                                    <span className="text-[10px] text-muted-foreground">{ext.category}</span>
+                                  </div>
+                                </div>
+                                {ext.price > 0 ? (
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[10px] font-bold">
+                                    {ext.price} ₽
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
+                                    FREE
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                {ext.description}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40">
+                              <span className="text-[10px] text-muted-foreground">
+                                📥 {ext.installCount || 0} установок
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isInstalled) {
+                                    handleUninstall(ext.id)
+                                  } else {
+                                    handleInstall(ext.id)
+                                  }
+                                }}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                                  isInstalled
+                                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                    : "bg-primary text-primary-foreground hover:brightness-110"
+                                )}
+                              >
+                                {isInstalled ? 'Установлено' : 'Установить'}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
