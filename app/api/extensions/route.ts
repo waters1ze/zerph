@@ -273,7 +273,7 @@ export async function GET(req: NextRequest) {
       },
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=180, stale-while-revalidate=360',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       }
     })
   } catch (err: unknown) {

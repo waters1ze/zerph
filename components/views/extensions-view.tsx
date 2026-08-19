@@ -1504,11 +1504,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {[
-                { id: 'core', label: '🌟 Основное' },
-                { id: 'all', label: 'Все категории' },
+                { id: 'core', label: '🌟 Системные' },
+                { id: 'all', label: 'Все расширения' },
                 { id: 'widget', label: '⏱️ Виджеты' },
                 { id: 'template', label: '🎯 Шаблоны' },
-                { id: 'theme', label: '🌌 Темы' },
                 { id: 'integration', label: '🔌 Интеграции' },
               ].map(cat => (
                 <button
