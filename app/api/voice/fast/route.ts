@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 
+import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -22,13 +24,13 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const groqKey = process.env.GROQ_API_KEY || (req.headers.get('x-groq-api-key') || undefined)
     const nowIso = new Date().toISOString()
 
-    // 1. Fast regex heuristic if no LLM key is set or for sub-50ms ultra fast fallback
+    // 1. Fast regex heuristic if needed for instant fallback
     const heuristicTask = {
       title: text,
       dueDate: null as string | null,
+      dueTime: null as string | null,
       priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
       tags: [] as string[],
       category: 'inbox',
@@ -45,29 +47,14 @@ export async function POST(req: NextRequest) {
       heuristicTask.dueDate = d.toISOString().split('T')[0]
     }
 
-    if (!groqKey) {
-      return NextResponse.json({
-        ok: true,
-        fast: true,
-        source: 'heuristic',
-        task: heuristicTask,
-      })
-    }
-
-    // 2. High-speed Llama 3.1 8B instant structuring via Groq API (<250ms)
+    // 2. High-speed LLM instant structuring via Groq Key Pool (<250ms)
     try {
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${groqKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [
-            {
-              role: 'system',
-              content: `Ты — сверхбыстрый парсер голосовых задач Zerf Note. Текущее время: ${nowIso}.
+      const completion = await callGroqChatCompletion({
+        model: 'openai/gpt-oss-20b',
+        messages: [
+          {
+            role: 'system',
+            content: `Ты — сверхбыстрый парсер голосовых задач Zerf Note. Текущее время: ${nowIso}.
 Извлеки из текста пользователя задачу в формате JSON:
 {
   "title": "краткая суть задачи без вводных слов",
@@ -78,34 +65,29 @@ export async function POST(req: NextRequest) {
   "tags": ["тег1"]
 }
 Отвечай ТОЛЬКО валидным JSON без markdown пояснений.`
-            },
-            { role: 'user', content: text }
-          ],
-          temperature: 0.1,
-          max_tokens: 200,
-          response_format: { type: 'json_object' }
-        })
+          },
+          { role: 'user', content: text }
+        ],
+        temperature: 0.1,
+        max_tokens: 200,
+        response_format: { type: 'json_object' }
       })
 
-      if (groqRes.ok) {
-        const groqData = await groqRes.json()
-        const content = groqData.choices?.[0]?.message?.content
-        if (content) {
-          const parsed = JSON.parse(content)
-          return NextResponse.json({
-            ok: true,
-            fast: true,
-            source: 'groq-llama-3.1-8b-instant',
-            task: {
-              title: parsed.title || heuristicTask.title,
-              dueDate: parsed.dueDate || heuristicTask.dueDate,
-              dueTime: parsed.dueTime || null,
-              priority: parsed.priority || heuristicTask.priority,
-              category: parsed.category || heuristicTask.category,
-              tags: Array.isArray(parsed.tags) ? parsed.tags : [],
-            }
-          })
-        }
+      if (completion.content) {
+        const parsed = JSON.parse(completion.content)
+        return NextResponse.json({
+          ok: true,
+          fast: true,
+          source: completion.modelUsed || 'groq-openai-gpt-oss-20b',
+          task: {
+            title: parsed.title || heuristicTask.title,
+            dueDate: parsed.dueDate || heuristicTask.dueDate,
+            dueTime: parsed.dueTime || null,
+            priority: parsed.priority || heuristicTask.priority,
+            category: parsed.category || heuristicTask.category,
+            tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+          }
+        })
       }
     } catch {}
 

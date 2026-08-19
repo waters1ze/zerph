@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Priority } from '@/lib/types'
-import { X, Tag, FolderKanban, Flame } from 'lucide-react'
+import { X, Tag, FolderKanban, Flame, Clock, Bell } from 'lucide-react'
 import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
 import { DatePicker } from '@/components/ui/date-picker'
 
@@ -29,6 +29,7 @@ export function NewTaskModal({ open, onClose }: Props) {
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<Priority>('medium')
   const [dueDate, setDueDate] = useState<string | undefined>(undefined)
+  const [dueTime, setDueTime] = useState<string>('')
   const [projectId, setProjectId] = useState('')
   const [habitId, setHabitId] = useState('')
   const [tagInput, setTagInput] = useState('')
@@ -36,7 +37,7 @@ export function NewTaskModal({ open, onClose }: Props) {
 
   const reset = () => {
     setTitle(''); setDescription(''); setPriority('medium')
-    setDueDate(undefined)
+    setDueDate(undefined); setDueTime('')
     setProjectId(''); setHabitId(''); setTagInput(''); setTags([])
   }
 
@@ -60,6 +61,7 @@ export function NewTaskModal({ open, onClose }: Props) {
         priority,
         status: 'todo',
         dueDate: dueDate || undefined,
+        dueTime: dueTime.trim() || undefined,
         projectId: projectId || undefined,
         habitId: habitId || undefined,
         tags,
@@ -156,16 +158,45 @@ export function NewTaskModal({ open, onClose }: Props) {
                 </div>
               </div>
 
-              {/* Due date + Project + Habit */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Date & Reminder Time Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Срок выполнения</p>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
+                    <span>Срок (Дата)</span>
+                  </p>
                   <DatePicker
                     value={dueDate}
                     onChange={setDueDate}
                     placeholder="Без даты"
                   />
                 </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5 flex items-center gap-1.5">
+                    <Clock className="w-3 h-3 text-primary" />
+                    <span>Время напоминания</span>
+                  </p>
+                  <div className="flex items-center gap-2 bg-muted/40 border border-border/50 rounded-lg px-2.5 py-1.5 hover:border-primary/40 focus-within:border-primary transition-colors">
+                    <input
+                      type="time"
+                      value={dueTime}
+                      onChange={e => setDueTime(e.target.value)}
+                      className="bg-transparent text-xs text-foreground outline-none font-mono flex-1 cursor-pointer"
+                    />
+                    {dueTime && (
+                      <button
+                        type="button"
+                        onClick={() => setDueTime('')}
+                        className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Project + Habit */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">Проект</p>
                   <CustomSelect

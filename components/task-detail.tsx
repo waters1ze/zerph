@@ -200,33 +200,18 @@ export function TaskDetail() {
           </div>
 
           {/* Due Time */}
-          {state.settings.userPlan === 'premium' ? (
-            <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] uppercase tracking-widest text-foreground/80 font-semibold flex items-center gap-1.5">
-                <Clock className="w-3 h-3 text-primary" />
-                <span>ВРЕМЯ НАПОМИНАНИЯ</span>
-              </p>
-              <input
-                type="time"
-                value={task.dueTime ?? ''}
-                onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
-                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-border text-foreground outline-none font-mono cursor-pointer"
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5 opacity-60" onClick={() => alert('Точное время напоминания доступно только в Premium версии. Пожалуйста, приобретите Premium через бота.')}>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
-                <Clock className="w-3 h-3 text-muted-foreground" />
-                <span>ВРЕМЯ (PREMIUM)</span>
-              </p>
-              <input
-                type="time"
-                disabled
-                value={task.dueTime ?? ''}
-                className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1 border border-border text-muted-foreground outline-none font-mono cursor-not-allowed pointer-events-none"
-              />
-            </div>
-          )}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] uppercase tracking-widest text-foreground/80 font-semibold flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-primary" />
+              <span>ВРЕМЯ НАПОМИНАНИЯ</span>
+            </p>
+            <input
+              type="time"
+              value={task.dueTime ?? ''}
+              onChange={e => dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { dueTime: e.target.value || undefined } })}
+              className="text-[12px] bg-muted/50 rounded-lg px-2.5 py-1.5 border border-border text-foreground outline-none font-mono cursor-pointer hover:border-primary/50 focus:border-primary transition-colors"
+            />
+          </div>
         </div>
 
         {/* Live Notification Countdown */}

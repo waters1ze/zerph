@@ -348,10 +348,10 @@ export interface LiveChatMessage {
 }
 
 const AVAILABLE_MODELS = [
-  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', desc: 'Ультра-быстрый живой диалог (~120ms)', minPlan: 'free' },
-  { id: 'qwen/qwen3.6-27b', name: 'Qwen 2.5 27B Chat', desc: 'Глубокое понимание контекста и логики', minPlan: 'plus' },
-  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoner', desc: 'Флагманские рассуждения и эрудиция', minPlan: 'pro' },
-  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', desc: 'Флагманская сверхмощная модель Zerf', minPlan: 'corp' },
+  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Live', desc: 'Ультра-быстрый живой диалог (~150ms)', minPlan: 'free' },
+  { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B Chat', desc: 'Глубокое понимание контекста и логики', minPlan: 'plus' },
+  { id: 'groq/compound', name: 'Groq Compound', desc: 'Сбалансированные вычисления', minPlan: 'plus' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', desc: 'Флагманская сверхмощная модель Zerf', minPlan: 'pro' },
 ]
 
 export function ZerficLiveView() {
@@ -368,7 +368,7 @@ export function ZerficLiveView() {
   // Voice & Audio Settings
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_original')
   const [voiceVolume, setVoiceVolume] = useState<number>(0.85) // Volume 0.0 - 1.0
-  const [selectedModelId, setSelectedModelId] = useState<string>('llama-3.1-8b-instant')
+  const [selectedModelId, setSelectedModelId] = useState<string>('openai/gpt-oss-20b')
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(true)
 

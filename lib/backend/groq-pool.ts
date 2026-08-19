@@ -19,22 +19,25 @@ import { normalizePlan } from '@/lib/plans'
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
 
 export const FREE_ALLOWED_MODELS = [
-  'llama-3.1-8b-instant',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b',
   'groq/compound-mini',
+  'allam-2-7b',
 ]
 
 export const PLUS_ALLOWED_MODELS = [
-  'qwen/qwen3.6-27b',
   'openai/gpt-oss-20b',
-  'llama-3.1-8b-instant',
+  'qwen/qwen3.6-27b',
+  'groq/compound',
   'groq/compound-mini',
+  'allam-2-7b',
 ]
 
 /**
  * Model allocation based on subscription tier:
- * - Free: Strictly limited to lightweight models <= 8B (Llama 3.1 8B Instant, Compound Mini)
- * - Plus (99 ₽): Models up to 27B (Qwen 3.6 27B, GPT-OSS 20B, Llama 3.1 8B Instant)
- * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, DeepSeek R1, Llama 3.3 70B, etc.) and per-task custom routing
+ * - Free: Highly optimized fast models (GPT-OSS 20B, Qwen 3.6 27B)
+ * - Plus (99 ₽): Advanced models (Qwen 3.6 27B, GPT-OSS 20B, Compound)
+ * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, Qwen 27B, etc.) and per-task custom routing
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -46,25 +49,25 @@ export function getModelForUserPlan(
 
   // Pro & Corp: full freedom to use ANY model for each task
   if (norm === 'pro' || norm === 'corp') {
-    if (req) return req
+    if (req && KNOWN_GROQ_CHAT_MODELS.has(req)) return req
     if (taskKind === 'siri' || taskKind === 'voice') return 'openai/gpt-oss-20b'
     if (taskKind === 'extensions') return 'openai/gpt-oss-120b'
     return 'openai/gpt-oss-120b'
   }
 
-  // Plus: up to 27B (Qwen 3.6 27B, GPT-OSS 20B, Llama 3.1 8B)
+  // Plus: up to 27B / fast models (Qwen 3.6 27B, GPT-OSS 20B)
   if (norm === 'plus') {
-    if (req && (PLUS_ALLOWED_MODELS.includes(req) || req === 'qwen/qwen3.6-27b' || req === 'openai/gpt-oss-20b' || req === 'llama-3.1-8b-instant' || req === 'groq/compound-mini')) {
+    if (req && PLUS_ALLOWED_MODELS.includes(req)) {
       return req
     }
     return 'qwen/qwen3.6-27b'
   }
 
-  // Free: strictly <= 8B (Llama 3.1 8B Instant or Compound Mini)
-  if (req && (FREE_ALLOWED_MODELS.includes(req) || req === 'llama-3.1-8b-instant' || req === 'groq/compound-mini')) {
+  // Free: ultra-fast GPT-OSS 20B or Qwen 27B
+  if (req && FREE_ALLOWED_MODELS.includes(req)) {
     return req
   }
-  return 'llama-3.1-8b-instant'
+  return 'openai/gpt-oss-20b'
 }
 
 interface KeyStatus {
@@ -92,11 +95,9 @@ export function stripThinkingTags(raw: string): string {
 }
 
 const KNOWN_GROQ_CHAT_MODELS = new Set([
-  'deepseek-r1-distill-llama-70b',
-  'llama-3.1-8b-instant',
-  'qwen/qwen3.6-27b',
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b',
   'groq/compound',
   'groq/compound-mini',
   'allam-2-7b',
@@ -109,25 +110,19 @@ export function normalizeGroqChatModel(model?: string): string {
   if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) return trimmed
   
   const lower = trimmed.toLowerCase()
-  if (lower.includes('deepseek') || lower.includes('r1')) {
-    return 'deepseek-r1-distill-llama-70b'
-  }
-  if (lower.includes('70b') || lower.includes('versatile') || lower.includes('72b')) {
-    return 'deepseek-r1-distill-llama-70b'
-  }
-  if (lower.includes('llama-3.1-8b') || lower.includes('llama-3.2') || lower.includes('instant') || lower.includes('mini')) {
-    return 'llama-3.1-8b-instant'
-  }
-  if (lower.includes('qwen') || lower.includes('mixtral')) {
-    return 'qwen/qwen3.6-27b'
-  }
-  if (lower.includes('20b')) {
-    return 'openai/gpt-oss-20b'
-  }
-  if (lower.includes('120b')) {
+  if (lower.includes('120b') || lower.includes('flagship') || lower.includes('pro') || lower.includes('70b') || lower.includes('deepseek') || lower.includes('r1')) {
     return 'openai/gpt-oss-120b'
   }
-  return GROQ_CHAT_MODEL
+  if (lower.includes('qwen') || lower.includes('3.6') || lower.includes('2.5') || lower.includes('27b')) {
+    return 'qwen/qwen3.6-27b'
+  }
+  if (lower.includes('compound-mini') || lower.includes('mini')) {
+    return 'openai/gpt-oss-20b'
+  }
+  if (lower.includes('compound')) {
+    return 'groq/compound'
+  }
+  return 'openai/gpt-oss-20b'
 }
 
 export function normalizeGroqWhisperModel(model?: string): string {
@@ -338,12 +333,11 @@ export async function callGroqChatCompletion(options: {
 
   const requestedModel = normalizeGroqChatModel(options.model)
   const defaultFallbacks = [
-    'deepseek-r1-distill-llama-70b',
-    'llama-3.1-8b-instant',
-    'qwen/qwen3.6-27b',
-    'groq/compound-mini',
-    'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
+    'openai/gpt-oss-120b',
+    'qwen/qwen3.6-27b',
+    'groq/compound',
+    'allam-2-7b',
   ]
   const normalizedFallbacks = (options.fallbackModels !== undefined && options.fallbackModels.length > 0)
     ? options.fallbackModels.map(m => normalizeGroqChatModel(m))
