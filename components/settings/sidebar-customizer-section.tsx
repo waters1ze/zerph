@@ -120,10 +120,6 @@ export function getInitialSidebarConfig(): SidebarConfig {
       if (saved) {
         const parsed = JSON.parse(saved)
         if (parsed && Array.isArray(parsed.folders) && parsed.folders.length > 0) {
-          parsed.folders = parsed.folders.map((f: SidebarFolder) => ({
-            ...f,
-            itemIds: (f.itemIds || []).filter((id: string) => id !== 'extensions'),
-          }))
           return parsed
         }
       }
@@ -263,6 +259,50 @@ export function SidebarCustomizerSection() {
           )
           setInstalledExts(activeExts)
 
+          // Auto-ensure any installed extension is present in customizer folders
+          setConfig(currConfig => {
+            const assignedSet = new Set<string>()
+            currConfig.folders.forEach(f => (f.itemIds || []).forEach(id => assignedSet.add(id)))
+            
+            const missingExtIds = activeExts
+              .map((e: ExtensionItem) => e.id)
+              .filter((id: string) => !assignedSet.has(id))
+
+            if (missingExtIds.length === 0) return currConfig
+
+            let extFolder = currConfig.folders.find(f => f.id === 'extensions' || f.title.toLowerCase() === 'расширения')
+            let nextFolders = [...currConfig.folders]
+
+            if (extFolder) {
+              nextFolders = nextFolders.map(f => {
+                if (f.id === extFolder!.id) {
+                  return { ...f, itemIds: Array.from(new Set([...f.itemIds, ...missingExtIds])) }
+                }
+                return f
+              })
+            } else {
+              const accountIdx = nextFolders.findIndex(f => f.id === 'account')
+              const newExtFolder: SidebarFolder = {
+                id: 'extensions',
+                title: 'Расширения',
+                itemIds: missingExtIds,
+              }
+              if (accountIdx !== -1) {
+                nextFolders.splice(accountIdx, 0, newExtFolder)
+              } else {
+                nextFolders.push(newExtFolder)
+              }
+            }
+
+            const updatedConfig = { ...currConfig, folders: nextFolders }
+            try {
+              localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(updatedConfig))
+              localStorage.setItem('zerf_sidebar_config', JSON.stringify(updatedConfig))
+              window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+            } catch {}
+            return updatedConfig
+          })
+
           // Extract public/published layout presets & templates from store catalog dynamically
           const extractedStorePresets: LayoutPreset[] = data.catalog
             .filter((ext: ExtensionItem) => {
@@ -294,10 +334,10 @@ export function SidebarCustomizerSection() {
 
   const saveConfig = (newConfig: SidebarConfig) => {
     // 🔒 PERMANENT PROTECTION: 'settings' MUST NEVER be hidden and MUST ALWAYS exist in folders!
-    const cleanHidden = (newConfig.hiddenItems || []).filter(id => id !== 'settings' && id !== 'extensions')
+    const cleanHidden = (newConfig.hiddenItems || []).filter(id => id !== 'settings')
     let folders = (newConfig.folders || []).map(f => ({
       ...f,
-      itemIds: (f.itemIds || []).filter(id => id !== 'extensions'),
+      itemIds: [...(f.itemIds || [])],
     }))
 
     const hasSettings = folders.some(f => f.itemIds.includes('settings'))

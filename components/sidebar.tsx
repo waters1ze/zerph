@@ -611,12 +611,22 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         {unassignedActiveExts.length > 0 && (
           <div className="mb-1.5 pt-1">
             {!isCollapsed && (
-              <div className="w-full px-2 py-1 flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80 font-sans">
-                <span className="truncate">Расширения</span>
-                <span className="text-emerald-400 font-mono text-[9px] font-semibold">{unassignedActiveExts.length}</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => toggleFolder('extensions_dynamic')}
+                className="w-full px-2 py-1 flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80 hover:text-foreground font-sans cursor-pointer group"
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="truncate">Расширения</span>
+                  <span className="text-emerald-400 font-mono text-[9px] font-semibold">{unassignedActiveExts.length}</span>
+                </div>
+                <span className="text-muted-foreground/50 group-hover:text-foreground">
+                  {!collapsedFolders['extensions_dynamic'] ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                </span>
+              </button>
             )}
-            <div className="space-y-0.5 mt-0.5">
+            {(!isCollapsed ? !collapsedFolders['extensions_dynamic'] : true) && (
+              <div className="space-y-0.5 mt-0.5">
               {unassignedActiveExts.map(ext => {
                 const userPlan = (state.settings?.userPlan as PlanId) || 'free'
                 const isPlanRestricted = Boolean(
@@ -706,6 +716,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                 )
               })}
             </div>
+          )}
           </div>
         )}
 
