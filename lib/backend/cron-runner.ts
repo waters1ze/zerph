@@ -928,6 +928,10 @@ export async function runAllCronTasks() {
     runWeeklySundayReport(),
     runChannelAndAiCron(),
     runGoogleCalendarPeriodicSync(),
+    (async () => {
+      const { getLiveGroqModels } = await import('./groq-pool')
+      await getLiveGroqModels().catch(() => {})
+    })(),
   ])
 }
 
