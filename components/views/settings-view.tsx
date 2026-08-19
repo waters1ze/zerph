@@ -2070,7 +2070,7 @@ export function SettingsView() {
                           <CreditCard className="w-3.5 h-3.5" />
                         </div>
                         <p className="text-xs font-bold text-foreground">
-                          Реквизиты выплат автору (ЮMoney / СБП / Карта)
+                          Привязка ЮMoney для автоматических выплат (80/20)
                         </p>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
@@ -2079,7 +2079,7 @@ export function SettingsView() {
                     </div>
 
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Привяжите кошелёк ЮMoney или реквизиты. <b>80% от каждой покупки ваших плагинов в Магазине Zerf начисляются вам</b>, 20% — комиссия платформы.
+                      Укажите ваш кошелёк ЮMoney. <b>80% от каждой продажи ваших плагинов начисляются вам автоматически</b> (20% — комиссия платформы). Никаких ручных запросов делать не нужно.
                     </p>
 
                     {/* Method Selector */}
@@ -2098,18 +2098,6 @@ export function SettingsView() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCardFormType('sbp')}
-                        className={cn(
-                          'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
-                          cardFormType === 'sbp'
-                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs'
-                            : 'bg-card text-muted-foreground border-border hover:text-foreground'
-                        )}
-                      >
-                        ⚡ СБП (Телефон)
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setCardFormType('card')}
                         className={cn(
                           'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
@@ -2122,10 +2110,10 @@ export function SettingsView() {
                       </button>
                     </div>
 
-                    {cardFormType === 'yoomoney' && (
+                    {cardFormType === 'yoomoney' ? (
                       <div className="space-y-1">
                         <label className="text-[11px] text-muted-foreground font-semibold block">
-                          Номер счёта ЮMoney (14–16 цифр):
+                          Номер счёта ЮMoney (14–16 цифр: 41001...):
                         </label>
                         <input
                           type="text"
@@ -2136,40 +2124,7 @@ export function SettingsView() {
                           className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
                         />
                       </div>
-                    )}
-
-                    {cardFormType === 'sbp' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-muted-foreground font-semibold block">
-                            Номер телефона для СБП:
-                          </label>
-                          <input
-                            type="tel"
-                            required
-                            value={cardFormPhone}
-                            onChange={e => setCardFormPhone(e.target.value)}
-                            placeholder="+7 999 123-45-67"
-                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-muted-foreground font-semibold block">
-                            Наименование банка:
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={cardFormBank}
-                            onChange={e => setCardFormBank(e.target.value)}
-                            placeholder="Сбербанк, Т-Банк, ВТБ..."
-                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-purple-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {cardFormType === 'card' && (
+                    ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <label className="text-[11px] text-muted-foreground font-semibold block">
@@ -2205,7 +2160,7 @@ export function SettingsView() {
                         disabled={autoRenewLoading}
                         className="px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
                       >
-                        {autoRenewLoading ? 'Сохранение...' : 'Сохранить реквизиты ЮMoney'}
+                        {autoRenewLoading ? 'Сохранение...' : 'Сохранить ЮMoney кошелёк'}
                       </button>
                       <button
                         type="button"

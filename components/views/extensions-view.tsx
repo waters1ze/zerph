@@ -2549,24 +2549,21 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               </div>
             </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border/60">
-              <div className="text-xs text-muted-foreground">
-                Минимальная сумма вывода: <b className="text-foreground">100 ₽</b>
+            <div className="pt-2 border-t border-border/60">
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 font-bold text-xs text-emerald-400">
+                    <Check className="w-4 h-4" />
+                    <span>Автоматические выплаты на ЮMoney активны</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    80% от каждой продажи вашего расширения зачисляются вам на привязанный ЮMoney кошелёк автоматически. Ручные запросы не требуются.
+                  </p>
+                </div>
+                <span className="px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-400 font-bold text-xs shrink-0 border border-emerald-500/30">
+                  80/20 сплит
+                </span>
               </div>
-
-              <button
-                onClick={handleOpenPayout}
-                disabled={authorStats.balance < 100}
-                className={cn(
-                  'px-5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs',
-                  authorStats.balance >= 100
-                    ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
-                )}
-              >
-                <ArrowUpRight className="w-4 h-4" />
-                <span>Запросить вывод средств ({authorStats.balance} ₽)</span>
-              </button>
             </div>
           </div>
         </div>
@@ -3465,11 +3462,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 {/* Method selector */}
                 <div className="space-y-1.5">
                   <label className="font-semibold text-foreground text-[11px] block">Способ получения выплат:</label>
-                  <div className="grid grid-cols-3 gap-1.5 bg-muted/40 p-1 rounded-2xl border border-border">
+                  <div className="grid grid-cols-2 gap-1.5 bg-muted/40 p-1 rounded-2xl border border-border">
                     {[
-                      { id: 'card', icon: '💳', label: 'Карта РФ' },
-                      { id: 'sbp', icon: '⚡', label: 'СБП (Телефон)' },
                       { id: 'yoomoney', icon: '🟣', label: 'ЮMoney' },
+                      { id: 'card', icon: '💳', label: 'Карта РФ' },
                     ].map(m => (
                       <button
                         key={m.id}

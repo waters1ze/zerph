@@ -295,39 +295,6 @@ export default function DeveloperPage() {
     }, 650)
   }
 
-  const handleRequestPayout = async () => {
-    const amt = Number(payoutAmount) || authorStats.balance
-    if (amt < 100) {
-      alert('Минимальная сумма для вывода: 100 ₽')
-      return
-    }
-    if (amt > authorStats.balance) {
-      alert('Недостаточно средств на балансе автора')
-      return
-    }
-
-    try {
-      setPayoutLoading(true)
-      const res = await fetch('/api/extensions', {
-        method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'request_payout', amount: amt }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        alert(`🎉 Заявка на вывод ${amt} ₽ создана! Средства поступят после подтверждения.`)
-        fetchDevData()
-        setPayoutAmount('')
-      } else {
-        alert(data.error || 'Ошибка вывода средств')
-      }
-    } catch {
-      alert('Ошибка при создании заявки на вывод')
-    } finally {
-      setPayoutLoading(false)
-    }
-  }
-
   const AI_SKILL_PROMPT = `---
 name: zerf-extension-builder
 description: Comprehensive expert skill for creating 100% compliant, secure Zerf Note extensions from scratch.
@@ -846,9 +813,9 @@ export default defineExtension({
                 {/* Payout Form & YooMoney Details */}
                 <div className="p-5 rounded-2xl bg-muted/30 border border-border space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-foreground">Реквизиты выплат ЮMoney / Карты (80% с продаж)</h4>
+                    <h4 className="text-xs font-bold text-foreground">Реквизиты выплат ЮMoney (80% с каждой продажи)</h4>
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                      80/20 сплит
+                      Автовыплаты 80/20
                     </span>
                   </div>
 
@@ -856,11 +823,11 @@ export default defineExtension({
                     <div className="p-3.5 rounded-xl bg-card border border-purple-500/30 flex items-center justify-between gap-3 text-xs">
                       <div>
                         <p className="font-bold text-foreground flex items-center gap-1.5">
-                          <span>{boundCard.payoutType === 'yoomoney' ? '🟣 ЮMoney кошелёк' : boundCard.payoutType === 'sbp' ? '⚡ СБП' : '💳 Банковская карта'}</span>
-                          <span className="text-[10px] text-emerald-400">✓ Активен</span>
+                          <span>{boundCard.payoutType === 'yoomoney' ? '🟣 ЮMoney кошелёк' : '💳 Банковская карта'}</span>
+                          <span className="text-[10px] text-emerald-400">✓ Активен для авто-выплат</span>
                         </p>
                         <p className="text-muted-foreground font-mono text-[11px] mt-0.5">
-                          {boundCard.payoutType === 'yoomoney' ? boundCard.cardNumber : boundCard.payoutType === 'sbp' ? `${boundCard.phone} (${boundCard.bankName || ''})` : `•••• ${boundCard.cardNumber?.slice(-4)} (${boundCard.bankName || ''})`}
+                          {boundCard.payoutType === 'yoomoney' ? boundCard.cardNumber : `•••• ${boundCard.cardNumber?.slice(-4)} (${boundCard.bankName || ''})`}
                         </p>
                       </div>
                       <button
@@ -874,7 +841,7 @@ export default defineExtension({
                   ) : (
                     <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
                       <p className="text-xs text-amber-300 font-medium">
-                        Привяжите ваш кошелёк ЮMoney, чтобы 80% от каждой покупки ваших плагинов начислялись вам автоматически.
+                        Привяжите ваш кошелёк ЮMoney. 80% от каждой покупки ваших плагинов начисляются вам автоматически, без ручных запросов.
                       </p>
                       <button
                         type="button"
@@ -891,7 +858,7 @@ export default defineExtension({
                   {showDevYoomoneyModal && (
                     <form onSubmit={handleSaveDevPayoutDetails} className="p-4 rounded-2xl bg-card border border-purple-500/40 space-y-3 shadow-xs">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-bold text-foreground">Привязка реквизитов для получения 80% с продаж</p>
+                        <p className="text-xs font-bold text-foreground">Привязка ЮMoney для получения 80% с продаж</p>
                         <button type="button" onClick={() => setShowDevYoomoneyModal(false)} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
                       </div>
 
@@ -905,13 +872,6 @@ export default defineExtension({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDevCardPayoutType('sbp')}
-                          className={cn('flex-1 py-1 px-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer', devCardPayoutType === 'sbp' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-muted/30 border-border text-muted-foreground')}
-                        >
-                          ⚡ СБП
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setDevCardPayoutType('card')}
                           className={cn('flex-1 py-1 px-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer', devCardPayoutType === 'card' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-muted/30 border-border text-muted-foreground')}
                         >
@@ -919,9 +879,9 @@ export default defineExtension({
                         </button>
                       </div>
 
-                      {devCardPayoutType === 'yoomoney' && (
+                      {devCardPayoutType === 'yoomoney' ? (
                         <div className="space-y-1">
-                          <label className="text-[11px] text-muted-foreground block">Номер кошелька ЮMoney (14–16 цифр):</label>
+                          <label className="text-[11px] text-muted-foreground block">Номер счёта ЮMoney (14–16 цифр: 41001...):</label>
                           <input
                             type="text"
                             required
@@ -931,30 +891,7 @@ export default defineExtension({
                             className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
                           />
                         </div>
-                      )}
-
-                      {devCardPayoutType === 'sbp' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="tel"
-                            required
-                            value={devCardPhone}
-                            onChange={e => setDevCardPhone(e.target.value)}
-                            placeholder="+7 999 123-45-67"
-                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
-                          />
-                          <input
-                            type="text"
-                            required
-                            value={devCardBank}
-                            onChange={e => setDevCardBank(e.target.value)}
-                            placeholder="Банк (Сбер, Т-Банк)"
-                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-purple-500"
-                          />
-                        </div>
-                      )}
-
-                      {devCardPayoutType === 'card' && (
+                      ) : (
                         <div className="grid grid-cols-2 gap-2">
                           <input
                             type="text"
@@ -980,7 +917,7 @@ export default defineExtension({
                           disabled={payoutLoading}
                           className="px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
                         >
-                          {payoutLoading ? 'Сохранение...' : 'Сохранить реквизиты'}
+                          {payoutLoading ? 'Сохранение...' : 'Сохранить ЮMoney кошелёк'}
                         </button>
                         <button
                           type="button"
@@ -993,22 +930,11 @@ export default defineExtension({
                     </form>
                   )}
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={payoutAmount}
-                      onChange={e => setPayoutAmount(e.target.value)}
-                      placeholder={`Сумма к выводу (макс. ${authorStats.balance} ₽)`}
-                      className="flex-1 h-10 px-3.5 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
-                    />
-                    <button
-                      onClick={handleRequestPayout}
-                      disabled={payoutLoading || authorStats.balance < 100}
-                      className="h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs disabled:opacity-40 cursor-pointer shrink-0"
-                    >
-                      {payoutLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                      <span>Запросить вывод</span>
-                    </button>
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                    <p className="text-xs font-bold text-emerald-400">⚡ Автоматические выплаты активны</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      При каждой покупке вашего расширения покупателем в Магазине Zerf Note 80% от суммы автоматически начисляются автору на привязанный ЮMoney кошелёк. Ручные запросы не требуются.
+                    </p>
                   </div>
                 </div>
               </div>
