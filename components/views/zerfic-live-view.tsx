@@ -12,8 +12,15 @@ import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { type ZerfikMood } from '@/components/views/tikhonya-mascot'
 import { planAtLeast, type PlanId } from '@/lib/plans'
+import {
+  useZerficLive,
+  ZERFIK_VOICE_PROFILES,
+  type ZerfikVoiceProfile,
+  type LiveChatMessage,
+  type ZerfikGesture
+} from '@/lib/zerfic-live-context'
 
-export type ZerfikGesture = 'none' | 'chair_sit' | 'waving_arms' | 'jump_and_float' | 'spread' | 'head_tilt' | 'nod'
+export { ZERFIK_VOICE_PROFILES, type ZerfikVoiceProfile, type LiveChatMessage, type ZerfikGesture }
 
 export interface ZerficCompanionProps {
   mood: ZerfikMood | 'curious' | 'surprised'
@@ -274,79 +281,6 @@ export function ZerficAllayCompanion({
   )
 }
 
-export interface ZerfikVoiceProfile {
-  id: string
-  name: string
-  subtitle: string
-  tag: string
-  gender: 'male' | 'female'
-  pitch: number
-  rate: number
-  description: string
-}
-
-export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
-  {
-    id: 'zerfik_original',
-    name: 'Зерфик (Оригинал / Тихоня)',
-    subtitle: 'Звонкий, милый, дружелюбный',
-    tag: 'Фирменный',
-    gender: 'male',
-    pitch: 1.24,
-    rate: 1.05,
-    description: 'Фирменный светлый и живой голос Зерфика-Тихони для тёплого дружеского общения.',
-  },
-  {
-    id: 'zerfik_friend',
-    name: 'Зерфик (Разговорный друг)',
-    subtitle: 'Естественный, живой, с юмором',
-    tag: 'Человек',
-    gender: 'male',
-    pitch: 1.0,
-    rate: 1.08,
-    description: 'Живая человеческая речь, разговорные связки и быстрый диалог без роботоподобности.',
-  },
-  {
-    id: 'alex_baritone',
-    name: 'Алекс (Эрудит / Бас)',
-    subtitle: 'Спокойный, глубокий и бархатный',
-    tag: 'Баритон',
-    gender: 'male',
-    pitch: 0.76,
-    rate: 0.94,
-    description: 'Глубокий бархатный тембр для спокойного разбора дня и вдумчивых советов.',
-  },
-  {
-    id: 'dmitry_business',
-    name: 'Дмитрий (Коуч / Драйв)',
-    subtitle: 'Энергичный, мотивирующий, быстрый',
-    tag: 'Энергия',
-    gender: 'male',
-    pitch: 1.06,
-    rate: 1.22,
-    description: 'Динамичный и чёткий темп для продуктивного тайм-менеджмента и фокуса.',
-  },
-  {
-    id: 'alisa_soft',
-    name: 'Алиса (Мягкий / Светлый)',
-    subtitle: 'Нежный, женский, умиротворяющий',
-    tag: 'Мягкий',
-    gender: 'female',
-    pitch: 1.30,
-    rate: 1.02,
-    description: 'Приятный женский голос с мягкими интонациями для уютных разговоров.',
-  },
-]
-
-export interface LiveChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  text: string
-  mood?: ZerfikMood
-  gesture?: ZerfikGesture
-  timestamp: number
-}
-
 const AVAILABLE_MODELS = [
   { id: 'allam-2-7b', name: 'ALLaM 2 7B Live', desc: 'Компактная базовая 7B модель', minPlan: 'free' },
   { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', desc: 'Ультра-быстрый живой диалог (~150ms)', minPlan: 'plus' },
@@ -357,96 +291,54 @@ const AVAILABLE_MODELS = [
 export function ZerficLiveView() {
   const { state, dispatch } = useApp()
   const userPlan = (state.settings?.userPlan as PlanId) || 'free'
+  const live = useZerficLive()
 
-  const [isActive, setIsActive] = useState(false)
-  const [isListening, setIsListening] = useState(false)
-  const [isThinking, setIsThinking] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
-  const [autoListen, setAutoListen] = useState(true)
+  const {
+    isActive,
+    isListening,
+    isThinking,
+    isSpeaking,
+    isMuted,
+    autoListen,
+    audioLevel,
+    statusText,
+    interimText,
+    mood,
+    gesture,
+    selectedVoiceId,
+    voiceVolume,
+    selectedModelId,
+    messages,
+    setIsMuted,
+    setAutoListen,
+    setSelectedVoiceId,
+    setVoiceVolume,
+    setSelectedModelId,
+    setMood,
+    setGesture,
+    startListeningSession,
+    stopListeningSession,
+    sendToZerfik,
+    speakText,
+    stopSpeaking,
+    clearMessages,
+  } = live
 
-  // Voice & Audio Settings
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_original')
-  const [voiceVolume, setVoiceVolume] = useState<number>(0.85) // Volume 0.0 - 1.0
-  const [selectedModelId, setSelectedModelId] = useState<string>('allam-2-7b')
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(true)
-
-  const [mood, setMood] = useState<ZerfikMood>('happy')
-  const [gesture, setGesture] = useState<ZerfikGesture>('chair_sit')
-  const [statusText, setStatusText] = useState('Зерфик готов к общению')
-  const [interimText, setInterimText] = useState('')
-  const [audioLevel, setAudioLevel] = useState(0)
-
-  const [messages, setMessages] = useState<LiveChatMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('zerf_live_chat_history')
-        if (saved) return JSON.parse(saved)
-      } catch {}
-    }
-    return [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        text: 'Привет! Я Зерфик. Можем обсудить твои дела на сегодня, распланировать задачи или просто поболтать. Я слушаю!',
-        mood: 'happy',
-        gesture: 'waving_arms',
-        timestamp: Date.now(),
-      },
-    ]
-  })
+  const [typedInput, setTypedInput] = useState('')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const recognitionRef = useRef<any>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const animationFrameRef = useRef<number | null>(null)
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
-  const isSpeakingRef = useRef(false)
-  const currentSpokenTextRef = useRef<string>('')
-  const isInterruptedRef = useRef(false)
-  const lastProcessedSpeechRef = useRef<{ text: string; time: number }>({ text: '', time: 0 })
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const animationFrameRef = useRef<number | null>(null)
 
-  // Persist messages to storage
   useEffect(() => {
-    try {
-      localStorage.setItem('zerf_live_chat_history', JSON.stringify(messages.slice(-30)))
-    } catch {}
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Broadcast live state to floating pill across all views
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('zerf_live_state_changed', {
-          detail: {
-            active: isActive,
-            status: isSpeaking ? 'speaking' : isThinking ? 'thinking' : isListening ? 'listening' : 'idle',
-          },
-        })
-      )
-    }
-  }, [isActive, isSpeaking, isThinking, isListening])
 
   const selectedVoice = useMemo(() => {
     return ZERFIK_VOICE_PROFILES.find(v => v.id === selectedVoiceId) || ZERFIK_VOICE_PROFILES[0]
   }, [selectedVoiceId])
-
-  // Stop any active TTS audio immediately (Barge-in / Interruption handler)
-  const stopSpeaking = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
-    isSpeakingRef.current = false
-    currentSpokenTextRef.current = ''
-    setIsSpeaking(false)
-    isInterruptedRef.current = true
-  }, [])
 
   // Audio Visualizer Canvas Loop
   useEffect(() => {
@@ -527,374 +419,6 @@ export function ZerficLiveView() {
     }
   }, [isListening, isSpeaking, isThinking, audioLevel])
 
-  // Speech Synthesis Function with Distinct Voice Profiles and Volume
-  const speakText = useCallback((textToSpeak: string) => {
-    if (typeof window === 'undefined') return
-    stopSpeaking()
-
-    currentSpokenTextRef.current = textToSpeak.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
-    isSpeakingRef.current = true
-
-    if ('speechSynthesis' in window) {
-      isInterruptedRef.current = false
-      const utterance = new SpeechSynthesisUtterance(textToSpeak)
-      utterance.rate = selectedVoice.rate
-      utterance.pitch = selectedVoice.pitch
-      utterance.volume = isMuted ? 0 : voiceVolume
-      utterance.lang = 'ru-RU'
-
-      // Pick matching Russian voice from browser synthesizers
-      const voices = window.speechSynthesis.getVoices()
-      const ruVoices = voices.filter(v => v.lang.startsWith('ru') || v.lang.startsWith('RU'))
-
-      if (ruVoices.length > 0) {
-        if (selectedVoice.gender === 'female') {
-          const femaleVoice = ruVoices.find(v =>
-            v.name.toLowerCase().includes('irina') ||
-            v.name.toLowerCase().includes('tatiana') ||
-            v.name.toLowerCase().includes('svetlana') ||
-            v.name.toLowerCase().includes('alisa') ||
-            v.name.toLowerCase().includes('female')
-          ) || ruVoices[0]
-          utterance.voice = femaleVoice
-        } else if (selectedVoice.id === 'alex_baritone') {
-          const bassVoice = ruVoices.find(v =>
-            v.name.toLowerCase().includes('dmitry') ||
-            v.name.toLowerCase().includes('aleksandr')
-          ) || ruVoices[0]
-          utterance.voice = bassVoice
-        } else {
-          const maleVoice = ruVoices.find(v =>
-            v.name.toLowerCase().includes('pavel') ||
-            v.name.toLowerCase().includes('male') ||
-            v.name.toLowerCase().includes('русский')
-          ) || ruVoices[0]
-          utterance.voice = maleVoice
-        }
-      }
-
-      utterance.onstart = () => {
-        isSpeakingRef.current = true
-        setIsSpeaking(true)
-        setStatusText('Зерфик говорит...')
-      }
-
-      utterance.onend = () => {
-        isSpeakingRef.current = false
-        currentSpokenTextRef.current = ''
-        setIsSpeaking(false)
-        if (autoListen && isActive && !isInterruptedRef.current) {
-          setStatusText('Слушаю вас...')
-          setMood('normal')
-        } else {
-          setStatusText('Готов к разговору')
-        }
-      }
-
-      utterance.onerror = () => {
-        isSpeakingRef.current = false
-        currentSpokenTextRef.current = ''
-        setIsSpeaking(false)
-        setStatusText('Готов к разговору')
-      }
-
-      currentUtteranceRef.current = utterance
-      window.speechSynthesis.speak(utterance)
-    } else {
-      // Fallback server audio
-      fetch('/api/extensions/zerfic-live/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSpeak, voiceId: selectedVoice.id }),
-      })
-        .then(r => r.arrayBuffer())
-        .then(buf => {
-          const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }))
-          const audio = new Audio(url)
-          audio.volume = isMuted ? 0 : voiceVolume
-          isSpeakingRef.current = true
-          setIsSpeaking(true)
-          setStatusText('Зерфик говорит...')
-          audio.onended = () => {
-            isSpeakingRef.current = false
-            currentSpokenTextRef.current = ''
-            setIsSpeaking(false)
-            setStatusText(autoListen ? 'Слушаю вас...' : 'Готов к разговору')
-          }
-          audio.play().catch(() => {
-            isSpeakingRef.current = false
-            setIsSpeaking(false)
-          })
-        })
-        .catch(() => {
-          isSpeakingRef.current = false
-          setIsSpeaking(false)
-        })
-    }
-  }, [selectedVoice, voiceVolume, isMuted, autoListen, isActive, stopSpeaking])
-
-  // Process User Speech Text through AI Chat Engine (with Strict Deduplication)
-  const sendToZerfik = useCallback(async (userText: string) => {
-    const trimmed = userText.trim()
-    if (!trimmed) return
-
-    // Prevent duplicate speech inputs within 2.5 seconds
-    const now = Date.now()
-    if (
-      lastProcessedSpeechRef.current.text === trimmed &&
-      now - lastProcessedSpeechRef.current.time < 2500
-    ) {
-      return
-    }
-    lastProcessedSpeechRef.current = { text: trimmed, time: now }
-
-    stopSpeaking()
-    setIsThinking(true)
-    setStatusText('Зерфик обдумывает ответ...')
-    setMood('thinking')
-    setGesture('chair_sit')
-    setInterimText('')
-
-    const userMsg: LiveChatMessage = {
-      id: `u_${now}`,
-      role: 'user',
-      text: trimmed,
-      timestamp: now,
-    }
-
-    setMessages(prev => {
-      // Deduplicate if last message was already identical
-      if (prev.length > 0 && prev[prev.length - 1].role === 'user' && prev[prev.length - 1].text === trimmed) {
-        return prev
-      }
-      return [...prev, userMsg]
-    })
-
-    try {
-      const historyPayload = messages.slice(-6).map(m => ({
-        role: m.role,
-        content: m.text,
-      }))
-
-      const res = await fetch('/api/extensions/zerfic-live/chat', {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: trimmed,
-          history: historyPayload,
-          model: selectedModelId,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (data.error) {
-        const errorMsg: LiveChatMessage = {
-          id: `b_${Date.now()}`,
-          role: 'assistant',
-          text: data.error,
-          mood: 'normal',
-          gesture: 'none',
-          timestamp: Date.now(),
-        }
-        setMessages(prev => [...prev, errorMsg])
-        setStatusText('Ошибка соединения')
-        setIsThinking(false)
-        return
-      }
-
-      const botReply = data.reply || 'Я тебя услышал!'
-      const botMood: ZerfikMood = data.mood || 'happy'
-      const botGesture: ZerfikGesture = data.gesture || 'waving_arms'
-
-      const botMsg: LiveChatMessage = {
-        id: `b_${Date.now()}`,
-        role: 'assistant',
-        text: botReply,
-        mood: botMood,
-        gesture: botGesture,
-        timestamp: Date.now(),
-      }
-
-      setMessages(prev => [...prev, botMsg])
-      setMood(botMood)
-      setGesture(botGesture)
-      setIsThinking(false)
-      setStatusText('Зерфик говорит...')
-
-      // Play Speech Synthesis
-      speakText(botReply)
-    } catch (err) {
-      console.error('Zerfic Live Chat Error:', err)
-      setIsThinking(false)
-      setStatusText('Ошибка сети')
-    }
-  }, [messages, selectedModelId, stopSpeaking, speakText])
-
-  // Setup Continuous Speech Recognition & VAD (Silence Detector)
-  const startListeningSession = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
-
-      // Audio Context for Volume Level Detection
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
-      const audioCtx = new AudioCtx()
-      const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 256
-      const source = audioCtx.createMediaStreamSource(stream)
-      source.connect(analyser)
-
-      audioContextRef.current = audioCtx
-      analyserRef.current = analyser
-
-      // Level monitoring loop
-      const dataArray = new Uint8Array(analyser.frequencyBinCount)
-      const checkLevel = () => {
-        if (!analyserRef.current) return
-        analyserRef.current.getByteFrequencyData(dataArray)
-        let sum = 0
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i]
-        }
-        const avg = sum / dataArray.length / 255
-        setAudioLevel(avg)
-
-        // Dynamic volume visualizer
-        if (isActive) {
-          requestAnimationFrame(checkLevel)
-        }
-      }
-      checkLevel()
-
-      // Web Speech Recognition
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition()
-        recognition.continuous = true
-        recognition.interimResults = true
-        recognition.lang = 'ru-RU'
-
-        recognition.onstart = () => {
-          setIsListening(true)
-          if (!isSpeakingRef.current) {
-            setStatusText('Слушаю вас...')
-          }
-        }
-
-        recognition.onresult = (event: any) => {
-          let finalTranscript = ''
-          let currentInterim = ''
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript
-            if (event.results[i].isFinal) {
-              finalTranscript += transcript
-            } else {
-              currentInterim += transcript
-            }
-          }
-
-          const rawText = (finalTranscript || currentInterim).trim()
-          const normalizedIncoming = rawText.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
-
-          // Echo cancellation: if incoming transcript is Zerfik speaking his own message, discard it!
-          if (isSpeakingRef.current && currentSpokenTextRef.current) {
-            if (
-              currentSpokenTextRef.current.includes(normalizedIncoming) ||
-              normalizedIncoming.includes(currentSpokenTextRef.current.slice(0, 30))
-            ) {
-              return
-            }
-            // User interrupted Zerfik with distinct new words
-            if (normalizedIncoming.length > 5) {
-              stopSpeaking()
-            }
-          }
-
-          if (currentInterim) {
-            setInterimText(currentInterim)
-            setMood('thinking')
-          }
-
-          if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current)
-            silenceTimerRef.current = null
-          }
-
-          if (finalTranscript.trim()) {
-            setInterimText('')
-            sendToZerfik(finalTranscript.trim())
-          } else if (currentInterim.trim()) {
-            // Snappy silence detection: after 650ms of no new speech, process the phrase
-            silenceTimerRef.current = setTimeout(() => {
-              if (currentInterim.trim().length > 1) {
-                setInterimText('')
-                sendToZerfik(currentInterim.trim())
-              }
-            }, 650)
-          }
-        }
-
-        recognition.onerror = (e: any) => {
-          console.warn('Speech Recognition notice:', e.error)
-        }
-
-        recognition.onend = () => {
-          if (isActive && autoListen && !isMuted) {
-            try {
-              recognition.start()
-            } catch {}
-          } else {
-            setIsListening(false)
-          }
-        }
-
-        recognition.start()
-        recognitionRef.current = recognition
-      }
-
-      setIsActive(true)
-      setIsListening(true)
-      setStatusText('Слушаю вас... Говорите свободно')
-      setMood('normal')
-    } catch (err) {
-      console.error('Microphone error:', err)
-      alert('Пожалуйста, разрешите доступ к микрофону для разговора с Зерфиком.')
-    }
-  }, [isActive, autoListen, isMuted, isSpeaking, stopSpeaking, sendToZerfik])
-
-  // Stop Listening Session
-  const stopListeningSession = useCallback(() => {
-    setIsActive(false)
-    setIsListening(false)
-    stopSpeaking()
-    setInterimText('')
-    setStatusText('Разговор завершён')
-    setMood('normal')
-
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch {}
-      recognitionRef.current = null
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close()
-      } catch {}
-      audioContextRef.current = null
-    }
-  }, [stopSpeaking])
-
   // Handle Main Call Button
   const handleToggleCall = () => {
     if (isActive) {
@@ -904,21 +428,11 @@ export function ZerficLiveView() {
     }
   }
 
-  // Clear Chat History
-  const handleClearHistory = () => {
-    setMessages([
-      {
-        id: 'welcome_reset',
-        role: 'assistant',
-        text: 'История очищена. Я готов к новой теме!',
-        mood: 'happy',
-        gesture: 'waving_arms',
-        timestamp: Date.now(),
-      },
-    ])
-    try {
-      localStorage.removeItem('zerf_live_chat_history')
-    } catch {}
+  const handleSendText = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!typedInput.trim()) return
+    sendToZerfik(typedInput.trim())
+    setTypedInput('')
   }
 
   return (
@@ -982,7 +496,7 @@ export function ZerficLiveView() {
 
           {/* Clear History */}
           <button
-            onClick={handleClearHistory}
+            onClick={clearMessages}
             className="p-2 rounded-xl bg-muted/60 hover:bg-rose-500/15 text-muted-foreground hover:text-rose-400 border border-border/80 transition-all cursor-pointer shadow-2xs"
             title="Очистить историю разговора"
           >
@@ -1158,7 +672,7 @@ export function ZerficLiveView() {
             <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-border/60">
               <button
                 type="button"
-                onClick={() => setVoiceVolume(prev => (prev === 0 ? 0.85 : 0))}
+                onClick={() => setVoiceVolume(voiceVolume === 0 ? 0.85 : 0)}
                 className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                 title="Громкость речи Зерфика"
               >

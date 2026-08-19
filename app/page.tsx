@@ -327,6 +327,8 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
   )
 }
 
+import { ZerficLiveProvider } from '@/lib/zerfic-live-context'
+
 export default function Page() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -335,7 +337,9 @@ export default function Page() {
 
   return (
     <AppProvider>
-      <AppShell />
+      <ZerficLiveProvider>
+        <AppShell />
+      </ZerficLiveProvider>
     </AppProvider>
   )
 }
