@@ -682,7 +682,7 @@ export async function generateReminderContext(
 }
 
 /**
- * Generate a personalized morning greeting based on user's recent tasks and notes.
+ * Generate a personalized morning greeting based strictly on user's own recent tasks, notes, and today's birthdays.
  * Returns a ready-to-send Russian Telegram message (with Markdown).
  */
 export async function generateMorningGreeting(
@@ -690,6 +690,7 @@ export async function generateMorningGreeting(
   recentTaskTitles: string[],
   recentNoteTitles: string[],
   pendingTasks: string[],
+  todayBirthdays: string[] = [],
   apiKey?: string
 ): Promise<string> {
   const now = new Date()
@@ -700,47 +701,57 @@ export async function generateMorningGreeting(
 
   try {
     const contextLines: string[] = []
-    if (recentTaskTitles.length) contextLines.push(`Недавние задачи: ${recentTaskTitles.slice(0, 5).join(', ')}`)
-    if (recentNoteTitles.length) contextLines.push(`Недавние заметки: ${recentNoteTitles.slice(0, 3).join(', ')}`)
-    if (pendingTasks.length) contextLines.push(`Активные задачи сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
+    if (todayBirthdays.length) contextLines.push(`Праздники и Дни рождения СЕГОДНЯ: ${todayBirthdays.join(', ')}`)
+    if (pendingTasks.length) contextLines.push(`Планы и задачи на сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
+    if (recentTaskTitles.length) contextLines.push(`Контекст недавних задач: ${recentTaskTitles.slice(0, 4).join(', ')}`)
+    if (recentNoteTitles.length) contextLines.push(`Контекст заметок пользователя: ${recentNoteTitles.slice(0, 3).join(', ')}`)
 
     const result = await callGroqChatCompletion({
       messages: [
         {
           role: 'system',
-          content: `Ты — персональный AI-ассистент пользователя в Telegram. Каждое утро ты пишешь ему тёплое, персонализированное сообщение.
-Формат ответа — Markdown для Telegram. Пиши ТОЛЬКО на русском языке.
-Структура (строго):
-1. Приветствие с именем (1 строка)
-2. Упоминание дня/даты
-3. Персонализированный комментарий, основанный на известных задачах/заметках пользователя (2-3 предложения, как будто ты знаешь его жизнь — тепло и конкретно)
-4. 2 практические рекомендации на основе его активностей
-5. Мотивирующая фраза
+          content: `Ты — персональный AI-ассистент пользователя в Telegram (Zerf AI). Каждое утро ты пишешь ему тёплое, вдохновляющее и строго персонализированное утреннее сообщение.
+Формат ответа — Markdown для Telegram (жирный *текст*, курсив _текст_). Пиши ТОЛЬКО на русском языке.
 
-Максимум 200 слов. Без шаблонных «Желаю тебе». Конкретно и по-дружески.`,
+Правила контекста (КРИТИЧЕСКИ ВАЖНО):
+- Опирайся ИСКЛЮЧИТЕЛЬНО на предоставленные задачи, заметки и дни рождения ЭТОГО пользователя. НЕ выдумывай чужие задачи, людей или события, которых нет в контексте.
+- Если список задач пуст: пожелай отличного свободного дня, предложи наметить главные цели или провести день с пользой.
+- Дни рождения: упоминай день рождения ТОЛЬКО если он явно указан в строке «Праздники и Дни рождения СЕГОДНЯ». Если эта строка отсутствует или пуста, КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать о днях рождения, поздравлениях или праздниках!
+- Задачи на сегодня — это планы, которые предстоит выполнить сегодня (НЕ пиши, что они уже сделаны).
+
+Структура сообщения:
+1. Приветствие с именем (1 строка, например: «Доброе утро, [Имя]!»)
+2. Упоминание дня недели и даты (например: «Сегодня — [день], [дата].»)
+3. Короткий персонализированный комментарий по его планам на сегодня (2-3 предложения, тепло, по-дружески).
+4. 2 полезных практических совета для продуктивности или комфортного выполнения дел.
+5. Короткая мотивирующая фраза на день.
+
+Максимум 160 слов. Без шаблонности, конкретно и заботливо.`,
         },
         {
           role: 'user',
-          content: `Имя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
+          content: `Имя пользователя: ${firstName}\nДата: ${dayName}\n${contextLines.length ? contextLines.join('\n') : 'Задач на сегодня нет, день полностью свободен.'}`,
         },
       ],
       model: GROQ_CHAT_MODEL,
-      temperature: 0.8,
+      temperature: 0.7,
       max_tokens: 350,
       apiKey,
     })
 
     const aiText = result.content?.trim() || ''
-    return aiText || buildFallbackGreeting(firstName, dayName, pendingTasks)
+    return aiText || buildFallbackGreeting(firstName, dayName, pendingTasks, todayBirthdays)
   } catch {
-    return buildFallbackGreeting(firstName, dayName, pendingTasks)
+    return buildFallbackGreeting(firstName, dayName, pendingTasks, todayBirthdays)
   }
 }
 
-function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[]): string {
+function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[], todayBirthdays: string[] = []): string {
+  const bdayLine = todayBirthdays.length ? `🎂 *Праздники сегодня:*\n${todayBirthdays.map(b => `▪ ${b}`).join('\n')}\n\n` : ''
   return (
-    `✦ *Доброе утро, ${firstName}*\n\n` +
+    `✦ *Доброе утро, ${firstName}!*\n\n` +
     `Сегодня ${dayName}.\n\n` +
+    bdayLine +
     (pendingTasks.length
       ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `▪ ${t}`).join('\n')}\n\n`
       : `✓ На сегодня задач нет — отличная возможность спланировать день!\n\n`) +

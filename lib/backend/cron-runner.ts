@@ -9,7 +9,7 @@
  * 5. CHANNEL DIGESTS & POLLS: once per scheduled day
  */
 
-import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig, getUserUsageAndLimits } from './db'
+import { getAllTasks, updateTask, getAllNotes, getConfig, setConfig, getUserUsageAndLimits, parseBirthday } from './db'
 import { PLANS, getDailyCount, incrementDailyCount, COUNTERS, isNewsDisabled, planAtLeast } from './plans'
 import { generateMorningGreeting, generateEveningReview } from './groq'
 import { prisma } from './prisma'
@@ -33,6 +33,20 @@ import {
 import { syncGoogleCalendar } from './google-calendar'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+
+function isTaskForUser(t: any, chatId: number): boolean {
+  if (t.ownerChatId && Number(t.ownerChatId) === chatId) return true
+  if (Array.isArray(t.assignees) && t.assignees.some((a: any) => String(a) === String(chatId))) return true
+  return false
+}
+
+function isNoteForUser(n: any, chatId: number): boolean {
+  return Boolean(n.ownerChatId && Number(n.ownerChatId) === chatId)
+}
+
+function isGoalForUser(g: any, chatId: number): boolean {
+  return Boolean(g.ownerChatId && Number(g.ownerChatId) === chatId)
+}
 
 async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any) {
   let delivered = false
@@ -281,20 +295,7 @@ export async function runMorningGreeting() {
 
     const allTasks = await getAllTasks()
     const allNotes = await getAllNotes()
-
-    const recentTaskTitles = allTasks
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10)
-      .map(t => t.title)
-
-    const recentNoteTitles = allNotes
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5)
-      .map(n => n.title)
-
-    const pendingToday = allTasks
-      .filter(t => t.status !== 'done' && t.dueDate === todayStr)
-      .map(t => t.title)
+    const todayMonthDay = `${getPart('month')}-${getPart('day')}` // e.g. "08-19"
 
     for (const chat of uniqueChats) {
       try {
@@ -312,25 +313,57 @@ export async function runMorningGreeting() {
 
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 
-        const userTasks = allTasks.filter(t => {
-          const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
-          return !ownerId || Number(ownerId) === chatId
-        })
+        // Strictly isolate tasks and notes belonging to this user
+        const userTasks = allTasks.filter(t => isTaskForUser(t, chatId))
+        const userNotes = allNotes.filter(n => isNoteForUser(n, chatId))
 
+        // Detect birthdays happening strictly TODAY
+        const todayBirthdays: string[] = []
+        if (chat.birthday) {
+          const parsedBday = parseBirthday(chat.birthday)
+          if (parsedBday) {
+            const bMonthDay = `${String(parsedBday.month).padStart(2, '0')}-${String(parsedBday.day).padStart(2, '0')}`
+            if (bMonthDay === todayMonthDay) {
+              todayBirthdays.push('Твой День рождения сегодня! 🎉')
+            }
+          }
+        }
+
+        // Mutual friend birthdays occurring strictly TODAY
+        const friendBdaysToday = userTasks.filter(t =>
+          t.dueDate === todayStr &&
+          (t.tags?.includes('день рождения') || t.title.startsWith('🎂')) &&
+          !t.title.includes('Мой день рождения')
+        )
+        for (const bt of friendBdaysToday) {
+          todayBirthdays.push(bt.title.replace(/^🎂\s*/, ''))
+        }
+
+        const isBdayTask = (t: any) =>
+          Boolean(t.tags?.includes('день рождения') || t.tags?.includes('мой день рождения') || t.title.startsWith('🎂'))
+
+        // User's regular pending tasks for today (excluding future birthday tasks)
         const userPending = userTasks
-          .filter(t => t.status !== 'done' && t.dueDate === todayStr)
+          .filter(t => t.status !== 'done' && t.status !== 'draft' && t.dueDate === todayStr && !isBdayTask(t))
           .map(t => t.title)
 
         const userRecent = userTasks
+          .filter(t => !isBdayTask(t))
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 8)
+          .slice(0, 5)
           .map(t => t.title)
+
+        const userRecentNotes = userNotes
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 3)
+          .map(n => n.title)
 
         const greeting = await generateMorningGreeting(
           firstName,
-          userRecent.length ? userRecent : recentTaskTitles,
-          recentNoteTitles,
-          userPending.length ? userPending : pendingToday,
+          userRecent,
+          userRecentNotes,
+          userPending,
+          todayBirthdays
         ).catch(() => null)
 
         if (greeting) {
@@ -338,11 +371,14 @@ export async function runMorningGreeting() {
           // Mark as done ONLY after successful delivery
           await markUserCronDoneToday('morning_greeting', chatId, todayStr)
         } else {
-          // Groq failed — build fallback immediately and still deliver
+          // Fallback immediately
+          const bdayLine = todayBirthdays.length ? `🎂 *Праздники сегодня:*\n${todayBirthdays.map(b => `▪ ${b}`).join('\n')}\n\n` : ''
           const fallbackGreeting = `✦ *Доброе утро, ${firstName}!*\n\n` +
+            `Сегодня ${todayStr}.\n\n` +
+            bdayLine +
             (userPending.length
               ? `📋 *На сегодня (${userPending.length}):*\n` + userPending.slice(0, 5).map(t => `▪ ${t}`).join('\n') + `\n\n`
-              : ``) +
+              : `✓ На сегодня задач нет — отличная возможность спланировать день!\n\n`) +
             `_Продуктивного дня! ✦_`
           await sendTelegramMessage(chatId, fallbackGreeting)
           await markUserCronDoneToday('morning_greeting', chatId, todayStr)
@@ -354,7 +390,7 @@ export async function runMorningGreeting() {
       }
     }
 
-    console.log(`[Zerf Cron] Morning greeting sent to ${chats.length} users at ${todayStr} MSK`)
+    console.log(`[Zerf Cron] Morning greeting sent to ${uniqueChats.length} users at ${todayStr} MSK`)
   } catch (err) {
     console.error('Morning greeting cron error:', err)
   }
@@ -401,6 +437,9 @@ export async function runEveningReview() {
 
     const allTasks = await getAllTasks()
 
+    const isBdayTask = (t: any) =>
+      Boolean(t.tags?.includes('день рождения') || t.tags?.includes('мой день рождения') || t.title.startsWith('🎂'))
+
     for (const chat of uniqueChats) {
       try {
         const chatId = Number(chat.chatId)
@@ -418,10 +457,7 @@ export async function runEveningReview() {
 
         const firstName = (chat as { firstName?: string | null }).firstName || 'друг'
 
-        const userTasks = allTasks.filter(t => {
-          const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
-          return !ownerId || Number(ownerId) === chatId
-        })
+        const userTasks = allTasks.filter(t => isTaskForUser(t, chatId) && !isBdayTask(t))
 
         const completedToday = userTasks
           .filter(t => t.status === 'done' && (
@@ -458,7 +494,7 @@ export async function runEveningReview() {
       }
     }
 
-    console.log(`[Zerf Cron] Evening review sent to users at ${todayStr} 21:00 MSK`)
+    console.log(`[Zerf Cron] Evening review sent to users at ${todayStr} MSK`)
   } catch (err) {
     console.error('Evening review cron error:', err)
   }
@@ -511,6 +547,8 @@ export async function runWeeklySundayReport() {
       allGoals = await prisma.goal.findMany()
     } catch {}
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const isBdayTask = (t: any) =>
+      Boolean(t.tags?.includes('день рождения') || t.tags?.includes('мой день рождения') || t.title.startsWith('🎂'))
 
     for (const chat of uniqueChats) {
       try {
@@ -520,15 +558,8 @@ export async function runWeeklySundayReport() {
         }
         await markUserCronDoneToday('weekly_sunday_report', chatId, todayStr)
 
-        const userTasks = allTasks.filter(t => {
-          const ownerId = (t as { ownerChatId?: bigint | null }).ownerChatId
-          return !ownerId || Number(ownerId) === chatId
-        })
-
-        const userGoals = allGoals.filter(g => {
-          const ownerId = (g as { ownerChatId?: bigint | null }).ownerChatId
-          return !ownerId || Number(ownerId) === chatId
-        })
+        const userTasks = allTasks.filter(t => isTaskForUser(t, chatId) && !isBdayTask(t))
+        const userGoals = allGoals.filter(g => isGoalForUser(g, chatId))
 
         const weekCompleted = userTasks.filter(t => {
           if (t.status !== 'done') return false
@@ -747,10 +778,7 @@ export async function runForceMorningGreeting() {
 
     const allTasks = await getAllTasks()
     const allNotes = await getAllNotes()
-
-    const recentNoteTitles = allNotes
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5).map(n => n.title)
+    const todayMonthDay = `${getPart('month')}-${getPart('day')}` // e.g. "08-19"
 
     const seenChatIds = new Set<string>()
     for (const chat of chats) {
@@ -763,26 +791,64 @@ export async function runForceMorningGreeting() {
         const chatId = Number(chat.chatId)
         const firstName = (chat as any).firstName || 'друг'
 
-        const userTasks = allTasks.filter(t => {
-          const ownerId = (t as any).ownerChatId
-          return !ownerId || Number(ownerId) === chatId
-        })
+        const userTasks = allTasks.filter(t => isTaskForUser(t, chatId))
+        const userNotes = allNotes.filter(n => isNoteForUser(n, chatId))
+
+        // Detect birthdays happening strictly TODAY
+        const todayBirthdays: string[] = []
+        if (chat.birthday) {
+          const parsedBday = parseBirthday(chat.birthday)
+          if (parsedBday) {
+            const bMonthDay = `${String(parsedBday.month).padStart(2, '0')}-${String(parsedBday.day).padStart(2, '0')}`
+            if (bMonthDay === todayMonthDay) {
+              todayBirthdays.push('Твой День рождения сегодня! 🎉')
+            }
+          }
+        }
+
+        const friendBdaysToday = userTasks.filter(t =>
+          t.dueDate === todayStr &&
+          (t.tags?.includes('день рождения') || t.title.startsWith('🎂')) &&
+          !t.title.includes('Мой день рождения')
+        )
+        for (const bt of friendBdaysToday) {
+          todayBirthdays.push(bt.title.replace(/^🎂\s*/, ''))
+        }
+
+        const isBdayTask = (t: any) =>
+          Boolean(t.tags?.includes('день рождения') || t.tags?.includes('мой день рождения') || t.title.startsWith('🎂'))
+
         const userPending = userTasks
-          .filter(t => t.status !== 'done' && t.dueDate === todayStr)
+          .filter(t => t.status !== 'done' && t.status !== 'draft' && t.dueDate === todayStr && !isBdayTask(t))
           .map(t => t.title)
+
         const userRecent = userTasks
+          .filter(t => !isBdayTask(t))
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 8).map(t => t.title)
+          .slice(0, 5)
+          .map(t => t.title)
+
+        const userRecentNotes = userNotes
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 3)
+          .map(n => n.title)
 
         const greeting = await generateMorningGreeting(
-          firstName, userRecent, recentNoteTitles, userPending
+          firstName,
+          userRecent,
+          userRecentNotes,
+          userPending,
+          todayBirthdays
         ).catch(() => null)
 
+        const bdayLine = todayBirthdays.length ? `🎂 *Праздники сегодня:*\n${todayBirthdays.map(b => `▪ ${b}`).join('\n')}\n\n` : ''
         const text = greeting || (
-          `✦ *Доброе утро, ${firstName}*\n\n` +
+          `✦ *Доброе утро, ${firstName}!*\n\n` +
+          `Сегодня ${todayStr}.\n\n` +
+          bdayLine +
           (userPending.length
             ? `📋 *На сегодня (${userPending.length}):*\n` + userPending.slice(0, 5).map(t => `▪ ${t}`).join('\n') + '\n\n'
-            : '') +
+            : `✓ На сегодня задач нет — отличная возможность спланировать день!\n\n`) +
           `_Продуктивного дня! ✦_`
         )
 
