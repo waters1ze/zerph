@@ -596,26 +596,29 @@ export function EntropySearchView() {
           {/* Depth / Length Selector */}
           <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-xl border border-border shrink-0">
             {[
-              { id: 'lite', label: 'Lite', limit: 'до 500 зн.', icon: '⚡', desc: 'Краткий блиц (до 500 символов)' },
-              { id: 'high', label: 'High', limit: 'до 1000 зн.', icon: '📊', desc: 'Стандартный анализ (до 1000 символов)' },
-              { id: 'max',  label: 'Max',  limit: 'до 2000 зн.', icon: '📚', desc: 'Глубокий отчет (до 2000 символов)' },
-            ].map(d => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => setSearchDepth(d.id as any)}
-                title={`${d.desc} — ${d.limit}`}
-                className={cn(
-                  'px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1',
-                  searchDepth === d.id
-                    ? 'bg-primary text-primary-foreground shadow-2xs'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                <span>{d.icon}</span>
-                <span>{d.label}</span>
-              </button>
-            ))}
+              { id: 'lite', label: 'Lite', limit: 'до 400 зн.', Icon: Zap, desc: 'Краткий блиц (до 400 символов)' },
+              { id: 'high', label: 'High', limit: 'до 1200 зн.', Icon: Layers, desc: 'Развернутый анализ (800–1200 символов)' },
+              { id: 'max',  label: 'Max',  limit: 'до 2500 зн.', Icon: FileText, desc: 'Глубокий отчет-лонгрид (1500–2500 символов)' },
+            ].map(d => {
+              const Icon = d.Icon
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setSearchDepth(d.id as any)}
+                  title={`${d.desc} — ${d.limit}`}
+                  className={cn(
+                    'px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                    searchDepth === d.id
+                      ? 'bg-primary text-primary-foreground shadow-2xs'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  <Icon className="w-3 h-3 shrink-0" />
+                  <span>{d.label}</span>
+                </button>
+              )
+            })}
           </div>
 
           <button
@@ -864,8 +867,23 @@ export function EntropySearchView() {
                 <h3 className="font-bold text-sm text-foreground">Синтез ответа и фактологический отчет</h3>
                 
                 {/* Result Depth Mode Badge */}
-                <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold font-mono">
-                  {result.depth === 'lite' ? '⚡ Lite (до 500 зн.)' : result.depth === 'max' ? '📚 Max (до 2000 зн.)' : '📊 High (до 1000 зн.)'}
+                <span className="px-2 py-0.5 rounded-md bg-muted/80 text-foreground border border-border text-[10px] font-bold font-mono flex items-center gap-1">
+                  {result.depth === 'lite' ? (
+                    <>
+                      <Zap className="w-2.5 h-2.5 text-muted-foreground" />
+                      <span>Lite (до 400 зн.)</span>
+                    </>
+                  ) : result.depth === 'max' ? (
+                    <>
+                      <FileText className="w-2.5 h-2.5 text-muted-foreground" />
+                      <span>Max (до 2500 зн.)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="w-2.5 h-2.5 text-muted-foreground" />
+                      <span>High (до 1200 зн.)</span>
+                    </>
+                  )}
                 </span>
 
                 {result.isPro && (

@@ -518,8 +518,10 @@ export async function POST(req: NextRequest) {
   4) 🔮 Анализ последствий, влияние на индустрию/общество и дальнейшие сценарии развития.
 - Длина ответа "answer" ДОЛЖНА быть не менее 1500 символов!`
     } else {
-      depthInstruction = `ОБЪЁМ И СТРУКТУРА: РЕЖИМ HIGH (СТАНДАРТНЫЙ АНАЛИЗ, 800–1200 СИМВОЛОВ).
-- Напиши структурированный ответ из 2–3 содержательных абзацев с ключевыми деталями, аргументами и сносками [1], [2], [3].`
+      depthInstruction = `ОБЪЁМ И СТРУКТУРА: РЕЖИМ HIGH (РАЗВЕРНУТЫЙ АНАЛИЗ, 800–1200 СИМВОЛОВ).
+- ОБЯЗАТЕЛЬНО напиши подробный, содержательный и структурированный ответ из 2–3 полноценных абзацев!
+- Запрещено писать короткий ответ в 1-2 предложения! Разверни факты, контекст, предысторию и подробности со сносками [1], [2], [3].
+- Объём ответа "answer" должен составлять от 800 до 1200 символов.`
     }
 
     if (isPro) {
@@ -563,7 +565,7 @@ ${liveContext}
      • Проведи объективный анализ первоисточников, укажи точные факты, хронологию и расставь сноски [1], [2], [3].
 3. Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал вопрос по программированию!
 4. Если предоставлены первоисточники или личные заметки/задачи, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
-5. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 400 симв.' : depth === 'max' ? 'ОТ 1500 ДО 2500 симв. (длинный лонгрид!)' : 'до 1000 симв.'}).
+5. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 400 симв.' : depth === 'max' ? 'ОТ 1500 ДО 2500 симв. (длинный лонгрид!)' : 'ОТ 800 ДО 1200 симв. (2–3 развернутых абзаца)'}).
 6. Сформируй 2-4 ключевых вывода/инсайта ("takeaways").
 7. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
 8. Напиши умный, тёплый и живой комментарий от Зерфика ("tikhonyaComment"), отражающий суть вопроса.
@@ -599,7 +601,7 @@ ${liveContext}
       ? 'You are Zerfik — a deep, comprehensive and analytical AI research engine (like Perplexity Pro Search). Write extensive, multi-paragraph in-depth reports in Russian with rich context, timeline, data points, nuances and precise source citations [1], [2], [3]. Never output short summaries when in Max or Pro Search mode. Always output pure valid JSON.'
       : depth === 'lite'
       ? 'You are Zerfik — a fast, ultra-concise AI search engine (Lite mode). Write brief 1-2 sentence answers in Russian with key source citations. Always output pure valid JSON.'
-      : 'You are Zerfik — a smart, structured and factual AI search engine. Write well-rounded, balanced answers in Russian with key details and source citations [1], [2]. Always output pure valid JSON.'
+      : 'You are Zerfik — a smart, comprehensive and factual AI search engine. Write well-rounded, detailed 2-3 paragraph answers in Russian with rich context, key facts and source citations [1], [2]. Do not make the answer too brief or one-sentence. Always output pure valid JSON.'
 
     try {
       const completion = await callGroqChatCompletion({
@@ -616,8 +618,8 @@ ${liveContext}
         model: effectiveModel,
         apiKey: apiKey || process.env.GROQ_API_KEY,
         response_format: { type: 'json_object' },
-        temperature: isDeepReport ? 0.35 : 0.2,
-        max_tokens: isDeepReport ? 3500 : 1500,
+        temperature: isDeepReport ? 0.35 : depth === 'lite' ? 0.2 : 0.28,
+        max_tokens: isDeepReport ? 3500 : depth === 'lite' ? 800 : 2200,
       })
 
       const raw = completion.content || '{}'

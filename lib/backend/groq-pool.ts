@@ -90,11 +90,12 @@ export function stripThinkingTags(raw: string): string {
 }
 
 const KNOWN_GROQ_CHAT_MODELS = new Set([
+  'llama-3.3-70b-versatile',
+  'deepseek-r1-distill-llama-70b',
+  'llama-3.1-8b-instant',
+  'qwen/qwen3.6-27b',
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
-  'qwen/qwen3.6-27b',
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
   'groq/compound',
   'groq/compound-mini',
   'allam-2-7b',
@@ -107,12 +108,14 @@ export function normalizeGroqChatModel(model?: string): string {
   if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) return trimmed
   
   const lower = trimmed.toLowerCase()
-  // Map any legacy names to current fast Groq models
-  if (lower.includes('llama-3.1-8b') || lower.includes('llama-3.2') || lower.includes('instant') || lower.includes('mini')) {
-    return 'llama-3.1-8b-instant'
+  if (lower.includes('deepseek') || lower.includes('r1')) {
+    return 'deepseek-r1-distill-llama-70b'
   }
   if (lower.includes('70b') || lower.includes('versatile') || lower.includes('72b')) {
     return 'llama-3.3-70b-versatile'
+  }
+  if (lower.includes('llama-3.1-8b') || lower.includes('llama-3.2') || lower.includes('instant') || lower.includes('mini')) {
+    return 'llama-3.1-8b-instant'
   }
   if (lower.includes('qwen') || lower.includes('mixtral')) {
     return 'qwen/qwen3.6-27b'
@@ -333,7 +336,15 @@ export async function callGroqChatCompletion(options: {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
 
   const requestedModel = normalizeGroqChatModel(options.model)
-  const defaultFallbacks = ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile']
+  const defaultFallbacks = [
+    'llama-3.3-70b-versatile',
+    'deepseek-r1-distill-llama-70b',
+    'qwen/qwen3.6-27b',
+    'llama-3.1-8b-instant',
+    'groq/compound-mini',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+  ]
   const normalizedFallbacks = (options.fallbackModels !== undefined && options.fallbackModels.length > 0)
     ? options.fallbackModels.map(m => normalizeGroqChatModel(m))
     : defaultFallbacks
@@ -414,9 +425,11 @@ export async function callGroqChatCompletion(options: {
   if (hfTokens.length > 0) {
     const tier2Deadline = Date.now() + 10_000
     const hfChatModels = [
+      'meta-llama/Llama-3.3-70B-Instruct',
+      'Qwen/Qwen2.5-72B-Instruct',
+      'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
       'meta-llama/Llama-3.1-8B-Instruct',
       'Qwen/Qwen2.5-7B-Instruct',
-      'meta-llama/Llama-3.2-3B-Instruct',
     ]
 
     for (const hfModel of hfChatModels) {
@@ -445,6 +458,12 @@ export async function callGroqChatCompletion(options: {
             if (content) {
               return { content, keyUsed: `${token.slice(0, 6)}...`, modelUsed: hfModel }
             }
+          } else if (hfRes.status === 503) {
+            console.warn(`[HF-Chat] Model ${hfModel} is loading (503 Cold Start), instantly skipping to next model...`)
+            continue
+          } else if (hfRes.status === 429) {
+            console.warn(`[HF-Chat] Rate limit 429 on token ${token.slice(0, 6)}..., switching token/model...`)
+            continue
           } else {
             const hfErrText = await hfRes.text()
             console.warn(`[HF-Chat] Model ${hfModel} HTTP ${hfRes.status}:`, hfErrText)
