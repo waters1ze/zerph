@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
 
       try {
         const order = JSON.parse(pendingRec.value)
-        const { extensionId, buyerChatId, authorChatId, price, authorShare, platformShare } = order
+        const { extensionId, buyerChatId, authorChatId, price } = order
         const amtNum = parseFloat(amount)
 
         if (isNaN(amtNum) || amtNum < price) {
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
           return new Response('OK', { status: 200 })
         }
 
-        // 1. Grant extension to buyer
+        // 1. Grant extension to buyer (installed + enabled)
         let installed: string[] = []
         try {
           const instRow = await prisma.config.findUnique({ where: { key: `user_extensions_${buyerChatId}` } })
@@ -147,7 +147,6 @@ export async function POST(req: NextRequest) {
           })
         }
 
-        // Enable extension
         let enabled: string[] = []
         try {
           const enRow = await prisma.config.findUnique({ where: { key: `user_enabled_extensions_${buyerChatId}` } })
@@ -162,10 +161,21 @@ export async function POST(req: NextRequest) {
           })
         }
 
-        const finalGatewayFee = order.gatewayFeeRub ?? Math.round(price * 0.035)
-        const finalNet = order.netDistributableRub ?? Math.max(0, price - finalGatewayFee)
-        const finalAuthorShare = order.authorShare ?? Math.round(finalNet * 0.80)
-        const finalPlatformShare = order.platformShare ?? (finalNet - finalAuthorShare)
+        // Increment extension install count in catalog
+        try {
+          const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+          if (extRec?.value) {
+            const parsed = JSON.parse(extRec.value)
+            parsed.installCount = (parsed.installCount || 0) + 1
+            await prisma.config.update({
+              where: { key: `zerf_ext_${extensionId}` },
+              data: { value: JSON.stringify(parsed) },
+            })
+          }
+        } catch {}
+
+        const finalAuthorShare = order.authorShare ?? Math.round(price * 0.80)
+        const finalPlatformShare = order.platformShare ?? (price - finalAuthorShare)
 
         // 2. Record permanent purchase
         await prisma.config.create({
@@ -176,8 +186,6 @@ export async function POST(req: NextRequest) {
               buyerChatId,
               authorChatId,
               price,
-              gatewayFeeRub: finalGatewayFee,
-              netDistributableRub: finalNet,
               authorShare: finalAuthorShare,
               platformShare: finalPlatformShare,
               operationId: operation_id,
@@ -186,7 +194,7 @@ export async function POST(req: NextRequest) {
           },
         }).catch(() => {})
 
-        // 3. Credit author share (80% of net after fee)
+        // 3. Credit author share (80% to author)
         if (authorChatId && authorChatId !== 'system') {
           let authorStats = { balance: 0, totalEarned: 0, salesCount: 0 }
           try {
@@ -204,19 +212,17 @@ export async function POST(req: NextRequest) {
             create: { key: `author_balance_${authorChatId}`, value: JSON.stringify(authorStats) },
           })
 
-          // Check author's payout card / SBP
+          // Check author's payout wallet / card
           let cardInfoText = ''
           try {
             const cardRow = (await prisma.config.findUnique({ where: { key: `author_payout_card_${authorChatId}` } }))
               || (await prisma.config.findUnique({ where: { key: `user_payment_card_${authorChatId}` } }))
             if (cardRow?.value) {
               const card = JSON.parse(cardRow.value)
-              const mask = card.payoutType === 'sbp'
-                ? `⚡ СБП (${card.phone})`
-                : card.payoutType === 'yoomoney'
-                ? `🟣 ЮMoney (${card.cardNumber ? '•••• ' + card.cardNumber.slice(-4) : 'Кошелек'})`
+              const mask = card.payoutType === 'yoomoney'
+                ? `🟣 ЮMoney (${card.cardNumber ? '•••• ' + card.cardNumber.slice(-4) : 'Кошелёк'})`
                 : `💳 Карту (•••• ${card.cardNumber ? card.cardNumber.slice(-4) : '••••'})`
-              cardInfoText = `\n💳 *Мгновенный перевод*: направлен на вашу привязанную ${mask}`
+              cardInfoText = `\n💳 *Авто-выплата*: направлена на ваш ${mask}`
             }
           } catch {}
 
@@ -224,10 +230,8 @@ export async function POST(req: NextRequest) {
             authorChatId,
             `🎉 *Покупка вашего расширения!*\n\n` +
             `Пользователь приобрёл ваше расширение за *${price} ₽* в Zerf Note.\n` +
-            `• Комиссия платёжного шлюза (3.5%): -${finalGatewayFee} ₽\n` +
-            `• Чистая сумма: ${finalNet} ₽\n` +
-            `💰 *Ваша выплата (80%): +${finalAuthorShare} ₽*${cardInfoText}\n` +
-            `• Проверить баланс и историю: https://zeprh.vercel.app`
+            `💰 *Ваш доход (80%): +${finalAuthorShare} ₽*${cardInfoText}\n` +
+            `• Проверить баланс и историю: https://zeprh.vercel.app/developer?tab=earnings`
           )
 
           // Notify platform owner (20% platform share)
@@ -249,7 +253,7 @@ export async function POST(req: NextRequest) {
           buyerChatId,
           `🎉 *Расширение успешно оплачено и добавлено!* ✨\n\n` +
           `Расширение активировано в вашем аккаунте Zerf Note.\n` +
-          `• Открыть: https://zeprh.vercel.app`
+          `• Открыть: https://zeprh.vercel.app/?view=extensions`
         )
 
         // 5. Delete pending record

@@ -4206,16 +4206,14 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                   <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 border border-border/60">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-card border border-border flex items-center justify-center text-lg shadow-2xs">
-                        {userPaymentCard.payoutType === 'sbp' ? '⚡' : userPaymentCard.payoutType === 'yoomoney' ? '🟣' : '💳'}
+                        {userPaymentCard.payoutType === 'yoomoney' ? '🟣' : '💳'}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-foreground font-mono">
-                            {userPaymentCard.payoutType === 'sbp'
-                              ? `СБП: ${userPaymentCard.phone || 'Номер привязан'}`
-                              : userPaymentCard.payoutType === 'yoomoney'
-                              ? `ЮMoney: ${userPaymentCard.cardNumber ? '•••• ' + userPaymentCard.cardNumber.slice(-4) : 'Кошелек привязан'}`
-                              : `Карта: •••• ${userPaymentCard.cardNumber ? userPaymentCard.cardNumber.slice(-4) : '••••'}`}
+                            {userPaymentCard.payoutType === 'yoomoney'
+                              ? `ЮMoney: ${userPaymentCard.cardNumber ? '•••• ' + userPaymentCard.cardNumber.slice(-4) : 'Кошелёк привязан'}`
+                              : `Карта РФ: •••• ${userPaymentCard.cardNumber ? userPaymentCard.cardNumber.slice(-4) : '••••'}`}
                           </span>
                           <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-bold">
                             Привязана
@@ -4231,18 +4229,18 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                   <form onSubmit={handleSavePaymentCard} className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border/60">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-foreground">
-                        {userPaymentCard ? 'Обновить данные карты' : 'Привязать банковскую карту'}
+                        {userPaymentCard ? 'Обновить данные карты / ЮMoney' : 'Привязать банковскую карту / ЮMoney'}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="sm:col-span-2">
-                        <label className="text-[10px] font-medium text-muted-foreground block mb-1">Номер карты / СБП телефон</label>
+                        <label className="text-[10px] font-medium text-muted-foreground block mb-1">Номер карты РФ / ЮMoney счёт (41001...)</label>
                         <input
                           type="text"
                           value={cardFormNumber}
                           onChange={e => setCardFormNumber(e.target.value)}
-                          placeholder="2200 0000 0000 0000"
+                          placeholder="2200 0000 0000 0000 / 41001..."
                           className="w-full h-8 px-3 rounded-lg bg-card border border-border text-xs font-mono text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
                         />
                       </div>
@@ -4252,7 +4250,7 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                           type="text"
                           value={cardFormBank}
                           onChange={e => setCardFormBank(e.target.value)}
-                          placeholder="Сбербанк, Т-Банк..."
+                          placeholder="Сбербанк, Т-Банк, ЮMoney..."
                           className="w-full h-8 px-3 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
                         />
                       </div>

@@ -791,7 +791,7 @@ export default defineExtension({
                     <span>Монетизация расширений & Баланс автора (80/20)</span>
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Получайте 80% от каждой покупки вашего расширения с мгновенным выводом на карту РФ, СБП или ЮMoney
+                    Получайте 80% от каждой покупки вашего расширения с авто-выплатами на ЮMoney или карту РФ
                   </p>
                 </div>
 
@@ -1073,7 +1073,7 @@ export default defineExtension({
                     <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-2">
                       <p className="font-bold text-emerald-400">80% от всех покупок вашего расширения начисляются автору!</p>
                       <p className="text-muted-foreground">
-                        Выплаты осуществляются мгновенно на привязанный кошелёк ЮMoney, СБП или банковскую карту РФ. 20% составляет комиссия платформы за эквайринг, серверную инфраструктуру и ИИ-трафик.
+                        Выплаты начисляются автоматически на привязанный кошелёк ЮMoney (80%) или банковскую карту РФ. 20% составляет комиссия платформы за эквайринг, серверную инфраструктуру и ИИ-трафик.
                       </p>
                     </div>
                   )}
@@ -1112,7 +1112,7 @@ export default defineExtension({
                   <span className="text-muted-foreground">Реквизиты:</span>
                   <span className="font-bold text-foreground truncate max-w-[140px]">
                     {boundCard
-                      ? (boundCard.payoutType === 'yoomoney' ? `🟣 ${boundCard.cardNumber}` : boundCard.payoutType === 'sbp' ? `⚡ ${boundCard.phone}` : `💳 •••• ${boundCard.cardNumber?.slice(-4)}`)
+                      ? (boundCard.payoutType === 'yoomoney' ? `🟣 ${boundCard.cardNumber}` : `💳 •••• ${boundCard.cardNumber?.slice(-4)}`)
                       : 'Не привязаны'}
                   </span>
                 </div>
@@ -1135,9 +1135,9 @@ export default defineExtension({
                   type="button"
                   onClick={() => setActiveTab('earnings')}
                   className="py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
-                  title="Вывести средства"
+                  title="Открыть вкладку доходов"
                 >
-                  <span>Вывод</span>
+                  <span>Доходы</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>

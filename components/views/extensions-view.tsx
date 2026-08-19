@@ -357,10 +357,9 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false)
   const [showSpecModal, setShowSpecModal] = useState<boolean>(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [showPayoutModal, setShowPayoutModal] = useState<boolean>(false)
   const [showCardModal, setShowCardModal] = useState<boolean>(false)
   const [boundCard, setBoundCard] = useState<{
-    payoutType: 'card' | 'sbp' | 'yoomoney'
+    payoutType: 'card' | 'yoomoney'
     cardNumber: string
     phone: string
     bankName: string
@@ -370,21 +369,11 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [payoutConfig, setPayoutConfig] = useState<{
     platformPercent: number
     authorPercent: number
-    gatewayFeePercent: number
-    minPayoutRub: number
-  }>({ platformPercent: 20, authorPercent: 80, gatewayFeePercent: 3.5, minPayoutRub: 100 })
-  const [cardPayoutType, setCardPayoutType] = useState<'card' | 'sbp' | 'yoomoney'>('card')
+  }>({ platformPercent: 20, authorPercent: 80 })
+  const [cardPayoutType, setCardPayoutType] = useState<'card' | 'yoomoney'>('yoomoney')
   const [cardNumberInput, setCardNumberInput] = useState<string>('')
-  const [cardPhoneInput, setCardPhoneInput] = useState<string>('')
   const [cardBankInput, setCardBankInput] = useState<string>('')
   const [cardRecipientInput, setCardRecipientInput] = useState<string>('')
-  const [payoutAmountInput, setPayoutAmountInput] = useState<string>('')
-  const [payoutResult, setPayoutResult] = useState<{
-    requestedAmount: number
-    gatewayFeeRub: number
-    netPayoutRub: number
-  } | null>(null)
-  const [payoutSuccess, setPayoutSuccess] = useState<boolean>(false)
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false)
   const [selectedAuthorProfile, setSelectedAuthorProfile] = useState<string | null>(null)
   
@@ -857,15 +846,13 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const handleOpenCardModal = () => {
     if (boundCard) {
-      setCardPayoutType(boundCard.payoutType || 'card')
+      setCardPayoutType(boundCard.payoutType || 'yoomoney')
       setCardNumberInput(boundCard.cardNumber || '')
-      setCardPhoneInput(boundCard.phone || '')
       setCardBankInput(boundCard.bankName || '')
       setCardRecipientInput(boundCard.recipientName || '')
     } else {
-      setCardPayoutType('card')
+      setCardPayoutType('yoomoney')
       setCardNumberInput('')
-      setCardPhoneInput('')
       setCardBankInput('')
       setCardRecipientInput('')
     }
@@ -883,7 +870,6 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
           action: 'bind_card',
           payoutType: cardPayoutType,
           cardNumber: cardNumberInput,
-          phone: cardPhoneInput,
           bankName: cardBankInput,
           recipientName: cardRecipientInput,
         }),
@@ -892,7 +878,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       if (data.success) {
         setBoundCard(data.boundCard)
         setShowCardModal(false)
-        showToast('✓ Реквизиты для выплат успешно сохранены!', 'success')
+        showToast('✓ Реквизиты ЮMoney / карты успешно сохранены!', 'success')
       } else {
         showToast(data.error || 'Ошибка при сохранении реквизитов', 'error')
       }
@@ -905,8 +891,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const handleUnbindCard = async () => {
     const ok = await confirmDialog({
-      title: 'Отвязать карту / реквизиты выплат?',
-      description: 'Вы сможете привязать новую карту или СБП в любой момент.',
+      title: 'Отвязать кошелёк ЮMoney / карту?',
+      description: 'Вы сможете привязать новый кошелёк ЮMoney или карту в любой момент.',
       confirmText: 'Да, отвязать',
       cancelText: 'Отмена',
       variant: 'danger',
@@ -927,60 +913,6 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       }
     } catch {
       showToast('Ошибка при отвязке карты', 'error')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleOpenPayout = () => {
-    setPayoutAmountInput(String(authorStats.balance))
-    setPayoutSuccess(false)
-    setPayoutResult(null)
-    setShowPayoutModal(true)
-  }
-
-  const handleExecutePayout = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const amount = Number(payoutAmountInput) || authorStats.balance
-    if (amount < payoutConfig.minPayoutRub) {
-      showToast(`Минимальная сумма для вывода: ${payoutConfig.minPayoutRub} ₽`, 'error')
-      return
-    }
-    if (amount > authorStats.balance) {
-      showToast('Запрошенная сумма превышает ваш доступный баланс', 'error')
-      return
-    }
-
-    if (!boundCard) {
-      showToast('Сначала привяжите банковскую карту или телефон СБП для выплат', 'info')
-      setShowPayoutModal(false)
-      setShowCardModal(true)
-      return
-    }
-
-    try {
-      setActionLoading('request_payout')
-      const res = await fetch('/api/extensions', {
-        method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'request_payout',
-          amount,
-          payoutDetails: boundCard,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setAuthorStats(data.authorStats)
-        setPayoutResult(data.payout)
-        setPayoutSuccess(true)
-        fetchExtensions()
-        showToast('🎉 Заявка на вывод средств успешно отправлена!', 'success')
-      } else {
-        showToast(data.error || 'Ошибка при оформлении заявки на вывод', 'error')
-      }
-    } catch {
-      showToast('Ошибка при оформлении заявки на вывод', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -2428,10 +2360,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               ) : (
                 <button
                   onClick={handleOpenCardModal}
-                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0"
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Привязать карту или СБП</span>
+                  <span>Привязать ЮMoney (80%)</span>
                 </button>
               )}
             </div>
@@ -2440,16 +2372,14 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
               <div className="p-3.5 rounded-2xl bg-muted/40 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-xl bg-card border border-border flex items-center justify-center font-bold text-sm text-foreground shrink-0 shadow-2xs">
-                    {boundCard.payoutType === 'sbp' ? '⚡' : boundCard.payoutType === 'yoomoney' ? '🟣' : '💳'}
+                    {boundCard.payoutType === 'yoomoney' ? '🟣' : '💳'}
                   </div>
                   <div>
                     <div className="font-bold text-foreground flex items-center gap-2">
                       <span>
-                        {boundCard.payoutType === 'sbp'
-                          ? `СБП: ${boundCard.phone}`
-                          : boundCard.payoutType === 'yoomoney'
+                        {boundCard.payoutType === 'yoomoney'
                           ? `ЮMoney: ${boundCard.cardNumber}`
-                          : `Карта: •••• ${boundCard.cardNumber ? boundCard.cardNumber.slice(-4) : '••••'}`}
+                          : `Карта РФ: •••• ${boundCard.cardNumber ? boundCard.cardNumber.slice(-4) : '••••'}`}
                       </span>
                       {boundCard.bankName && (
                         <span className="text-[10px] px-2 py-0.5 rounded-md bg-card border border-border text-muted-foreground font-medium">
@@ -2467,13 +2397,13 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/20 w-fit">
                   <Check className="w-3.5 h-3.5" />
-                  <span>Активно для выплат</span>
+                  <span>Автовыплаты активны (80%)</span>
                 </div>
               </div>
             ) : (
               <div className="p-4 rounded-2xl bg-muted/20 border border-dashed border-border/80 text-center space-y-1">
                 <p className="text-xs text-muted-foreground font-medium">
-                  Реквизиты пока не привязаны. Привяжите карту МИР, Visa, Mastercard или телефон СБП.
+                  Реквизиты пока не привязаны. Привяжите кошелёк ЮMoney (41001...) или карту РФ для автоматических выплат 80%.
                 </p>
               </div>
             )}
@@ -2524,7 +2454,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
           <div className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Shield className="w-4 h-4 text-primary" />
-              <span>Прозрачные условия монетизации и выплат</span>
+              <span>Прозрачные условия монетизации и выплат (80/20)</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs leading-relaxed">
@@ -2534,17 +2464,17 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                   <span className="text-emerald-400 font-bold">80% с каждой продажи</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  При продаже плагина 80% суммы моментально поступает на ваш баланс. Доля платформы (20%) удерживается автоматически.
+                  При покупке вашего плагина 80% суммы начисляются на баланс автора и зачисляются на привязанный ЮMoney автоматически.
                 </p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-muted/30 border border-border space-y-1">
                 <div className="font-bold text-foreground flex items-center gap-1.5">
-                  <span>⚡ Комиссия шлюза выплат:</span>
-                  <span className="text-amber-400 font-bold">3.5% при выводе</span>
+                  <span>⚡ Комиссия платформы (20%):</span>
+                  <span className="text-primary font-bold">Всё включено</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Банковские издержки шлюза за перевод (3.5%) удерживаются с суммы вывода. Доля платформы остаётся нетронутой.
+                  20% покрывают эквайринг ЮMoney, серверную инфраструктуру и ИИ-трафик. Никаких скрытых списаний с автора.
                 </p>
               </div>
             </div>
@@ -3486,16 +3416,27 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 </div>
 
                 {/* Form fields based on selected method */}
-                {cardPayoutType === 'card' && (
+                {cardPayoutType === 'yoomoney' ? (
+                  <div className="space-y-1">
+                    <label className="font-semibold text-foreground text-[11px] block">Номер счёта ЮMoney (14–16 цифр: 41001...):</label>
+                    <input
+                      type="text"
+                      value={cardNumberInput}
+                      onChange={e => setCardNumberInput(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                      placeholder="4100119573095433"
+                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-purple-500 font-mono text-xs"
+                      required
+                    />
+                  </div>
+                ) : (
                   <div className="space-y-3">
                     <div className="space-y-1">
-                      <label className="font-semibold text-foreground text-[11px] block">Номер банковской карты (МИР, Visa, Mastercard):</label>
+                      <label className="font-semibold text-foreground text-[11px] block">Номер банковской карты РФ:</label>
                       <input
                         type="text"
                         value={cardNumberInput}
-                        onChange={e => setCardNumberInput(e.target.value)}
+                        onChange={e => setCardNumberInput(e.target.value.replace(/\D/g, '').slice(0, 19))}
                         placeholder="2202 2000 0000 0000"
-                        maxLength={23}
                         className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
                         required
                       />
@@ -3503,18 +3444,18 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <label className="font-semibold text-foreground text-[11px] block">Банк получателя:</label>
+                        <label className="font-semibold text-foreground text-[11px] block">Банк карты:</label>
                         <input
                           type="text"
                           value={cardBankInput}
                           onChange={e => setCardBankInput(e.target.value)}
-                          placeholder="Сбербанк, Т-Банк..."
+                          placeholder="Сбер, Т-Банк, Альфа..."
                           className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="font-semibold text-foreground text-[11px] block">ФИО получателя:</label>
+                        <label className="font-semibold text-foreground text-[11px] block">ФИО получателя (опционально):</label>
                         <input
                           type="text"
                           value={cardRecipientInput}
@@ -3527,63 +3468,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                   </div>
                 )}
 
-                {cardPayoutType === 'sbp' && (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <label className="font-semibold text-foreground text-[11px] block">Номер телефона СБП:</label>
-                      <input
-                        type="tel"
-                        value={cardPhoneInput}
-                        onChange={e => setCardPhoneInput(e.target.value)}
-                        placeholder="+7 (999) 000-00-00"
-                        className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
-                        required
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="font-semibold text-foreground text-[11px] block">Банк в СБП:</label>
-                        <input
-                          type="text"
-                          value={cardBankInput}
-                          onChange={e => setCardBankInput(e.target.value)}
-                          placeholder="Т-Банк, Сбербанк..."
-                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="font-semibold text-foreground text-[11px] block">Имя получателя:</label>
-                        <input
-                          type="text"
-                          value={cardRecipientInput}
-                          onChange={e => setCardRecipientInput(e.target.value)}
-                          placeholder="Иван И."
-                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {cardPayoutType === 'yoomoney' && (
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-[11px] block">Номер кошелька ЮMoney:</label>
-                    <input
-                      type="text"
-                      value={cardNumberInput}
-                      onChange={e => setCardNumberInput(e.target.value)}
-                      placeholder="410010000000000"
-                      className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
-                      required
-                    />
-                  </div>
-                )}
-
-                <div className="p-3 rounded-2xl bg-muted/30 border border-border text-[10px] text-muted-foreground leading-relaxed">
-                  🔒 Ваши платёжные данные сохраняются в зашифрованном виде и используются исключительно для выплаты вознаграждения.
+                <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300 leading-relaxed">
+                  🟣 <b>80% с каждой продажи</b> вашего расширения зачисляются вам на баланс и выплачиваются автоматически на привязанные реквизиты.
                 </div>
 
                 <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/60">
@@ -3597,207 +3483,13 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                   <button
                     type="submit"
                     disabled={actionLoading === 'save_card'}
-                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
                     {actionLoading === 'save_card' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                     <span>Сохранить реквизиты</span>
                   </button>
                 </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* MODAL: PAYOUT REQUEST WITH TRANSPARENT FEE BREAKDOWN */}
-      <AnimatePresence>
-        {showPayoutModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 text-xs"
-            >
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold">
-                    <DollarSign className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-foreground">Вывод заработанных средств</h3>
-                    <p className="text-[10px] text-muted-foreground">
-                      Выплата автору с прозрачным расчётом комиссий
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowPayoutModal(false)}
-                  className="p-1 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {payoutSuccess && payoutResult ? (
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 space-y-3">
-                  <div className="flex items-center gap-2 font-bold text-sm">
-                    <Check className="w-4 h-4" />
-                    <span>Заявка на выплату успешно создана!</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-card/80 border border-emerald-500/20 text-xs space-y-1.5 font-medium text-foreground">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Списано с баланса:</span>
-                      <b>{payoutResult.requestedAmount} ₽</b>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Комиссия перевода (3.5%):</span>
-                      <span className="text-rose-400">-{payoutResult.gatewayFeeRub} ₽</span>
-                    </div>
-                    <div className="flex items-center justify-between border-t border-border/60 pt-1.5 text-emerald-400 font-bold">
-                      <span>Итого к получению на карту:</span>
-                      <span className="text-sm font-bold">{payoutResult.netPayoutRub} ₽</span>
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Перевод поступит на ваши реквизиты в течение 1–24 часов. Уведомление отправлено администратору.
-                  </p>
-
-                  <button
-                    onClick={() => { setShowPayoutModal(false); setPayoutSuccess(false) }}
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-xs"
-                  >
-                    Готово
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleExecutePayout} className="space-y-4">
-                  {/* Bound Card Status */}
-                  <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-[11px]">Реквизиты для зачисления:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowPayoutModal(false)
-                          handleOpenCardModal()
-                        }}
-                        className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
-                      >
-                        {boundCard ? 'Изменить' : '+ Привязать'}
-                      </button>
-                    </div>
-
-                    {boundCard ? (
-                      <div className="flex items-center gap-2.5 text-xs font-bold text-foreground">
-                        <span>{boundCard.payoutType === 'sbp' ? '⚡' : boundCard.payoutType === 'yoomoney' ? '🟣' : '💳'}</span>
-                        <span>
-                          {boundCard.payoutType === 'sbp'
-                            ? `СБП: ${boundCard.phone} (${boundCard.bankName || ''})`
-                            : boundCard.payoutType === 'yoomoney'
-                            ? `ЮMoney: ${boundCard.cardNumber}`
-                            : `Карта: •••• ${boundCard.cardNumber ? boundCard.cardNumber.slice(-4) : '••••'} (${boundCard.bankName || ''})`}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] flex items-center justify-between">
-                        <span>Сначала привяжите карту для выплат</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowPayoutModal(false)
-                            handleOpenCardModal()
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] cursor-pointer"
-                        >
-                          Привязать
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Amount input */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="font-semibold text-foreground text-[11px]">Сумма к выводу в рублях:</label>
-                      <span className="text-[10px] text-muted-foreground">
-                        Доступно: <b className="text-foreground">{authorStats.balance} ₽</b>
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={payoutConfig.minPayoutRub}
-                        max={authorStats.balance}
-                        value={payoutAmountInput}
-                        onChange={e => setPayoutAmountInput(e.target.value)}
-                        placeholder="100"
-                        className="flex-1 h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs font-bold"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPayoutAmountInput(String(authorStats.balance))}
-                        className="px-3 h-9 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs border border-border cursor-pointer shrink-0"
-                      >
-                        Вся сумма
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Transparent Fee Breakdown */}
-                  {(() => {
-                    const inputNum = Number(payoutAmountInput) || 0
-                    const feeNum = Math.round(inputNum * (payoutConfig.gatewayFeePercent / 100))
-                    const netNum = Math.max(0, inputNum - feeNum)
-
-                    return (
-                      <div className="p-3.5 rounded-2xl bg-card border border-border space-y-2 text-xs">
-                        <span className="font-bold text-foreground text-[11px] block">Прозрачный расчёт перевода:</span>
-                        <div className="space-y-1.5 text-[11px]">
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span>Запрошенная сумма:</span>
-                            <span className="text-foreground font-bold font-mono">{inputNum} ₽</span>
-                          </div>
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span>Комиссия платформы (20%):</span>
-                            <span className="text-emerald-400 font-medium">Удержана при продаже (0 ₽)</span>
-                          </div>
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span>Комиссия шлюза выплат ({payoutConfig.gatewayFeePercent}%):</span>
-                            <span className="text-rose-400 font-mono">-{feeNum} ₽</span>
-                          </div>
-                          <div className="flex items-center justify-between border-t border-border/60 pt-2 font-bold text-foreground">
-                            <span>К зачислению на карту:</span>
-                            <span className="text-sm font-bold text-emerald-400 font-mono">{netNum} ₽</span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/60">
-                    <button
-                      type="button"
-                      onClick={() => setShowPayoutModal(false)}
-                      className="px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs transition-colors cursor-pointer"
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={actionLoading === 'request_payout' || !boundCard || (Number(payoutAmountInput) || 0) < payoutConfig.minPayoutRub}
-                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading === 'request_payout' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
-                      <span>Подтвердить вывод</span>
-                    </button>
-                  </div>
-                </form>
-              )}
             </motion.div>
           </div>
         )}

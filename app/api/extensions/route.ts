@@ -302,8 +302,6 @@ export async function GET(req: NextRequest) {
       payoutConfig: {
         platformPercent: 20,
         authorPercent: 80,
-        gatewayFeePercent: 3.5, // 3.5% banking/SBP payout gateway fee deducted from author on payout
-        minPayoutRub: 100,
       },
       revenueShare: {
         authorPercent: 80,
@@ -997,46 +995,33 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, isFree: true, installedIds: installed })
       }
 
-      // Calculation of net revenue after 3.5% payment gateway fee:
+      // 80/20 Revenue share: 80% to author, 20% platform fee
       const price = ext.price
-      const gatewayFeePercent = 3.5
-      const gatewayFeeRub = Math.round(price * (gatewayFeePercent / 100))
-      const netDistributableRub = Math.max(0, price - gatewayFeeRub)
-      const authorShare = Math.round(netDistributableRub * 0.80) // 80% of net after fee
-      const platformShare = netDistributableRub - authorShare     // 20% of net after fee
+      const authorShare = Math.round(price * 0.80)
+      const platformShare = price - authorShare
 
-      // Unique tracking label for YooMoney: ext_<id>_<chatId>_<timestamp>
+      // Unique tracking label for YooMoney: ext_<chatId>_<timestamp>_<hex> (< 40 chars, safe from YooMoney 64 char limit)
       const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
-      const successUrl = `${appUrl}/?ext_purchased=${ext.id}`
+      const successUrl = `${appUrl}/?view=extensions&ext_purchased=${ext.id}`
 
-      // Check if active pending purchase already exists (within last 15 mins)
-      const pendingPrefix = `ext_pending_ext_${ext.id}_${chatId}_`
-      const existingPending = await prisma.config.findFirst({
-        where: { key: { startsWith: pendingPrefix } },
+      const label = `ext_${chatId}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`
+
+      await prisma.config.create({
+        data: {
+          key: `ext_pending_${label}`,
+          value: JSON.stringify({
+            extensionId: ext.id,
+            extensionTitle: ext.title,
+            buyerChatId: chatId,
+            authorChatId: ext.authorChatId,
+            price: ext.price,
+            authorShare,
+            platformShare,
+            createdAt: new Date().toISOString(),
+          }),
+        },
       })
-
-      let label = `ext_${ext.id}_${chatId}_${Date.now()}`
-      if (existingPending) {
-        label = existingPending.key.replace('ext_pending_', '')
-      } else {
-        await prisma.config.create({
-          data: {
-            key: `ext_pending_${label}`,
-            value: JSON.stringify({
-              extensionId: ext.id,
-              buyerChatId: chatId,
-              authorChatId: ext.authorChatId,
-              price: ext.price,
-              gatewayFeeRub,
-              netDistributableRub,
-              authorShare,
-              platformShare,
-              createdAt: new Date().toISOString(),
-            }),
-          },
-        })
-      }
 
       // Create YooMoney QuickPay checkout URL
       const params = new URLSearchParams({
@@ -1056,8 +1041,6 @@ export async function POST(req: NextRequest) {
         paymentUrl,
         label,
         amount: ext.price,
-        gatewayFeeRub,
-        netDistributableRub,
         authorShare,
         platformShare,
       })
@@ -1140,17 +1123,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // ── ACTION: BIND PAYOUT CARD / SBP DETAILS & AUTO-RENEW TOGGLE ──
+    // ── ACTION: BIND PAYOUT CARD / YOOMONEY DETAILS & AUTO-RENEW TOGGLE ──
     if (action === 'bind_card') {
       const { payoutType, cardNumber, phone, bankName, recipientName, autoRenewEnabled } = body
       if (!cardNumber && !phone) {
-        return NextResponse.json({ error: 'Укажите номер карты или номер телефона СБП' }, { status: 400 })
+        return NextResponse.json({ error: 'Укажите номер счёта ЮMoney или номер карты' }, { status: 400 })
       }
 
       const isAutoRenew = autoRenewEnabled !== undefined ? Boolean(autoRenewEnabled) : true
 
       const cardData = {
-        payoutType: payoutType || 'card', // 'card' | 'sbp' | 'yoomoney'
+        payoutType: payoutType === 'card' ? 'card' : 'yoomoney',
         cardNumber: cardNumber ? String(cardNumber).replace(/\s+/g, '') : '',
         phone: phone ? String(phone).trim() : '',
         bankName: bankName ? String(bankName).trim() : '',
@@ -1159,119 +1142,34 @@ export async function POST(req: NextRequest) {
         updatedAt: new Date().toISOString(),
       }
 
-      await prisma.config.upsert({
-        where: { key: `author_payout_card_${chatId}` },
-        update: { value: JSON.stringify(cardData) },
-        create: { key: `author_payout_card_${chatId}`, value: JSON.stringify(cardData) },
-      })
-
-      await prisma.config.upsert({
-        where: { key: `user_autorenew_${chatId}` },
-        update: { value: isAutoRenew ? 'true' : 'false' },
-        create: { key: `user_autorenew_${chatId}`, value: isAutoRenew ? 'true' : 'false' },
-      })
+      await Promise.all([
+        prisma.config.upsert({
+          where: { key: `author_payout_card_${chatId}` },
+          update: { value: JSON.stringify(cardData) },
+          create: { key: `author_payout_card_${chatId}`, value: JSON.stringify(cardData) },
+        }),
+        prisma.config.upsert({
+          where: { key: `user_payment_card_${chatId}` },
+          update: { value: JSON.stringify(cardData) },
+          create: { key: `user_payment_card_${chatId}`, value: JSON.stringify(cardData) },
+        }),
+        prisma.config.upsert({
+          where: { key: `user_autorenew_${chatId}` },
+          update: { value: isAutoRenew ? 'true' : 'false' },
+          create: { key: `user_autorenew_${chatId}`, value: isAutoRenew ? 'true' : 'false' },
+        }),
+      ])
 
       return NextResponse.json({ success: true, boundCard: cardData, autoRenewEnabled: isAutoRenew })
     }
 
     // ── ACTION: UNBIND PAYOUT CARD ──
     if (action === 'unbind_card') {
-      await prisma.config.delete({ where: { key: `author_payout_card_${chatId}` } }).catch(() => {})
+      await Promise.all([
+        prisma.config.delete({ where: { key: `author_payout_card_${chatId}` } }).catch(() => {}),
+        prisma.config.delete({ where: { key: `user_payment_card_${chatId}` } }).catch(() => {}),
+      ])
       return NextResponse.json({ success: true })
-    }
-
-    // ── ACTION: REQUEST SECURE PAYOUT (Fee is deducted from author payout, owner 20% untouched) ──
-    if (action === 'request_payout') {
-      if (!checkInMemoryRateLimit(`payout:${chatId}`, 3, 60 * 60 * 1000)) {
-        return NextResponse.json({ error: 'Слишком много запросов на вывод. Попробуйте через час.' }, { status: 429 })
-      }
-
-      const authorStats = await getAuthorBalance(chatId)
-      const requestedAmount = Number(body.amount) || authorStats.balance
-      const minPayout = 100
-
-      if (authorStats.balance < minPayout || requestedAmount < minPayout) {
-        return NextResponse.json({ error: `Минимальная сумма для вывода: ${minPayout} ₽` }, { status: 400 })
-      }
-      if (requestedAmount > authorStats.balance) {
-        return NextResponse.json({ error: 'Недостаточно средств на балансе автора' }, { status: 400 })
-      }
-
-      const boundCard = await getAuthorPayoutCard(chatId)
-      const details = body.payoutDetails || boundCard
-      if (!details || (!details.cardNumber && !details.phone)) {
-        return NextResponse.json({ error: 'Привяжите банковскую карту или укажите телефон СБП для вывода' }, { status: 400 })
-      }
-
-      // Calculation of net amount after banking payout gateway fee (3.5%)
-      const gatewayFeePercent = 3.5
-      const gatewayFeeRub = Math.round(requestedAmount * (gatewayFeePercent / 100))
-      const netPayoutRub = requestedAmount - gatewayFeeRub
-
-      // Deduct requested balance
-      authorStats.balance -= requestedAmount
-      await prisma.config.upsert({
-        where: { key: `author_balance_${chatId}` },
-        update: { value: JSON.stringify(authorStats) },
-        create: { key: `author_balance_${chatId}`, value: JSON.stringify(authorStats) },
-      })
-
-      // Log payout request in database
-      const payoutId = `payout_${Date.now()}_${chatId}`
-      await prisma.config.create({
-        data: {
-          key: `payout_req_${payoutId}`,
-          value: JSON.stringify({
-            payoutId,
-            chatId,
-            requestedAmount,
-            gatewayFeeRub,
-            netPayoutRub,
-            details,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-          }),
-        },
-      }).catch(() => {})
-
-      // Send telegram notification to admin
-      const botToken = process.env.TELEGRAM_BOT_TOKEN
-      if (botToken) {
-        const destStr = details.payoutType === 'sbp'
-          ? `⚡ СБП: ${details.phone} (${details.bankName || 'Банк не указан'})`
-          : details.payoutType === 'yoomoney'
-          ? `🟣 ЮMoney: ${details.cardNumber}`
-          : `💳 Карта: ${details.cardNumber} (${details.bankName || ''})`
-
-        const adminMsg = `💸 *Новая заявка на вывод средств от автора расширений!*\n\n` +
-          `👤 ChatID: \`${chatId}\`\n` +
-          `💰 Сумма списания: *${requestedAmount} ₽*\n` +
-          `📉 Комиссия шлюза выплат (3.5%): *${gatewayFeeRub} ₽*\n` +
-          `💵 *К зачислению автору: ${netPayoutRub} ₽*\n\n` +
-          `📌 Реквизиты:\n${destStr}\n` +
-          (details.recipientName ? `Получатель: ${details.recipientName}\n` : '') +
-          `\n✅ Доля платформы (20%) остаётся нетронутой.`
-
-        fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: process.env.OWNER_CHAT_ID || ROOT_ADMIN_IDS[0] || chatId,
-            text: adminMsg,
-            parse_mode: 'Markdown',
-          }),
-        }).catch(() => {})
-      }
-
-      return NextResponse.json({
-        success: true,
-        authorStats,
-        payout: {
-          requestedAmount,
-          gatewayFeeRub,
-          netPayoutRub,
-        },
-      })
     }
 
     return NextResponse.json({ error: 'Неизвестное действие' }, { status: 400 })
