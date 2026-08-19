@@ -134,6 +134,42 @@ export function TodayView() {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
   const [plannerLoading, setPlannerLoading] = useState(false)
   const [plannerMsg, setPlannerMsg] = useState<string | null>(null)
+  const [rescheduleLoading, setRescheduleLoading] = useState(false)
+
+  const handleSmartReschedule = async () => {
+    if (overdueTasks.length === 0 || rescheduleLoading) return
+    setRescheduleLoading(true)
+    try {
+      const res = await fetch('/api/tasks/smart-reschedule', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tasks: overdueTasks.map(t => ({ id: t.id, title: t.title, priority: t.priority })),
+        }),
+      })
+      const data = await res.json()
+      if (data.ok && Array.isArray(data.rescheduled)) {
+        for (const item of data.rescheduled) {
+          dispatch({
+            type: 'UPDATE_TASK',
+            id: item.id,
+            updates: {
+              dueDate: item.dueDate,
+              dueTime: item.dueTime || undefined,
+              status: 'todo',
+            },
+          })
+        }
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setRescheduleLoading(false)
+    }
+  }
 
   const handleSaveGroup = (group: ScheduleGroup) => {
     const exists = state.scheduleGroups?.some(g => g.id === group.id)
@@ -393,12 +429,25 @@ export function TodayView() {
 
         {/* Overdue tasks */}
         {overdueTasks.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <AlertCircle className="w-3.5 h-3.5 text-[var(--status-overdue)]" />
-              <h2 className="text-[12px] font-semibold text-[var(--status-overdue)] uppercase tracking-wide">Просрочено ({overdueTasks.length})</h2>
+          <div className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/20 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-destructive" />
+                <h2 className="text-xs font-bold text-destructive uppercase tracking-wider">
+                  Просрочено ({overdueTasks.length})
+                </h2>
+              </div>
+              <button
+                onClick={handleSmartReschedule}
+                disabled={rescheduleLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-destructive text-destructive-foreground text-xs font-semibold hover:opacity-90 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                title="ИИ умно распределит просроченные дела по дням недели"
+              >
+                <Sparkles className={cn("w-3.5 h-3.5", rescheduleLoading && "animate-spin")} />
+                <span>{rescheduleLoading ? 'Перепланирую...' : '🔄 Перепланировать с ИИ'}</span>
+              </button>
             </div>
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {overdueTasks.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}
             </div>
           </div>

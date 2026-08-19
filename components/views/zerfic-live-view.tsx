@@ -405,6 +405,8 @@ export function ZerficLiveView() {
   const animationFrameRef = useRef<number | null>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const isSpeakingRef = useRef(false)
+  const currentSpokenTextRef = useRef<string>('')
   const isInterruptedRef = useRef(false)
   const lastProcessedSpeechRef = useRef<{ text: string; time: number }>({ text: '', time: 0 })
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -440,6 +442,8 @@ export function ZerficLiveView() {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
+    isSpeakingRef.current = false
+    currentSpokenTextRef.current = ''
     setIsSpeaking(false)
     isInterruptedRef.current = true
   }, [])
@@ -528,6 +532,9 @@ export function ZerficLiveView() {
     if (typeof window === 'undefined') return
     stopSpeaking()
 
+    currentSpokenTextRef.current = textToSpeak.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
+    isSpeakingRef.current = true
+
     if ('speechSynthesis' in window) {
       isInterruptedRef.current = false
       const utterance = new SpeechSynthesisUtterance(textToSpeak)
@@ -567,11 +574,14 @@ export function ZerficLiveView() {
       }
 
       utterance.onstart = () => {
+        isSpeakingRef.current = true
         setIsSpeaking(true)
         setStatusText('Зерфик говорит...')
       }
 
       utterance.onend = () => {
+        isSpeakingRef.current = false
+        currentSpokenTextRef.current = ''
         setIsSpeaking(false)
         if (autoListen && isActive && !isInterruptedRef.current) {
           setStatusText('Слушаю вас...')
@@ -582,6 +592,8 @@ export function ZerficLiveView() {
       }
 
       utterance.onerror = () => {
+        isSpeakingRef.current = false
+        currentSpokenTextRef.current = ''
         setIsSpeaking(false)
         setStatusText('Готов к разговору')
       }
@@ -600,15 +612,24 @@ export function ZerficLiveView() {
           const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }))
           const audio = new Audio(url)
           audio.volume = isMuted ? 0 : voiceVolume
+          isSpeakingRef.current = true
           setIsSpeaking(true)
           setStatusText('Зерфик говорит...')
           audio.onended = () => {
+            isSpeakingRef.current = false
+            currentSpokenTextRef.current = ''
             setIsSpeaking(false)
             setStatusText(autoListen ? 'Слушаю вас...' : 'Готов к разговору')
           }
-          audio.play().catch(() => setIsSpeaking(false))
+          audio.play().catch(() => {
+            isSpeakingRef.current = false
+            setIsSpeaking(false)
+          })
         })
-        .catch(() => setIsSpeaking(false))
+        .catch(() => {
+          isSpeakingRef.current = false
+          setIsSpeaking(false)
+        })
     }
   }, [selectedVoice, voiceVolume, isMuted, autoListen, isActive, stopSpeaking])
 
@@ -742,11 +763,7 @@ export function ZerficLiveView() {
         const avg = sum / dataArray.length / 255
         setAudioLevel(avg)
 
-        // Barge-in trigger: if Zerfik is speaking and user starts talking noticeably
-        if (avg > 0.15 && isSpeaking) {
-          stopSpeaking()
-        }
-
+        // Dynamic volume visualizer
         if (isActive) {
           requestAnimationFrame(checkLevel)
         }
@@ -763,15 +780,12 @@ export function ZerficLiveView() {
 
         recognition.onstart = () => {
           setIsListening(true)
-          setStatusText('Слушаю вас...')
+          if (!isSpeakingRef.current) {
+            setStatusText('Слушаю вас...')
+          }
         }
 
         recognition.onresult = (event: any) => {
-          // If Zerfik is speaking, user speaking interrupts him immediately!
-          if (isSpeaking) {
-            stopSpeaking()
-          }
-
           let finalTranscript = ''
           let currentInterim = ''
 
@@ -781,6 +795,23 @@ export function ZerficLiveView() {
               finalTranscript += transcript
             } else {
               currentInterim += transcript
+            }
+          }
+
+          const rawText = (finalTranscript || currentInterim).trim()
+          const normalizedIncoming = rawText.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
+
+          // Echo cancellation: if incoming transcript is Zerfik speaking his own message, discard it!
+          if (isSpeakingRef.current && currentSpokenTextRef.current) {
+            if (
+              currentSpokenTextRef.current.includes(normalizedIncoming) ||
+              normalizedIncoming.includes(currentSpokenTextRef.current.slice(0, 30))
+            ) {
+              return
+            }
+            // User interrupted Zerfik with distinct new words
+            if (normalizedIncoming.length > 5) {
+              stopSpeaking()
             }
           }
 
