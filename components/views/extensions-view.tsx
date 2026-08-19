@@ -1129,9 +1129,18 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     }
 
     // Instant optimistic update
-    setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
-    setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
+    const nextInstalled = Array.from(new Set([...installedIds, extensionId]))
+    const nextEnabled = Array.from(new Set([...enabledIds, extensionId]))
+    setInstalledIds(nextInstalled)
+    setEnabledIds(nextEnabled)
+    try {
+      localStorage.setItem('zerf_installed_extensions', JSON.stringify(nextInstalled))
+      localStorage.setItem('zerf_enabled_extensions', JSON.stringify(nextEnabled))
+    } catch {}
     setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
+    window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+    window.dispatchEvent(new CustomEvent('zerf_extension_installed', { detail: { extensionId } }))
+    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
 
     try {
       setActionLoading(extensionId)
@@ -1142,8 +1151,14 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds || [])
-        if (data.enabledIds) setEnabledIds(data.enabledIds)
+        const finalInstalled = data.installedIds || nextInstalled
+        const finalEnabled = data.enabledIds || nextEnabled
+        setInstalledIds(finalInstalled)
+        setEnabledIds(finalEnabled)
+        try {
+          localStorage.setItem('zerf_installed_extensions', JSON.stringify(finalInstalled))
+          localStorage.setItem('zerf_enabled_extensions', JSON.stringify(finalEnabled))
+        } catch {}
         window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
         window.dispatchEvent(new CustomEvent('zerf_extension_installed', { detail: { extensionId } }))
         window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
@@ -1179,9 +1194,17 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const handleUninstall = async (extensionId: string) => {
     // Instant optimistic update
-    setInstalledIds(prev => prev.filter(id => id !== extensionId))
-    setEnabledIds(prev => prev.filter(id => id !== extensionId))
+    const nextInstalled = installedIds.filter(id => id !== extensionId)
+    const nextEnabled = enabledIds.filter(id => id !== extensionId)
+    setInstalledIds(nextInstalled)
+    setEnabledIds(nextEnabled)
+    try {
+      localStorage.setItem('zerf_installed_extensions', JSON.stringify(nextInstalled))
+      localStorage.setItem('zerf_enabled_extensions', JSON.stringify(nextEnabled))
+    } catch {}
     setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
+    window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
 
     try {
       setActionLoading(extensionId)
@@ -1192,8 +1215,14 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds || [])
-        if (data.enabledIds) setEnabledIds(data.enabledIds)
+        const finalInstalled = data.installedIds || nextInstalled
+        const finalEnabled = data.enabledIds || nextEnabled
+        setInstalledIds(finalInstalled)
+        setEnabledIds(finalEnabled)
+        try {
+          localStorage.setItem('zerf_installed_extensions', JSON.stringify(finalInstalled))
+          localStorage.setItem('zerf_enabled_extensions', JSON.stringify(finalEnabled))
+        } catch {}
         window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
         window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
         showToast('✓ Расширение удалено из вашего списка', 'info')

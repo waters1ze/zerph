@@ -92,7 +92,6 @@ export function stripThinkingTags(raw: string): string {
 }
 
 const KNOWN_GROQ_CHAT_MODELS = new Set([
-  'llama-3.3-70b-versatile',
   'deepseek-r1-distill-llama-70b',
   'llama-3.1-8b-instant',
   'qwen/qwen3.6-27b',
@@ -114,7 +113,7 @@ export function normalizeGroqChatModel(model?: string): string {
     return 'deepseek-r1-distill-llama-70b'
   }
   if (lower.includes('70b') || lower.includes('versatile') || lower.includes('72b')) {
-    return 'llama-3.3-70b-versatile'
+    return 'deepseek-r1-distill-llama-70b'
   }
   if (lower.includes('llama-3.1-8b') || lower.includes('llama-3.2') || lower.includes('instant') || lower.includes('mini')) {
     return 'llama-3.1-8b-instant'
@@ -339,10 +338,9 @@ export async function callGroqChatCompletion(options: {
 
   const requestedModel = normalizeGroqChatModel(options.model)
   const defaultFallbacks = [
-    'llama-3.3-70b-versatile',
     'deepseek-r1-distill-llama-70b',
-    'qwen/qwen3.6-27b',
     'llama-3.1-8b-instant',
+    'qwen/qwen3.6-27b',
     'groq/compound-mini',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',

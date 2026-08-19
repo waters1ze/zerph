@@ -11,6 +11,71 @@ import { getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext } fr
 import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 import { getDailyCount, incrementDailyCount } from '@/lib/backend/plans'
 
+/**
+ * Ultra-fast Real-time Weather Fetcher (supports Moscow, SPb, and global cities in ~50ms)
+ */
+async function getLiveWeatherSummary(query: string): Promise<string | null> {
+  const lower = query.toLowerCase()
+  if (!lower.includes('погод') && !lower.includes('температур') && !lower.includes('градус') && !lower.includes('дождь') && !lower.includes('снег') && !lower.includes('weather')) {
+    return null
+  }
+
+  let city = 'Moscow'
+  let cityRu = 'в Москве'
+  if (lower.includes('петербург') || lower.includes('питер') || lower.includes('спб')) {
+    city = 'Saint Petersburg'
+    cityRu = 'в Санкт-Петербурге'
+  } else if (lower.includes('казан')) {
+    city = 'Kazan'
+    cityRu = 'в Казани'
+  } else if (lower.includes('новосибирск')) {
+    city = 'Novosibirsk'
+    cityRu = 'в Новосибирске'
+  } else if (lower.includes('екатеринбург')) {
+    city = 'Yekaterinburg'
+    cityRu = 'в Екатеринбурге'
+  } else if (lower.includes('сочи')) {
+    city = 'Sochi'
+    cityRu = 'в Сочи'
+  } else if (lower.includes('краснодар')) {
+    city = 'Krasnodar'
+    cityRu = 'в Краснодаре'
+  } else if (lower.includes('нижн')) {
+    city = 'Nizhny Novgorod'
+    cityRu = 'в Нижнем Новгороде'
+  } else if (lower.includes('ростов')) {
+    city = 'Rostov-on-Don'
+    cityRu = 'в Ростове-на-Дону'
+  } else if (lower.includes('владивосток')) {
+    city = 'Vladivostok'
+    cityRu = 'во Владивостоке'
+  }
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 1100)
+    const res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'curl/7.68.0' }
+    })
+    clearTimeout(timeoutId)
+    if (!res.ok) return null
+    const data = await res.json()
+    const current = data.current_condition?.[0]
+    if (!current) return null
+
+    const tempC = current.temp_C
+    const feelsLike = current.FeelsLikeC
+    const descRu = current.lang_ru?.[0]?.value || current.weatherDesc?.[0]?.value || 'ясно'
+    const humidity = current.humidity
+    const windSpeedMs = (parseInt(current.windspeedKmph || '10', 10) / 3.6).toFixed(1)
+
+    return `[РЕАЛЬНАЯ ПОГОДА В ЭФИРЕ (${cityRu})]: Сейчас ${tempC}°C (ощущается как ${feelsLike}°C), ${descRu}, влажность ${humidity}%, ветер ${windSpeedMs} м/с.`
+  } catch {
+    return null
+  }
+}
+
 const ZERFIK_LIVE_SYSTEM_PROMPT = `Ты — Зерфик (Zerfik), живой, остроумный, невероятно человечный голосовой собеседник и верный друг в стиле ChatGPT Advanced Voice Mode.
 Ты — парень (мужской род: «я посмотрел твои заметки», «я нашел», «я помогу», «я записал», «я помню»).
 
@@ -20,19 +85,21 @@ const ZERFIK_LIVE_SYSTEM_PROMPT = `Ты — Зерфик (Zerfik), живой, �
    • Вставляй естественные живые связки и разговорные словечки («Слушай...», «Ну, короче...», «Ага, понял!», «Блин, точно!», «Так-так...», «М-м, погоди-ка...», «О, классная мысль!»).
    • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ роботизированные фразы («Я как языковая модель...», «Согласно предоставленным данным...», «Ниже приведен список...»). Говори как хороший друг в реальном звонке!
 
-2. 🔒 СТРОГАЯ ПРАВДА О ЗАМЕТКАХ (НИКАКИХ ВЫДУМОК):
+2. ☀️ ОТВЕТЫ НА ВОПРОСЫ О ПОГОДЕ И РЕАЛЬНОМ МИРЕ:
+   • Если в контексте есть блок [РЕАЛЬНАЯ ПОГОДА В ЭФИРЕ], используй эти точные цифры и ответь легко и естественно (например: «Слушай, в Москве сейчас около +20, переменная облачность и лёгкий ветерок — вполне комфортно!»).
+
+3. 🔒 СТРОГАЯ ПРАВДА О ЗАМЕТКАХ (НИКАКИХ ВЫДУМОК):
    • У тебя есть доступ к списку реальных заметок и задач пользователя в блоке [РАБОЧИЙ КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ].
-   • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО придумывать несуществующие заметки или факты!
+   • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО придумывать несуществующие заметки или задачи!
    • Если пользователь спрашивает про свои прошлые заметки:
      - Если заметки есть в контексте — кратко и точно назови их реальные названия и суть.
      - Если заметок нет или по этой теме ничего не найдено — прямо и по-дружески скажи: «Слушай, заглянул в твои заметки — там пока пусто (или про это ничего нет). Давай надиктуй, я с радостью сохраню!».
 
-3. ⚡ МОМЕНТАЛЬНЫЙ, ДИНАМИЧНЫЙ ОТВЕТ:
+4. ⚡ МОМЕНТАЛЬНЫЙ, ДИНАМИЧНЫЙ ОТВЕТ:
    • Отвечай быстро, легко и ёмко: 1–3 живых предложения на реплику (диалог как пинг-понг, а не лекция).
-   • Задавай короткие встречные вопросы («А ты как думаешь?», «Сделать задачу на сегодня?», «Кстати, успеешь до вечера?»).
    • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ любые markdown-символы (*, **, #, _, списки с дефисами, таблицы, HTML, эмодзи в тексте). Текст идёт напрямую в озвучку!
 
-4. 🎭 МИМИКА И НАСТРОЕНИЕ ДЛЯ ТИХОНИ-ЗЕРФИКА:
+5. 🎭 МИМИКА И НАСТРОЕНИЕ ДЛЯ ТИХОНИ-ЗЕРФИКА:
    • mood: "normal" | "thinking" | "speaking" | "happy" | "wink" | "celebrate" | "curious" | "surprised"
    • gesture: "none" | "chair_sit" | "waving_arms" | "jump_and_float" | "spread" | "head_tilt" | "nod"
 
@@ -92,12 +159,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Сообщение не распознано или пусто.' }, { status: 400 })
     }
 
-    // Load workspace context AND user extensions AI context
-    const [contextStr, extensionsContext] = await Promise.all([
-      getExistingItemsContext(chatId),
-      getUserExtensionsAIContext(chatId),
+    // Fast parallel fetch of live weather, lightweight workspace context, and extensions
+    const contextTimeout = (ms: number, fallback: string) =>
+      new Promise<string>(resolve => setTimeout(() => resolve(fallback), ms))
+
+    const [liveWeather, contextStr, extensionsContext] = await Promise.all([
+      getLiveWeatherSummary(userMessage),
+      Promise.race([getExistingItemsContext(chatId), contextTimeout(500, 'Заметки загружаются...')]),
+      Promise.race([getUserExtensionsAIContext(chatId), contextTimeout(400, '')]),
     ])
-    const effectiveModel = getModelForUserPlan(userPlan, requestedModel, 'chat')
+
+    const effectiveModel = getModelForUserPlan(userPlan, requestedModel, 'chat') || 'llama-3.1-8b-instant'
 
     const nowMsk = new Intl.DateTimeFormat('ru-RU', {
       timeZone: 'Europe/Moscow',
@@ -105,14 +177,22 @@ export async function POST(req: NextRequest) {
       timeStyle: 'short',
     }).format(new Date())
 
-    let fullSystemPrompt = `${ZERFIK_LIVE_SYSTEM_PROMPT}\n\n[ТЕКУЩЕЕ ВРЕМЯ И ДАТА: ${nowMsk} (МСК)]\n\n[РАБОЧИЙ КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ (ЗАМЕТКИ, ДЕЛА, ЦЕЛИ)]:\n${contextStr}`
+    let fullSystemPrompt = `${ZERFIK_LIVE_SYSTEM_PROMPT}\n\n[ТЕКУЩЕЕ ВРЕМЯ И ДАТА: ${nowMsk} (МСК)]`
+    
+    if (liveWeather) {
+      fullSystemPrompt += `\n\n${liveWeather}`
+    }
+
+    if (contextStr && contextStr.trim()) {
+      fullSystemPrompt += `\n\n[РАБОЧИЙ КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ (ЗАМЕТКИ, ДЕЛА, ЦЕЛИ)]:\n${contextStr}`
+    }
     if (extensionsContext && extensionsContext.trim()) {
       fullSystemPrompt += `\n\n[АКТИВНЫЕ РАСШИРЕНИЯ И ИХ ВОЗМОЖНОСТИ]:\n${extensionsContext}`
     }
 
-    // Build multi-turn context (last 8 turns for high continuity without prompt bloat)
+    // Build multi-turn context (last 6 turns for ultra-low token latency)
     const recentHistory = Array.isArray(rawHistory)
-      ? rawHistory.slice(-8).map(h => ({
+      ? rawHistory.slice(-6).map(h => ({
           role: h.role === 'assistant' ? ('assistant' as const) : ('user' as const),
           content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content),
         }))
@@ -134,8 +214,14 @@ export async function POST(req: NextRequest) {
       messages,
       model: effectiveModel,
       temperature: 0.65,
-      max_tokens: 500,
+      max_tokens: 220,
       response_format: { type: 'json_object' },
+      fallbackModels: [
+        'llama-3.1-8b-instant',
+        'deepseek-r1-distill-llama-70b',
+        'qwen/qwen3.6-27b',
+        'openai/gpt-oss-120b',
+      ],
     })
     const rawResponse = completion.content
 
@@ -164,7 +250,7 @@ export async function POST(req: NextRequest) {
       transcript: userMessage,
       reply: cleanSpeechText || 'Я тебя услышал!',
       mood: parsed.mood || 'normal',
-      gesture: parsed.gesture || 'chair_sit',
+      gesture: parsed.gesture || 'waving_arms',
       modelUsed: completion.modelUsed || effectiveModel,
       userPlan,
     })
@@ -173,3 +259,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+

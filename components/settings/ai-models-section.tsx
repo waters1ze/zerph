@@ -14,11 +14,10 @@ interface AiModelsSectionProps {
 
 const ALL_MODELS = [
   { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill 70B', tier: 'pro', params: '70B Reasoning', desc: 'Флагманская модель рассуждений и глубокой логики DeepSeek R1' },
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', tier: 'pro', params: '70B', desc: 'Мощная универсальная модель Meta с высокой точностью' },
   { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект для масштабных проектов и декомпозиции' },
   { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, отличное понимание структуры дел и русского языка' },
   { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', tier: 'plus', params: '20B', desc: 'Сверхбыстрый отклик (~150 мс), чистый русский язык, мгновенная обработка Siri и заметок' },
-  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Сверхлегкая и экономичная модель для базового ввода и быстрых команд' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Сверхлегкая и экономичная модель для базового ввода и быстрых команд (~120 мс)' },
   { id: 'groq/compound-mini', name: 'Groq Compound Mini', tier: 'free', params: 'Mini', desc: 'Компактная легковесная модель для мгновенных задач' },
   { id: 'groq/compound', name: 'Groq Compound', tier: 'pro', params: 'Compound', desc: 'Сбалансированная модель для быстрых вычислений' },
 ]
@@ -555,7 +554,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                   { id: 'claude', label: 'Claude (Anthropic)', url: 'https://api.anthropic.com/v1', model: 'claude-3-7-sonnet-20250219' },
                   { id: 'gemini', label: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-2.5-pro' },
                   { id: 'ollama', label: 'Local Ollama / LM Studio', url: 'http://localhost:11434/v1', model: 'llama3:latest' },
-                  { id: 'groq', label: 'Groq Cloud', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+                  { id: 'groq', label: 'Groq Cloud', url: 'https://api.groq.com/openai/v1', model: 'deepseek-r1-distill-llama-70b' },
                   { id: 'custom', label: 'Кастомный эндпоинт', url: '', model: '' },
                 ].map(p => (
                   <button

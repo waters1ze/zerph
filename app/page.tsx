@@ -11,26 +11,29 @@ import { AiChatPanel } from '@/components/ai-chat-panel'
 import { VoiceRecorder } from '@/components/voice-recorder'
 import { Menu } from 'lucide-react'
 
-import { TodayView }    from '@/components/views/today-view'
-import { InboxView }    from '@/components/views/inbox-view'
-import { TasksView }    from '@/components/views/tasks-view'
-import { GoalsView }    from '@/components/views/goals-view'
-import { NotesView }    from '@/components/views/notes-view'
-import { CalendarView } from '@/components/views/calendar-view'
-import { StatsView }    from '@/components/views/stats-view'
-import { FriendsView }  from '@/components/views/friends-view'
-import { TeamsView }    from '@/components/views/teams-view'
-import { SettingsView } from '@/components/views/settings-view'
+import dynamic from 'next/dynamic'
 
-import { ProjectsView } from '@/components/views/projects-view'
-import { AdminView } from '@/components/views/admin-view'
-import { ClockView } from '@/components/views/clock-view'
-import { GraphView } from '@/components/views/graph-view'
-import { ExtensionsView } from '@/components/views/extensions-view'
-import { EntropySearchView } from '@/components/views/entropy-search-view'
-import { ZerficLiveView } from '@/components/views/zerfic-live-view'
-import { ZerficLiveFloatingPill } from '@/components/ui/zerfic-live-floating-pill'
-import { AuthGateModal } from '@/components/auth-gate-modal'
+import { TodayView } from '@/components/views/today-view'
+import { InboxView } from '@/components/views/inbox-view'
+import { TasksView } from '@/components/views/tasks-view'
+import { GoalsView } from '@/components/views/goals-view'
+import { NotesView } from '@/components/views/notes-view'
+
+// Lazy-load heavy secondary views for lightning-fast initial page load
+const CalendarView = dynamic(() => import('@/components/views/calendar-view').then(m => m.CalendarView), { ssr: false })
+const StatsView = dynamic(() => import('@/components/views/stats-view').then(m => m.StatsView), { ssr: false })
+const FriendsView = dynamic(() => import('@/components/views/friends-view').then(m => m.FriendsView), { ssr: false })
+const TeamsView = dynamic(() => import('@/components/views/teams-view').then(m => m.TeamsView), { ssr: false })
+const SettingsView = dynamic(() => import('@/components/views/settings-view').then(m => m.SettingsView), { ssr: false })
+const ProjectsView = dynamic(() => import('@/components/views/projects-view').then(m => m.ProjectsView), { ssr: false })
+const AdminView = dynamic(() => import('@/components/views/admin-view').then(m => m.AdminView), { ssr: false })
+const ClockView = dynamic(() => import('@/components/views/clock-view').then(m => m.ClockView), { ssr: false })
+const GraphView = dynamic(() => import('@/components/views/graph-view').then(m => m.GraphView), { ssr: false })
+const ExtensionsView = dynamic(() => import('@/components/views/extensions-view').then(m => m.ExtensionsView), { ssr: false })
+const EntropySearchView = dynamic(() => import('@/components/views/entropy-search-view').then(m => m.EntropySearchView), { ssr: false })
+const ZerficLiveView = dynamic(() => import('@/components/views/zerfic-live-view').then(m => m.ZerficLiveView), { ssr: false })
+const ZerficLiveFloatingPill = dynamic(() => import('@/components/ui/zerfic-live-floating-pill').then(m => m.ZerficLiveFloatingPill), { ssr: false })
+const AuthGateModal = dynamic(() => import('@/components/auth-gate-modal').then(m => m.AuthGateModal), { ssr: false })
 import { PullToRefresh } from '@/components/ui/pull-to-refresh'
 import { cn } from '@/lib/utils'
 

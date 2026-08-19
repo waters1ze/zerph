@@ -348,10 +348,10 @@ export interface LiveChatMessage {
 }
 
 const AVAILABLE_MODELS = [
-  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Live', desc: 'Ультра-быстрый диалог (~120ms)', minPlan: 'free' },
-  { id: 'qwen/qwen3.6-27b', name: 'Qwen 2.5 27B Chat', desc: 'Глубокое понимание контекста', minPlan: 'plus' },
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Pro', desc: 'Максимальная эрудиция и логика', minPlan: 'pro' },
-  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', desc: 'Флагманская модель Zerf', minPlan: 'corp' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', desc: 'Ультра-быстрый живой диалог (~120ms)', minPlan: 'free' },
+  { id: 'qwen/qwen3.6-27b', name: 'Qwen 2.5 27B Chat', desc: 'Глубокое понимание контекста и логики', minPlan: 'plus' },
+  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoner', desc: 'Флагманские рассуждения и эрудиция', minPlan: 'pro' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', desc: 'Флагманская сверхмощная модель Zerf', minPlan: 'corp' },
 ]
 
 export function ZerficLiveView() {
