@@ -440,7 +440,7 @@ export async function POST(req: NextRequest) {
         const ghData = await fetchManifestFromGithub(githubUrl)
         if (ghData) {
           const m = ghData.manifest
-          if (!finalTitle && (m.name || m.title)) finalTitle = m.name || m.title
+          if (!finalTitle && (m.displayName || m.name || m.title)) finalTitle = m.displayName || m.name || m.title
           if (!finalDesc && m.description) finalDesc = m.description
           if ((!finalIcon || finalIcon === '🧩') && m.icon) finalIcon = m.icon
           if (!finalType && m.type) finalType = m.type
@@ -448,6 +448,9 @@ export async function POST(req: NextRequest) {
           if (!finalVersion && m.version) finalVersion = m.version
           if (m.minPlan && ['free', 'plus', 'pro', 'corp'].includes(m.minPlan)) finalMinPlan = m.minPlan
           if (m.price !== undefined && price === undefined) finalPrice = Math.max(0, Math.min(5000, Number(m.price) || 0))
+          if (m.isRunnable !== undefined && body.isRunnable === undefined) body.isRunnable = Boolean(m.isRunnable)
+          if (m.triggers && (!body.triggers || body.triggers.length === 0)) body.triggers = m.triggers
+          if (m.aiSkills && (!body.aiSkills || body.aiSkills.length === 0)) body.aiSkills = m.aiSkills
           if (!manifestContent || Object.keys(manifestContent).length === 0) {
             manifestContent = m.content || m.config || manifestContent
           }

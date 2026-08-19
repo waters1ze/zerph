@@ -1370,8 +1370,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const myExtensions = useMemo(() => {
     if (!currentChatId) return []
-    return catalog.filter(ext => ext.authorChatId === currentChatId || (canCreate && ext.isOfficial))
-  }, [catalog, currentChatId, canCreate])
+    return catalog.filter(ext => ext.authorChatId === currentChatId)
+  }, [catalog, currentChatId])
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 space-y-6 pb-20">
