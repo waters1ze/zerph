@@ -1453,7 +1453,17 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
       msg += `Описание: ${escMd(item.summary)}\n`
     }
     if (item.subtasks && item.subtasks.length > 0) {
-      msg += `Чек-лист:\n` + item.subtasks.map((s: string) => `  • ${escMd(s)}`).join('\n') + `\n`
+      msg += `Этапы / Чек-лист:\n` + item.subtasks.map((s: any) => {
+        const title = typeof s === 'string' ? s : s.title
+        const timeParts: string[] = []
+        if (typeof s === 'object' && s !== null) {
+          if (s.dueTime) timeParts.push(`⏰ ${s.dueTime}`)
+          if (s.dueDate) timeParts.push(`📅 ${s.dueDate}`)
+          if (s.durationDays) timeParts.push(`(${s.durationDays} дн.)`)
+        }
+        const timeBadge = timeParts.length ? ` — _${timeParts.join(' ')}_` : ''
+        return `  • ${escMd(title)}${timeBadge}`
+      }).join('\n') + `\n`
     }
     if (item.priority && !isHoliday && !isBirthday) msg += `Приоритет: ${pText}\n`
     if (item.dueDate) msg += `Дата: ${item.dueDate}\n`
@@ -1480,9 +1490,13 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         })
         if (createdTask && Array.isArray(createdTask.subtasks) && createdTask.subtasks.length > 0) {
           const subtasks = createdTask.subtasks as any[]
-          const inlineKeyboard = subtasks.map((st, i) => ([
-            { text: `◻️ ${i + 1}. ${st.title.slice(0, 35)}`, callback_data: `st_${createdTask.id}_${i}` }
-          ]))
+          const inlineKeyboard = subtasks.map((st, i) => {
+            const timeTag = st.dueTime ? ` [${st.dueTime}]` : (st.durationDays ? ` [${st.durationDays}д]` : '')
+            const statusIcon = st.done ? '☑️' : '◻️'
+            return ([
+              { text: `${statusIcon} ${i + 1}. ${st.title.slice(0, 30)}${timeTag}`, callback_data: `st_${createdTask.id}_${i}` }
+            ])
+          })
           inlineKeyboard.push([
             { text: '✅ Завершить задачу целиком', callback_data: `rem_done_${createdTask.id}` }
           ])

@@ -2078,12 +2078,26 @@ export async function saveParsedItemToDb(
       source: item.rawText,
       ownerChatId: ownerChatId || null,
       assignees: item.assignees || [],
-      isShared: item.isShared || false,
-      subtasks: (item.subtasks || []).map((st, i) => ({
-        id: `st_${i}_${Date.now()}`,
-        title: st,
-        done: false,
-      })),
+      subtasks: (item.subtasks || []).map((st: any, i: number) => {
+        if (typeof st === 'object' && st !== null) {
+          return {
+            id: st.id || `st_${i}_${Date.now()}`,
+            title: st.title || String(st),
+            done: Boolean(st.done),
+            dueTime: st.dueTime || null,
+            dueDate: st.dueDate || null,
+            durationDays: st.durationDays ? Number(st.durationDays) : null,
+          }
+        }
+        return {
+          id: `st_${i}_${Date.now()}`,
+          title: String(st),
+          done: false,
+          dueTime: null,
+          dueDate: null,
+          durationDays: null,
+        }
+      }),
     })
   }
 

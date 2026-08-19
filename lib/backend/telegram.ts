@@ -163,7 +163,17 @@ export async function handleTelegramUpdate(
         replyText += `\n🚩 *Ключевые этапы:*\n` + parsedItem.milestones.map((m: string) => ` • ${m}`).join('\n') + '\n'
       }
       if (parsedItem.type === 'task' && parsedItem.subtasks?.length) {
-        replyText += `\n📋 *Подзадачи:*\n` + parsedItem.subtasks.map((s: string) => ` • ${s}`).join('\n') + '\n'
+        replyText += `\n📋 *Подзадачи:*\n` + parsedItem.subtasks.map((s: any) => {
+          const title = typeof s === 'string' ? s : s.title
+          const timeParts: string[] = []
+          if (typeof s === 'object' && s !== null) {
+            if (s.dueTime) timeParts.push(`⏰ ${s.dueTime}`)
+            if (s.dueDate) timeParts.push(`📅 ${s.dueDate}`)
+            if (s.durationDays) timeParts.push(`(${s.durationDays} дн.)`)
+          }
+          const timeInfo = timeParts.length ? ` — _${timeParts.join(' ')}_` : ''
+          return ` • ${title}${timeInfo}`
+        }).join('\n') + '\n'
       }
 
       replyText += `\n✨ *Синхронизировано с твоим приложением!*`

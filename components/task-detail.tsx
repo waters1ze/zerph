@@ -267,26 +267,38 @@ export function TaskDetail() {
               Subtasks ({task.subtasks.filter(s => s.done).length}/{task.subtasks.length})
             </p>
             <div className="space-y-1.5">
-              {task.subtasks.map(sub => (
-                <div
-                  key={sub.id}
-                  onClick={() => {
-                    const updated = task.subtasks!.map(s => s.id === sub.id ? { ...s, done: !s.done } : s)
-                    dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { subtasks: updated } })
-                  }}
-                  className="flex items-center gap-2.5 cursor-pointer group"
-                >
-                  <div className={cn(
-                    'w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
-                    sub.done ? 'bg-primary border-primary' : 'border-border group-hover:border-primary/50'
-                  )}>
-                    {sub.done && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+              {task.subtasks.map(sub => {
+                const timeInfo = (sub as any).dueTime || (sub as any).dueDate || (sub as any).durationDays
+                return (
+                  <div
+                    key={sub.id}
+                    onClick={() => {
+                      const updated = task.subtasks!.map(s => s.id === sub.id ? { ...s, done: !s.done } : s)
+                      dispatch({ type: 'UPDATE_TASK', id: task.id, updates: { subtasks: updated } })
+                    }}
+                    className="flex items-center justify-between gap-2.5 p-1.5 rounded-lg hover:bg-muted/40 cursor-pointer group transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className={cn(
+                        'w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                        sub.done ? 'bg-primary border-primary' : 'border-border group-hover:border-primary/50'
+                      )}>
+                        {sub.done && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                      </div>
+                      <span className={cn('text-[13px] truncate', sub.done ? 'line-through text-muted-foreground' : 'text-foreground')}>
+                        {sub.title}
+                      </span>
+                    </div>
+                    {timeInfo && (
+                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60 shrink-0">
+                        {(sub as any).dueTime ? `⏰ ${(sub as any).dueTime}` : ''}
+                        {(sub as any).dueDate ? ` 📅 ${(sub as any).dueDate}` : ''}
+                        {(sub as any).durationDays ? ` (${(sub as any).durationDays} дн.)` : ''}
+                      </span>
+                    )}
                   </div>
-                  <span className={cn('text-[13px]', sub.done ? 'line-through text-muted-foreground' : 'text-foreground')}>
-                    {sub.title}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}

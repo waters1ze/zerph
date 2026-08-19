@@ -5,6 +5,13 @@
 
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
 
+export interface ParsedSubtask {
+  title: string
+  dueTime?: string | null
+  dueDate?: string | null
+  durationDays?: number | null
+}
+
 export interface ParsedItem {
   type: 'task' | 'goal' | 'note' | 'project' | 'habit' | 'reminder' | 'completion' | 'delegate' | 'schedule' | 'answer'
   action?: 'create' | 'update' | 'delete' | 'delete_all' | 'cancel_schedule' | 'cancel_recurring_schedule' | 'completion' | 'set_my_birthday' | 'get_schedule' | 'reply'
@@ -26,7 +33,7 @@ export interface ParsedItem {
   icon?: string | null
   frequency?: string | null
   tags: string[]
-  subtasks?: string[]
+  subtasks?: Array<string | ParsedSubtask>
   milestones?: string[]
   motivation?: string
   rawText: string
@@ -174,8 +181,24 @@ ${friendsContext}
    - Никогда не оставляй summary пустым или из 2 слов.
    - Разворачивай суть задачи: ЗАЧЕМ это делается, ЧТО конкретно нужно проверить/сделать, с какими деталями.
 
-3. "subtasks": ПОДЗАДАЧИ (ОБЯЗАТЕЛЬНО 2-4 ШАГА)
-   - Всегда разбивай задачу на логичные практические шаги выполнения (например: ["Связаться и уточнить время", "Подготовить документы", "Зафиксировать результат"]).
+3. "subtasks": ПРАВИЛА ДЛЯ ПОДЗАДАЧ И ЭТАПОВ (СТРОГИЙ КОНТРОЛЬ!):
+   - ДЛЯ ОБЫЧНЫХ, ОДИНОЧНЫХ ИЛИ КОРОТКИХ ДЕЛ (например: "урок в 10", "купить хлеб", "позвонить маме", "встреча в 15:00", "вынести мусор", "забрать посылку", обычная заметка):
+     • СТРОГО СТАВЬ: "subtasks": [] (ПУСТОЙ МАССИВ!).
+     • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выдумывать, навязывать и генерировать лишние подзадачи для простых действий!
+   - ГЕНЕРИРОВАТЬ "subtasks" ТОЛЬКО В 3 СЛУЧАЯХ:
+     а) Задача ДЕЙСТВИТЕЛЬНО БОЛЬШАЯ, комплексная, масштабная или занимает много времени (например: «подготовить курсовую работу», «сделать ремонт в спальне», «запустить сайт проекта», «организовать переезд»);
+     б) Пользователь САМ явно перечислил этапы / части дела (например: «большая задача 4 этапа: 1 этап в 10:00, 2 и 3 в 20:00, а 4 растягивается на 3 дня» или «сначала А, затем Б, потом В»);
+     в) Пользователь явно попросил: «разбей на шаги», «добавь подзадачи», «составь чек-лист», «распиши этапы».
+   - ПОДЗАДАЧИ С ИНДИВИДУАЛЬНЫМ ВРЕМЕНЕМ И ДАТАМИ + МНОГОДНЕВНЫЕ ЗАДАЧИ:
+     • Если для разных этапов указано свое время или даты (например: «1 этап в 10:00, 2 и 3 в 20:00, 4 этап на 3 дня»):
+       Указывай массив объектов:
+       "subtasks": [
+         { "title": "1 этап: ...", "dueTime": "10:00", "dueDate": "YYYY-MM-DD" },
+         { "title": "2 этап: ...", "dueTime": "20:00", "dueDate": "YYYY-MM-DD" },
+         { "title": "3 этап: ...", "dueTime": "20:00", "dueDate": "YYYY-MM-DD" },
+         { "title": "4 этап: ...", "dueDate": "YYYY-MM-DD (дата через 3 дня)", "durationDays": 3 }
+       ]
+     • Для всей задачи: "dueDate" ставь по финальной дате (например через 3 дня), "dueTime": "10:00", а в "summary" кратко распиши график и напоминания для каждого этапа!
 
 4. "tags": АВТОМАТИЧЕСКАЯ КАТЕГОРИЗАЦИЯ ПО РАЗДЕЛАМ (ОБЯЗАТЕЛЬНО)
    - В массиве "tags" ВСЕГДА указывай 1-2 подходящих базовых раздела из системы:
@@ -223,7 +246,7 @@ Always respond with ONLY valid JSON:
       "targetId": "ID элемента если action update/delete" | null,
       "type": "task" | "goal" | "note" | "project" | "habit" | "reminder" | "completion" | "delegate" | "schedule" | "answer",
       "title": "Понятное, информативное название с сутью действия",
-      "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями)",
+      "summary": "Максимально подробное описание (2-5 предложений или Markdown список со всеми деталями и графиком напоминаний)",
       "priority": "urgent" | "high" | "medium" | "low",
       "dueDate": "YYYY-MM-DD" | null,
       "dueTime": "HH:MM" | "HH:MM - HH:MM" | null,
@@ -240,7 +263,7 @@ Always respond with ONLY valid JSON:
       "icon": "эмодзи для привычки (например '🔥', '💧', '📚', '🏃', '🧘') если type: habit" | null,
       "frequency": "daily" | "weekly" | "weekdays" | null,
       "tags": ["тег1", "тег2"],
-      "subtasks": ["конкретный шаг 1", "конкретный шаг 2", "конкретный шаг 3"],
+      "subtasks": [] | ["подзадача 1", "подзадача 2"] | [{"title": "этап 1", "dueTime": "10:00", "dueDate": "YYYY-MM-DD"}, {"title": "этап 2", "dueDate": "YYYY-MM-DD", "durationDays": 3}],
       "milestones": ["этап 1", "этап 2"],
       "motivation": "только для целей" | null,
       "tasksToCreate": [{"title": "название", "dueDate": "YYYY-MM-DD" | null, "dueTime": "HH:MM" | null}] // только для type: note, чтобы создать и сразу привязать задачи
