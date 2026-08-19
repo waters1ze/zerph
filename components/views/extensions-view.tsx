@@ -664,7 +664,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
           icon: parsedManifest.icon,
           version: parsedManifest.version || '1.0.0',
           price: parsedManifest.price || 0,
-          isPublished: false, // Default to Draft / Unpublished
+          isPublished: true, // Default to Published in Store upon import
           changelog: parsedManifest.changelog || 'Первичный импорт манифеста из GitHub',
           content: parsedManifest.content,
         }),
@@ -1344,13 +1344,16 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       // Hide unpublished drafts from public store
       if (ext.isPublished === false) return false
 
+      // Strictly exclude themes from extensions catalog (themes belong exclusively in Settings -> Appearance)
+      if (ext.type === 'theme' || ext.category === 'Темы & Стили') return false
+
       const matchesSearch = ext.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (ext.githubUrl && ext.githubUrl.toLowerCase().includes(searchQuery.toLowerCase()))
       
       if (selectedCategory === 'core') {
-        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.id === 'ext_entropy_search' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy')
+        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.id === 'ext_entropy_search' || ext.id === 'ext_zerfic_live' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy') || ext.title.toLowerCase().includes('zerfic')
         return matchesSearch && isCore
       }
       if (selectedCategory === 'all') return matchesSearch
@@ -1689,11 +1692,18 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
                   <div className="space-y-3 pt-2 border-t border-border/60">
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                        <b className="text-foreground">{ext.rating.toFixed(1)}</b> ({ext.ratingCount})
-                      </span>
-                      <span>{ext.installCount} {ext.installCount === 1 ? 'установка' : 'установок'}</span>
+                      {ext.ratingCount && ext.ratingCount > 0 ? (
+                        <span className="flex items-center gap-1">
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                          <b className="text-foreground">{ext.rating ? ext.rating.toFixed(1) : '5.0'}</b> ({ext.ratingCount})
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-muted-foreground/70">
+                          <Star className="w-3 h-3 text-muted-foreground/50" />
+                          <span>0 оценок</span>
+                        </span>
+                      )}
+                      <span>{ext.installCount || 0} {(ext.installCount || 0) === 1 ? 'установка' : (ext.installCount || 0) > 1 && (ext.installCount || 0) < 5 ? 'установки' : 'установок'}</span>
                       {ext.authorGithub || (ext.authorName && !ext.authorName.toLowerCase().includes('создатель') && !ext.authorName.includes(' ')) ? (
                         <a
                           href={`https://github.com/${ext.authorGithub || ext.authorName.replace(/^@/, '')}`}

@@ -110,9 +110,9 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     isRunnable: true,
     changelog: 'Релиз v1.0.0: Мужские голоса Зерфика, анимация сидения на стуле, жесты, Push-to-Talk и ответы голосовыми в Telegram-боте.',
     rating: 5.0,
-    ratingCount: 1,
-    likesCount: 5,
-    installCount: 12,
+    ratingCount: 0,
+    likesCount: 0,
+    installCount: 0,
     aiInstructions: 'Когда пользователь обращается к Зерфику или запускает Zerfic Live — веди живой разговор от мужского лица, используй естественные междометия («а...», «мм...», «кстати»), проявляй дружелюбие и помогай по задачам и планам.',
     triggers: ['/live', '/zerfic', 'зерфик', 'поговори со мной', 'зерфик лайв', 'zerfic live'],
     aiSkills: [
@@ -133,126 +133,6 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     },
     createdAt: '2026-08-19T18:00:00Z',
     updatedAt: '2026-08-19T18:00:00Z',
-  },
-  {
-    id: 'ext_theme_cyberpunk',
-    title: 'Cyberpunk Neon Emerald',
-    version: '1.2.0',
-    description: 'Изумрудный строгий неон для максимальной концентрации в темноте: мягкое неоновое свечение, киберпанк-акценты и анимация фокуса.',
-    type: 'theme',
-    category: 'Темы & Стили',
-    icon: '🌌',
-    githubUrl: 'https://github.com/waters1ze/zerf-theme-cyberpunk',
-    authorChatId: 'system',
-    authorName: 'Zerf Official',
-    authorGithub: 'zerf-official',
-    price: 0,
-    minPlan: 'free',
-    isOfficial: true,
-    isPublished: true,
-    rating: 5.0,
-    ratingCount: 14,
-    likesCount: 0,
-    installCount: 154,
-    content: {
-      theme: 'strict',
-      accentColor: 'emerald',
-      density: 'compact',
-      borderRadius: 'rounded',
-      roundShapes: true,
-      preview: { bg: 'oklch(0.10 0.002 260)', surface: 'oklch(0.16 0.002 260)', accent: 'oklch(0.74 0.14 152)' },
-      customCss: `
-        @keyframes pulse-emerald-glow {
-          0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.25); }
-          50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.45); }
-        }
-        .theme-strict .bg-primary, .theme-strict button[class*="bg-primary"] {
-          box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
-        }
-      `,
-      i18nOverrides: {
-        en: { brandTag: 'Zerf // Emerald Cyber' },
-        ru: { brandTag: 'Zerf // Изумрудный Неон' },
-      },
-    },
-    createdAt: '2026-08-18T10:00:00Z',
-    updatedAt: '2026-08-18T12:00:00Z',
-  },
-  {
-    id: 'ext_theme_royal_gold',
-    title: 'Royal Gold Luxe',
-    version: '1.1.0',
-    description: 'Тёплый бархатный чёрный с элементами шампанского золота, градиентами роскоши и плавными переходами.',
-    type: 'theme',
-    category: 'Темы & Стили',
-    icon: '👑',
-    githubUrl: 'https://github.com/waters1ze/zerf-theme-royal-gold',
-    authorChatId: 'system',
-    authorName: 'Zerf Official',
-    authorGithub: 'zerf-official',
-    price: 0,
-    minPlan: 'free',
-    isOfficial: true,
-    isPublished: true,
-    rating: 4.9,
-    ratingCount: 19,
-    likesCount: 0,
-    installCount: 210,
-    content: {
-      theme: 'warm',
-      accentColor: 'gold',
-      density: 'comfortable',
-      borderRadius: 'default',
-      roundShapes: true,
-      preview: { bg: 'oklch(0.085 0.006 70)', surface: 'oklch(0.145 0.008 70)', accent: 'oklch(0.78 0.15 78)' },
-      customCss: `
-        @keyframes shimmer-gold {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        .theme-warm .bg-primary {
-          background-image: linear-gradient(135deg, oklch(0.78 0.15 78) 0%, oklch(0.85 0.18 85) 50%, oklch(0.74 0.13 72) 100%) !important;
-        }
-      `,
-    },
-    createdAt: '2026-08-18T10:00:00Z',
-    updatedAt: '2026-08-18T12:00:00Z',
-  },
-  {
-    id: 'ext_theme_tokyo_night',
-    title: 'Tokyo Nightfall Neon',
-    version: '1.0.0',
-    description: 'Глубокий ночной Токио: неоновый фиолетовый и индиго с мягким свечением и ультра-чистой типографикой.',
-    type: 'theme',
-    category: 'Темы & Стили',
-    icon: '🗼',
-    githubUrl: 'https://github.com/waters1ze/zerf-theme-tokyo-night',
-    authorChatId: 'system',
-    authorName: 'Zerf Official',
-    authorGithub: 'zerf-official',
-    price: 0,
-    minPlan: 'free',
-    isOfficial: true,
-    isPublished: true,
-    rating: 5.0,
-    ratingCount: 11,
-    likesCount: 0,
-    installCount: 98,
-    content: {
-      theme: 'vivid',
-      accentColor: 'violet',
-      density: 'default',
-      borderRadius: 'rounded',
-      roundShapes: true,
-      preview: { bg: 'oklch(0.115 0.012 300)', surface: 'oklch(0.175 0.014 300)', accent: 'oklch(0.72 0.19 300)' },
-      customCss: `
-        .theme-vivid .bg-card {
-          backdrop-filter: blur(12px);
-        }
-      `,
-    },
-    createdAt: '2026-08-18T10:00:00Z',
-    updatedAt: '2026-08-18T12:00:00Z',
   },
 ]
 
