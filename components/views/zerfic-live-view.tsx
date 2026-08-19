@@ -295,6 +295,26 @@ export function ZerficLiveView() {
   const userPlan = (state.settings?.userPlan as PlanId) || 'free'
   const live = useZerficLive()
 
+  const [liveModels, setLiveModels] = useState(() => AVAILABLE_MODELS)
+
+  useEffect(() => {
+    let isMounted = true
+    fetch('/api/ai/models')
+      .then(r => r.json())
+      .then(d => {
+        if (isMounted && Array.isArray(d.models) && d.models.length > 0) {
+          setLiveModels(d.models.map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            desc: m.desc || '',
+            minPlan: m.minTier,
+          })))
+        }
+      })
+      .catch(() => {})
+    return () => { isMounted = false }
+  }, [])
+
   const {
     isActive,
     isListening,
@@ -478,7 +498,7 @@ export function ZerficLiveView() {
             className="px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-foreground/90 hover:text-foreground text-xs font-medium border border-border/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
             <Zap className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline font-mono">{AVAILABLE_MODELS.find(m => m.id === selectedModelId)?.name || 'Llama 3.1'}</span>
+            <span className="hidden md:inline font-mono">{liveModels.find(m => m.id === selectedModelId)?.name || 'Groq Compound'}</span>
             <span className="md:hidden">Модель</span>
           </button>
 
@@ -878,7 +898,7 @@ export function ZerficLiveView() {
                   <span>Нейросетевой движок</span>
                 </label>
                 <div className="space-y-2">
-                  {AVAILABLE_MODELS.map(m => {
+                  {liveModels.map(m => {
                     const isSelected = m.id === selectedModelId
                     const isLocked = m.minPlan !== 'free' && !planAtLeast(userPlan, m.minPlan as PlanId)
                     return (

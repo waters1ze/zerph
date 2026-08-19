@@ -34,14 +34,35 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   const isPlus = userPlan === 'plus'
   const isFree = userPlan === 'free'
 
-  const availableModelsForPlan = ALL_MODELS.filter(m => {
+  const [modelsList, setModelsList] = useState(() => ALL_MODELS)
+
+  React.useEffect(() => {
+    let isMounted = true
+    fetch('/api/ai/models')
+      .then(r => r.json())
+      .then(d => {
+        if (isMounted && Array.isArray(d.models) && d.models.length > 0) {
+          setModelsList(d.models.map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            tier: m.minTier,
+            params: m.paramsBillions ? (m.paramsBillions >= 1 ? `${m.paramsBillions}B` : `${Math.round(m.paramsBillions * 1000)}M`) : 'Auto',
+            desc: m.desc || '',
+          })))
+        }
+      })
+      .catch(() => {})
+    return () => { isMounted = false }
+  }, [])
+
+  const availableModelsForPlan = modelsList.filter(m => {
     if (isCorp) return true
     if (isProOrCorp) return m.tier === 'pro' || m.tier === 'plus' || m.tier === 'free'
     if (isPlus) return m.tier === 'plus' || m.tier === 'free'
     return m.tier === 'free'
   })
 
-  const currentGlobalModel = settings.integrations?.aiModel || (isProOrCorp ? 'openai/gpt-oss-120b' : isPlus ? 'qwen/qwen3.6-27b' : 'openai/gpt-oss-20b')
+  const currentGlobalModel = settings.integrations?.aiModel || (isProOrCorp ? 'openai/gpt-oss-120b' : isPlus ? 'qwen/qwen3.6-27b' : 'groq/compound')
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
@@ -63,7 +84,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   }
 
   const handleGlobalModelChange = (modelId: string) => {
-    const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
+    const selectedMeta = modelsList.find(m => m.id === modelId)
     if (!selectedMeta) return
 
     if (isFree && selectedMeta.tier !== 'free') {
@@ -95,7 +116,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
       return
     }
 
-    const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
+    const selectedMeta = modelsList.find(m => m.id === modelId)
     if (isPlus && (selectedMeta?.tier === 'pro' || selectedMeta?.tier === 'corp')) {
       if (onUpgradeClick) onUpgradeClick()
       return
@@ -132,7 +153,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-bold text-foreground">
-              {isProOrCorp ? '👑 Режим Pro & Corp: Полная кастомизация ИИ' : isPlus ? '⚡ Режим Plus: Выбор моделей до 27B' : '🆓 Базовый режим: 2 легковесные модели (до 8B)'}
+              {isProOrCorp ? '👑 Режим Pro & Corp: Флагманы до 120B и Enterprise' : isPlus ? '⚡ Режим Plus: Нейросети до 70B' : '🆓 Бесплатный тариф: Groq Compound, Compound Mini и до 20B'}
             </h4>
             <span className={cn(
               "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
@@ -143,10 +164,10 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {isProOrCorp
-              ? 'Вам доступен выбор любой нейросети под каждый тип задач и расширений отдельно, а также максимальный приоритет и кастомные системные промпты.'
+              ? 'Вам доступен выбор любых флагманских нейросетей (GPT-OSS 120B, MiniMax M2.7 Enterprise, DeepSeek R1), максимальный приоритет и оркестрация инструментов.'
               : isPlus
-              ? 'Вам доступен выбор моделей до 27 млрд параметров (Qwen 3.6 27B, GPT-OSS 20B Fast) для расширений и задач. Оформите Pro для доступа к флагманам 120B и DeepSeek R1!'
-              : 'На бесплатном тарифе доступны 2 легковесные модели до 8 млрд параметров (Llama 3.1 8B Instant и Compound Mini).'}
+              ? 'Вам доступен выбор моделей до 70 млрд параметров (Qwen 3.6 27B, Llama 3.3 70B, DeepSeek R1 70B, Groq Compound). Оформите Pro для доступа к флагману 120B!'
+              : 'На бесплатном тарифе доступны быстрые системы Groq Compound, Compound Mini, GPT-OSS 20B и Prompt Guard.'}
           </p>
         </div>
         {savedToast && (

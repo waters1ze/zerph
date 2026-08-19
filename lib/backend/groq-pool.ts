@@ -279,6 +279,8 @@ export function classifyTierByParams(billions: number, category?: string): 'free
   return 'corp'
 }
 
+const MODEL_CACHE_TTL_MS = 60 * 60 * 1000 // Exactly 1 hour
+
 let dynamicModelsCache: { timestamp: number; models: GroqModelMeta[] } | null = null
 let isRefreshingBackground = false
 
@@ -294,27 +296,28 @@ function triggerBackgroundModelRefresh() {
     } finally {
       isRefreshingBackground = false
     }
-  }, 1000)
+  }, 500)
 }
 
 /**
- * Dynamically queries Groq /openai/v1/models and automatically discovers new models
+ * Dynamically queries Groq /openai/v1/models every 1 hour upon AI message requests
+ * and automatically adapts to newly released models without any hardcoding.
  */
 export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[]> {
   const now = Date.now()
-  if (dynamicModelsCache && (now - dynamicModelsCache.timestamp < 15 * 60 * 1000)) {
+  if (dynamicModelsCache && (now - dynamicModelsCache.timestamp < MODEL_CACHE_TTL_MS)) {
     return dynamicModelsCache.models
   }
 
   const keys = groqPool.getOrderedHealthyKeys(apiKey)
   if (keys.length === 0) {
-    return VERIFIED_GROQ_MODELS
+    return VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded)
   }
 
   try {
     const res = await fetch('https://api.groq.com/openai/v1/models', {
       headers: { Authorization: `Bearer ${keys[0]}` },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3500),
     })
 
     if (res.ok) {
@@ -327,10 +330,10 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
         const id = item.id
         if (!id || typeof id !== 'string') continue
         if (id.startsWith('whisper') || id.includes('audio')) continue
-        if (id.includes('orpheus') || id.includes('arabic')) continue // skip expensive non-chat models
+        if (id.includes('orpheus') || id.includes('arabic')) continue // Skip expensive specialized preview models
 
         const existing = knownMap.get(id)
-        if (existing) {
+        if (existing && !existing.isExcluded) {
           discovered.push(existing)
         } else {
           // Dynamic auto-adaptation for new Groq models!
@@ -338,16 +341,17 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
           const minTier = classifyTierByParams(billions)
           discovered.push({
             id,
-            name: id.split('/').pop()?.replace(/-/g, ' ') || id,
+            name: id.split('/').pop()?.replace(/[-_]/g, ' ').toUpperCase() || id,
             paramsBillions: billions,
-            category: 'preview',
+            category: 'production',
             minTier,
-            desc: `Автоматически обнаруженная модель Groq (${billions}B параметров, доступ с тарифа ${minTier.toUpperCase()})`,
+            desc: `Автоматически подключенная модель Groq (${billions}B параметров, доступ с тарифа ${minTier.toUpperCase()})`,
             contextTokens: item.context_window || 131072,
           })
         }
       }
 
+      // Ensure verified core models are present if not excluded
       for (const vm of VERIFIED_GROQ_MODELS) {
         if (!discovered.some(d => d.id === vm.id) && !vm.isExcluded) {
           discovered.push(vm)
@@ -358,10 +362,10 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
       return discovered
     }
   } catch (err) {
-    console.warn('[GroqModels] Failed to query /models dynamically, using verified catalog:', err)
+    console.warn('[GroqModels] 1-hour cache query notice (using cached models):', err)
   }
 
-  return VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded)
+  return dynamicModelsCache?.models || VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded)
 }
 
 export function isModelAllowedForPlan(modelId: string, userPlan?: string | null): boolean {
