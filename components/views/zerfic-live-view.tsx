@@ -2,14 +2,15 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Image from 'next/image'
 import {
-  Mic, MicOff, Volume2, VolumeX, Sparkles, Settings2, Trash2,
+  Mic, MicOff, Volume2, Volume1, VolumeX, Sparkles, Settings2, Trash2,
   ChevronDown, MessageSquare, Play, Square, RefreshCw, Zap,
   CheckCircle2, Radio, Sliders, Shield, ArrowUpRight, Crown, CornerDownLeft
 } from 'lucide-react'
 import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { ZerfikMascot, type ZerfikMood } from '@/components/views/tikhonya-mascot'
+import { type ZerfikMood } from '@/components/views/tikhonya-mascot'
 import { planAtLeast, type PlanId } from '@/lib/plans'
 
 export type ZerfikGesture = 'none' | 'chair_sit' | 'waving_arms' | 'jump_and_float' | 'spread' | 'head_tilt' | 'nod'
@@ -25,10 +26,11 @@ export interface ZerficCompanionProps {
 }
 
 /**
- * High-Definition Interactive Animated Vector Companion for Zerfic Live
- * 60 FPS physics, eye-tracking, audio-reactive mouth waveform, and animated particle aura.
+ * Genuine Minecraft Allay (Тихоня) Mascot Spirit for Zerfik Live
+ * Features animated translucent fairy wings, authentic sprites, orbiting celestial sparkles,
+ * soundwave aura, and smooth floating physics.
  */
-export function ZerficLivingCompanion({
+export function ZerficAllayCompanion({
   mood,
   gesture = 'none',
   isListening,
@@ -37,71 +39,60 @@ export function ZerficLivingCompanion({
   audioLevel,
   onClick,
 }: ZerficCompanionProps) {
-  const [blink, setBlink] = useState(false)
-  const [lookOffset, setLookOffset] = useState({ x: 0, y: 0, tilt: 0 })
-  const [interactiveWave, setInteractiveWave] = useState(0)
-
-  // Natural blinking cycle (blinks every 3.5 - 6 seconds)
-  useEffect(() => {
-    let blinkTimeout: NodeJS.Timeout
-    const scheduleBlink = () => {
-      const delay = Math.random() * 2500 + 3500
-      blinkTimeout = setTimeout(() => {
-        setBlink(true)
-        setTimeout(() => {
-          setBlink(false)
-          scheduleBlink()
-        }, 180)
-      }, delay)
-    }
-    scheduleBlink()
-    return () => clearTimeout(blinkTimeout)
-  }, [])
-
-  // Dynamic soundwave mouth animation frame when speaking
-  useEffect(() => {
-    if (!isSpeaking) return
-    const interval = setInterval(() => {
-      setInteractiveWave(prev => (prev + 1) % 6)
-    }, 120)
-    return () => clearInterval(interval)
-  }, [isSpeaking])
+  const [specialAction, setSpecialAction] = useState<'none' | 'jump' | 'wave'>('none')
+  const [cursorVector, setCursorVector] = useState({ dx: 0, dy: 0, rawDx: 0, rawDy: 0, tilt: 0 })
 
   // Mouse cursor gaze tracking
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const cx = window.innerWidth / 2
       const cy = window.innerHeight / 2
-      const dx = (e.clientX - cx) / (window.innerWidth / 2)
-      const dy = (e.clientY - cy) / (window.innerHeight / 2)
-      setLookOffset({
-        x: Math.max(-6, Math.min(6, dx * 7)),
-        y: Math.max(-5, Math.min(5, dy * 6)),
-        tilt: Math.max(-8, Math.min(8, dx * 10)),
-      })
+      const rawDx = e.clientX - cx
+      const rawDy = e.clientY - cy
+      const maxDist = Math.max(window.innerWidth, window.innerHeight) || 1000
+
+      const normX = Math.max(-12, Math.min(12, (rawDx / maxDist) * 30))
+      const normY = Math.max(-10, Math.min(10, (rawDy / maxDist) * 24))
+      const tilt = Math.max(-12, Math.min(12, (rawDx / maxDist) * 35))
+
+      setCursorVector({ dx: normX, dy: normY, rawDx, rawDy, tilt })
     }
     window.addEventListener('mousemove', handleMouseMove, { passive: true })
     return () => window.removeEventListener('mousemove', handleMouseMove)
   }, [])
 
-  // Aura Color and Pulse Dynamics
-  const auraGlowColor = isSpeaking
-    ? 'rgba(56, 189, 248, 0.45)'
-    : isListening
-      ? 'rgba(52, 211, 153, 0.45)'
-      : isThinking
-        ? 'rgba(251, 191, 36, 0.45)'
-        : mood === 'happy' || mood === 'celebrate'
-          ? 'rgba(168, 85, 247, 0.4)'
-          : 'rgba(56, 189, 248, 0.25)'
+  const isHappy = mood === 'happy' || mood === 'celebrate' || isSpeaking
+  const isThink = mood === 'thinking' || isThinking
 
-  const isHappy = mood === 'happy' || mood === 'celebrate'
-  const isCurious = mood === 'curious' || gesture === 'head_tilt'
-  const isWink = mood === 'wink'
+  // Select authentic Allay sprite based on mood, actions and gaze
+  let activeSprite = '/images/zerfik_idle.png'
+  if (isThink) {
+    activeSprite = '/images/zerfik_thinking.png'
+  } else if (specialAction === 'jump' || gesture === 'jump_and_float') {
+    activeSprite = '/images/zerfik_spread.png'
+  } else if (specialAction === 'wave' || gesture === 'waving_arms') {
+    activeSprite = '/images/zerfik_wave.png'
+  } else if (isHappy) {
+    activeSprite = '/images/zerfik_happy.png'
+  } else if (cursorVector.rawDy > 35 && Math.abs(cursorVector.rawDy) >= Math.abs(cursorVector.rawDx) * 0.7) {
+    activeSprite = '/images/zerfik_down.png'
+  } else if (cursorVector.rawDy < -35 && Math.abs(cursorVector.rawDy) >= Math.abs(cursorVector.rawDx) * 0.7) {
+    activeSprite = '/images/zerfik_up.png'
+  } else if (cursorVector.rawDx < -20) {
+    activeSprite = '/images/zerfik_left.png'
+  } else if (cursorVector.rawDx > 20) {
+    activeSprite = '/images/zerfik_right.png'
+  }
+
+  const handleMascotClick = () => {
+    setSpecialAction('jump')
+    setTimeout(() => setSpecialAction('none'), 2400)
+    if (onClick) onClick()
+  }
 
   return (
     <div
-      onClick={onClick}
+      onClick={handleMascotClick}
       className="relative flex items-center justify-center cursor-pointer select-none group"
       style={{ width: 280, height: 280 }}
     >
@@ -112,318 +103,238 @@ export function ZerficLivingCompanion({
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{
-                scale: [1, 1.35 + audioLevel * 1.8, 1],
-                opacity: [0.3, 0.7, 0.3],
+                scale: [1, 1.4 + audioLevel * 1.8, 1],
+                opacity: [0.3, 0.75, 0.3],
               }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute inset-0 rounded-full border-2 border-emerald-400/40 pointer-events-none"
+              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute inset-0 rounded-full border-2 border-emerald-400/50 pointer-events-none"
             />
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{
-                scale: [1.1, 1.6 + audioLevel * 2.2, 1.1],
+                scale: [1.1, 1.7 + audioLevel * 2.2, 1.1],
                 opacity: [0.15, 0.45, 0.15],
               }}
-              transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
-              className="absolute inset-0 rounded-full border border-emerald-400/25 pointer-events-none"
+              transition={{ duration: 1.9, repeat: Infinity, ease: 'easeInOut', delay: 0.25 }}
+              className="absolute inset-0 rounded-full border border-emerald-400/30 pointer-events-none"
             />
           </>
         )}
 
         {isSpeaking && (
-          <motion.div
-            animate={{
-              scale: [1, 1.25, 1],
-              opacity: [0.25, 0.6, 0.25],
-            }}
-            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute inset-0 rounded-full border-2 border-sky-400/40 pointer-events-none"
-          />
+          <>
+            <motion.div
+              animate={{
+                scale: [1, 1.35, 1],
+                opacity: [0.3, 0.7, 0.3],
+              }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute inset-0 rounded-full border-2 border-cyan-400/50 pointer-events-none"
+            />
+            <motion.div
+              animate={{
+                scale: [1.15, 1.6, 1.15],
+                opacity: [0.15, 0.4, 0.15],
+              }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+              className="absolute inset-0 rounded-full border border-sky-400/30 pointer-events-none"
+            />
+          </>
         )}
       </AnimatePresence>
 
-      {/* ── Soft Glow Ambient Backdrop ── */}
+      {/* ── Soft Ambient Glow ── */}
       <div
-        className="absolute w-52 h-52 rounded-full blur-3xl transition-all duration-500 pointer-events-none"
-        style={{ background: auraGlowColor }}
+        className="absolute w-56 h-56 rounded-full blur-3xl transition-all duration-500 pointer-events-none"
+        style={{
+          background: isSpeaking
+            ? 'rgba(34, 211, 238, 0.45)'
+            : isListening
+            ? 'rgba(52, 211, 153, 0.45)'
+            : isThink
+            ? 'rgba(251, 191, 36, 0.45)'
+            : isHappy
+            ? 'rgba(147, 197, 253, 0.4)'
+            : 'rgba(34, 211, 238, 0.25)',
+        }}
       />
+
+      {/* ── Orbiting Celestial Sparkles & Magic Dust ── */}
+      {(isThink || isSpeaking || isListening) && (
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: isSpeaking ? 3.5 : 5.0, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-2 flex items-center justify-center pointer-events-none"
+        >
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-cyan-300 font-bold text-sm filter drop-shadow-[0_0_8px_rgba(34,211,238,0.9)]">
+            ✦
+          </div>
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-amber-300 font-bold text-sm filter drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]">
+            ✧
+          </div>
+          <div className="absolute top-1/2 -left-2 -translate-y-1/2 text-sky-200 font-bold text-base filter drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]">
+            ✨
+          </div>
+          <div className="absolute top-1/2 -right-2 -translate-y-1/2 text-cyan-300 font-bold text-sm filter drop-shadow-[0_0_8px_rgba(147,197,253,0.9)]">
+            ✦
+          </div>
+        </motion.div>
+      )}
 
       {/* ── Floating Character Physical Rig ── */}
       <motion.div
-        animate={{
-          y: isSpeaking
-            ? [-4, 4, -4]
-            : isListening
-              ? [-2, 2, -2]
-              : isThinking
-                ? [-3, 3, -3]
-                : [-6, 6, -6],
-          rotate: isCurious
-            ? 12 + lookOffset.tilt
-            : isThinking
-              ? -5 + lookOffset.tilt * 0.5
-              : lookOffset.tilt,
-          scale: isSpeaking ? [1, 1.02, 1] : 1,
-        }}
-        transition={{
-          duration: isSpeaking ? 1.4 : isThinking ? 2.2 : 3.8,
-          repeat: Infinity,
-          ease: 'easeInOut',
-        }}
-        className="relative z-10 flex flex-col items-center justify-center"
-      >
-        {/* Top Floating Cyber-Antenna with pulsing beacon */}
-        <div className="relative flex flex-col items-center -mb-2 z-20">
-          <motion.div
-            animate={{
-              scale: isThinking ? [1, 1.4, 1] : isSpeaking ? [1, 1.2, 1] : [1, 1.1, 1],
-              boxShadow: isThinking
-                ? '0 0 16px rgba(251, 191, 36, 0.9)'
-                : isListening
-                  ? '0 0 16px rgba(52, 211, 153, 0.9)'
-                  : '0 0 16px rgba(56, 189, 248, 0.9)',
-            }}
-            transition={{ duration: 1.2, repeat: Infinity }}
-            className={cn(
-              'w-3.5 h-3.5 rounded-full border border-white/60 transition-colors',
-              isThinking ? 'bg-amber-400' : isListening ? 'bg-emerald-400' : 'bg-sky-400'
-            )}
-          />
-          <div className="w-1 h-3 bg-gradient-to-b from-slate-400 to-slate-700 rounded-full" />
-        </div>
-
-        {/* ── Main Head & Body Capsule Rig ── */}
-        <div className="relative">
-          {/* Side Retractable Cyber Wings */}
-          <motion.div
-            animate={{
-              rotate: isHappy ? [-15, 15, -15] : isSpeaking ? [-4, 4, -4] : 0,
-              scaleX: isSpeaking ? [1, 1.08, 1] : 1,
-            }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            className="absolute -left-7 top-6 w-8 h-12 bg-gradient-to-l from-slate-700 to-sky-600/60 rounded-l-2xl border-l border-t border-sky-400/40 shadow-lg -z-10"
-          />
-          <motion.div
-            animate={{
-              rotate: isHappy ? [15, -15, 15] : isSpeaking ? [4, -4, 4] : 0,
-              scaleX: isSpeaking ? [1, 1.08, 1] : 1,
-            }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            className="absolute -right-7 top-6 w-8 h-12 bg-gradient-to-r from-slate-700 to-sky-600/60 rounded-r-2xl border-r border-t border-sky-400/40 shadow-lg -z-10"
-          />
-
-          {/* Head Chassis */}
-          <div className="w-44 h-36 rounded-3xl bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 p-2.5 border-2 border-sky-500/40 shadow-2xl relative overflow-hidden backdrop-blur-xl">
-            {/* Subtle Metallic Reflex Glow */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none" />
-
-            {/* Dark Visor Screen */}
-            <div className="w-full h-full rounded-2xl bg-black/90 border border-slate-700/60 relative p-3 flex flex-col items-center justify-between overflow-hidden shadow-inner">
-              {/* Top Sensor Notch */}
-              <div className="w-12 h-1 rounded-full bg-slate-800/80 border border-slate-700/50" />
-
-              {/* ── Expressive Digital Eyes Area ── */}
-              <div
-                className="flex items-center justify-center gap-7 my-auto transition-transform duration-150"
-                style={{
-                  transform: `translate(${lookOffset.x}px, ${lookOffset.y}px)`,
-                }}
-              >
-                {/* Left Eye */}
-                {isHappy ? (
-                  // Smiling Crescent Eye ( ^ )
-                  <motion.div
-                    animate={{ scaleY: [1, 1.2, 1] }}
-                    transition={{ duration: 1.2, repeat: Infinity }}
-                    className="w-8 h-4 border-t-4 border-sky-300 rounded-t-full drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]"
-                  />
-                ) : blink ? (
-                  // Closed Blink Line ( - )
-                  <div className="w-8 h-1 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
-                ) : isThinking ? (
-                  // Thinking Eye (looking up with data pulse)
-                  <motion.div
-                    animate={{ y: [-1, -3, -1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="w-7 h-8 rounded-xl bg-amber-400 border border-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.9)] flex items-center justify-center overflow-hidden"
-                  >
-                    <div className="w-3 h-3 rounded-full bg-slate-950" />
-                  </motion.div>
-                ) : isListening ? (
-                  // Listening Eye (wide attentive with pulsing radar pupil)
-                  <motion.div
-                    animate={{ scale: [1, 1.12 + audioLevel * 0.4, 1] }}
-                    transition={{ duration: 0.6, repeat: Infinity }}
-                    className="w-8 h-8 rounded-full bg-emerald-400 border-2 border-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.9)] flex items-center justify-center"
-                  >
-                    <div className="w-3.5 h-3.5 rounded-full bg-slate-950" />
-                  </motion.div>
-                ) : (
-                  // Normal Lively Eye
-                  <motion.div
-                    animate={{ scaleY: isSpeaking ? [1, 1.08, 1] : 1 }}
-                    transition={{ duration: 0.8, repeat: Infinity }}
-                    className="w-7 h-8 rounded-2xl bg-sky-400 border border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.85)] flex items-center justify-center"
-                  >
-                    <div className="w-3 h-3 rounded-full bg-slate-950" />
-                  </motion.div>
-                )}
-
-                {/* Right Eye */}
-                {isWink ? (
-                  // Winking Eye ( - )
-                  <div className="w-8 h-1 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
-                ) : isHappy ? (
-                  // Smiling Crescent Eye ( ^ )
-                  <motion.div
-                    animate={{ scaleY: [1, 1.2, 1] }}
-                    transition={{ duration: 1.2, repeat: Infinity }}
-                    className="w-8 h-4 border-t-4 border-sky-300 rounded-t-full drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]"
-                  />
-                ) : blink ? (
-                  // Closed Blink Line ( - )
-                  <div className="w-8 h-1 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
-                ) : isThinking ? (
-                  // Thinking Eye (looking up with data pulse)
-                  <motion.div
-                    animate={{ y: [-1, -3, -1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="w-7 h-8 rounded-xl bg-amber-400 border border-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.9)] flex items-center justify-center overflow-hidden"
-                  >
-                    <div className="w-3 h-3 rounded-full bg-slate-950" />
-                  </motion.div>
-                ) : isListening ? (
-                  // Listening Eye (wide attentive with pulsing radar pupil)
-                  <motion.div
-                    animate={{ scale: [1, 1.12 + audioLevel * 0.4, 1] }}
-                    transition={{ duration: 0.6, repeat: Infinity }}
-                    className="w-8 h-8 rounded-full bg-emerald-400 border-2 border-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.9)] flex items-center justify-center"
-                  >
-                    <div className="w-3.5 h-3.5 rounded-full bg-slate-950" />
-                  </motion.div>
-                ) : (
-                  // Normal Lively Eye
-                  <motion.div
-                    animate={{ scaleY: isSpeaking ? [1, 1.08, 1] : 1 }}
-                    transition={{ duration: 0.8, repeat: Infinity }}
-                    className="w-7 h-8 rounded-2xl bg-sky-400 border border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.85)] flex items-center justify-center"
-                  >
-                    <div className="w-3 h-3 rounded-full bg-slate-950" />
-                  </motion.div>
-                )}
-              </div>
-
-              {/* ── Holographic Mouth / Audio-reactive Spectrum on Visor ── */}
-              <div className="w-full flex items-center justify-center gap-1 h-3.5">
-                {isSpeaking ? (
-                  // 5-bar energetic voice equalizer mouth
-                  [0.4, 0.9, 1.0, 0.8, 0.5].map((scale, idx) => (
-                    <motion.div
-                      key={idx}
-                      animate={{
-                        scaleY: [
-                          scale * 0.4,
-                          Math.sin(interactiveWave + idx) * 0.5 + 0.9,
-                          scale * 0.4,
-                        ],
-                      }}
-                      transition={{ duration: 0.25, repeat: Infinity }}
-                      className="w-1.5 h-3.5 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]"
-                    />
-                  ))
-                ) : isListening ? (
-                  // Listening wave pulse matching mic
-                  <motion.div
-                    animate={{ scaleX: [0.6, 1 + audioLevel * 1.5, 0.6] }}
-                    transition={{ duration: 0.4, repeat: Infinity }}
-                    className="w-8 h-1 bg-emerald-400 rounded-full shadow-[0_0_6px_rgba(52,211,153,0.9)]"
-                  />
-                ) : isHappy ? (
-                  // Smiling glowing mouth
-                  <div className="w-6 h-2 border-b-2 border-sky-300 rounded-b-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
-                ) : (
-                  // Calm standby pulse
-                  <div className="w-3 h-1 bg-sky-400/60 rounded-full shadow-[0_0_4px_rgba(56,189,248,0.5)]" />
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Lower Thruster / Jet Plasma Plume ── */}
-          <div className="flex flex-col items-center -mt-1">
-            {/* Thruster Nozzle */}
-            <div className="w-8 h-2.5 bg-slate-800 border-x border-b border-slate-600 rounded-b-lg" />
-            {/* Plasma Flame */}
-            <motion.div
-              animate={{
-                scaleY: isSpeaking ? [1, 1.4, 1] : [0.9, 1.15, 0.9],
-                opacity: isSpeaking ? [0.8, 1, 0.8] : [0.6, 0.85, 0.6],
-              }}
-              transition={{ duration: 0.35, repeat: Infinity }}
-              className={cn(
-                'w-4 h-6 rounded-b-full blur-xs transition-colors shadow-lg',
-                isSpeaking
-                  ? 'bg-gradient-to-b from-sky-300 via-sky-500 to-transparent'
+        animate={
+          specialAction === 'jump'
+            ? {
+                y: [0, -38, -32, -34, -16, 2, 0],
+                rotate: [0, -10, 10, -8, 8, -2, 0],
+                scale: [1, 1.2, 1.1, 1.15, 1.05, 0.95, 1],
+              }
+            : {
+                x: cursorVector.dx,
+                y: isSpeaking
+                  ? [-6, 6, -6]
                   : isListening
-                    ? 'bg-gradient-to-b from-emerald-300 via-emerald-500 to-transparent'
-                    : isThinking
-                      ? 'bg-gradient-to-b from-amber-300 via-amber-500 to-transparent'
-                      : 'bg-gradient-to-b from-sky-400 via-sky-600 to-transparent'
-              )}
-            />
-          </div>
+                  ? [-3, 3, -3]
+                  : isThink
+                  ? [-4, 4, -4]
+                  : [-8, 8, -8],
+                rotate: isThink ? -4 + cursorVector.tilt * 0.5 : cursorVector.tilt,
+                scale: isSpeaking ? [1, 1.04, 1] : 1,
+              }
+        }
+        transition={
+          specialAction === 'jump'
+            ? { duration: 2.4, ease: 'easeInOut' }
+            : {
+                y: { duration: isSpeaking ? 1.4 : isThink ? 2.0 : 3.6, repeat: Infinity, ease: 'easeInOut' },
+                rotate: { duration: 2.0, repeat: Infinity, ease: 'easeInOut' },
+                scale: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' },
+              }
+        }
+        className="relative z-10 flex items-center justify-center pointer-events-auto"
+      >
+        {/* ── Animated Translucent Fairy Wings (Flapping 3D) ── */}
+        {/* Left Fairy Wing */}
+        <motion.div
+          animate={{
+            rotateY: isSpeaking ? [-45, 45, -45] : [-25, 25, -25],
+            scaleX: isSpeaking ? [0.7, 1.25, 0.7] : [0.85, 1.15, 0.85],
+            scaleY: [0.95, 1.05, 0.95],
+          }}
+          transition={{
+            duration: isSpeaking ? 0.35 : 0.8,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+          style={{ transformOrigin: 'right center' }}
+          className="absolute -left-12 top-6 w-16 h-22 rounded-full bg-gradient-to-tr from-cyan-300/70 via-sky-200/50 to-transparent backdrop-blur-xs border border-cyan-200/60 shadow-[0_0_16px_rgba(34,211,238,0.85)] -z-10 pointer-events-none"
+        />
+
+        {/* Right Fairy Wing */}
+        <motion.div
+          animate={{
+            rotateY: isSpeaking ? [45, -45, 45] : [25, -25, 25],
+            scaleX: isSpeaking ? [0.7, 1.25, 0.7] : [0.85, 1.15, 0.85],
+            scaleY: [0.95, 1.05, 0.95],
+          }}
+          transition={{
+            duration: isSpeaking ? 0.35 : 0.8,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+          style={{ transformOrigin: 'left center' }}
+          className="absolute -right-12 top-6 w-16 h-22 rounded-full bg-gradient-to-tl from-cyan-300/70 via-sky-200/50 to-transparent backdrop-blur-xs border border-cyan-200/60 shadow-[0_0_16px_rgba(34,211,238,0.85)] -z-10 pointer-events-none"
+        />
+
+        {/* ── Central Spirit Body Sprite (Minecraft Allay Тихоня) ── */}
+        <div
+          className="relative w-44 h-44 flex items-center justify-center select-none"
+          style={{
+            filter: isThink
+              ? 'drop-shadow(0 0 20px rgba(251, 191, 36, 0.85)) drop-shadow(0 0 8px rgba(34, 211, 238, 0.9))'
+              : isSpeaking
+              ? 'drop-shadow(0 0 22px rgba(34, 211, 238, 0.95)) drop-shadow(0 0 8px rgba(56, 189, 248, 0.9))'
+              : isListening
+              ? 'drop-shadow(0 0 20px rgba(52, 211, 153, 0.85)) drop-shadow(0 0 6px rgba(34, 211, 238, 0.7))'
+              : 'drop-shadow(0 0 16px rgba(34, 211, 238, 0.65))',
+          }}
+        >
+          <Image
+            src={activeSprite}
+            alt="Зерфик — Тихоня AI Spirit"
+            fill
+            sizes="180px"
+            priority
+            className="object-contain pointer-events-none select-none"
+          />
         </div>
       </motion.div>
     </div>
   )
 }
 
-export interface ZerfikMaleVoice {
+export interface ZerfikVoiceProfile {
   id: string
   name: string
   subtitle: string
   tag: string
+  gender: 'male' | 'female'
   pitch: number
   rate: number
   description: string
 }
 
-export const ZERFIK_MALE_VOICES: ZerfikMaleVoice[] = [
+export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   {
-    id: 'zerfik_energetic',
-    name: 'Зерфик (Оригинальный)',
-    subtitle: 'Молодой, энергичный и дружелюбный',
-    tag: 'Основной',
-    pitch: 0.96,
-    rate: 1.06,
-    description: 'Живой, динамичный мужской голос для быстрого диалога и планирования задач.',
+    id: 'zerfik_original',
+    name: 'Зерфик (Оригинал / Тихоня)',
+    subtitle: 'Звонкий, милый, дружелюбный',
+    tag: 'Фирменный',
+    gender: 'male',
+    pitch: 1.24,
+    rate: 1.05,
+    description: 'Фирменный светлый и живой голос Зерфика-Тихони для тёплого дружеского общения.',
+  },
+  {
+    id: 'zerfik_friend',
+    name: 'Зерфик (Разговорный друг)',
+    subtitle: 'Естественный, живой, с юмором',
+    tag: 'Человек',
+    gender: 'male',
+    pitch: 1.0,
+    rate: 1.08,
+    description: 'Живая человеческая речь, разговорные связки и быстрый диалог без роботоподобности.',
   },
   {
     id: 'alex_baritone',
-    name: 'Алекс (Баритон)',
-    subtitle: 'Спокойный, глубокий и рассудительный',
+    name: 'Алекс (Эрудит / Бас)',
+    subtitle: 'Спокойный, глубокий и бархатный',
     tag: 'Баритон',
-    pitch: 0.78,
-    rate: 0.96,
-    description: 'Глубокий мужской тембр для спокойного разбора дня и вдумчивых советов.',
+    gender: 'male',
+    pitch: 0.76,
+    rate: 0.94,
+    description: 'Глубокий бархатный тембр для спокойного разбора дня и вдумчивых советов.',
   },
   {
     id: 'dmitry_business',
-    name: 'Дмитрий (Деловой)',
-    subtitle: 'Уверенный, чёткий и лаконичный',
-    tag: 'Бизнес',
-    pitch: 0.90,
-    rate: 1.10,
-    description: 'Чёткий мужской голос для продуктивного тайм-менеджмента.',
+    name: 'Дмитрий (Коуч / Драйв)',
+    subtitle: 'Энергичный, мотивирующий, быстрый',
+    tag: 'Энергия',
+    gender: 'male',
+    pitch: 1.06,
+    rate: 1.22,
+    description: 'Динамичный и чёткий темп для продуктивного тайм-менеджмента и фокуса.',
   },
   {
-    id: 'mark_tech',
-    name: 'Марк (Инженерный)',
-    subtitle: 'Точный, умный цифровой ассистент',
-    tag: 'AI Pro',
-    pitch: 0.85,
-    rate: 1.08,
-    description: 'Сконцентрированный мужской голос для работы со структурой, кодом и аналитикой.',
+    id: 'alisa_soft',
+    name: 'Алиса (Мягкий / Светлый)',
+    subtitle: 'Нежный, женский, умиротворяющий',
+    tag: 'Мягкий',
+    gender: 'female',
+    pitch: 1.30,
+    rate: 1.02,
+    description: 'Приятный женский голос с мягкими интонациями для уютных разговоров.',
   },
 ]
 
@@ -454,7 +365,9 @@ export function ZerficLiveView() {
   const [isMuted, setIsMuted] = useState(false)
   const [autoListen, setAutoListen] = useState(true)
 
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_energetic')
+  // Voice & Audio Settings
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_original')
+  const [voiceVolume, setVoiceVolume] = useState<number>(0.85) // Volume 0.0 - 1.0
   const [selectedModelId, setSelectedModelId] = useState<string>('llama-3.1-8b-instant')
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(true)
@@ -493,6 +406,7 @@ export function ZerficLiveView() {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
   const isInterruptedRef = useRef(false)
+  const lastProcessedSpeechRef = useRef<{ text: string; time: number }>({ text: '', time: 0 })
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // Persist messages to storage
@@ -518,7 +432,7 @@ export function ZerficLiveView() {
   }, [isActive, isSpeaking, isThinking, isListening])
 
   const selectedVoice = useMemo(() => {
-    return ZERFIK_MALE_VOICES.find(v => v.id === selectedVoiceId) || ZERFIK_MALE_VOICES[0]
+    return ZERFIK_VOICE_PROFILES.find(v => v.id === selectedVoiceId) || ZERFIK_VOICE_PROFILES[0]
   }, [selectedVoiceId])
 
   // Stop any active TTS audio immediately (Barge-in / Interruption handler)
@@ -570,17 +484,16 @@ export function ZerficLiveView() {
           const x = startX + i * (barWidth + gap)
           const y = centerY - barHeight / 2
 
-          // Gradient color: Emerald/Sky when listening, Amber/Purple when thinking, Primary/Cyan when speaking
           const grad = ctx.createLinearGradient(0, y, 0, y + barHeight)
           if (isSpeaking) {
-            grad.addColorStop(0, 'rgba(56, 189, 248, 0.95)')
+            grad.addColorStop(0, 'rgba(34, 211, 238, 0.95)')
             grad.addColorStop(1, 'rgba(14, 165, 233, 0.4)')
           } else if (isListening) {
             grad.addColorStop(0, 'rgba(52, 211, 153, 0.95)')
             grad.addColorStop(1, 'rgba(16, 185, 129, 0.35)')
           } else {
-            grad.addColorStop(0, 'rgba(251, 191, 36, 0.9)')
-            grad.addColorStop(1, 'rgba(245, 158, 11, 0.3)')
+            grad.addColorStop(0, 'rgba(251, 191, 36, 0.95)')
+            grad.addColorStop(1, 'rgba(245, 158, 11, 0.35)')
           }
 
           ctx.fillStyle = grad
@@ -589,7 +502,6 @@ export function ZerficLiveView() {
           ctx.fill()
         }
       } else {
-        // Idle gentle breathing line
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
         ctx.lineWidth = 2
         ctx.beginPath()
@@ -611,91 +523,7 @@ export function ZerficLiveView() {
     }
   }, [isListening, isSpeaking, isThinking, audioLevel])
 
-  // Process User Speech Text through AI Chat Engine
-  const sendToZerfik = useCallback(async (userText: string) => {
-    if (!userText.trim()) return
-
-    stopSpeaking()
-    setIsThinking(true)
-    setStatusText('Зерфик обдумывает ответ...')
-    setMood('thinking')
-    setGesture('chair_sit')
-
-    const userMsg: LiveChatMessage = {
-      id: `u_${Date.now()}`,
-      role: 'user',
-      text: userText.trim(),
-      timestamp: Date.now(),
-    }
-
-    setMessages(prev => [...prev, userMsg])
-    setInterimText('')
-
-    try {
-      const historyPayload = messages.slice(-6).map(m => ({
-        role: m.role,
-        content: m.text,
-      }))
-
-      const res = await fetch('/api/extensions/zerfic-live/chat', {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userText.trim(),
-          history: historyPayload,
-          model: selectedModelId,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (data.error) {
-        const errorMsg: LiveChatMessage = {
-          id: `b_${Date.now()}`,
-          role: 'assistant',
-          text: data.error,
-          mood: 'normal',
-          gesture: 'none',
-          timestamp: Date.now(),
-        }
-        setMessages(prev => [...prev, errorMsg])
-        setStatusText('Ошибка соединения')
-        setIsThinking(false)
-        return
-      }
-
-      const botReply = data.reply || 'Я тебя услышал!'
-      const botMood: ZerfikMood = data.mood || 'happy'
-      const botGesture: ZerfikGesture = data.gesture || 'chair_sit'
-
-      const botMsg: LiveChatMessage = {
-        id: `b_${Date.now()}`,
-        role: 'assistant',
-        text: botReply,
-        mood: botMood,
-        gesture: botGesture,
-        timestamp: Date.now(),
-      }
-
-      setMessages(prev => [...prev, botMsg])
-      setMood(botMood)
-      setGesture(botGesture)
-      setIsThinking(false)
-      setStatusText('Зерфик говорит...')
-
-      // Play Speech Synthesis
-      speakText(botReply)
-    } catch (err) {
-      console.error('Zerfic Live Chat Error:', err)
-      setIsThinking(false)
-      setStatusText('Ошибка сети')
-    }
-  }, [messages, selectedModelId, stopSpeaking])
-
-  // Speech Synthesis Function with Male Voice filtering
+  // Speech Synthesis Function with Distinct Voice Profiles and Volume
   const speakText = useCallback((textToSpeak: string) => {
     if (typeof window === 'undefined') return
     stopSpeaking()
@@ -705,21 +533,37 @@ export function ZerficLiveView() {
       const utterance = new SpeechSynthesisUtterance(textToSpeak)
       utterance.rate = selectedVoice.rate
       utterance.pitch = selectedVoice.pitch
+      utterance.volume = isMuted ? 0 : voiceVolume
       utterance.lang = 'ru-RU'
 
-      // Pick best matching Russian male voice if available
+      // Pick matching Russian voice from browser synthesizers
       const voices = window.speechSynthesis.getVoices()
-      const ruVoices = voices.filter(v => v.lang.startsWith('ru'))
-      const maleVoice = ruVoices.find(v =>
-        v.name.toLowerCase().includes('pavel') ||
-        v.name.toLowerCase().includes('dmitry') ||
-        v.name.toLowerCase().includes('aleksandr') ||
-        v.name.toLowerCase().includes('male') ||
-        v.name.toLowerCase().includes('русский')
-      ) || ruVoices[0]
+      const ruVoices = voices.filter(v => v.lang.startsWith('ru') || v.lang.startsWith('RU'))
 
-      if (maleVoice) {
-        utterance.voice = maleVoice
+      if (ruVoices.length > 0) {
+        if (selectedVoice.gender === 'female') {
+          const femaleVoice = ruVoices.find(v =>
+            v.name.toLowerCase().includes('irina') ||
+            v.name.toLowerCase().includes('tatiana') ||
+            v.name.toLowerCase().includes('svetlana') ||
+            v.name.toLowerCase().includes('alisa') ||
+            v.name.toLowerCase().includes('female')
+          ) || ruVoices[0]
+          utterance.voice = femaleVoice
+        } else if (selectedVoice.id === 'alex_baritone') {
+          const bassVoice = ruVoices.find(v =>
+            v.name.toLowerCase().includes('dmitry') ||
+            v.name.toLowerCase().includes('aleksandr')
+          ) || ruVoices[0]
+          utterance.voice = bassVoice
+        } else {
+          const maleVoice = ruVoices.find(v =>
+            v.name.toLowerCase().includes('pavel') ||
+            v.name.toLowerCase().includes('male') ||
+            v.name.toLowerCase().includes('русский')
+          ) || ruVoices[0]
+          utterance.voice = maleVoice
+        }
       }
 
       utterance.onstart = () => {
@@ -755,6 +599,7 @@ export function ZerficLiveView() {
         .then(buf => {
           const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }))
           const audio = new Audio(url)
+          audio.volume = isMuted ? 0 : voiceVolume
           setIsSpeaking(true)
           setStatusText('Зерфик говорит...')
           audio.onended = () => {
@@ -765,7 +610,108 @@ export function ZerficLiveView() {
         })
         .catch(() => setIsSpeaking(false))
     }
-  }, [selectedVoice, autoListen, isActive, stopSpeaking])
+  }, [selectedVoice, voiceVolume, isMuted, autoListen, isActive, stopSpeaking])
+
+  // Process User Speech Text through AI Chat Engine (with Strict Deduplication)
+  const sendToZerfik = useCallback(async (userText: string) => {
+    const trimmed = userText.trim()
+    if (!trimmed) return
+
+    // Prevent duplicate speech inputs within 2.5 seconds
+    const now = Date.now()
+    if (
+      lastProcessedSpeechRef.current.text === trimmed &&
+      now - lastProcessedSpeechRef.current.time < 2500
+    ) {
+      return
+    }
+    lastProcessedSpeechRef.current = { text: trimmed, time: now }
+
+    stopSpeaking()
+    setIsThinking(true)
+    setStatusText('Зерфик обдумывает ответ...')
+    setMood('thinking')
+    setGesture('chair_sit')
+    setInterimText('')
+
+    const userMsg: LiveChatMessage = {
+      id: `u_${now}`,
+      role: 'user',
+      text: trimmed,
+      timestamp: now,
+    }
+
+    setMessages(prev => {
+      // Deduplicate if last message was already identical
+      if (prev.length > 0 && prev[prev.length - 1].role === 'user' && prev[prev.length - 1].text === trimmed) {
+        return prev
+      }
+      return [...prev, userMsg]
+    })
+
+    try {
+      const historyPayload = messages.slice(-6).map(m => ({
+        role: m.role,
+        content: m.text,
+      }))
+
+      const res = await fetch('/api/extensions/zerfic-live/chat', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: trimmed,
+          history: historyPayload,
+          model: selectedModelId,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.error) {
+        const errorMsg: LiveChatMessage = {
+          id: `b_${Date.now()}`,
+          role: 'assistant',
+          text: data.error,
+          mood: 'normal',
+          gesture: 'none',
+          timestamp: Date.now(),
+        }
+        setMessages(prev => [...prev, errorMsg])
+        setStatusText('Ошибка соединения')
+        setIsThinking(false)
+        return
+      }
+
+      const botReply = data.reply || 'Я тебя услышал!'
+      const botMood: ZerfikMood = data.mood || 'happy'
+      const botGesture: ZerfikGesture = data.gesture || 'waving_arms'
+
+      const botMsg: LiveChatMessage = {
+        id: `b_${Date.now()}`,
+        role: 'assistant',
+        text: botReply,
+        mood: botMood,
+        gesture: botGesture,
+        timestamp: Date.now(),
+      }
+
+      setMessages(prev => [...prev, botMsg])
+      setMood(botMood)
+      setGesture(botGesture)
+      setIsThinking(false)
+      setStatusText('Зерфик говорит...')
+
+      // Play Speech Synthesis
+      speakText(botReply)
+    } catch (err) {
+      console.error('Zerfic Live Chat Error:', err)
+      setIsThinking(false)
+      setStatusText('Ошибка сети')
+    }
+  }, [messages, selectedModelId, stopSpeaking, speakText])
 
   // Setup Continuous Speech Recognition & VAD (Silence Detector)
   const startListeningSession = useCallback(async () => {
@@ -821,7 +767,7 @@ export function ZerficLiveView() {
         }
 
         recognition.onresult = (event: any) => {
-          // If Zerfik is speaking, user speaking interrupts him!
+          // If Zerfik is speaking, user speaking interrupts him immediately!
           if (isSpeaking) {
             stopSpeaking()
           }
@@ -845,17 +791,20 @@ export function ZerficLiveView() {
 
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current)
+            silenceTimerRef.current = null
           }
 
           if (finalTranscript.trim()) {
+            setInterimText('')
             sendToZerfik(finalTranscript.trim())
           } else if (currentInterim.trim()) {
-            // Silence detection: after 900ms of no new words, send the interim transcript
+            // Snappy silence detection: after 650ms of no new speech, process the phrase
             silenceTimerRef.current = setTimeout(() => {
               if (currentInterim.trim().length > 1) {
+                setInterimText('')
                 sendToZerfik(currentInterim.trim())
               }
-            }, 900)
+            }, 650)
           }
         }
 
@@ -946,7 +895,7 @@ export function ZerficLiveView() {
       {/* ── Top Header Toolbar ── */}
       <div className="flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-border/60 bg-card/40 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
+          <div className="w-9 h-9 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shadow-xs">
             <Radio className={cn('w-4 h-4', isActive && 'text-emerald-400 animate-pulse')} />
           </div>
           <div>
@@ -961,15 +910,15 @@ export function ZerficLiveView() {
           </div>
         </div>
 
-        {/* Top Controls: Voice, Model, Drawer Toggle */}
+        {/* Top Controls: Voice, Model, Volume, Drawer Toggle */}
         <div className="flex items-center gap-2">
-          {/* Male Voice Selector Pill */}
+          {/* Voice Selector Pill */}
           <div className="relative group">
             <button
               onClick={() => setShowSettingsModal(true)}
               className="px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-foreground/90 hover:text-foreground text-xs font-medium border border-border/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
-              <Volume2 className="w-3.5 h-3.5 text-primary" />
+              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
               <span className="hidden sm:inline">{selectedVoice.name}</span>
               <span className="sm:hidden">Голос</span>
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -1018,14 +967,14 @@ export function ZerficLiveView() {
           {/* Subtle decorative glow orb */}
           <div
             className={cn(
-              'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] rounded-full blur-[100px] pointer-events-none transition-all duration-700',
+              'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full blur-[110px] pointer-events-none transition-all duration-700',
               isActive && isSpeaking
-                ? 'bg-primary/20 scale-125'
+                ? 'bg-cyan-500/25 scale-125'
                 : isActive && isListening
-                  ? 'bg-emerald-500/20 scale-110'
-                  : isThinking
-                    ? 'bg-amber-500/20 scale-115'
-                    : 'bg-muted/10 scale-90'
+                ? 'bg-emerald-500/20 scale-110'
+                : isThinking
+                ? 'bg-amber-500/20 scale-115'
+                : 'bg-cyan-500/10 scale-90'
             )}
           />
 
@@ -1036,24 +985,24 @@ export function ZerficLiveView() {
               className={cn(
                 'px-4 py-1.5 rounded-full border text-xs font-semibold backdrop-blur-md shadow-xs flex items-center gap-2 transition-all',
                 isSpeaking
-                  ? 'bg-primary/15 text-primary border-primary/30'
+                  ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
                   : isListening
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : isThinking
-                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                      : 'bg-card/80 text-muted-foreground border-border/60'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  : isThinking
+                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                  : 'bg-card/80 text-muted-foreground border-border/60'
               )}
             >
               <span
                 className={cn(
                   'w-2 h-2 rounded-full',
                   isSpeaking
-                    ? 'bg-primary animate-pulse'
+                    ? 'bg-cyan-400 animate-pulse'
                     : isListening
-                      ? 'bg-emerald-400 animate-ping'
-                      : isThinking
-                        ? 'bg-amber-400 animate-bounce'
-                        : 'bg-muted-foreground'
+                    ? 'bg-emerald-400 animate-ping'
+                    : isThinking
+                    ? 'bg-amber-400 animate-bounce'
+                    : 'bg-muted-foreground'
                 )}
               />
               <span>{statusText}</span>
@@ -1074,37 +1023,23 @@ export function ZerficLiveView() {
             </AnimatePresence>
           </div>
 
-          {/* Central Hero Mascot Presentation */}
+          {/* Central Hero Mascot Presentation (Minecraft Allay Тихоня) */}
           <div className="z-10 flex flex-col items-center justify-center my-auto relative">
-            {/* Mascot Character Component */}
-            <motion.div
-              animate={{
-                y: isSpeaking ? [0, -6, 0] : isListening ? [0, -3, 0] : [0, -4, 0],
-                scale: isSpeaking ? [1, 1.03, 1] : 1,
-              }}
-              transition={{
-                duration: isSpeaking ? 1.8 : 3.5,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-              className="cursor-pointer transition-transform"
+            <ZerficAllayCompanion
+              mood={mood}
+              gesture={gesture}
+              isListening={isListening}
+              isThinking={isThinking}
+              isSpeaking={isSpeaking}
+              audioLevel={audioLevel}
               onClick={() => {
                 if (!isActive) startListeningSession()
                 else if (isSpeaking) stopSpeaking()
               }}
-            >
-              <ZerficLivingCompanion
-                mood={mood}
-                gesture={gesture}
-                isListening={isListening}
-                isThinking={isThinking}
-                isSpeaking={isSpeaking}
-                audioLevel={audioLevel}
-              />
-            </motion.div>
+            />
 
             {/* 60FPS Audio Waveform Canvas */}
-            <div className="w-full max-w-[320px] h-12 mt-4 flex items-center justify-center">
+            <div className="w-full max-w-[320px] h-12 mt-2 flex items-center justify-center">
               <canvas
                 ref={canvasRef}
                 width={320}
@@ -1115,7 +1050,7 @@ export function ZerficLiveView() {
           </div>
 
           {/* Quick Suggestions Chips */}
-          <div className="z-10 w-full max-w-xl flex items-center justify-center gap-2 flex-wrap mb-4">
+          <div className="z-10 w-full max-w-xl flex items-center justify-center gap-2 flex-wrap mb-3">
             {[
               'Что у меня на сегодня?',
               'Помоги спланировать день',
@@ -1126,27 +1061,27 @@ export function ZerficLiveView() {
                 key={prompt}
                 onClick={() => sendToZerfik(prompt)}
                 disabled={isThinking}
-                className="px-3 py-1 rounded-full bg-card/60 hover:bg-card text-muted-foreground hover:text-foreground text-[11px] font-medium border border-border/60 hover:border-primary/40 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                className="px-3 py-1 rounded-full bg-card/60 hover:bg-card text-muted-foreground hover:text-foreground text-[11px] font-medium border border-border/60 hover:border-cyan-400/40 transition-all cursor-pointer shadow-2xs hover:scale-102"
               >
                 {prompt}
               </button>
             ))}
           </div>
 
-          {/* ── Main Call Action Controls Bar ── */}
-          <div className="z-10 flex items-center gap-4 bg-card/80 backdrop-blur-xl border border-border/80 px-6 py-3 rounded-full shadow-xl">
-            {/* Mute Button */}
+          {/* ── Main Call Action Controls Bar (With Volume Slider) ── */}
+          <div className="z-10 flex items-center gap-3 bg-card/85 backdrop-blur-xl border border-border/80 px-5 py-2.5 rounded-full shadow-2xl">
+            {/* Mute Microphone Button */}
             <button
               onClick={() => setIsMuted(!isMuted)}
               className={cn(
-                'p-3 rounded-full border transition-all cursor-pointer',
+                'p-2.5 rounded-full border transition-all cursor-pointer',
                 isMuted
                   ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
                   : 'bg-muted/60 hover:bg-muted text-foreground border-border'
               )}
               title={isMuted ? 'Включить микрофон' : 'Отключить микрофон'}
             >
-              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
 
             {/* Pulsing Main Start/Stop Call Button */}
@@ -1154,7 +1089,7 @@ export function ZerficLiveView() {
               whileTap={{ scale: 0.94 }}
               onClick={handleToggleCall}
               className={cn(
-                'px-8 py-3.5 rounded-full font-bold text-sm flex items-center gap-2.5 transition-all cursor-pointer shadow-lg',
+                'px-7 py-3 rounded-full font-bold text-sm flex items-center gap-2.5 transition-all cursor-pointer shadow-lg',
                 isActive
                   ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
                   : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-primary/25 hover:shadow-primary/40'
@@ -1178,15 +1113,46 @@ export function ZerficLiveView() {
               onClick={stopSpeaking}
               disabled={!isSpeaking}
               className={cn(
-                'p-3 rounded-full border transition-all cursor-pointer',
+                'p-2.5 rounded-full border transition-all cursor-pointer',
                 isSpeaking
                   ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                   : 'bg-muted/30 text-muted-foreground/40 border-border/40 cursor-not-allowed'
               )}
               title="Перебить / Остановить голос Зерфика"
             >
-              <VolumeX className="w-5 h-5" />
+              <VolumeX className="w-4 h-4" />
             </button>
+
+            {/* Volume Slider Control */}
+            <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-border/60">
+              <button
+                type="button"
+                onClick={() => setVoiceVolume(prev => (prev === 0 ? 0.85 : 0))}
+                className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                title="Громкость речи Зерфика"
+              >
+                {voiceVolume === 0 ? (
+                  <VolumeX className="w-4 h-4 text-rose-400" />
+                ) : voiceVolume < 0.4 ? (
+                  <Volume1 className="w-4 h-4 text-cyan-400" />
+                ) : (
+                  <Volume2 className="w-4 h-4 text-cyan-400" />
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={voiceVolume}
+                onChange={e => setVoiceVolume(parseFloat(e.target.value))}
+                className="w-18 sm:w-22 h-1.5 bg-muted rounded-lg accent-primary cursor-pointer"
+                title={`Громкость: ${Math.round(voiceVolume * 100)}%`}
+              />
+              <span className="text-[10px] text-muted-foreground font-mono w-7">
+                {Math.round(voiceVolume * 100)}%
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1202,7 +1168,7 @@ export function ZerficLiveView() {
             >
               <div className="p-3.5 border-b border-border/60 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-primary" />
+                  <MessageSquare className="w-4 h-4 text-cyan-400" />
                   <span className="text-xs font-bold text-foreground">Стенограмма диалога</span>
                 </div>
                 <span className="text-[10px] text-muted-foreground font-mono">{messages.length} реплик</span>
@@ -1272,7 +1238,7 @@ export function ZerficLiveView() {
         </AnimatePresence>
       </div>
 
-      {/* ── Settings Modal: Male Voice & Model Selection ── */}
+      {/* ── Settings Modal: Voice & Model Selection ── */}
       <AnimatePresence>
         {showSettingsModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1287,12 +1253,12 @@ export function ZerficLiveView() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden z-10 p-6 space-y-6"
+              className="relative w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden z-10 p-6 space-y-5 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2">
-                  <Settings2 className="w-5 h-5 text-primary" />
-                  <h3 className="text-sm font-bold text-foreground">Настройки голоса и нейросети Зерфика</h3>
+                  <Settings2 className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-foreground">Настройки голоса и модели Зерфика</h3>
                 </div>
                 <button
                   onClick={() => setShowSettingsModal(false)}
@@ -1302,14 +1268,36 @@ export function ZerficLiveView() {
                 </button>
               </div>
 
-              {/* Voice Selection (Only Male Voices) */}
+              {/* Volume Slider in Settings */}
+              <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Volume2 className="w-4 h-4 text-cyan-400" />
+                    <span>Громкость голоса</span>
+                  </label>
+                  <span className="text-xs font-mono font-bold text-cyan-400">
+                    {Math.round(voiceVolume * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={voiceVolume}
+                  onChange={e => setVoiceVolume(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-muted rounded-lg accent-primary cursor-pointer"
+                />
+              </div>
+
+              {/* Voice Selection */}
               <div className="space-y-2.5">
                 <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Volume2 className="w-4 h-4 text-primary" />
-                  <span>Мужской голос озвучки</span>
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>Выберите тембр и характер голоса</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {ZERFIK_MALE_VOICES.map(voice => {
+                  {ZERFIK_VOICE_PROFILES.map(voice => {
                     const isSelected = voice.id === selectedVoiceId
                     return (
                       <button
@@ -1319,7 +1307,7 @@ export function ZerficLiveView() {
                           speakText(`Привет! Я говорю голосом ${voice.name}`)
                         }}
                         className={cn(
-                          'p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1',
+                          'p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5',
                           isSelected
                             ? 'bg-primary/10 border-primary text-primary shadow-xs'
                             : 'bg-muted/30 border-border hover:bg-muted/60 text-foreground'
@@ -1352,24 +1340,24 @@ export function ZerficLiveView() {
                         disabled={isLocked}
                         onClick={() => setSelectedModelId(m.id)}
                         className={cn(
-                          'w-full p-3 rounded-2xl border text-left transition-all flex items-center justify-between gap-3',
-                          isLocked
-                            ? 'opacity-50 bg-muted/20 border-border/40 cursor-not-allowed'
-                            : isSelected
-                              ? 'bg-primary/10 border-primary text-primary shadow-xs cursor-pointer'
-                              : 'bg-muted/30 border-border hover:bg-muted/60 text-foreground cursor-pointer'
+                          'w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer',
+                          isSelected
+                            ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                            : isLocked
+                            ? 'opacity-50 cursor-not-allowed bg-muted/20 border-border'
+                            : 'bg-muted/30 border-border hover:bg-muted/60 text-foreground'
                         )}
                       >
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold">{m.name}</span>
-                            {m.minPlan !== 'free' && (
-                              <span className="px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-400 text-[9px] font-bold">
-                                {m.minPlan.toUpperCase()}
+                            {isLocked && (
+                              <span className="px-1.5 py-0.2 rounded-md bg-amber-500/10 text-amber-400 text-[9px] font-bold border border-amber-500/20 uppercase">
+                                {m.minPlan}
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] text-muted-foreground">{m.desc}</p>
+                          <span className="text-[10px] text-muted-foreground">{m.desc}</span>
                         </div>
                         {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
                       </button>
