@@ -330,49 +330,77 @@ export function groupTasksByDate<T extends { dueDate?: string | null; dueTime?: 
 
 /**
  * Calculates the user's real productivity streak (consecutive active days).
- * Takes into account completed tasks, dates of completion, and habit streaks.
+ * Takes into account completed tasks, dates of completion, notes, and habit streaks.
  */
-export function calculateRealStreak(tasks: any[] = [], habits: any[] = []): number {
+export function calculateStreakInfo(
+  tasks: any[] = [],
+  habits: any[] = [],
+  notes: any[] = []
+): { streak: number; hasActivityToday: boolean } {
   if (!Array.isArray(tasks)) tasks = []
   if (!Array.isArray(habits)) habits = []
+  if (!Array.isArray(notes)) notes = []
 
   const completedDates = new Set<string>()
+
+  // Helper to format local YYYY-MM-DD
+  const toLocalYMD = (dInput: any): string => {
+    try {
+      const d = new Date(dInput)
+      if (isNaN(d.getTime())) return ''
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    } catch {
+      return ''
+    }
+  }
 
   // 1. Gather all completion dates from tasks
   tasks.forEach(t => {
     if (t && t.status === 'done') {
       if (t.completedAt) {
-        try {
-          const d = new Date(t.completedAt).toISOString().slice(0, 10)
-          completedDates.add(d)
-        } catch {}
+        const k = toLocalYMD(t.completedAt)
+        if (k) completedDates.add(k)
       }
       if (t.dueDate && typeof t.dueDate === 'string') {
         completedDates.add(t.dueDate.slice(0, 10))
       }
       if (t.updatedAt && !t.completedAt && !t.dueDate) {
-        try {
-          const d = new Date(t.updatedAt).toISOString().slice(0, 10)
-          completedDates.add(d)
-        } catch {}
+        const k = toLocalYMD(t.updatedAt)
+        if (k) completedDates.add(k)
       }
     }
   })
 
-  // 2. Gather completion dates from habits
+  // 2. Gather dates from notes
+  notes.forEach(n => {
+    if (n) {
+      if (n.dueDate) {
+        completedDates.add(n.dueDate.slice(0, 10))
+      } else if (n.createdAt) {
+        const k = toLocalYMD(n.createdAt)
+        if (k) completedDates.add(k)
+      } else if (n.updatedAt) {
+        const k = toLocalYMD(n.updatedAt)
+        if (k) completedDates.add(k)
+      }
+    }
+  })
+
+  // 3. Gather completion dates from habits
   habits.forEach(h => {
     if (h && h.lastCompletedAt) {
-      try {
-        const d = new Date(h.lastCompletedAt).toISOString().slice(0, 10)
-        completedDates.add(d)
-      } catch {}
+      const k = toLocalYMD(h.lastCompletedAt)
+      if (k) completedDates.add(k)
     }
   })
 
   const now = new Date()
-  const todayStr = now.toISOString().slice(0, 10)
-  const yesterdayDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  const yesterdayStr = yesterdayDate.toISOString().slice(0, 10)
+  const todayStr = toLocalYMD(now)
+  const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  const yesterdayStr = toLocalYMD(yesterdayDate)
 
   let streak = 0
   const hasDoneToday = completedDates.has(todayStr)
@@ -381,26 +409,28 @@ export function calculateRealStreak(tasks: any[] = [], habits: any[] = []): numb
   if (hasDoneToday || hasDoneYesterday) {
     let checkDate = new Date(hasDoneToday ? now : yesterdayDate)
     while (true) {
-      const dateStr = checkDate.toISOString().slice(0, 10)
+      const dateStr = toLocalYMD(checkDate)
       if (completedDates.has(dateStr)) {
         streak++
-        checkDate = new Date(checkDate.getTime() - 24 * 60 * 60 * 1000)
+        checkDate.setDate(checkDate.getDate() - 1)
       } else {
         break
       }
     }
   }
 
-  // 3. Fallback to maximum habit streak if larger
+  // Fallback to maximum habit streak if larger
   const maxHabitStreak = habits.reduce((max, h) => Math.max(max, Number(h?.streak) || 0), 0)
+  const finalStreak = Math.max(streak, maxHabitStreak)
 
-  // 4. If user has any done tasks but dates couldn't be parsed, fallback to at least 1
-  const doneTasksCount = tasks.filter(t => t && t.status === 'done').length
-  const baseCount = Math.max(streak, maxHabitStreak)
-  if (baseCount === 0 && doneTasksCount > 0 && hasDoneToday) {
-    return 1
+  return {
+    streak: finalStreak,
+    hasActivityToday: hasDoneToday,
   }
-
-  return baseCount
 }
+
+export function calculateRealStreak(tasks: any[] = [], habits: any[] = [], notes: any[] = []): number {
+  return calculateStreakInfo(tasks, habits, notes).streak
+}
+
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cn, calculateRealStreak } from '@/lib/utils'
+import { cn, calculateStreakInfo } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import { NotificationsPanel } from '@/components/notifications-panel'
 import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw } from 'lucide-react'
@@ -257,14 +257,24 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
 
         {/* Streak Flame Badge */}
         {(() => {
-          const realStreak = calculateRealStreak(state.tasks, state.habits)
+          const { streak, hasActivityToday } = calculateStreakInfo(state.tasks, state.habits, state.notes)
+          const tooltip = hasActivityToday
+            ? `Стрик продуктивности: ${streak} ${streak === 1 ? 'день' : streak < 5 && streak > 0 ? 'дня' : 'дней'} подряд (сегодня активность учтена!)`
+            : streak > 0
+            ? `Стрик ${streak} ${streak === 1 ? 'день' : streak < 5 && streak > 0 ? 'дня' : 'дней'}. Сделайте заметку или задачу сегодня, чтобы стрик не сгорел!`
+            : 'Стрик продуктивности: выполните дело или создайте заметку, чтобы зажечь огонь!'
           return (
             <div
-              title={`Стрик продуктивности: ${realStreak} ${realStreak === 1 ? 'день' : realStreak < 5 && realStreak > 0 ? 'дня' : 'дней'} подряд`}
-              className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-muted/60 border border-border text-foreground text-xs font-bold shrink-0 cursor-default"
+              title={tooltip}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 h-8 rounded-lg border text-xs font-bold shrink-0 cursor-default select-none transition-all',
+                hasActivityToday
+                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 shadow-xs'
+                  : 'bg-muted/60 text-foreground border-border'
+              )}
             >
-              <span className="text-sm mono-emoji">🔥</span>
-              <span>{realStreak}</span>
+              <span className={cn('text-sm mono-emoji', hasActivityToday && 'animate-pulse')}>🔥</span>
+              <span>{streak}</span>
             </div>
           )
         })()}
