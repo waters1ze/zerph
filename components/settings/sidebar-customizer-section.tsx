@@ -49,7 +49,6 @@ export const DEFAULT_MENU_ITEMS: Record<string, { title: string; icon: any; isEx
   goals:              { title: 'Цели',                 icon: Target },
   projects:           { title: 'Проекты',              icon: FolderOpen },
   ext_entropy_search: { title: 'Entropy AI Search',    icon: '🔮', isExt: true },
-  ext_zerfic_live:    { title: 'Зерфик Live',          icon: '🎙️', isExt: true },
   stats:              { title: 'Аналитика',            icon: BarChart2 },
   friends:            { title: 'Друзья',               icon: UserCheck },
   teams:              { title: 'Команды',              icon: Building2 },
@@ -137,7 +136,6 @@ function getItemDisplayName(itemId: string, metaTitle?: string): string {
     return metaTitle
   }
   if (itemId === 'ext_entropy_search') return 'Entropy AI Search'
-  if (itemId === 'ext_zerfic_live' || itemId === 'zerfic-live') return 'Зерфик Live'
   if (itemId.startsWith('ext_gh_')) {
     return 'GitHub Расширение'
   }
@@ -655,8 +653,6 @@ export function SidebarCustomizerSection() {
   const allItemMetas = useMemo<Record<string, { title: string; icon: any; isExt?: boolean }>>(() => {
     const map: Record<string, { title: string; icon: any; isExt?: boolean }> = { ...DEFAULT_MENU_ITEMS }
     map['ext_entropy_search'] = { title: 'Entropy AI Search', icon: '🔮', isExt: true }
-    map['ext_zerfic_live'] = { title: 'Зерфик Live', icon: '🎙️', isExt: true }
-    map['zerfic-live'] = { title: 'Зерфик Live', icon: '🎙️', isExt: true }
 
     installedExts.forEach(ext => {
       if (ext && ext.id) {

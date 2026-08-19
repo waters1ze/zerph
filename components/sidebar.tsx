@@ -332,25 +332,11 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   // Map of extensions for quick lookup strictly from user's installed extensions
   const extensionsMap = useMemo(() => {
     const map = new Map<string, Partial<ExtensionItem>>()
-    // Built-in starter extensions fallback
+    // Built-in starter extension fallback
     map.set('ext_entropy_search', {
       id: 'ext_entropy_search',
       title: 'Entropy AI Search',
       icon: '🔮',
-      isPublished: true,
-      minPlan: 'free',
-    })
-    map.set('ext_zerfic_live', {
-      id: 'ext_zerfic_live',
-      title: 'Зерфик Live',
-      icon: '🎙️',
-      isPublished: true,
-      minPlan: 'free',
-    })
-    map.set('zerfic-live', {
-      id: 'zerfic-live',
-      title: 'Зерфик Live',
-      icon: '🎙️',
       isPublished: true,
       minPlan: 'free',
     })
