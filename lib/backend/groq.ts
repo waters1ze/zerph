@@ -826,6 +826,7 @@ export async function generateEveningReview(
   firstName: string,
   completedTasks: string[],
   pendingTasks: string[],
+  tomorrowTasks: string[] = [],
   apiKey?: string
 ): Promise<string> {
   try {
@@ -833,48 +834,77 @@ export async function generateEveningReview(
       messages: [
         {
           role: 'system',
-          content: `Ты — личный ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня.
-Пиши ТОЛЬКО на русском языке, в Markdown для Telegram.
-Стиль: минималистичный, эстетичный, поддерживающий.
-Структура:
-1. Тёплое вечернее обращение по имени.
-2. Похвала за закрытые задачи (если есть) или ободрение.
-3. Короткий дружеский совет по отдыху/восстановлению сил на завтра.
-Максимум 120 слов.`,
+          content: `Ты — тактичный и умный вечерний ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня в Telegram.
+Пиши ТОЛЬКО на русском языке, в Markdown для Telegram (жирный **текст**, курсив _текст_).
+Стиль: спокойный, лаконичный, поддерживающий.
+
+СТРОГИЕ ПРАВИЛА (НЕ НАРУШАЙ НИ ПРИ КАКИХ УСЛОВИЯХ!):
+1. ЧЁТКО РАЗДЕЛЯЙ ДНИ: СЕГОДНЯ и ЗАВТРА — это разные дни. Никогда не путай их!
+2. НЕЗАКРЫТЫЕ ЗАДАЧИ ЗА СЕГОДНЯ:
+   - Если за сегодня есть незакрытые задачи, ты ТОЛЬКО мягко напоминаешь о них или спрашиваешь: возможно пользователь уже выполнил их, но забыл отметить выполненными в приложении Zerf.
+   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО давать советы по сегодняшним невыполненным задачам!
+   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО переносить сегодняшние незакрытые задачи на завтра в тексте (например, если сегодня была задача "встреча с врачом", НЕЛЬЗЯ писать "завтра удачи у врача"!).
+3. СОВЕТ И ЗАДАЧИ НА ЗАВТРА:
+   - Блок «**Совет:**» строится ИСКЛЮЧИТЕЛЬНО на основе списка «ЗАПЛАНИРОВАНО НА ЗАВТРА» (если они есть).
+   - Если на завтра есть задачи: дай 1 короткий практичный совет, как подготовиться ко сну и завтрашним делам.
+   - Если на завтра задач нет (список пуст): дай нейтральный совет по вечернему отдыху, сну и восстановлению (без упоминания чужих или сегодняшних дел).
+
+СТРУКТУРА СООБЩЕНИЯ:
+1. Обращение по имени (например: «**Привет, [Имя]! 🌙**» или «**Добрый вечер, [Имя]! 🌙**»).
+2. Итоги за СЕГОДНЯ:
+   - Если были закрыты задачи: похвали за конкретно выполненные дела.
+   - Если остались незакрытые задачи: мягко упомяни их списком («Остались незакрытыми: ... Возможно, ты уже всё сделал(а), но забыл(а) отметить галочкой в приложении»).
+   - Если задач вообще не было: скажи, что день прошёл в спокойном ритме.
+3. Блок «**Совет:**» — 1–2 предложения с рекомендацией на вечер/сон (строго с учётом задач на завтра, если они есть).
+
+Максимум 110 слов. Без лишней воды.`,
         },
         {
           role: 'user',
-          content: `Имя: ${firstName}\nВыполнено задач сегодня (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'нет'}\nОсталось невыполненных (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'нет'}`,
+          content: `Имя: ${firstName}\nВыполнено задач СЕГОДНЯ (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'нет'}\nОстались незакрытыми СЕГОДНЯ (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'все закрыты'}\nЗапланировано НА ЗАВТРА (${tomorrowTasks.length}): ${tomorrowTasks.slice(0, 5).join(', ') || 'нет конкретных задач на завтра'}`,
         },
       ],
       model: GROQ_CHAT_MODEL,
-      temperature: 0.7,
+      temperature: 0.4,
       max_tokens: 300,
       apiKey,
     })
 
     const aiText = result.content?.trim() || ''
-    return aiText || buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
+    return aiText || buildFallbackEveningReview(firstName, completedTasks, pendingTasks, tomorrowTasks)
   } catch {
-    return buildFallbackEveningReview(firstName, completedTasks, pendingTasks)
+    return buildFallbackEveningReview(firstName, completedTasks, pendingTasks, tomorrowTasks)
   }
 }
 
-function buildFallbackEveningReview(firstName: string, completedTasks: string[], pendingTasks: string[]): string {
-  let msg = `✦ *Добрый вечер, ${firstName}*\n\n`
+function buildFallbackEveningReview(
+  firstName: string,
+  completedTasks: string[],
+  pendingTasks: string[],
+  tomorrowTasks: string[] = []
+): string {
+  let msg = `✦ **Добрый вечер, ${firstName}! 🌙**\n\n`
   if (completedTasks.length > 0) {
-    msg += `✓ *Выполнено за сегодня (${completedTasks.length}):*\n` +
+    msg += `✓ **Выполнено за сегодня (${completedTasks.length}):**\n` +
       completedTasks.slice(0, 5).map(t => `  ▫ ~${t}~`).join('\n') + `\n\n`
   } else {
-    msg += `Сегодня был спокойный день без закрытых задач.\n\n`
+    msg += `Сегодня не было отмечено выполненных задач.\n\n`
   }
 
   if (pendingTasks.length > 0) {
-    msg += `⏱ *Осталось незавершенных (${pendingTasks.length}):*\n` +
-      pendingTasks.slice(0, 5).map(t => `  ▪ ${t}`).join('\n') + `\n\n`
-    msg += `_Отдохните и наберитесь сил. При необходимости можно перенести задачи на завтра в 1 клик._`
+    msg += `⏱ **Остались незакрытыми за сегодня (${pendingTasks.length}):**\n` +
+      pendingTasks.slice(0, 5).map(t => `  ▪ ${t}`).join('\n') + `\n` +
+      `_Если вы их уже выполнили, не забудьте отметить галочкой в приложении._\n\n`
   } else {
-    msg += `✦ *Все задачи закрыты! Идеальный результат. Приятного отдыха!*`
+    msg += `✦ **Все задачи за сегодня закрыты! Отличная работа.**\n\n`
+  }
+
+  if (tomorrowTasks.length > 0) {
+    msg += `📅 **Планы на завтра (${tomorrowTasks.length}):**\n` +
+      tomorrowTasks.slice(0, 3).map(t => `  ▫ ${t}`).join('\n') + `\n\n`
+    msg += `**Совет:** отдохните вечером и выспитесь, чтобы завтра продуктивно закрыть запланированные дела.`
+  } else {
+    msg += `**Совет:** отложите телефон перед сном, выпейте тёплого чая или сделайте лёгкую растяжку, чтобы хорошо выспаться.`
   }
 
   return msg

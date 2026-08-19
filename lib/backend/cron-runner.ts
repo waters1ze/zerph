@@ -495,15 +495,23 @@ export async function runEveningReview() {
           .map(t => t.title)
 
         const pendingToday = userTasks
-          .filter(t => t.status !== 'done' && t.status !== 'draft' && (t.dueDate === todayStr || !t.dueDate))
+          .filter(t => t.status !== 'done' && t.status !== 'draft' && (t.dueDate === todayStr || (!t.dueDate && t.createdAt && new Date(t.createdAt).toISOString().slice(0, 10) === todayStr)))
           .map(t => t.title)
 
-        if (completedToday.length === 0 && pendingToday.length === 0) continue
+        // Calculate tomorrow MSK date and extract real scheduled tasks for tomorrow
+        const tomorrowDate = new Date(new Date(todayStr + 'T12:00:00Z').getTime() + 24 * 60 * 60 * 1000)
+        const tomorrowStr = tomorrowDate.toISOString().slice(0, 10)
+        const tomorrowTasks = userTasks
+          .filter(t => t.status !== 'done' && t.status !== 'draft' && t.dueDate === tomorrowStr)
+          .map(t => t.title)
+
+        if (completedToday.length === 0 && pendingToday.length === 0 && tomorrowTasks.length === 0) continue
 
         const reviewText = await generateEveningReview(
           firstName,
           completedToday,
-          pendingToday
+          pendingToday,
+          tomorrowTasks
         ).catch(() => null)
 
         if (reviewText) {
