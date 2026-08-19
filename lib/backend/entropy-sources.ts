@@ -12,27 +12,55 @@ export interface LiveSource {
   snippet: string
 }
 
+export function isGeneralNewsOrDigestQuery(q: string): boolean {
+  const lower = q.toLowerCase().trim()
+  return (
+    /какую\s+информацию\s+(?:на\s+)?сегодня/i.test(lower) ||
+    /новости\s+(?:на\s+)?сегодня/i.test(lower) ||
+    /что\s+(?:нового|произошло|случилось)\s+(?:сегодня|сейчас)/i.test(lower) ||
+    /главные\s+новости/i.test(lower) ||
+    /сводка\s+(?:новостей|за\s+день|на\s+сегодня)/i.test(lower) ||
+    /дайджест\s+(?:новостей|за\s+день)/i.test(lower) ||
+    /события\s+(?:сегодня|дня)/i.test(lower) ||
+    /новости\s+дня/i.test(lower) ||
+    /свежие\s+новости/i.test(lower) ||
+    /картина\s+дня/i.test(lower) ||
+    /что\s+в\s+мире/i.test(lower)
+  )
+}
+
+export function cleanSearchKeywords(query: string): string {
+  return query
+    .replace(/^(?:расскажи|покажи|найди|объясни|подскажи|дай|какую\s+информацию\s+(?:ты\s+)?дашь\s+по|какая\s+информация\s+есть\s+по|что\s+ты\s+знаешь\s+о|что\s+такое|кто\s+такой|кто\s+такая|что\s+за|почему|зачем|как)\s+/i, '')
+    .replace(/[?!.]+$/, '')
+    .trim()
+}
+
 /**
  * Fetch real-time live news and recent articles via Google News RSS
  */
 async function fetchGoogleNews(query: string): Promise<LiveSource[]> {
   try {
-    const encoded = encodeURIComponent(query.trim())
-    // Russian news feed
-    const res = await fetch(
-      `https://news.google.com/rss/search?q=${encoded}&hl=ru&gl=RU&ceid=RU:ru`,
-      {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(4000),
-      }
-    )
+    const isTopNews = isGeneralNewsOrDigestQuery(query)
+    const cleanKw = cleanSearchKeywords(query)
+    const encoded = encodeURIComponent(isTopNews ? 'новости главное' : (cleanKw || query.trim()))
+
+    // Top headlines RSS feed if general news, or search feed if specific query
+    const feedUrl = isTopNews
+      ? `https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru`
+      : `https://news.google.com/rss/search?q=${encoded}&hl=ru&gl=RU&ceid=RU:ru`
+
+    const res = await fetch(feedUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(4000),
+    })
     if (!res.ok) return []
     const xml = await res.text()
 
     const items = xml.split('<item>')
     const sources: LiveSource[] = []
 
-    for (let i = 1; i < Math.min(items.length, 5); i++) {
+    for (let i = 1; i < Math.min(items.length, 6); i++) {
       const chunk = items[i]
       const titleMatch = chunk.match(/<title>([^<]+)<\/title>/)
       const linkMatch = chunk.match(/<link>([^<]+)<\/link>/)
@@ -71,7 +99,15 @@ async function fetchGoogleNews(query: string): Promise<LiveSource[]> {
  */
 async function fetchWikipedia(query: string): Promise<LiveSource[]> {
   try {
-    const encoded = encodeURIComponent(query.trim())
+    if (isGeneralNewsOrDigestQuery(query)) {
+      // Don't search Wikipedia with generic "какую информацию дашь на сегодня"
+      return []
+    }
+
+    const cleanKw = cleanSearchKeywords(query)
+    if (!cleanKw || cleanKw.length < 3) return []
+
+    const encoded = encodeURIComponent(cleanKw)
     const searchRes = await fetch(
       `https://ru.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encoded}&format=json&utf8=1&srlimit=2`,
       { signal: AbortSignal.timeout(3500) }

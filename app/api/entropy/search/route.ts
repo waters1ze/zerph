@@ -225,15 +225,38 @@ export async function POST(req: NextRequest) {
     // 1. Fetch real-time live open knowledge sources
     let liveSources: any[] = await aggregateLiveKnowledgeSources(cleanQuery, mode, isPro)
 
-    const words = cleanQuery.toLowerCase().split(/[\s,.;:!?\-#]+/).filter(w => w.length >= 2)
+    const STOPWORDS = new Set([
+      'какой', 'какую', 'какие', 'какая', 'каком', 'каких',
+      'что', 'кто', 'где', 'когда', 'куда', 'откуда', 'почему', 'зачем', 'как',
+      'информация', 'информацию', 'информации', 'информацией',
+      'сегодня', 'сейчас', 'завтра', 'вчера', 'дня', 'день',
+      'мне', 'меня', 'мной', 'тебе', 'тебя', 'тобой', 'нам', 'вас', 'вам',
+      'дашь', 'дай', 'даст', 'покажи', 'расскажи', 'найди', 'посоветуй',
+      'есть', 'быть', 'был', 'была', 'были', 'будет', 'будут',
+      'на', 'в', 'во', 'по', 'к', 'ко', 'с', 'со', 'из', 'от', 'до', 'для', 'о', 'об', 'обо', 'про',
+      'и', 'или', 'но', 'а', 'да', 'же', 'ли', 'бы', 'не', 'ни',
+      'это', 'этот', 'эта', 'эти', 'этом', 'тот', 'та', 'те', 'том',
+      'все', 'всё', 'весь', 'вся', 'всех', 'всем',
+      'очень', 'просто', 'тоже', 'также', 'только', 'еще', 'ещё', 'уже',
+    ])
+
+    const isPersonalWorkspaceQuery = (
+      mode === 'notes' ||
+      /\b(?:мои|моя|моё|мое|мой|моих|мне|моем|моём|задач[аиеу]|дела|план[ыаов]|заметк[аиеу]|расписани[еи]|список|цел[ьи]|напоминани[яе])\b/i.test(cleanQuery)
+    )
+
+    const meaningfulWords = cleanQuery
+      .toLowerCase()
+      .split(/[\s,.;:!?\-#]+/)
+      .filter(w => w.length >= 3 && !STOPWORDS.has(w))
 
     // 2. Smart Client Workspace Context Integration (Notes, Tasks, Goals)
     const clientSources: any[] = []
 
-    if (Array.isArray(userNotes) && userNotes.length > 0) {
+    if (Array.isArray(userNotes) && userNotes.length > 0 && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
       const matchedClientNotes = userNotes.filter((n: any) => {
         const combined = ((n.title || '') + ' ' + (n.content || '') + ' ' + (n.tags || []).join(' ')).toLowerCase()
-        return words.some(w => combined.includes(w))
+        return meaningfulWords.some(w => combined.includes(w))
       })
       matchedClientNotes.slice(0, 3).forEach((n: any) => {
         clientSources.push({
@@ -247,27 +270,31 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (Array.isArray(userTasks) && userTasks.length > 0) {
+    if (Array.isArray(userTasks) && userTasks.length > 0 && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
       const matchedClientTasks = userTasks.filter((t: any) => {
         const combined = ((t.title || '') + ' ' + (t.tags || []).join(' ')).toLowerCase()
-        return words.some(w => combined.includes(w))
+        return meaningfulWords.some(w => combined.includes(w))
       })
       matchedClientTasks.slice(0, 3).forEach((t: any) => {
+        const isDone = t.status === 'done' || Boolean(t.completedAt)
+        const statusLabel = isDone
+          ? ' [СТАТУС: ВЫПОЛНЕНА / ЗАВЕРШЕНА РАНЕЕ. Дело уже сделано в прошлом, НЕ предлагать к выполнению на сегодня!]'
+          : ` [СТАТУС: АКТИВНА / В ПРОЦЕССЕ.${t.dueDate ? ` Запланирована на: ${t.dueDate}` : ''}]`
         clientSources.push({
           title: `✓ Задача: «${t.title}»`,
           url: `/tasks?id=${t.id}`,
           domain: 'zerf.tasks',
-          snippet: `Задача из Zerf Note${t.dueDate ? ` (Срок: ${t.dueDate})` : ''}${t.status === 'done' ? ' — Выполнена' : ' — В процессе'}`,
+          snippet: `Задача из Zerf Note: «${t.title}»${statusLabel}`,
           type: 'task',
           taskId: t.id,
         })
       })
     }
 
-    if (Array.isArray(userGoals) && userGoals.length > 0) {
+    if (Array.isArray(userGoals) && userGoals.length > 0 && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
       const matchedClientGoals = userGoals.filter((g: any) => {
         const combined = (g.title || '').toLowerCase()
-        return words.some(w => combined.includes(w))
+        return meaningfulWords.some(w => combined.includes(w))
       })
       matchedClientGoals.slice(0, 2).forEach((g: any) => {
         clientSources.push({
@@ -286,7 +313,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Search user's internal notes, tasks and graph knowledge in DB
-    if (ownerChatId !== 'guest') {
+    if (ownerChatId !== 'guest' && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
       try {
         const numericOwnerId = BigInt(ownerChatId)
 
@@ -307,13 +334,13 @@ export async function POST(req: NextRequest) {
         const matchedNotes = notes.filter((n: any) => {
           const tagsStr = (n.tags || []).join(' ').toLowerCase()
           const combined = (n.title + ' ' + (n.content || '') + ' ' + tagsStr).toLowerCase()
-          return words.some(w => combined.includes(w))
+          return meaningfulWords.some(w => combined.includes(w))
         })
 
         const matchedTasks = tasks.filter((t: any) => {
           const tagsStr = (t.tags || []).join(' ').toLowerCase()
           const combined = (t.title + ' ' + (t.description || '') + ' ' + tagsStr).toLowerCase()
-          return words.some(w => combined.includes(w))
+          return meaningfulWords.some(w => combined.includes(w))
         })
 
         const chosenNotes = mode === 'notes' && matchedNotes.length === 0
@@ -331,14 +358,20 @@ export async function POST(req: NextRequest) {
             type: 'note',
             noteId: n.id,
           })),
-          ...chosenTasks.map((t: any) => ({
-            title: `✓ Задача: «${t.title}»`,
-            url: `/tasks?id=${t.id}`,
-            domain: 'zerf.task',
-            snippet: (t.description || t.title) + (t.dueDate ? ` (Срок: ${t.dueDate} ${t.dueTime || ''})` : ''),
-            type: 'task',
-            taskId: t.id,
-          })),
+          ...chosenTasks.map((t: any) => {
+            const isDone = t.status === 'done' || Boolean(t.completedAt)
+            const statusLabel = isDone
+              ? ' [СТАТУС: ВЫПОЛНЕНА / ЗАВЕРШЕНА РАНЕЕ. Дело уже сделано, НЕ предлагать к выполнению на сегодня!]'
+              : ` [СТАТУС: АКТИВНА / В ПРОЦЕССЕ.${t.dueDate ? ` Срок: ${t.dueDate} ${t.dueTime || ''}` : ''}]`
+            return {
+              title: `✓ Задача: «${t.title}»`,
+              url: `/tasks?id=${t.id}`,
+              domain: 'zerf.task',
+              snippet: (t.description || t.title) + statusLabel,
+              type: 'task',
+              taskId: t.id,
+            }
+          }),
         ]
 
         if (internalSources.length > 0) {
@@ -396,6 +429,11 @@ ${liveContext}
 ИНСТРУКЦИИ:
 1. Дай прямой, живой, фактологический и максимально полезный ответ на русском языке конкретно на вопрос пользователя.
 2. ГЛУБОКИЙ КОНТЕКСТУАЛЬНЫЙ ИНТЕЛЛЕКТ:
+   - Если вопрос касается ОБЩЕЙ СВОДКИ ИЛИ НОВОСТЕЙ НА СЕГОДНЯ («какую информацию на сегодня мне дашь?», «новости на сегодня», «что произошло в мире»):
+     • Сформируй структурированную картину главных актуальных новостей дня (мировые события, технологии, культура, экономика) на основе новостных первоисточников.
+     • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО подмешивать личные выполненные задачи пользователя в мировые новости, если пользователь прямо не спрашивал про свои задачи!
+   - Если вопрос касается ЗАДАЧ И РАСПИСАНИЯ ПОЛЬЗОВАТЕЛЯ:
+     • Обращай внимание на статус задач: если задача помечена как [СТАТУС: ВЫПОЛНЕНА / ЗАВЕРШЕНА РАНЕЕ], она УЖЕ завершена пользователем в прошлом! КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать, что пользователю «нужно сделать эту задачу» или «ваша задача на сегодня — провести...». Если пользователь спрашивает, отвечай, что она уже выполнена.
    - Если вопрос касается ПОДАРКА или ДНЯ РОЖДЕНИЯ (например: «Что подарить на день рождения: Лерочч?»):
      • Предложи 4 конкретные вдохновляющие категории подарков:
        1) 🎁 Впечатления и эмоции (мастер-классы, спа, концерты, квесты).
