@@ -135,6 +135,19 @@ async function runAction(promptText) {
   const [devCardPayoutType, setDevCardPayoutType] = useState<'card' | 'yoomoney'>('yoomoney')
   const [devCardNumber, setDevCardNumber] = useState<string>('')
   const [devCardBank, setDevCardBank] = useState<string>('')
+  const [showDevBankDropdown, setShowDevBankDropdown] = useState<boolean>(false)
+
+  const POPULAR_BANKS_LIST = [
+    { name: 'ЮMoney', icon: '🟣', badge: 'Кошелёк / Карта' },
+    { name: 'Сбербанк', icon: '🟢', badge: 'Сбер' },
+    { name: 'Т-Банк', icon: '🟡', badge: 'Тинькофф' },
+    { name: 'Альфа-Банк', icon: '🔴', badge: 'Альфа' },
+    { name: 'ВТБ', icon: '🔵', badge: 'ВТБ' },
+    { name: 'Ozon Банк', icon: '🟣', badge: 'Ozon' },
+    { name: 'Райффайзен', icon: '🟠', badge: 'Райф' },
+    { name: 'Газпромбанк', icon: '🔵', badge: 'ГПБ' },
+    { name: 'Другой банк', icon: '💳', badge: 'Карта РФ' },
+  ]
 
   // GitHub Publish & Validation State
   const [publishRepoUrl, setPublishRepoUrl] = useState('')
@@ -1467,15 +1480,56 @@ When processing user instructions and extension triggers, ALWAYS output your fin
                             className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
                           />
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 relative">
                           <label className="text-[11px] text-muted-foreground block">Банк карты:</label>
-                          <input
-                            type="text"
-                            value={devCardBank}
-                            onChange={e => setDevCardBank(e.target.value)}
-                            placeholder="Сбер, Т-Банк..."
-                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-purple-500"
-                          />
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setShowDevBankDropdown(!showDevBankDropdown)}
+                              className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground flex items-center justify-between gap-1.5 hover:border-purple-500 transition-colors cursor-pointer"
+                            >
+                              <span className="truncate font-medium">
+                                {devCardBank
+                                  ? (POPULAR_BANKS_LIST.find(b => b.name === devCardBank)?.icon || '💳') + ' ' + devCardBank
+                                  : 'Выбрать банк...'}
+                              </span>
+                              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", showDevBankDropdown && "rotate-180")} />
+                            </button>
+
+                            <AnimatePresence>
+                              {showDevBankDropdown && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                  className="absolute right-0 top-full mt-1.5 w-60 p-1.5 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl z-50 space-y-0.5 max-h-56 overflow-y-auto"
+                                >
+                                  {POPULAR_BANKS_LIST.map(b => (
+                                    <button
+                                      key={b.name}
+                                      type="button"
+                                      onClick={() => {
+                                        setDevCardBank(b.name)
+                                        setShowDevBankDropdown(false)
+                                      }}
+                                      className={cn(
+                                        "w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-colors cursor-pointer",
+                                        devCardBank === b.name
+                                          ? "bg-purple-500/20 text-purple-300 font-bold"
+                                          : "text-foreground hover:bg-muted/70"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm">{b.icon}</span>
+                                        <span>{b.name}</span>
+                                      </div>
+                                      <span className="text-[9px] text-muted-foreground font-mono">{b.badge}</span>
+                                    </button>
+                                  ))}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
                         </div>
                       </div>
                     )}

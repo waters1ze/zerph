@@ -374,7 +374,20 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [cardNumberInput, setCardNumberInput] = useState<string>('')
   const [cardBankInput, setCardBankInput] = useState<string>('')
   const [cardRecipientInput, setCardRecipientInput] = useState<string>('')
+  const [showExtBankDropdown, setShowExtBankDropdown] = useState<boolean>(false)
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false)
+
+  const POPULAR_BANKS_LIST = [
+    { name: 'ЮMoney', icon: '🟣', badge: 'Кошелёк / Карта' },
+    { name: 'Сбербанк', icon: '🟢', badge: 'Сбер' },
+    { name: 'Т-Банк', icon: '🟡', badge: 'Тинькофф' },
+    { name: 'Альфа-Банк', icon: '🔴', badge: 'Альфа' },
+    { name: 'ВТБ', icon: '🔵', badge: 'ВТБ' },
+    { name: 'Ozon Банк', icon: '🟣', badge: 'Ozon' },
+    { name: 'Райффайзен', icon: '🟠', badge: 'Райф' },
+    { name: 'Газпромбанк', icon: '🔵', badge: 'ГПБ' },
+    { name: 'Другой банк', icon: '💳', badge: 'Карта РФ' },
+  ]
   const [selectedAuthorProfile, setSelectedAuthorProfile] = useState<string | null>(null)
   
   // Reviews & Ratings Modal State
@@ -3443,15 +3456,56 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
+                      <div className="space-y-1 relative">
                         <label className="font-semibold text-foreground text-[11px] block">Банк карты:</label>
-                        <input
-                          type="text"
-                          value={cardBankInput}
-                          onChange={e => setCardBankInput(e.target.value)}
-                          placeholder="Сбер, Т-Банк, Альфа..."
-                          className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary text-xs"
-                        />
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowExtBankDropdown(!showExtBankDropdown)}
+                            className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground flex items-center justify-between gap-1.5 hover:border-primary transition-colors cursor-pointer"
+                          >
+                            <span className="truncate font-medium">
+                              {cardBankInput
+                                ? (POPULAR_BANKS_LIST.find(b => b.name === cardBankInput)?.icon || '💳') + ' ' + cardBankInput
+                                : 'Выбрать банк...'}
+                            </span>
+                            <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", showExtBankDropdown && "rotate-180")} />
+                          </button>
+
+                          <AnimatePresence>
+                            {showExtBankDropdown && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                className="absolute left-0 top-full mt-1.5 w-60 p-1.5 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl z-50 space-y-0.5 max-h-56 overflow-y-auto"
+                              >
+                                {POPULAR_BANKS_LIST.map(b => (
+                                  <button
+                                    key={b.name}
+                                    type="button"
+                                    onClick={() => {
+                                      setCardBankInput(b.name)
+                                      setShowExtBankDropdown(false)
+                                    }}
+                                    className={cn(
+                                      "w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-colors cursor-pointer",
+                                      cardBankInput === b.name
+                                        ? "bg-primary/20 text-primary font-bold"
+                                        : "text-foreground hover:bg-muted/70"
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm">{b.icon}</span>
+                                      <span>{b.name}</span>
+                                    </div>
+                                    <span className="text-[9px] text-muted-foreground font-mono">{b.badge}</span>
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
 
                       <div className="space-y-1">

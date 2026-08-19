@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import {
   Bell, BellOff, Link, Key,
   User, Users, Mail, Palette, Save, Check, MessageSquare,
-  Zap, Globe, Shield, ChevronRight, Smartphone, Sparkles,
+  Zap, Globe, Shield, ChevronRight, ChevronDown, Smartphone, Sparkles,
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
   Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen,
@@ -298,6 +298,20 @@ export function SettingsView() {
   const [cardFormPhone, setCardFormPhone] = useState<string>('')
   const [cardFormBank, setCardFormBank] = useState<string>('')
   const [cardFormName, setCardFormName] = useState<string>('')
+  const [showBankDropdown, setShowBankDropdown] = useState<boolean>(false)
+  const [showBankDropdown2, setShowBankDropdown2] = useState<boolean>(false)
+
+  const POPULAR_BANKS_LIST = [
+    { name: 'ЮMoney', icon: '🟣', badge: 'Кошелёк / Карта' },
+    { name: 'Сбербанк', icon: '🟢', badge: 'Сбер' },
+    { name: 'Т-Банк', icon: '🟡', badge: 'Тинькофф' },
+    { name: 'Альфа-Банк', icon: '🔴', badge: 'Альфа' },
+    { name: 'ВТБ', icon: '🔵', badge: 'ВТБ' },
+    { name: 'Ozon Банк', icon: '🟣', badge: 'Ozon' },
+    { name: 'Райффайзен', icon: '🟠', badge: 'Райф' },
+    { name: 'Газпромбанк', icon: '🔵', badge: 'ГПБ' },
+    { name: 'Другой банк', icon: '💳', badge: 'Карта РФ' },
+  ]
 
   const fetchAutoRenew = () => {
     fetch('/api/subscription/autorenew', { headers: getAuthHeaders() })
@@ -2139,17 +2153,58 @@ export function SettingsView() {
                             className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
                           />
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 relative">
                           <label className="text-[11px] text-muted-foreground font-semibold block">
                             Банк карты:
                           </label>
-                          <input
-                            type="text"
-                            value={cardFormBank}
-                            onChange={e => setCardFormBank(e.target.value)}
-                            placeholder="Сбер, Т-Банк, Альфа..."
-                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-purple-500"
-                          />
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setShowBankDropdown2(!showBankDropdown2)}
+                              className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground flex items-center justify-between gap-1.5 hover:border-purple-500 transition-colors cursor-pointer"
+                            >
+                              <span className="truncate font-medium">
+                                {cardFormBank
+                                  ? (POPULAR_BANKS_LIST.find(b => b.name === cardFormBank)?.icon || '💳') + ' ' + cardFormBank
+                                  : 'Выбрать банк...'}
+                              </span>
+                              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", showBankDropdown2 && "rotate-180")} />
+                            </button>
+
+                            <AnimatePresence>
+                              {showBankDropdown2 && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                  className="absolute right-0 top-full mt-1.5 w-60 p-1.5 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl z-50 space-y-0.5 max-h-56 overflow-y-auto"
+                                >
+                                  {POPULAR_BANKS_LIST.map(b => (
+                                    <button
+                                      key={b.name}
+                                      type="button"
+                                      onClick={() => {
+                                        setCardFormBank(b.name)
+                                        setShowBankDropdown2(false)
+                                      }}
+                                      className={cn(
+                                        "w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-colors cursor-pointer",
+                                        cardFormBank === b.name
+                                          ? "bg-purple-500/20 text-purple-300 font-bold"
+                                          : "text-foreground hover:bg-muted/70"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm">{b.icon}</span>
+                                        <span>{b.name}</span>
+                                      </div>
+                                      <span className="text-[9px] text-muted-foreground font-mono">{b.badge}</span>
+                                    </button>
+                                  ))}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4233,27 +4288,104 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="sm:col-span-2">
-                        <label className="text-[10px] font-medium text-muted-foreground block mb-1">Номер карты РФ / ЮMoney счёт (41001...)</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[10px] font-semibold text-muted-foreground block">Номер карты РФ / ЮMoney счёт (41001...)</label>
                         <input
                           type="text"
                           value={cardFormNumber}
-                          onChange={e => setCardFormNumber(e.target.value)}
+                          onChange={e => {
+                            const val = e.target.value
+                            setCardFormNumber(val)
+                            if (val.startsWith('41001')) {
+                              setCardFormBank('ЮMoney')
+                              setCardFormType('yoomoney')
+                            }
+                          }}
                           placeholder="2200 0000 0000 0000 / 41001..."
-                          className="w-full h-8 px-3 rounded-lg bg-card border border-border text-xs font-mono text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
+                          className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs font-mono text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-all"
                         />
                       </div>
-                      <div>
-                        <label className="text-[10px] font-medium text-muted-foreground block mb-1">Банк</label>
-                        <input
-                          type="text"
-                          value={cardFormBank}
-                          onChange={e => setCardFormBank(e.target.value)}
-                          placeholder="Сбербанк, Т-Банк, ЮMoney..."
-                          className="w-full h-8 px-3 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
-                        />
+                      <div className="space-y-1 relative">
+                        <label className="text-[10px] font-semibold text-muted-foreground block">Банк / Сервис</label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowBankDropdown(!showBankDropdown)}
+                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground flex items-center justify-between gap-1.5 hover:border-primary transition-colors cursor-pointer"
+                          >
+                            <span className="truncate font-medium">
+                              {cardFormBank
+                                ? (POPULAR_BANKS_LIST.find(b => b.name === cardFormBank)?.icon || '💳') + ' ' + cardFormBank
+                                : 'Выбрать банк...'}
+                            </span>
+                            <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", showBankDropdown && "rotate-180")} />
+                          </button>
+
+                          {/* Bank Dropdown Menu */}
+                          <AnimatePresence>
+                            {showBankDropdown && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                className="absolute right-0 top-full mt-1.5 w-60 p-1.5 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl z-50 space-y-0.5 max-h-56 overflow-y-auto"
+                              >
+                                <p className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                                  Популярные банки РФ
+                                </p>
+                                {POPULAR_BANKS_LIST.map(b => (
+                                  <button
+                                    key={b.name}
+                                    type="button"
+                                    onClick={() => {
+                                      setCardFormBank(b.name)
+                                      setShowBankDropdown(false)
+                                      if (b.name === 'ЮMoney') setCardFormType('yoomoney')
+                                    }}
+                                    className={cn(
+                                      "w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-colors cursor-pointer",
+                                      cardFormBank === b.name
+                                        ? "bg-primary/20 text-primary font-bold"
+                                        : "text-foreground hover:bg-muted/70"
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm">{b.icon}</span>
+                                      <span>{b.name}</span>
+                                    </div>
+                                    <span className="text-[9px] text-muted-foreground font-mono">{b.badge}</span>
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
+                    </div>
+
+                    {/* Quick Bank Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] text-muted-foreground font-medium">Быстрый выбор:</span>
+                      {POPULAR_BANKS_LIST.slice(0, 6).map(b => (
+                        <button
+                          key={b.name}
+                          type="button"
+                          onClick={() => {
+                            setCardFormBank(b.name)
+                            if (b.name === 'ЮMoney') setCardFormType('yoomoney')
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1",
+                            cardFormBank === b.name
+                              ? "bg-primary/20 text-primary border-primary/40 shadow-xs"
+                              : "bg-card text-muted-foreground border-border/80 hover:text-foreground hover:border-border"
+                          )}
+                        >
+                          <span>{b.icon}</span>
+                          <span>{b.name}</span>
+                        </button>
+                      ))}
                     </div>
 
                     <div className="flex items-center gap-2 pt-1">
