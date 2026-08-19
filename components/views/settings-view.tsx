@@ -1692,6 +1692,57 @@ export function SettingsView() {
                     )}
                   </div>
                 </div>
+
+                {/* 6. YooMoney Author Payouts Card (80/20) */}
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center font-bold text-xs border border-purple-500/25">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground">ЮMoney / Выплаты автору (80/20)</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {userPaymentCard?.cardNumber || userPaymentCard?.phone
+                            ? (userPaymentCard.payoutType === 'yoomoney' ? `ЮMoney: ${userPaymentCard.cardNumber}` : userPaymentCard.payoutType === 'sbp' ? `СБП: ${userPaymentCard.phone}` : `Карта: •••• ${userPaymentCard.cardNumber.slice(-4)}`)
+                            : '80% с каждой продажи плагинов'}
+                        </p>
+                      </div>
+                    </div>
+                    {userPaymentCard?.cardNumber || userPaymentCard?.phone ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
+                        Привязан
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
+                        Доступен
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowCardForm(!showCardForm)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>{userPaymentCard?.cardNumber || userPaymentCard?.phone ? 'Изменить ЮMoney' : 'Привязать ЮMoney (80%)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = '/developer?tab=earnings'
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      title="Открыть студию разработчика и доходы"
+                    >
+                      <span>Доходы</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Inline Modal/Form for GitHub Linking */}
@@ -1994,6 +2045,171 @@ export function SettingsView() {
                       <button
                         type="button"
                         onClick={() => setShowEmailLinkModal(false)}
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
+
+              {/* Inline Modal/Form for YooMoney / Payout Card Linking */}
+              <AnimatePresence>
+                {showCardForm && (
+                  <motion.form
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    onSubmit={handleSavePaymentCard}
+                    className="p-4 sm:p-5 rounded-2xl bg-purple-500/5 border border-purple-500/30 space-y-4 mt-3 overflow-hidden shadow-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-purple-500 text-white flex items-center justify-center font-bold text-[10px]">
+                          <CreditCard className="w-3.5 h-3.5" />
+                        </div>
+                        <p className="text-xs font-bold text-foreground">
+                          Реквизиты выплат автору (ЮMoney / СБП / Карта)
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        80% автору
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Привяжите кошелёк ЮMoney или реквизиты. <b>80% от каждой покупки ваших плагинов в Магазине Zerf начисляются вам</b>, 20% — комиссия платформы.
+                    </p>
+
+                    {/* Method Selector */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCardFormType('yoomoney')}
+                        className={cn(
+                          'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
+                          cardFormType === 'yoomoney'
+                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs'
+                            : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                        )}
+                      >
+                        🟣 ЮMoney кошелёк
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCardFormType('sbp')}
+                        className={cn(
+                          'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
+                          cardFormType === 'sbp'
+                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs'
+                            : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                        )}
+                      >
+                        ⚡ СБП (Телефон)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCardFormType('card')}
+                        className={cn(
+                          'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
+                          cardFormType === 'card'
+                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs'
+                            : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                        )}
+                      >
+                        💳 Карта РФ
+                      </button>
+                    </div>
+
+                    {cardFormType === 'yoomoney' && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground font-semibold block">
+                          Номер счёта ЮMoney (14–16 цифр):
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={cardFormNumber}
+                          onChange={e => setCardFormNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                          placeholder="4100119573095433"
+                          className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
+                        />
+                      </div>
+                    )}
+
+                    {cardFormType === 'sbp' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-muted-foreground font-semibold block">
+                            Номер телефона для СБП:
+                          </label>
+                          <input
+                            type="tel"
+                            required
+                            value={cardFormPhone}
+                            onChange={e => setCardFormPhone(e.target.value)}
+                            placeholder="+7 999 123-45-67"
+                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-muted-foreground font-semibold block">
+                            Наименование банка:
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={cardFormBank}
+                            onChange={e => setCardFormBank(e.target.value)}
+                            placeholder="Сбербанк, Т-Банк, ВТБ..."
+                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {cardFormType === 'card' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-muted-foreground font-semibold block">
+                            Номер банковской карты РФ:
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={cardFormNumber}
+                            onChange={e => setCardFormNumber(e.target.value.replace(/\D/g, '').slice(0, 19))}
+                            placeholder="2200 0000 0000 0000"
+                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-muted-foreground font-semibold block">
+                            Банк карты:
+                          </label>
+                          <input
+                            type="text"
+                            value={cardFormBank}
+                            onChange={e => setCardFormBank(e.target.value)}
+                            placeholder="Сбер, Т-Банк, Альфа..."
+                            className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={autoRenewLoading}
+                        className="px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                      >
+                        {autoRenewLoading ? 'Сохранение...' : 'Сохранить реквизиты ЮMoney'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCardForm(false)}
                         className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
                       >
                         Отмена

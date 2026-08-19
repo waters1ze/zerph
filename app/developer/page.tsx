@@ -17,7 +17,7 @@ import type { ExtensionItem } from '@/lib/backend/extensions'
 
 export default function DeveloperPage() {
   const [activeTab, setActiveTab] = useState<'manifest' | 'sandbox' | 'sdk' | 'earnings' | 'docs'>('manifest')
-  const [docSection, setDocSection] = useState<'quickstart' | 'npm_sdk' | 'manifest' | 'permissions' | 'settings' | 'ai_webhook' | 'cli' | 'limits' | 'monetization' | 'skill'>('quickstart')
+  const [docSection, setDocSection] = useState<'quickstart' | 'npm_sdk' | 'custom_ai' | 'manifest' | 'permissions' | 'settings' | 'ai_webhook' | 'cli' | 'limits' | 'monetization' | 'skill'>('quickstart')
   const [copiedJson, setCopiedJson] = useState(false)
   const [copiedSkill, setCopiedSkill] = useState(false)
   const [copiedInstallCmd, setCopiedInstallCmd] = useState(false)
@@ -69,6 +69,41 @@ export default function DeveloperPage() {
   const [payoutAmount, setPayoutAmount] = useState<string>('')
   const [payoutLoading, setPayoutLoading] = useState(false)
   const [userGh, setUserGh] = useState<string | null>(null)
+  const [showDevYoomoneyModal, setShowDevYoomoneyModal] = useState(false)
+  const [devCardPayoutType, setDevCardPayoutType] = useState<'card' | 'sbp' | 'yoomoney'>('yoomoney')
+  const [devCardNumber, setDevCardNumber] = useState<string>('')
+  const [devCardPhone, setDevCardPhone] = useState<string>('')
+  const [devCardBank, setDevCardBank] = useState<string>('')
+
+  const handleSaveDevPayoutDetails = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPayoutLoading(true)
+    try {
+      const res = await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bind_payout_card',
+          payoutType: devCardPayoutType,
+          cardNumber: devCardNumber,
+          phone: devCardPhone,
+          bankName: devCardBank,
+        }),
+      })
+      const d = await res.json()
+      if (d.success) {
+        setBoundCard(d.boundCard)
+        setShowDevYoomoneyModal(false)
+        alert('Реквизиты ЮMoney / выплат успешно привязаны (80% с продаж)!')
+      } else {
+        alert(d.error || 'Ошибка при сохранении реквизитов')
+      }
+    } catch {
+      alert('Сетевая ошибка при сохранении')
+    } finally {
+      setPayoutLoading(false)
+    }
+  }
 
   // Check URL query parameters for tab
   useEffect(() => {
@@ -808,17 +843,154 @@ export default defineExtension({
                   </div>
                 </div>
 
-                {/* Payout Form */}
+                {/* Payout Form & YooMoney Details */}
                 <div className="p-5 rounded-2xl bg-muted/30 border border-border space-y-4">
-                  <h4 className="text-xs font-bold text-foreground">Запросить выплату средств</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-foreground">Реквизиты выплат ЮMoney / Карты (80% с продаж)</h4>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      80/20 сплит
+                    </span>
+                  </div>
+
                   {boundCard ? (
-                    <div className="p-3 rounded-xl bg-card border border-border text-xs">
-                      Реквизиты: {boundCard.payoutType === 'sbp' ? `⚡ СБП: ${boundCard.phone}` : `💳 Карта: ${boundCard.cardNumber}`}
+                    <div className="p-3.5 rounded-xl bg-card border border-purple-500/30 flex items-center justify-between gap-3 text-xs">
+                      <div>
+                        <p className="font-bold text-foreground flex items-center gap-1.5">
+                          <span>{boundCard.payoutType === 'yoomoney' ? '🟣 ЮMoney кошелёк' : boundCard.payoutType === 'sbp' ? '⚡ СБП' : '💳 Банковская карта'}</span>
+                          <span className="text-[10px] text-emerald-400">✓ Активен</span>
+                        </p>
+                        <p className="text-muted-foreground font-mono text-[11px] mt-0.5">
+                          {boundCard.payoutType === 'yoomoney' ? boundCard.cardNumber : boundCard.payoutType === 'sbp' ? `${boundCard.phone} (${boundCard.bankName || ''})` : `•••• ${boundCard.cardNumber?.slice(-4)} (${boundCard.bankName || ''})`}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowDevYoomoneyModal(!showDevYoomoneyModal)}
+                        className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all cursor-pointer shrink-0"
+                      >
+                        Изменить
+                      </button>
                     </div>
                   ) : (
-                    <p className="text-xs text-amber-400">
-                      Привяжите карту в разделе «Магазин» на главной странице для вывода средств.
-                    </p>
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                      <p className="text-xs text-amber-300 font-medium">
+                        Привяжите ваш кошелёк ЮMoney, чтобы 80% от каждой покупки ваших плагинов начислялись вам автоматически.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowDevYoomoneyModal(true)}
+                        className="px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>🟣 Привязать ЮMoney кошелёк (80%)</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Modal / Form for binding YooMoney */}
+                  {showDevYoomoneyModal && (
+                    <form onSubmit={handleSaveDevPayoutDetails} className="p-4 rounded-2xl bg-card border border-purple-500/40 space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold text-foreground">Привязка реквизитов для получения 80% с продаж</p>
+                        <button type="button" onClick={() => setShowDevYoomoneyModal(false)} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDevCardPayoutType('yoomoney')}
+                          className={cn('flex-1 py-1 px-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer', devCardPayoutType === 'yoomoney' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-muted/30 border-border text-muted-foreground')}
+                        >
+                          🟣 ЮMoney
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDevCardPayoutType('sbp')}
+                          className={cn('flex-1 py-1 px-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer', devCardPayoutType === 'sbp' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-muted/30 border-border text-muted-foreground')}
+                        >
+                          ⚡ СБП
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDevCardPayoutType('card')}
+                          className={cn('flex-1 py-1 px-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer', devCardPayoutType === 'card' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-muted/30 border-border text-muted-foreground')}
+                        >
+                          💳 Карта
+                        </button>
+                      </div>
+
+                      {devCardPayoutType === 'yoomoney' && (
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-muted-foreground block">Номер кошелька ЮMoney (14–16 цифр):</label>
+                          <input
+                            type="text"
+                            required
+                            value={devCardNumber}
+                            onChange={e => setDevCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                            placeholder="4100119573095433"
+                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      )}
+
+                      {devCardPayoutType === 'sbp' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="tel"
+                            required
+                            value={devCardPhone}
+                            onChange={e => setDevCardPhone(e.target.value)}
+                            placeholder="+7 999 123-45-67"
+                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={devCardBank}
+                            onChange={e => setDevCardBank(e.target.value)}
+                            placeholder="Банк (Сбер, Т-Банк)"
+                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      )}
+
+                      {devCardPayoutType === 'card' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            required
+                            value={devCardNumber}
+                            onChange={e => setDevCardNumber(e.target.value.replace(/\D/g, '').slice(0, 19))}
+                            placeholder="Номер карты РФ"
+                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
+                          />
+                          <input
+                            type="text"
+                            value={devCardBank}
+                            onChange={e => setDevCardBank(e.target.value)}
+                            placeholder="Банк карты"
+                            className="w-full h-8 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="submit"
+                          disabled={payoutLoading}
+                          className="px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          {payoutLoading ? 'Сохранение...' : 'Сохранить реквизиты'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowDevYoomoneyModal(false)}
+                          className="px-3 py-1.5 rounded-xl bg-muted text-muted-foreground text-xs transition-colors cursor-pointer"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </form>
                   )}
 
                   <div className="flex items-center gap-2">
@@ -826,7 +998,7 @@ export default defineExtension({
                       type="number"
                       value={payoutAmount}
                       onChange={e => setPayoutAmount(e.target.value)}
-                      placeholder={`Сумма (макс. ${authorStats.balance} ₽)`}
+                      placeholder={`Сумма к выводу (макс. ${authorStats.balance} ₽)`}
                       className="flex-1 h-10 px-3.5 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary"
                     />
                     <button
@@ -852,7 +1024,7 @@ export default defineExtension({
                       <span>Полный справочник разработчика Zerf Note SDK</span>
                     </h2>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Спецификация манифестов, Webhook API, CLI-модулей, UI-настроек, лимитов и монетизации
+                      Спецификация манифестов, Webhook API, BYOK Custom AI, двусторонний протокол и монетизация 80/20
                     </p>
                   </div>
 
@@ -870,10 +1042,11 @@ export default defineExtension({
                   {[
                     { id: 'quickstart', label: '🚀 Быстрый старт' },
                     { id: 'npm_sdk', label: '📦 @zerf/sdk' },
+                    { id: 'custom_ai', label: '🤖 Свои нейросети & API Keys' },
                     { id: 'manifest', label: '📜 Манифест' },
                     { id: 'permissions', label: '🔑 Права' },
                     { id: 'ai_webhook', label: '🧠 Webhook API' },
-                    { id: 'monetization', label: '💰 Монетизация' },
+                    { id: 'monetization', label: '💰 Монетизация (80/20)' },
                   ].map(sub => (
                     <button
                       key={sub.id}
@@ -904,6 +1077,66 @@ export default defineExtension({
                     </div>
                   )}
 
+                  {docSection === 'custom_ai' && (
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/25 space-y-2">
+                        <h4 className="font-bold text-purple-300 flex items-center gap-2 text-sm">
+                          <Bot className="w-4 h-4" />
+                          <span>Подключение собственных нейросетей (BYOK) и Двусторонний Протокол Обмена</span>
+                        </h4>
+                        <p className="text-muted-foreground leading-relaxed">
+                          Пользователи и авторы плагинов могут подключать свои личные API-ключи нейросетей (OpenAI GPT-4o, Anthropic Claude 3.7 Sonnet, DeepSeek V3/R1, OpenRouter, Groq Cloud, Локальная Ollama). Zerf Note обеспечивает <b>100% двустороннее понимание</b> между нашей базовой моделью и вашей сторонней нейросетью.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="p-4 rounded-2xl bg-card border border-border space-y-2">
+                          <p className="font-bold text-foreground flex items-center gap-1.5">
+                            <span className="text-base">📥</span>
+                            <span>1. Входящий контекст (В вашу модель)</span>
+                          </p>
+                          <p className="text-muted-foreground leading-relaxed">
+                            Zerf Note автоматически обогащает запрос в вашу модель полной матрицей контекста: активные задачи, цели, заметки, события календаря и системные инструкции расширения. Ваша модель видит всё так же, как и встроенный ИИ.
+                          </p>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-card border border-border space-y-2">
+                          <p className="font-bold text-foreground flex items-center gap-1.5">
+                            <span className="text-base">📤</span>
+                            <span>2. Исходящий нормализованный ответ</span>
+                          </p>
+                          <p className="text-muted-foreground leading-relaxed">
+                            Ответ вашей нейросети возвращается в виде стандартизированных действий (Action Protocol). Наша внутренняя модель и маскот Зерфик мгновенно распознают созданные сущности, обновляют UI и могут продолжать диалог с пользователем.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="font-bold text-foreground">Пример формата ответа вашей модели (Inter-AI Action Protocol):</p>
+                        <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 font-mono overflow-auto max-h-[300px] border border-border/60">
+{`{
+  "message": "Анализ завершен. Созданы 2 задачи и 1 заметка с планом спринта.",
+  "actions": [
+    {
+      "type": "create_task",
+      "title": "Реализовать интеграцию с API",
+      "priority": "high",
+      "dueDate": "2026-08-20T18:00:00Z",
+      "category": "Разработка"
+    },
+    {
+      "type": "create_note",
+      "title": "Архитектурный план модуля",
+      "body": "1. Авторизация через токен\\n2. Webhook обработчик\\n3. Кэширование"
+    }
+  ],
+  "intent": "sprint_breakdown"
+}`}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+
                   {docSection === 'manifest' && (
                     <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 font-mono overflow-auto max-h-[380px] border border-border/60">
                       {manifestJsonString}
@@ -914,7 +1147,7 @@ export default defineExtension({
                     <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-2">
                       <p className="font-bold text-emerald-400">80% от всех покупок вашего расширения начисляются автору!</p>
                       <p className="text-muted-foreground">
-                        Выплаты осуществляются мгновенно или по запросу на привязанную карту РФ / СБП / ЮMoney.
+                        Выплаты осуществляются мгновенно на привязанный кошелёк ЮMoney, СБП или банковскую карту РФ. 20% составляет комиссия платформы за эквайринг, серверную инфраструктуру и ИИ-трафик.
                       </p>
                     </div>
                   )}
@@ -930,11 +1163,11 @@ export default defineExtension({
             <div className="p-5 rounded-3xl bg-card border border-border shadow-xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/25">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center font-bold text-xs border border-purple-500/25">
                     <DollarSign className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-xs text-foreground">Баланс автора</h3>
+                    <h3 className="font-bold text-xs text-foreground">Баланс автора (80/20)</h3>
                     <p className="text-[10px] text-muted-foreground">80% от продаж расширений</p>
                   </div>
                 </div>
@@ -948,13 +1181,40 @@ export default defineExtension({
                 <span className="text-xs text-muted-foreground">Продаж: {authorStats.salesCount}</span>
               </div>
 
-              <button
-                onClick={() => setActiveTab('earnings')}
-                className="w-full py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <span>Вывести средства (СБП / Карта)</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="p-2.5 rounded-xl bg-muted/40 border border-border text-[11px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Реквизиты:</span>
+                  <span className="font-bold text-foreground truncate max-w-[140px]">
+                    {boundCard
+                      ? (boundCard.payoutType === 'yoomoney' ? `🟣 ${boundCard.cardNumber}` : boundCard.payoutType === 'sbp' ? `⚡ ${boundCard.phone}` : `💳 •••• ${boundCard.cardNumber?.slice(-4)}`)
+                      : 'Не привязаны'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('earnings')
+                    setShowDevYoomoneyModal(true)
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{boundCard ? 'ЮMoney' : 'Привязать ЮMoney'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('earnings')}
+                  className="py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  title="Вывести средства"
+                >
+                  <span>Вывод</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* Block 2: Developer Profile & GitHub */}
