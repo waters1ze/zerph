@@ -472,7 +472,8 @@ export async function parseIntentWithGroq(
   model?: string,
   existingItemsContext?: string,
   friendsContext?: string,
-  extensionsContext?: string
+  extensionsContext?: string,
+  userPlan?: string | null
 ): Promise<ParsedItem[]> {
   const dynamicSystemPrompt = getDynamicSystemPrompt(existingItemsContext, friendsContext, extensionsContext)
 
@@ -485,6 +486,7 @@ export async function parseIntentWithGroq(
     temperature: 0.2,
     response_format: { type: 'json_object' },
     apiKey,
+    userPlan,
   })
 
   const raw = result.content || '{}'

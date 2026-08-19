@@ -380,6 +380,7 @@ export async function POST(req: NextRequest) {
       temperature: mode === 'enhance' ? 0.8 : 0.7,
       max_tokens: mode === 'enhance' ? 2048 : 1024,
       apiKey: groqApiKey,
+      userPlan: limits.plan,
     })
 
     const content = result.content || 'Готово! Чем ещё могу помочь?'

@@ -18,46 +18,524 @@ import { normalizePlan } from '@/lib/plans'
 
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
 
-export const FREE_ALLOWED_MODELS = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-  'deepseek-r1-distill-llama-70b',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768',
-]
-
-export const PLUS_ALLOWED_MODELS = [
-  'llama-3.3-70b-versatile',
-  'deepseek-r1-distill-llama-70b',
-  'llama-3.1-8b-instant',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768',
-]
+export interface GroqModelMeta {
+  id: string
+  name: string
+  paramsBillions: number
+  category: 'production' | 'preview' | 'systems' | 'audio' | 'guard'
+  minTier: 'free' | 'plus' | 'pro' | 'corp'
+  desc: string
+  speedTps?: number
+  contextTokens?: number
+  maxCompletionTokens?: number
+  isGuard?: boolean
+  isAudio?: boolean
+  isExcluded?: boolean // e.g. very high price non-chat models
+}
 
 /**
- * Model allocation based on subscription tier
+ * Verified Groq model registry matching official Groq documentation
+ */
+export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
+  // ── Systems & Compound (Primary for Free & Plus) ──
+  {
+    id: 'groq/compound',
+    name: 'Groq Compound',
+    paramsBillions: 70,
+    category: 'systems',
+    minTier: 'free',
+    desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s, 131K контекст)',
+    speedTps: 450,
+    contextTokens: 131072,
+    maxCompletionTokens: 8192,
+  },
+  {
+    id: 'groq/compound-mini',
+    name: 'Groq Compound Mini',
+    paramsBillions: 20,
+    category: 'systems',
+    minTier: 'free',
+    desc: 'Компактная сверхбыстрая система оркестрации инструментов (450 T/s, 131K контекст)',
+    speedTps: 450,
+    contextTokens: 131072,
+    maxCompletionTokens: 8192,
+  },
+
+  // ── Cheap & Guard Models for Free Tier ──
+  {
+    id: 'openai/gpt-oss-20b',
+    name: 'GPT OSS 20B',
+    paramsBillions: 20,
+    category: 'production',
+    minTier: 'free',
+    desc: 'Сверхбыстрый отклик (1000 T/s, 131K контекст), чистый русский язык, мгновенная обработка заметок и Siri',
+    speedTps: 1000,
+    contextTokens: 131072,
+    maxCompletionTokens: 65536,
+  },
+  {
+    id: 'meta-llama/llama-prompt-guard-2-22m',
+    name: 'Prompt Guard 2 22M',
+    paramsBillions: 0.022,
+    category: 'guard',
+    minTier: 'free',
+    desc: 'Ультра-легковесная базовая модель Meta для фильтрации и быстрых команд ($0.03/1M)',
+    speedTps: 1000,
+    contextTokens: 512,
+    isGuard: true,
+  },
+  {
+    id: 'meta-llama/llama-prompt-guard-2-86m',
+    name: 'Prompt Guard 2 86M',
+    paramsBillions: 0.086,
+    category: 'guard',
+    minTier: 'free',
+    desc: 'Компактная модель Meta ($0.04/1M) для базовой классификации',
+    speedTps: 1000,
+    contextTokens: 512,
+    isGuard: true,
+  },
+  {
+    id: 'llama-3.1-8b-instant',
+    name: 'Llama 3.1 8B Instant',
+    paramsBillions: 8,
+    category: 'production',
+    minTier: 'free',
+    desc: 'Мгновенный отклик для базовых команд и заметок',
+    speedTps: 700,
+    contextTokens: 128000,
+  },
+  {
+    id: 'openai/gpt-oss-safeguard-20b',
+    name: 'Safety GPT OSS 20B',
+    paramsBillions: 20,
+    category: 'preview',
+    minTier: 'free',
+    desc: 'Безопасная скоростная 20B модель (1000 T/s, 131K контекст)',
+    speedTps: 1000,
+    contextTokens: 131072,
+    maxCompletionTokens: 65536,
+  },
+
+  // ── Plus Models (up to 70B) ──
+  {
+    id: 'qwen/qwen3.6-27b',
+    name: 'Qwen 3.6 27B',
+    paramsBillions: 27,
+    category: 'preview',
+    minTier: 'plus',
+    desc: 'Продвинутая логика, структурирование задач и анализ расписания (500 T/s, 131K контекст)',
+    speedTps: 500,
+    contextTokens: 131072,
+    maxCompletionTokens: 16384,
+  },
+  {
+    id: 'llama-3.3-70b-versatile',
+    name: 'Llama 3.3 70B Versatile',
+    paramsBillions: 70,
+    category: 'production',
+    minTier: 'plus',
+    desc: 'Универсальная мощная 70B модель для сложных текстов и рассуждений',
+    speedTps: 300,
+    contextTokens: 128000,
+  },
+  {
+    id: 'deepseek-r1-distill-llama-70b',
+    name: 'DeepSeek R1 70B Reasoning',
+    paramsBillions: 70,
+    category: 'preview',
+    minTier: 'plus',
+    desc: 'Пошаговое глубокое рассуждение и аналитическое мышление',
+    speedTps: 280,
+    contextTokens: 128000,
+  },
+  {
+    id: 'mixtral-8x7b-32768',
+    name: 'Mixtral 8x7B MoE',
+    paramsBillions: 47,
+    category: 'production',
+    minTier: 'plus',
+    desc: 'MoE архитектура с длинным контекстом 32K',
+    speedTps: 450,
+    contextTokens: 32768,
+  },
+
+  // ── Pro Models (up to 120B) ──
+  {
+    id: 'openai/gpt-oss-120b',
+    name: 'GPT OSS 120B',
+    paramsBillions: 120,
+    category: 'production',
+    minTier: 'pro',
+    desc: 'Флагманский максимальный интеллект (500 T/s, 131K контекст) для масштабных проектов и сложной логики',
+    speedTps: 500,
+    contextTokens: 131072,
+    maxCompletionTokens: 65536,
+  },
+
+  // ── Corp & Enterprise Models (Unlimited) ──
+  {
+    id: 'minimaxai/minimax-m2.7',
+    name: 'MiniMax M2.7 Enterprise',
+    paramsBillions: 150,
+    category: 'preview',
+    minTier: 'corp',
+    desc: 'Сверхмощная Enterprise-модель для комплексных многоэтапных задач (260 T/s, 196K контекст)',
+    speedTps: 260,
+    contextTokens: 196608,
+    maxCompletionTokens: 131072,
+  },
+
+  // ── Excluded expensive specialized preview models ──
+  {
+    id: 'canopylabs/orpheus-v1-english',
+    name: 'Orpheus V1 English',
+    paramsBillions: 14,
+    category: 'preview',
+    minTier: 'corp',
+    desc: 'Специализированная модель ($22/1M)',
+    isExcluded: true,
+  },
+  {
+    id: 'canopylabs/orpheus-arabic-saudi',
+    name: 'Orpheus Arabic Saudi',
+    paramsBillions: 14,
+    category: 'preview',
+    minTier: 'corp',
+    desc: 'Специализированная арабская модель ($40/1M)',
+    isExcluded: true,
+  },
+]
+
+// ── Self-Healing Dynamic Health Pool ──
+interface ModelHealth {
+  failedUntil: number
+  failedCount: number
+  lastError?: string
+}
+
+const modelHealthMap = new Map<string, ModelHealth>()
+
+export function markModelFailed(modelId: string, error?: string, cooldownMinutes = 30) {
+  const current = modelHealthMap.get(modelId) || { failedUntil: 0, failedCount: 0 }
+  current.failedCount++
+  current.failedUntil = Date.now() + cooldownMinutes * 60 * 1000
+  current.lastError = error
+  modelHealthMap.set(modelId, current)
+  console.warn(`[GroqPool Health] Model ${modelId} marked unavailable (${error || 'Error'}). Skipping for ${cooldownMinutes}m.`)
+
+  // Automatically trigger background refresh to discover active replacement models
+  triggerBackgroundModelRefresh()
+}
+
+export function markModelSuccess(modelId: string) {
+  if (modelHealthMap.has(modelId)) {
+    modelHealthMap.delete(modelId)
+  }
+}
+
+export function isModelHealthy(modelId: string): boolean {
+  const health = modelHealthMap.get(modelId)
+  if (!health) return true
+  return Date.now() > health.failedUntil
+}
+
+export function extractParamsBillions(modelId: string, modelName?: string): number {
+  const s = `${modelId} ${modelName || ''}`.toLowerCase()
+  if (s.includes('120b')) return 120
+  if (s.includes('70b') || s.includes('72b')) return 70
+  if (s.includes('32b')) return 32
+  if (s.includes('27b')) return 27
+  if (s.includes('20b')) return 20
+  if (s.includes('14b')) return 14
+  if (s.includes('9b')) return 9
+  if (s.includes('8b')) return 8
+  if (s.includes('7b')) return 7
+  if (s.includes('compound-mini')) return 20
+  if (s.includes('compound')) return 70
+  if (s.includes('minimax') || s.includes('m2.7')) return 150
+  if (s.includes('guard-2-86m')) return 0.086
+  if (s.includes('guard-2-22m')) return 0.022
+  if (s.includes('whisper')) return 1.5
+
+  const matchB = s.match(/(\d+(?:\.\d+)?)\s*b\b/i)
+  if (matchB) return parseFloat(matchB[1])
+
+  const matchM = s.match(/(\d+(?:\.\d+)?)\s*m\b/i)
+  if (matchM) return parseFloat(matchM[1]) / 1000
+
+  return 20
+}
+
+export function classifyTierByParams(billions: number, category?: string): 'free' | 'plus' | 'pro' | 'corp' {
+  if (category === 'guard') return 'free'
+  // Up to 20B -> Free
+  if (billions <= 20) return 'free'
+  // Up to 70B -> Plus
+  if (billions <= 70) return 'plus'
+  // Up to 120B -> Pro
+  if (billions <= 120) return 'pro'
+  // > 120B -> Corp
+  return 'corp'
+}
+
+let dynamicModelsCache: { timestamp: number; models: GroqModelMeta[] } | null = null
+let isRefreshingBackground = false
+
+function triggerBackgroundModelRefresh() {
+  if (isRefreshingBackground) return
+  isRefreshingBackground = true
+  setTimeout(async () => {
+    try {
+      dynamicModelsCache = null
+      await getLiveGroqModels()
+    } catch (e) {
+      console.warn('[GroqPool] Background model scan error:', e)
+    } finally {
+      isRefreshingBackground = false
+    }
+  }, 1000)
+}
+
+/**
+ * Dynamically queries Groq /openai/v1/models and automatically discovers new models
+ */
+export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[]> {
+  const now = Date.now()
+  if (dynamicModelsCache && (now - dynamicModelsCache.timestamp < 15 * 60 * 1000)) {
+    return dynamicModelsCache.models
+  }
+
+  const keys = groqPool.getOrderedHealthyKeys(apiKey)
+  if (keys.length === 0) {
+    return VERIFIED_GROQ_MODELS
+  }
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: `Bearer ${keys[0]}` },
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      const rawList: any[] = Array.isArray(data.data) ? data.data : []
+      const knownMap = new Map(VERIFIED_GROQ_MODELS.map(m => [m.id, m]))
+
+      const discovered: GroqModelMeta[] = []
+      for (const item of rawList) {
+        const id = item.id
+        if (!id || typeof id !== 'string') continue
+        if (id.startsWith('whisper') || id.includes('audio')) continue
+        if (id.includes('orpheus') || id.includes('arabic')) continue // skip expensive non-chat models
+
+        const existing = knownMap.get(id)
+        if (existing) {
+          discovered.push(existing)
+        } else {
+          // Dynamic auto-adaptation for new Groq models!
+          const billions = extractParamsBillions(id)
+          const minTier = classifyTierByParams(billions)
+          discovered.push({
+            id,
+            name: id.split('/').pop()?.replace(/-/g, ' ') || id,
+            paramsBillions: billions,
+            category: 'preview',
+            minTier,
+            desc: `Автоматически обнаруженная модель Groq (${billions}B параметров, доступ с тарифа ${minTier.toUpperCase()})`,
+            contextTokens: item.context_window || 131072,
+          })
+        }
+      }
+
+      for (const vm of VERIFIED_GROQ_MODELS) {
+        if (!discovered.some(d => d.id === vm.id) && !vm.isExcluded) {
+          discovered.push(vm)
+        }
+      }
+
+      dynamicModelsCache = { timestamp: now, models: discovered }
+      return discovered
+    }
+  } catch (err) {
+    console.warn('[GroqModels] Failed to query /models dynamically, using verified catalog:', err)
+  }
+
+  return VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded)
+}
+
+export function isModelAllowedForPlan(modelId: string, userPlan?: string | null): boolean {
+  const p = String(userPlan || '').toLowerCase()
+  if (p === 'corp' || p === 'creator' || p === 'admin') return true
+  const norm = normalizePlan(userPlan)
+
+  const modelMeta = VERIFIED_GROQ_MODELS.find(m => m.id === modelId)
+  if (modelMeta?.isExcluded) return false
+
+  const billions = modelMeta ? modelMeta.paramsBillions : extractParamsBillions(modelId)
+
+  if (norm === 'pro') {
+    // Pro: up to 120B
+    return billions <= 120
+  }
+  if (norm === 'plus') {
+    // Plus: up to 70B
+    return billions <= 70
+  }
+  // Free: up to 20B (and groq/compound)
+  if (modelId === 'groq/compound' || modelId === 'groq/compound-mini') return true
+  return billions <= 20
+}
+
+export function getModelsForPlan(userPlan?: string | null, models: GroqModelMeta[] = VERIFIED_GROQ_MODELS): GroqModelMeta[] {
+  const norm = normalizePlan(userPlan)
+  return models.filter(m => isModelAllowedForPlan(m.id, norm) && !m.isExcluded)
+}
+
+/**
+ * Model allocation based on subscription tier:
+ * - Free: groq/compound, groq/compound-mini, openai/gpt-oss-20b, llama-prompt-guard, llama-3.1-8b-instant
+ * - Plus (99 ₽): models up to 70B (qwen/qwen3.6-27b, groq/compound, llama-3.3-70b-versatile, deepseek-r1-70b)
+ * - Pro (299 ₽): models up to 120B (openai/gpt-oss-120b, and all Plus models)
+ * - Corp & Admin: ALL models (minimaxai/minimax-m2.7, future 120B+ models, unrestricted)
  */
 export function getModelForUserPlan(
   plan?: string | null,
   requestedModel?: string | null,
   taskKind?: AiTaskKind
 ): string {
+  const p = String(plan || '').toLowerCase()
+  const isCorp = p === 'corp' || p === 'creator' || p === 'admin'
   const norm = normalizePlan(plan)
   const req = requestedModel?.trim()
 
-  if (norm === 'pro' || norm === 'corp') {
-    if (req && KNOWN_GROQ_CHAT_MODELS.has(req)) return req
-    if (taskKind === 'siri' || taskKind === 'voice') return 'llama-3.1-8b-instant'
-    return 'llama-3.3-70b-versatile'
+  if (isCorp) {
+    if (req && isModelHealthy(req)) return req
+    return isModelHealthy('openai/gpt-oss-120b') ? 'openai/gpt-oss-120b' : 'qwen/qwen3.6-27b'
+  }
+
+  if (norm === 'pro') {
+    if (req && isModelAllowedForPlan(req, 'pro') && isModelHealthy(req)) return req
+    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
+    if (isModelHealthy('openai/gpt-oss-120b')) return 'openai/gpt-oss-120b'
+    if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
+    return 'groq/compound'
   }
 
   if (norm === 'plus') {
-    if (req && PLUS_ALLOWED_MODELS.includes(req)) return req
-    return 'llama-3.3-70b-versatile'
+    if (req && isModelAllowedForPlan(req, 'plus') && isModelHealthy(req)) return req
+    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('groq/compound-mini') ? 'groq/compound-mini' : 'openai/gpt-oss-20b'
+    if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
+    if (isModelHealthy('groq/compound')) return 'groq/compound'
+    if (isModelHealthy('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
+    return 'groq/compound-mini'
   }
 
-  if (req && FREE_ALLOWED_MODELS.includes(req)) return req
-  return 'llama-3.3-70b-versatile'
+  // Free:
+  if (req && isModelAllowedForPlan(req, 'free') && isModelHealthy(req)) return req
+  if (isModelHealthy('groq/compound-mini')) return 'groq/compound-mini'
+  if (isModelHealthy('groq/compound')) return 'groq/compound'
+  if (isModelHealthy('openai/gpt-oss-20b')) return 'openai/gpt-oss-20b'
+  return 'llama-3.1-8b-instant'
+}
+
+export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: string): string[] {
+  const p = String(userPlan || '').toLowerCase()
+  const isCorp = p === 'corp' || p === 'creator' || p === 'admin'
+  const norm = normalizePlan(userPlan)
+
+  let fullHierarchy: string[] = []
+  if (isCorp || norm === 'pro') {
+    fullHierarchy = [
+      'openai/gpt-oss-120b',
+      'qwen/qwen3.6-27b',
+      'groq/compound',
+      'groq/compound-mini',
+      'openai/gpt-oss-20b',
+      'llama-3.3-70b-versatile',
+      'deepseek-r1-distill-llama-70b',
+      'llama-3.1-8b-instant',
+    ]
+  } else if (norm === 'plus') {
+    fullHierarchy = [
+      'qwen/qwen3.6-27b',
+      'groq/compound',
+      'groq/compound-mini',
+      'llama-3.3-70b-versatile',
+      'deepseek-r1-distill-llama-70b',
+      'openai/gpt-oss-20b',
+      'llama-3.1-8b-instant',
+    ]
+  } else {
+    fullHierarchy = [
+      'groq/compound-mini',
+      'groq/compound',
+      'openai/gpt-oss-20b',
+      'meta-llama/llama-prompt-guard-2-86m',
+      'meta-llama/llama-prompt-guard-2-22m',
+      'llama-3.1-8b-instant',
+    ]
+  }
+
+  return fullHierarchy.filter(m => m !== requestedModel && isModelAllowedForPlan(m, userPlan) && isModelHealthy(m))
+}
+
+export const KNOWN_GROQ_CHAT_MODELS = new Set([
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-safeguard-20b',
+  'groq/compound',
+  'groq/compound-mini',
+  'qwen/qwen3.6-27b',
+  'minimaxai/minimax-m2.7',
+  'meta-llama/llama-prompt-guard-2-86m',
+  'meta-llama/llama-prompt-guard-2-22m',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'deepseek-r1-distill-llama-70b',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+])
+
+export function normalizeGroqChatModel(model?: string, userPlan?: string | null): string {
+  if (!model) return getModelForUserPlan(userPlan)
+  const trimmed = model.trim()
+  if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) {
+    return isModelAllowedForPlan(trimmed, userPlan) ? trimmed : getModelForUserPlan(userPlan)
+  }
+  
+  const lower = trimmed.toLowerCase()
+  if (lower.includes('120b') || lower.includes('flagship')) {
+    return isModelAllowedForPlan('openai/gpt-oss-120b', userPlan) ? 'openai/gpt-oss-120b' : getModelForUserPlan(userPlan)
+  }
+  if (lower.includes('deepseek') || lower.includes('r1')) {
+    return isModelAllowedForPlan('deepseek-r1-distill-llama-70b', userPlan) ? 'deepseek-r1-distill-llama-70b' : getModelForUserPlan(userPlan)
+  }
+  if (lower.includes('qwen') || lower.includes('27b')) {
+    return isModelAllowedForPlan('qwen/qwen3.6-27b', userPlan) ? 'qwen/qwen3.6-27b' : getModelForUserPlan(userPlan)
+  }
+  if (lower.includes('compound-mini')) {
+    return 'groq/compound-mini'
+  }
+  if (lower.includes('compound')) {
+    return isModelAllowedForPlan('groq/compound', userPlan) ? 'groq/compound' : 'groq/compound-mini'
+  }
+  if (lower.includes('8b') || lower.includes('instant') || lower.includes('mini') || lower.includes('20b')) {
+    return 'openai/gpt-oss-20b'
+  }
+  if (lower.includes('70b')) {
+    return isModelAllowedForPlan('llama-3.3-70b-versatile', userPlan) ? 'llama-3.3-70b-versatile' : 'groq/compound-mini'
+  }
+  return getModelForUserPlan(userPlan)
+}
+
+export function normalizeGroqWhisperModel(model?: string): string {
+  if (!model) return GROQ_WHISPER_MODEL
+  const lower = model.trim().toLowerCase()
+  if (lower === 'whisper-large-v3' || lower === 'whisper-large-v3-turbo') return lower
+  return GROQ_WHISPER_MODEL
 }
 
 interface KeyStatus {
@@ -82,44 +560,6 @@ export function stripThinkingTags(raw: string): string {
     .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
     .replace(/^<\/think>/i, '')
     .trim()
-}
-
-const KNOWN_GROQ_CHAT_MODELS = new Set([
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-  'deepseek-r1-distill-llama-70b',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768',
-  'llama3-70b-8192',
-  'llama3-8b-8192',
-])
-
-export function normalizeGroqChatModel(model?: string): string {
-  if (!model) return GROQ_CHAT_MODEL
-  const trimmed = model.trim()
-  if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) return trimmed
-  
-  const lower = trimmed.toLowerCase()
-  if (lower.includes('deepseek') || lower.includes('r1')) {
-    return 'deepseek-r1-distill-llama-70b'
-  }
-  if (lower.includes('8b') || lower.includes('instant') || lower.includes('fast') || lower.includes('mini') || lower.includes('20b')) {
-    return 'llama-3.1-8b-instant'
-  }
-  if (lower.includes('gemma')) {
-    return 'gemma2-9b-it'
-  }
-  if (lower.includes('mixtral')) {
-    return 'mixtral-8x7b-32768'
-  }
-  return 'llama-3.3-70b-versatile'
-}
-
-export function normalizeGroqWhisperModel(model?: string): string {
-  if (!model) return GROQ_WHISPER_MODEL
-  const lower = model.trim().toLowerCase()
-  if (lower === 'whisper-large-v3' || lower === 'whisper-large-v3-turbo') return lower
-  return GROQ_WHISPER_MODEL
 }
 
 class GroqKeyPool {
@@ -318,19 +758,14 @@ export async function callGroqChatCompletion(options: {
   response_format?: { type: 'json_object' | 'text' }
   apiKey?: string
   fallbackModels?: string[]
+  userPlan?: string | null
 }): Promise<{ content: string; keyUsed: string; modelUsed: string }> {
   const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
 
-  const requestedModel = normalizeGroqChatModel(options.model)
-  const defaultFallbacks = [
-    'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant',
-    'deepseek-r1-distill-llama-70b',
-    'gemma2-9b-it',
-    'mixtral-8x7b-32768',
-  ]
+  const requestedModel = normalizeGroqChatModel(options.model, options.userPlan)
+  const defaultFallbacks = getFallbacksForPlan(options.userPlan, requestedModel)
   const normalizedFallbacks = (options.fallbackModels !== undefined && options.fallbackModels.length > 0)
-    ? options.fallbackModels.map(m => normalizeGroqChatModel(m))
+    ? options.fallbackModels.map(m => normalizeGroqChatModel(m, options.userPlan))
     : defaultFallbacks
 
   const models = [
@@ -375,7 +810,8 @@ export async function callGroqChatCompletion(options: {
           if (res.status === 404) {
             const errText = await res.text()
             lastError = new Error(`Groq Chat error (404): ${errText}`)
-            console.warn(`[GroqChat] Model ${m} returned 404, skipping to next fallback model...`)
+            console.warn(`[GroqChat] Model ${m} returned 404, marking unavailable and auto-discovering replacements...`)
+            markModelFailed(m, '404 Model Not Found', 60)
             modelNotFound = true
             break // Skip all remaining keys for this 404 model, jump directly to next model
           }
@@ -386,6 +822,11 @@ export async function callGroqChatCompletion(options: {
               groqPool.markKeyRateLimited(key, 45)
               continue
             }
+            if (res.status === 400 && (errText.includes('model') || errText.includes('not supported') || errText.includes('decommissioned'))) {
+              markModelFailed(m, `HTTP ${res.status}: ${errText}`, 60)
+              modelNotFound = true
+              break
+            }
             lastError = new Error(`Groq Chat error (${res.status}): ${errText}`)
             console.warn(`[GroqChat] Attempt failed on key ${key.slice(0, 7)}... with model ${m}: ${lastError.message}`)
             continue
@@ -395,6 +836,7 @@ export async function callGroqChatCompletion(options: {
           const rawContent = data.choices?.[0]?.message?.content || ''
           const content = stripThinkingTags(rawContent)
           groqPool.markKeySuccess(key)
+          markModelSuccess(m)
           return { content, keyUsed: key, modelUsed: m }
         } catch (err: unknown) {
           lastError = err instanceof Error ? err : new Error(String(err))

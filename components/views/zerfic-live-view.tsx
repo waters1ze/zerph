@@ -282,10 +282,12 @@ export function ZerficAllayCompanion({
 }
 
 const AVAILABLE_MODELS = [
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Flagship', desc: 'Флагманский максимальный интеллект Zerf', minPlan: 'free' },
-  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', desc: 'Ультра-быстрый живой диалог (~150ms)', minPlan: 'free' },
-  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoning', desc: 'Глубокое пошаговое рассуждение и анализ', minPlan: 'plus' },
-  { id: 'gemma2-9b-it', name: 'Gemma 2 9B (Google)', desc: 'Сбалансированная модель от Google', minPlan: 'plus' },
+  { id: 'openai/gpt-oss-20b', name: 'GPT OSS 20B Fast', desc: 'Ультра-быстрый живой диалог (1000 T/s, ~150ms)', minPlan: 'free' },
+  { id: 'groq/compound-mini', name: 'Compound Mini', desc: 'Компактная быстрая система оркестрации', minPlan: 'free' },
+  { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', desc: 'Глубокое понимание контекста и структурирование', minPlan: 'plus' },
+  { id: 'groq/compound', name: 'Groq Compound System', desc: 'Комплексная система с авто-роутингом инструментов', minPlan: 'plus' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B Flagship', desc: 'Флагманская сверхмощная модель Zerf (500 T/s)', minPlan: 'pro' },
+  { id: 'minimaxai/minimax-m2.7', name: 'MiniMax M2.7 Enterprise', desc: 'Enterprise-модель для комплексных задач (196K)', minPlan: 'corp' },
 ]
 
 export function ZerficLiveView() {

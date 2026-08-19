@@ -13,26 +13,35 @@ interface AiModelsSectionProps {
 }
 
 const ALL_MODELS = [
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Flagship', tier: 'free', params: '70B', desc: 'Флагманский максимальный интеллект, отличное понимание русского языка и сложной логики' },
-  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoning', tier: 'plus', params: '70B', desc: 'Продвинутая модель с пошаговым рассуждением и глубоким анализом' },
-  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Сверхбыстрый отклик (~150 мс), мгновенная обработка заметок и команд' },
-  { id: 'gemma2-9b-it', name: 'Gemma 2 9B (Google)', tier: 'plus', params: '9B', desc: 'Компактная сбалансированная модель от Google' },
-  { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B MoE', tier: 'plus', params: '8x7B', desc: 'Архитектура Mixture of Experts для многозадачности' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект (500 T/s, 131K контекст) для масштабных проектов и сложной логики' },
+  { id: 'minimaxai/minimax-m2.7', name: 'MiniMax M2.7 Enterprise', tier: 'corp', params: '150B', desc: 'Сверхмощная Enterprise-модель для комплексных многоэтапных проектов (196K контекст)' },
+  { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, структурирование задач и анализ расписания (500 T/s, 131K контекст)' },
+  { id: 'groq/compound', name: 'Groq Compound System', tier: 'plus', params: '70B', desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s, 131K контекст)' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', tier: 'plus', params: '70B', desc: 'Универсальная мощная 70B модель для сложных текстов и рассуждений' },
+  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoning', tier: 'plus', params: '70B', desc: 'Пошаговое глубокое рассуждение и аналитическое мышление' },
+  { id: 'openai/gpt-oss-20b', name: 'GPT OSS 20B Fast', tier: 'free', params: '20B', desc: 'Сверхбыстрый отклик (1000 T/s, 131K контекст), чистый русский язык, мгновенная обработка заметок и Siri' },
+  { id: 'groq/compound-mini', name: 'Groq Compound Mini', tier: 'free', params: '20B', desc: 'Компактная быстрая система оркестрации инструментов (450 T/s, 131K контекст)' },
+  { id: 'groq/compound', name: 'Groq Compound', tier: 'free', params: '70B', desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s)' },
+  { id: 'meta-llama/llama-prompt-guard-2-86m', name: 'Meta Prompt Guard 86M', tier: 'free', params: '86M', desc: 'Супер-экономная базовая модель Meta для фильтрации и быстрых команд ($0.04/1M)' },
+  { id: 'meta-llama/llama-prompt-guard-2-22m', name: 'Meta Prompt Guard 22M', tier: 'free', params: '22M', desc: 'Ультра-легковесная модель Meta ($0.03/1M)' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Мгновенный отклик для базовых команд и заметок (~150 мс)' },
 ]
 
 export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionProps) {
   const { settings, update } = useSettings()
-  const isProOrCorp = userPlan === 'pro' || userPlan === 'corp'
+  const isCorp = (userPlan as string) === 'corp' || (userPlan as string) === 'admin' || (userPlan as string) === 'creator'
+  const isProOrCorp = isCorp || userPlan === 'pro'
   const isPlus = userPlan === 'plus'
   const isFree = userPlan === 'free'
 
   const availableModelsForPlan = ALL_MODELS.filter(m => {
-    if (isProOrCorp) return true
+    if (isCorp) return true
+    if (isProOrCorp) return m.tier === 'pro' || m.tier === 'plus' || m.tier === 'free'
     if (isPlus) return m.tier === 'plus' || m.tier === 'free'
     return m.tier === 'free'
   })
 
-  const currentGlobalModel = settings.integrations?.aiModel || 'llama-3.3-70b-versatile'
+  const currentGlobalModel = settings.integrations?.aiModel || (isProOrCorp ? 'openai/gpt-oss-120b' : isPlus ? 'qwen/qwen3.6-27b' : 'openai/gpt-oss-20b')
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
@@ -54,14 +63,18 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   }
 
   const handleGlobalModelChange = (modelId: string) => {
-    // Prevent Free users from selecting >8B models
-    if (isFree && modelId !== 'llama-3.1-8b-instant' && modelId !== 'groq/compound-mini') {
+    const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
+    if (!selectedMeta) return
+
+    if (isFree && selectedMeta.tier !== 'free') {
       if (onUpgradeClick) onUpgradeClick()
       return
     }
-    // Prevent Plus users from selecting Pro-only models
-    const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
-    if (isPlus && selectedMeta?.tier === 'pro') {
+    if (isPlus && (selectedMeta.tier === 'pro' || selectedMeta.tier === 'corp')) {
+      if (onUpgradeClick) onUpgradeClick()
+      return
+    }
+    if (userPlan === 'pro' && selectedMeta.tier === 'corp') {
       if (onUpgradeClick) onUpgradeClick()
       return
     }
@@ -83,7 +96,11 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
     }
 
     const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
-    if (isPlus && selectedMeta?.tier === 'pro') {
+    if (isPlus && (selectedMeta?.tier === 'pro' || selectedMeta?.tier === 'corp')) {
+      if (onUpgradeClick) onUpgradeClick()
+      return
+    }
+    if (userPlan === 'pro' && selectedMeta?.tier === 'corp') {
       if (onUpgradeClick) onUpgradeClick()
       return
     }
@@ -342,7 +359,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 <p className="text-[11px] text-muted-foreground">Нейросеть для обработки голосовых команд через Siri и виджеты iPhone/Android</p>
               </div>
               <select
-                value={taskModels.siri || 'llama-3.1-8b-instant'}
+                value={taskModels.siri || (isProOrCorp ? 'openai/gpt-oss-120b' : isPlus ? 'qwen/qwen3.6-27b' : 'openai/gpt-oss-20b')}
                 onChange={(e) => handleTaskModelChange('siri' as any, e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-primary/40 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
