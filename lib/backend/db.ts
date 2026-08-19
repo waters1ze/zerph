@@ -3577,7 +3577,7 @@ export async function processParsedItemWithDelegation(
         if (botToken && friend.chatId) {
           const sender = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
           const senderName = [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.firstName || 'Коллега'
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
           let notifyMsg = isBothShared
             ? `🤝 *${senderName}* создал(а) общую задачу для вас двоих!\n\n`

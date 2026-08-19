@@ -63,7 +63,7 @@ program.action(async () => {
       process.stdout.write('\n')
       console.log(`\n ${GLYPH.cancel} ${chalk.bold.yellow('Доступ заблокирован: требуется подписка Plus, Pro или Corp')}`)
       console.log(`   ${data.message || 'Для обычных (бесплатных) аккаунтов доступ к Zerf CLI закрыт.'}`)
-      console.log(`   ${chalk.gray('Оформить подписку:')} ${chalk.cyanBright('https://zeprh.vercel.app/#pricing')}\n`)
+      console.log(`   ${chalk.gray('Оформить подписку:')} ${chalk.cyanBright('https://zerph.vercel.app/#pricing')}\n`)
       return
     }
 

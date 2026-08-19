@@ -8,7 +8,7 @@ import { LanguageProvider } from '@/lib/i18n/LanguageContext'
 // (@theme --font-sans), куда входит и монохромный Noto Emoji для эмодзи
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter', display: 'swap' })
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
 export const viewport: Viewport = {
   themeColor: '#090d16',
@@ -179,7 +179,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="lazyOnload" />
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <Script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js" strategy="lazyOnload" />
         <script
           dangerouslySetInnerHTML={{

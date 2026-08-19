@@ -69,7 +69,7 @@ export default function SharedProjectPage({ params }: { params: Promise<{ id: st
         <FolderOpen className="w-12 h-12 text-muted-foreground/40 mb-3" />
         <h1 className="text-lg font-bold">Проект не найден</h1>
         <p className="text-xs text-muted-foreground mt-1">Возможно, ссылка устарела или проект был удален.</p>
-        <a href="https://zeprh.vercel.app" className="mt-4 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold">
+        <a href="https://zerph.vercel.app" className="mt-4 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold">
           Перейти в Zerf AI
         </a>
       </div>

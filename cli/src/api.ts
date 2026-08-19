@@ -24,7 +24,7 @@ const ZERF_DIR = path.join(os.homedir(), '.zerf')
 const CREDENTIALS_FILE = path.join(ZERF_DIR, 'credentials.json')
 const CONFIG_FILE = path.join(ZERF_DIR, 'config.json')
 
-export const DEFAULT_SERVER_URL = process.env.ZERF_API_URL || 'https://zeprh.vercel.app'
+export const DEFAULT_SERVER_URL = process.env.ZERF_API_URL || 'https://zerph.vercel.app'
 
 export function loadCredentials(): ZerfCredentials {
   try {

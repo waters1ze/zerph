@@ -50,7 +50,7 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
         args: ["-y", "@zerf/mcp-server"],
         env: {
           ZERF_API_TOKEN: currentAuthToken,
-          ZERF_BASE_URL: typeof window !== 'undefined' ? window.location.origin : "https://zeprh.vercel.app"
+          ZERF_BASE_URL: typeof window !== 'undefined' ? window.location.origin : "https://zerph.vercel.app"
         }
       }
     }

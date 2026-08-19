@@ -11,7 +11,7 @@ const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824
  * 1-Click VK OAuth Entry point
  */
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin || 'https://zeprh.vercel.app'
+  const origin = req.nextUrl.origin || 'https://zerph.vercel.app'
   const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/vk/callback`
   
   const authUser = await getAuthenticatedUser(req)

@@ -47,7 +47,7 @@ export default function TermsPage() {
               <span>Принятие условий</span>
             </h2>
             <p>
-              Используя веб-сайт <a href="https://zeprh.vercel.app" className="text-primary hover:underline font-mono">https://zeprh.vercel.app</a>, бота Telegram <span className="font-mono text-foreground">@Zerph_bot</span> или иные клиенты сервиса <b>Zerf Note</b>, вы подтверждаете свое полное и безоговорочное согласие с настоящими Условиями и Политикой конфиденциальности.
+              Используя веб-сайт <a href="https://zerph.vercel.app" className="text-primary hover:underline font-mono">https://zerph.vercel.app</a>, бота Telegram <span className="font-mono text-foreground">@Zerph_bot</span> или иные клиенты сервиса <b>Zerf Note</b>, вы подтверждаете свое полное и безоговорочное согласие с настоящими Условиями и Политикой конфиденциальности.
             </p>
           </section>
 

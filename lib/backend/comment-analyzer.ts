@@ -251,10 +251,10 @@ export async function sendCommentReportToAdminsTelegram(): Promise<boolean> {
         `◈ <b>Топ запросов подписчиков:</b>\n` +
         report.topRequests.map(r => `▪ ${r}`).join('\n') +
         `\n\n<blockquote>${report.executiveSummary}</blockquote>\n\n` +
-        `<i>Все эти комментарии помечены как обработанные. Панель управления: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
+        `<i>Все эти комментарии помечены как обработанные. Панель управления: <a href="https://zerph.vercel.app">zerph.vercel.app</a></i>`
       : `✦ <b>ОТЧЕТ ИИ ПО КОММЕНТАРИЯМ ИЗ @zerph_off</b>\n\n` +
         `📊 <b>Статус:</b> Новых необработанных комментариев с момента прошлого отчета не поступало.\n\n` +
-        `<i>Панель администратора: <a href="https://zeprh.vercel.app">zeprh.vercel.app</a></i>`
+        `<i>Панель администратора: <a href="https://zerph.vercel.app">zerph.vercel.app</a></i>`
 
     for (const cid of Array.from(adminIds)) {
       await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {

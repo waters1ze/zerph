@@ -7,7 +7,7 @@ const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824
 const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || 'aaQ13axAPQEcczQa'
 
 export async function GET(req: NextRequest) {
-  const host = req.headers.get('host') || 'zeprh.vercel.app'
+  const host = req.headers.get('host') || 'zerph.vercel.app'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const origin = `${protocol}://${host}`
 

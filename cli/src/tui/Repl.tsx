@@ -423,7 +423,7 @@ export function Repl({ initialData }: { initialData?: any }) {
         let answerText = ''
 
         try {
-          const apiBase = (creds.serverUrl || 'https://zeprh.vercel.app').replace(/\/$/, '')
+          const apiBase = (creds.serverUrl || 'https://zerph.vercel.app').replace(/\/$/, '')
           const headers: Record<string, string> = { 'Content-Type': 'application/json' }
           if (creds.token) headers['x-telegram-auth'] = creds.token
           if (creds.chatId) headers['x-telegram-chat-id'] = creds.chatId

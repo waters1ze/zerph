@@ -15,7 +15,7 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li34b9d1469e88aa'
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'a1b2c3d4e5f678901234567890abcdef12345678'
 
 export async function GET(req: NextRequest) {
-  const host = req.headers.get('host') || 'zeprh.vercel.app'
+  const host = req.headers.get('host') || 'zerph.vercel.app'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const origin = `${protocol}://${host}`
 

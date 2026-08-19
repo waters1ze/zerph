@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { AppProvider } from '@/lib/store'
 import { AppShell } from '@/app/page'
 
+import { ZerficLiveProvider } from '@/lib/zerfic-live-context'
+
 export default function TgPage() {
   const [mounted, setMounted] = useState(false)
 
@@ -16,7 +18,6 @@ export default function TgPage() {
       if (tg) {
         try {
           tg.ready?.()
-          tg.expand?.()
           if (typeof tg.enableClosingConfirmation === 'function') {
             try { tg.enableClosingConfirmation() } catch {}
           }
@@ -44,7 +45,9 @@ export default function TgPage() {
   return (
     <div className="w-full h-full min-h-[100dvh] max-w-full overflow-hidden flex justify-center bg-background">
       <AppProvider>
-        <AppShell forceMobileLayout={true} />
+        <ZerficLiveProvider>
+          <AppShell forceMobileLayout={true} />
+        </ZerficLiveProvider>
       </AppProvider>
     </div>
   )

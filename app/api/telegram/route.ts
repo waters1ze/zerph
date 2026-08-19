@@ -35,7 +35,7 @@ import { NAME_TO_CLUSTER_MAP, tokenMatchesCandidateName, namesAreRelated } from 
 export const maxDuration = 60
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app').replace(/\/$/, '')
 const MINIAPP_URL = `${APP_URL}/tg`
 
 const P_EMOJI: Record<string, string> = {
@@ -164,6 +164,14 @@ async function ensureBotCommandsRegistered() {
         { command: 'help',       description: '❓ Все команды и руководство' },
       ],
       scope: { type: 'all_private_chats' },
+    })
+
+    await tgApi('setChatMenuButton', {
+      menu_button: {
+        type: 'web_app',
+        text: 'Открыть',
+        web_app: { url: MINIAPP_URL },
+      },
     })
   } catch {}
 }
@@ -589,7 +597,7 @@ async function handleFocus(chatId: number, minutesStr?: string) {
 }
 
 async function handleSiriSetup(chatId: number) {
-  const appUrl = APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = APP_URL || 'https://zerph.vercel.app'
   const endpointUrl = `${appUrl}/api/shortcuts`
   const siriKey = getSiriUserKey(chatId)
   const personalUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=`
@@ -623,7 +631,7 @@ async function handleSiriSetup(chatId: number) {
     `• 🔒 **Виджет на экране блокировки (Lock Screen):**\n` +
     `  _Зажмите экран блокировки ➔ Настроить ➔ Экран блокировки ➔ Добавить виджет ➔ «Команды» ➔ выберите «Запиши в Zerf»_.\n` +
     `• 📲 **Иконка на экран «Домой» (PWA):**\n` +
-    `  _Откройте https://zeprh.vercel.app в Safari ➔ Поделиться (квадрат со стрелкой) ➔ «На экран \"Домой\"»_.\n\n` +
+    `  _Откройте https://zerph.vercel.app в Safari ➔ Поделиться (квадрат со стрелкой) ➔ «На экран \"Домой\"»_.\n\n` +
     `───────────────\n` +
     `🤖 *ИНСТРУКЦИЯ ДЛЯ ANDROID (ВИДЖЕТ В 1 КЛИК):*\n\n` +
     `1️⃣ Установите бесплатное приложение **HTTP Shortcuts** из Google Play.\n` +
@@ -713,7 +721,7 @@ const TYPE_RU: Record<string, string> = {
 
 async function handleSubscribe(chatId: number) {
   const limits = await getUserUsageAndLimits(chatId)
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
   const pricingUrl = `${appUrl}/#pricing`
 
   if (planAtLeast(limits.plan, 'plus')) {
@@ -802,7 +810,7 @@ async function handleAdminCommand(chatId: number, args: string[]) {
   }
 
   const [subCmd, targetQuery] = args
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
   if (!subCmd) {
     await send(chatId,
@@ -1185,7 +1193,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
 
       const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
       const senderName = sender?.firstName || 'Пользователь'
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
       const allowedMatches = matches.filter(m => m.isAllowed)
 
@@ -1743,7 +1751,7 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: '⭐ Подключить Zerf Premium (99 ₽)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
+            { text: '⭐ Подключить Zerf Premium (99 ₽)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'}/tg` } }
           ]]
         }
       }
@@ -1759,7 +1767,7 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: '⭐ Оформить подписку (99 руб)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` } }
+            { text: '⭐ Оформить подписку (99 руб)', web_app: { url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'}/tg` } }
           ]]
         }
       }
@@ -1887,7 +1895,7 @@ async function handleGroupAddCommand(msg: any) {
         reply_to_message_id: msg.message_id,
         reply_markup: {
           inline_keyboard: [[
-            { text: 'Оформить Zerf Premium (99 руб)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'}/tg` }
+            { text: 'Оформить Zerf Premium (99 руб)', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'}/tg` }
           ]]
         }
       }
@@ -2240,7 +2248,7 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
   })
 
   // Notify recipient
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
   let notifyMsg = `📨 *${escMd(senderName)}* передал(а) тебе задачу!\n\n`
   notifyMsg += `📌 *${escMd(item.title || taskText)}*\n`
   if (item.summary && item.summary !== item.title) notifyMsg += `📝 ${escMd(item.summary)}\n`
@@ -2592,7 +2600,7 @@ async function handlePublicCommand(chatId: number, taskId?: string) {
 async function handleInlineQuery(iq: any) {
   const query = (iq.query || '').trim()
   const fromId = iq.from?.id
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
   const results: any[] = []
 
@@ -2753,7 +2761,7 @@ async function handleMatrixCommand(chatId: number) {
   await send(chatId, msg, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '📱 Открыть задачи на сайте', web_app: { url: `https://zeprh.vercel.app/tg?chatId=${chatId}` } }]
+        [{ text: '📱 Открыть задачи на сайте', web_app: { url: `https://zerph.vercel.app/tg?chatId=${chatId}` } }]
       ]
     }
   })
@@ -2958,7 +2966,7 @@ export async function POST(req: NextRequest) {
             
             const sender = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
             const senderName = sender?.firstName || 'Пользователь'
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
             const friend = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(friendChatId) } })
             
             if (friend) {
@@ -3042,7 +3050,7 @@ export async function POST(req: NextRequest) {
         })
       } else if (data.startsWith('alarm_ios_')) {
         const time = data.replace('alarm_ios_', '')
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
         const icsUrl = `${appUrl}/api/alarm/ics?time=${encodeURIComponent(time)}`
         await send(chatId, `📱 *1-Tap Будильник для iPhone (iOS):*\n\nНажми на кнопку ниже, чтобы мгновенно добавить напоминание с звуковым сигналом в Календарь iPhone на *${time}*!`, {
           reply_markup: {
@@ -3154,7 +3162,7 @@ export async function POST(req: NextRequest) {
         })
         await handleSettings(chatId)
       } else if (data === 'open_calendar_sync') {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
         const calSig = getFeedSignature(chatId)
         const webcalUrl = `${appUrl.replace(/^https?:\/\//, 'webcal://')}/api/alarm/ics?chatId=${chatId}&sig=${calSig}`
         const httpsUrl = `${appUrl}/api/alarm/ics?chatId=${chatId}&sig=${calSig}`

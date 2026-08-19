@@ -18,7 +18,7 @@ export function getRedirectUri(requestOrigin?: string): string {
   if (process.env.GOOGLE_REDIRECT_URI) {
     return process.env.GOOGLE_REDIRECT_URI
   }
-  return 'https://zeprh.vercel.app/api/calendar/token'
+  return 'https://zerph.vercel.app/api/calendar/token'
 }
 
 /**

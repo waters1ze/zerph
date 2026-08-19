@@ -5,4 +5,4 @@ Allow: /
 Allow: /tg
 Allow: /vk
 
-Sitemap: https://zeprh.vercel.app/sitemap.xml
+Sitemap: https://zerph.vercel.app/sitemap.xml

@@ -1002,7 +1002,7 @@ export async function POST(req: NextRequest) {
 
       // Unique tracking label for YooMoney: ext_<chatId>_<timestamp>_<hex> (< 40 chars, safe from YooMoney 64 char limit)
       const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
       const successUrl = `${appUrl}/?view=extensions&ext_purchased=${ext.id}`
 
       const label = `ext_${chatId}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`

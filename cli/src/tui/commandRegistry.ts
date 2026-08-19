@@ -397,7 +397,7 @@ export async function executeExtensionAction(
 
   // 1. Dedicated Search / Entropy AI Engine
   if (ext.id === 'ext_entropy_search' || ext.content?.engine === 'entropy_deep_search') {
-    const apiBase = (ctx.creds.serverUrl || 'https://zeprh.vercel.app').replace(/\/$/, '')
+    const apiBase = (ctx.creds.serverUrl || 'https://zerph.vercel.app').replace(/\/$/, '')
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (ctx.creds.token) headers['x-telegram-auth'] = ctx.creds.token
     if (ctx.creds.chatId) headers['x-telegram-chat-id'] = ctx.creds.chatId

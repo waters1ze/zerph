@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
             `🎉 *Покупка вашего расширения!*\n\n` +
             `Пользователь приобрёл ваше расширение за *${price} ₽* в Zerf Note.\n` +
             `💰 *Ваш доход (80%): +${finalAuthorShare} ₽*${cardInfoText}\n` +
-            `• Проверить баланс и историю: https://zeprh.vercel.app/developer?tab=earnings`
+            `• Проверить баланс и историю: https://zerph.vercel.app/developer?tab=earnings`
           )
 
           // Notify platform owner (20% platform share)
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
           buyerChatId,
           `🎉 *Расширение успешно оплачено и добавлено!* ✨\n\n` +
           `Расширение активировано в вашем аккаунте Zerf Note.\n` +
-          `• Открыть: https://zeprh.vercel.app/?view=extensions`
+          `• Открыть: https://zerph.vercel.app/?view=extensions`
         )
 
         // 5. Delete pending record

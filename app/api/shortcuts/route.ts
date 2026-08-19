@@ -128,7 +128,7 @@ async function processShortcutsItems(
   friends: any[]
 ): Promise<{ spokenText: string; tgMsg: string; items: any[] }> {
   const hasActionVerb = /\b(добавь|создай|напомни|запиши|поставь|купи|купить|сделай|сделать|позвони|позвонить|встреча|тренировка|занятие|урок|сдать|отправить|задача|задачу|план|планы)\b/i.test(inputText)
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
   const senderRec = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
   const senderName = senderRec?.firstName || 'Друг'
 

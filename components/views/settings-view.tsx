@@ -244,7 +244,7 @@ export function SettingsView() {
   const importFileRef = useRef<HTMLInputElement>(null)
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
   const siriKeyParam = profileData.siriKey ? `&key=${profileData.siriKey}` : ''
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
@@ -2489,13 +2489,13 @@ export function SettingsView() {
                   <p>3. В разделе <strong>Credentials</strong> создайте <strong>OAuth 2.0 Client ID</strong> (Web application).</p>
                   <p>4. В <strong>Authorized redirect URIs</strong> укажите:</p>
                   <div className="p-2 rounded bg-background border border-border text-primary select-all">
-                    https://zeprh.vercel.app/api/calendar/token
+                    https://zerph.vercel.app/api/calendar/token
                   </div>
                   <p>5. Добавьте в <code className="text-foreground">.env</code> или переменные Vercel:</p>
                   <pre className="p-2.5 rounded bg-background border border-border text-emerald-500 text-[10px] overflow-x-auto">
 GOOGLE_CLIENT_ID=ваш_client_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=ваш_client_secret
-GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
+GOOGLE_REDIRECT_URI=https://zerph.vercel.app/api/calendar/token
                   </pre>
                 </div>
               </div>

@@ -11,7 +11,7 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li34b9d1469e88aa'
  * 1-Click GitHub OAuth Entry point
  */
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin || 'https://zeprh.vercel.app'
+  const origin = req.nextUrl.origin || 'https://zerph.vercel.app'
   const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
   
   const authUser = await getAuthenticatedUser(req)
