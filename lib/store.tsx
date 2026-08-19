@@ -783,14 +783,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })
         }
 
-        // Throttle profile and birthdays fetch to at most once per day (24h) unless explicitly forced by user
-        const lastDailySync = typeof window !== 'undefined' ? Number(localStorage.getItem('zerf_last_daily_sync') || 0) : 0
-        const isPast24Hours = now - lastDailySync > 24 * 60 * 60 * 1000
+        // Sync profile, plan, avatar and sidebar configuration across devices
+        // Throttled to at most once per 5 seconds unless forced with showIndicator
+        const shouldFetchUser = showIndicator || (now - lastUserFetchTimeRef.current > 5000)
 
-        if (showIndicator || isPast24Hours) {
-          if (typeof window !== 'undefined') {
-            try { localStorage.setItem('zerf_last_daily_sync', String(now)) } catch {}
-          }
+        if (shouldFetchUser) {
           lastUserFetchTimeRef.current = now
           const userUrl = chatId ? `/api/telegram/user?chatId=${chatId}` : '/api/telegram/user'
           fetch(userUrl, { headers, cache: 'no-store', signal: AbortSignal.timeout(15000) })
@@ -822,7 +819,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   try {
                     localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(user.sidebarConfig))
                     localStorage.setItem('zerf_sidebar_config', JSON.stringify(user.sidebarConfig))
-                    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+                    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed', { detail: user.sidebarConfig }))
                   } catch {}
                 }
                 if (Object.keys(updates).length > 0) {
@@ -897,6 +894,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         eventSource.addEventListener('task_deleted', () => {
           syncBackendData(false)
+        })
+
+        eventSource.addEventListener('sidebar_config_changed', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data)
+            if (data.sidebarConfig && typeof window !== 'undefined') {
+              localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(data.sidebarConfig))
+              localStorage.setItem('zerf_sidebar_config', JSON.stringify(data.sidebarConfig))
+              window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed', { detail: data.sidebarConfig }))
+            }
+          } catch {}
         })
 
         eventSource.addEventListener('reminder', (e: MessageEvent) => {

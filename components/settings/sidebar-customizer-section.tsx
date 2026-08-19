@@ -212,6 +212,19 @@ export function SidebarCustomizerSection() {
     })
   }
 
+  // Sync with global config events
+  useEffect(() => {
+    const handleConfigChange = (e?: any) => {
+      if (e?.detail && typeof e.detail === 'object' && Array.isArray(e.detail.folders)) {
+        setConfig(e.detail)
+      } else {
+        setConfig(getInitialSidebarConfig())
+      }
+    }
+    window.addEventListener('zerf_sidebar_config_changed', handleConfigChange)
+    return () => window.removeEventListener('zerf_sidebar_config_changed', handleConfigChange)
+  }, [])
+
   // Sanitize config on mount to remove any legacy 'extensions' itemId
   useEffect(() => {
     setConfig(prev => {
@@ -228,7 +241,7 @@ export function SidebarCustomizerSection() {
         try {
           localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(next))
           localStorage.setItem('zerf_sidebar_config', JSON.stringify(next))
-          window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+          window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed', { detail: next }))
         } catch {}
         return next
       }

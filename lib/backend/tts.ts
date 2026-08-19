@@ -93,14 +93,17 @@ export function createSpokenSummary(items: any[]): string {
   return `Задача «${first.title}» добавлена в список дел!`
 }
 
-export async function sendVoiceResponse(chatId: string | number | bigint, text: string) {
+export async function sendVoiceResponse(
+  chatId: string | number | bigint,
+  text: string,
+  forceVoice = false
+) {
   try {
     const user = await prisma.telegramChat.findUnique({
       where: { chatId: BigInt(chatId) },
       select: { ttsEnabled: true }
     })
-    // Disabled by default unless user explicitly turned it ON
-    if (!user || user.ttsEnabled !== true) return
+    if (!forceVoice && (!user || user.ttsEnabled !== true)) return
 
     const audioBuf = await generateTtsAudio(text)
     if (audioBuf) {

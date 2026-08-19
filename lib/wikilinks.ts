@@ -89,6 +89,7 @@ export interface GraphFilterOptions {
   showFolders?: boolean
   showUnresolved?: boolean
   showTasks?: boolean
+  hideOrphanTags?: boolean
   searchQuery?: string
   colorGroups?: ColorGroup[]
   localNoteId?: string | null
@@ -187,6 +188,7 @@ export function buildGraphData(
     showFolders = false,
     showUnresolved = true,
     showTasks = true,
+    hideOrphanTags = true,
     colorGroups = [],
     localNoteId = null,
     localDepth = 1,
@@ -436,8 +438,59 @@ export function buildGraphData(
     counts.set(e.target, (counts.get(e.target) || 0) + 1)
   })
 
-  nodes.forEach(n => {
-    n.connectionCount = counts.get(n.id) || 0
+  // Map each tag to its connected neighbor node IDs
+  const tagNeighbors = new Map<string, string[]>()
+  edges.forEach(e => {
+    if (e.type === 'tag') {
+      if (e.source.startsWith('tag_')) {
+        const list = tagNeighbors.get(e.source) || []
+        list.push(e.target)
+        tagNeighbors.set(e.source, list)
+      }
+      if (e.target.startsWith('tag_')) {
+        const list = tagNeighbors.get(e.target) || []
+        list.push(e.source)
+        tagNeighbors.set(e.target, list)
+      }
+    }
+  })
+
+  // Filter out disconnected/orphan tags and single-item dead tag pairs if hideOrphanTags is enabled (default: true)
+  let finalNodes = nodes
+  if (hideOrphanTags) {
+    finalNodes = nodes.filter(n => {
+      if (n.type === 'tag') {
+        const connectionCount = counts.get(n.id) || 0
+        if (connectionCount === 0) return false
+        // If a tag connects to only 1 item, but that item has no other connections in the graph, it's a dead island — prune it!
+        if (connectionCount === 1) {
+          const neighbors = tagNeighbors.get(n.id) || []
+          const singleNeighborId = neighbors[0]
+          if (singleNeighborId) {
+            const neighborTotalConnections = counts.get(singleNeighborId) || 0
+            // If the neighbor only has this single tag connection (total connections <= 1), hide this dead tag
+            if (neighborTotalConnections <= 1) {
+              return false
+            }
+          }
+        }
+      }
+      return true
+    })
+  }
+
+  const validFinalNodeIds = new Set(finalNodes.map(n => n.id))
+  const finalEdges = edges.filter(e => validFinalNodeIds.has(e.source) && validFinalNodeIds.has(e.target))
+
+  // Recompute final connection counts after pruning
+  const finalCounts = new Map<string, number>()
+  finalEdges.forEach(e => {
+    finalCounts.set(e.source, (finalCounts.get(e.source) || 0) + 1)
+    finalCounts.set(e.target, (finalCounts.get(e.target) || 0) + 1)
+  })
+
+  finalNodes.forEach(n => {
+    n.connectionCount = finalCounts.get(n.id) || 0
     if (n.type === 'tag') {
       n.radius = Math.max(4, Math.min(14, 4 + n.connectionCount * 1.8))
     } else if (n.type === 'folder') {
@@ -449,5 +502,5 @@ export function buildGraphData(
     }
   })
 
-  return { nodes, edges }
+  return { nodes: finalNodes, edges: finalEdges }
 }

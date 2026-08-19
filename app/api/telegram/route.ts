@@ -1782,7 +1782,8 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
 
     // Send natural voice reply
     const spokenText = createSpokenSummary(items)
-    sendVoiceResponse(chatId, spokenText).catch(() => {})
+    const isConversational = items.some((i: any) => i.type === 'answer' || i.action === 'reply')
+    sendVoiceResponse(chatId, spokenText, isConversational).catch(() => {})
   } catch (err: unknown) {
     await send(chatId, `Ошибка: ${String(err).slice(0, 200)}`)
   }

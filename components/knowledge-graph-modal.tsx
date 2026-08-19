@@ -52,6 +52,7 @@ export function KnowledgeGraphModal({
   const [showUnresolved, setShowUnresolved] = useState(true)
   const [showTasks, setShowTasks] = useState(true)
   const [showArrows, setShowArrows] = useState(true)
+  const [hideOrphanTags, setHideOrphanTags] = useState(true)
 
   // Color Groups State (Obsidian-Style)
   const [colorGroups, setColorGroups] = useState<ColorGroup[]>([
@@ -62,11 +63,11 @@ export function KnowledgeGraphModal({
   const [newGroupQuery, setNewGroupQuery] = useState('')
   const [newGroupColor, setNewGroupColor] = useState('#6366f1')
 
-  // Physics & Display Controls State
+  // Physics & Display Controls State (Tuned for organic, non-dispersed layout)
   const [activePanel, setActivePanel] = useState<'filters' | 'colors' | 'forces' | 'display' | null>('filters')
-  const [repulsion, setRepulsion] = useState(130)
-  const [linkDistance, setLinkDistance] = useState(65)
-  const [centerGravity, setCenterGravity] = useState(0.0008)
+  const [repulsion, setRepulsion] = useState(90)
+  const [linkDistance, setLinkDistance] = useState(70)
+  const [centerGravity, setCenterGravity] = useState(0.0035)
   const [nodeSizeScale, setNodeSizeScale] = useState(1)
   const [linkThickness, setLinkThickness] = useState(1)
   const [isPhysicsPaused, setIsPhysicsPaused] = useState(false)
@@ -99,13 +100,14 @@ export function KnowledgeGraphModal({
       showFolders,
       showUnresolved,
       showTasks,
+      hideOrphanTags,
       colorGroups,
       localNoteId,
       localDepth,
       searchQuery,
       tasks,
     })
-  }, [notes, folderFilter, showTags, showFolders, showUnresolved, showTasks, colorGroups, localNoteId, localDepth, searchQuery, tasks])
+  }, [notes, folderFilter, showTags, showFolders, showUnresolved, showTasks, hideOrphanTags, colorGroups, localNoteId, localDepth, searchQuery, tasks])
 
   // Simulation node positions
   const simNodesRef = useRef<GraphNode[]>([])
@@ -236,16 +238,18 @@ export function KnowledgeGraphModal({
     }
   }, [repulsion, linkDistance, centerGravity, isPhysicsPaused])
 
-  // Canvas Render Loop
+  // Canvas Render Loop (High-DPI Retina Ready & Level-of-Detail)
   const render = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     ctx.save()
+    ctx.scale(dpr, dpr)
     ctx.translate(camera.x, camera.y)
     ctx.scale(camera.zoom, camera.zoom)
 
@@ -264,7 +268,7 @@ export function KnowledgeGraphModal({
       })
     }
 
-    // 1. Draw Edges
+    // 1. Draw Edges with Smooth Subtle Curves
     for (const edge of edges) {
       const a = nodeMap.get(edge.source)
       const b = nodeMap.get(edge.target)
@@ -275,35 +279,44 @@ export function KnowledgeGraphModal({
         (edge.target === activeHoverOrSelect.id && connectedNodeIds.has(edge.source))
       )
 
+      const midX = (a.x + b.x) / 2
+      const midY = (a.y + b.y) / 2
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1
+      const offset = Math.min(12, dist * 0.05)
+      const cx = midX - (dy / dist) * offset
+      const cy = midY + (dx / dist) * offset
+
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)
-      ctx.lineTo(b.x, b.y)
+      ctx.quadraticCurveTo(cx, cy, b.x, b.y)
 
       if (isConnected) {
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.9)'
-        ctx.lineWidth = (2.2 * linkThickness) / camera.zoom
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.95)'
+        ctx.lineWidth = Math.max(1.8, (2.2 * linkThickness) / Math.sqrt(camera.zoom))
       } else if (activeHoverOrSelect) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)'
-        ctx.lineWidth = (0.5 * linkThickness) / camera.zoom
+        ctx.lineWidth = (0.5 * linkThickness) / Math.sqrt(camera.zoom)
       } else {
         if (edge.type === 'unresolved') {
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)'
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)'
           ctx.setLineDash([4, 4])
         } else if (edge.type === 'tag') {
-          ctx.strokeStyle = 'rgba(168, 85, 247, 0.25)'
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.35)'
           ctx.setLineDash([])
         } else {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)'
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)'
           ctx.setLineDash([])
         }
-        ctx.lineWidth = (1 * linkThickness) / camera.zoom
+        ctx.lineWidth = Math.max(0.8, (1.1 * linkThickness) / Math.sqrt(camera.zoom))
       }
       ctx.stroke()
       ctx.setLineDash([])
 
       // Draw direction arrow if enabled
       if (showArrows && isConnected && edge.type === 'wikilink') {
-        const angle = Math.atan2(b.y - a.y, b.x - a.x)
+        const angle = Math.atan2(b.y - cy, b.x - cx)
         const radiusB = (b.radius || 6) * nodeSizeScale
         const targetX = b.x - Math.cos(angle) * (radiusB + 3)
         const targetY = b.y - Math.sin(angle) * (radiusB + 3)
@@ -313,31 +326,30 @@ export function KnowledgeGraphModal({
         ctx.rotate(angle)
         ctx.beginPath()
         ctx.moveTo(0, 0)
-        ctx.lineTo(-6 / camera.zoom, -3.5 / camera.zoom)
-        ctx.lineTo(-6 / camera.zoom, 3.5 / camera.zoom)
+        ctx.lineTo(-6 / Math.sqrt(camera.zoom), -3.5 / Math.sqrt(camera.zoom))
+        ctx.lineTo(-6 / Math.sqrt(camera.zoom), 3.5 / Math.sqrt(camera.zoom))
         ctx.closePath()
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.9)'
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.95)'
         ctx.fill()
         ctx.restore()
       }
     }
 
-    // 2. Draw Nodes
+    // 2. Draw Nodes and Dynamic Level-of-Detail (LOD) Labels
     for (const node of nodes) {
       if (node.x === undefined || node.y === undefined) continue
       const isSelected = selectedNode?.id === node.id
       const isHovered = hoveredNode?.id === node.id
       const isConnected = connectedNodeIds.has(node.id)
       const radius = (node.radius || 6) * nodeSizeScale
-
       const isMatchingSearch = searchQuery && node.title.toLowerCase().includes(searchQuery.toLowerCase())
 
-      // Glow halo
+      // Soft glow for active, selected, hovered, or search-matched nodes
       if (isSelected || isHovered || isMatchingSearch) {
         ctx.save()
         ctx.beginPath()
-        ctx.arc(node.x, node.y, radius + 5, 0, Math.PI * 2)
-        ctx.fillStyle = isMatchingSearch ? 'rgba(236, 72, 153, 0.4)' : 'rgba(245, 158, 11, 0.38)'
+        ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2)
+        ctx.fillStyle = isMatchingSearch ? 'rgba(236, 72, 153, 0.38)' : 'rgba(245, 158, 11, 0.38)'
         ctx.fill()
         ctx.restore()
       }
@@ -346,7 +358,7 @@ export function KnowledgeGraphModal({
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2)
 
       if (activeHoverOrSelect && !isConnected && !isMatchingSearch) {
-        ctx.fillStyle = 'rgba(100, 116, 139, 0.2)'
+        ctx.fillStyle = 'rgba(71, 85, 105, 0.25)'
       } else {
         ctx.fillStyle = isMatchingSearch ? '#ec4899' : node.color
       }
@@ -355,22 +367,74 @@ export function KnowledgeGraphModal({
       if (node.type === 'unresolved') {
         ctx.strokeStyle = '#94a3b8'
         ctx.setLineDash([2, 2])
-        ctx.lineWidth = 1.5 / camera.zoom
+        ctx.lineWidth = 1.5 / Math.sqrt(camera.zoom)
         ctx.stroke()
         ctx.setLineDash([])
       } else {
-        ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(0, 0, 0, 0.45)'
-        ctx.lineWidth = isSelected ? 2 / camera.zoom : 1 / camera.zoom
+        ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(0, 0, 0, 0.5)'
+        ctx.lineWidth = isSelected ? 2.5 / Math.sqrt(camera.zoom) : 1.2 / Math.sqrt(camera.zoom)
         ctx.stroke()
       }
 
-      // Labels
-      const shouldRenderLabel = camera.zoom > 0.7 || isSelected || isHovered || isConnected || isMatchingSearch
+      // Dynamic Level of Detail (LOD) for labels:
+      // Hide labels at zoom-out unless high connectivity, hovered, or selected
+      const isHighConnectivity = (node.connectionCount || 0) >= 2
+      const isExtremeConnectivity = (node.connectionCount || 0) >= 4
+      const shouldRenderLabel =
+        isSelected ||
+        isHovered ||
+        isConnected ||
+        isMatchingSearch ||
+        camera.zoom >= 1.0 ||
+        (camera.zoom >= 0.65 && isHighConnectivity) ||
+        (camera.zoom >= 0.4 && isExtremeConnectivity)
+
       if (shouldRenderLabel) {
-        ctx.font = `${Math.max(9, Math.min(13, 11 / camera.zoom))}px sans-serif`
+        const fontSize = Math.max(9, Math.min(12, 11 / Math.sqrt(camera.zoom)))
+        ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
         ctx.textAlign = 'center'
-        ctx.fillStyle = isSelected || isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.8)'
-        ctx.fillText(node.title, node.x, node.y + radius + 11 / camera.zoom)
+        ctx.textBaseline = 'top'
+
+        const textY = node.y + radius + 4
+        const text = node.title
+
+        // Crisp pill backdrop for label readability
+        const textMetrics = ctx.measureText(text)
+        const textWidth = textMetrics.width
+        const paddingX = 4
+        const paddingY = 2
+        const boxHeight = fontSize + paddingY * 2
+
+        ctx.save()
+        ctx.fillStyle = isSelected || isHovered
+          ? 'rgba(15, 23, 42, 0.95)'
+          : 'rgba(10, 13, 20, 0.78)'
+        ctx.beginPath()
+        const rectX = node.x - textWidth / 2 - paddingX
+        const rectY = textY - paddingY
+        const rectW = textWidth + paddingX * 2
+        const rectH = boxHeight
+        const cornerR = 4
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(rectX, rectY, rectW, rectH, cornerR)
+        } else {
+          ctx.rect(rectX, rectY, rectW, rectH)
+        }
+        ctx.fill()
+
+        if (isSelected || isHovered) {
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)'
+          ctx.lineWidth = 1
+          ctx.stroke()
+        }
+
+        ctx.fillStyle = isSelected || isHovered
+          ? '#ffffff'
+          : isConnected
+          ? 'rgba(255, 255, 255, 0.95)'
+          : 'rgba(226, 232, 240, 0.85)'
+        ctx.fillText(text, node.x, textY)
+        ctx.restore()
       }
     }
 
@@ -393,7 +457,7 @@ export function KnowledgeGraphModal({
     }
   }, [isOpen, stepPhysics, render])
 
-  // Handle Resize with ResizeObserver
+  // Handle Resize with ResizeObserver & Retina High-DPI
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -403,11 +467,16 @@ export function KnowledgeGraphModal({
     const updateSize = () => {
       const rect = parent.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
+        const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
         const w = Math.floor(rect.width)
         const h = Math.floor(rect.height)
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width = w
-          canvas.height = h
+        const targetW = Math.round(w * dpr)
+        const targetH = Math.round(h * dpr)
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW
+          canvas.height = targetH
+          canvas.style.width = `${w}px`
+          canvas.style.height = `${h}px`
         }
       }
     }
@@ -961,6 +1030,19 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showArrows}
                       onChange={e => setShowArrows(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between cursor-pointer select-none pt-1 border-t border-border/40">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Tag className="w-3 h-3 text-purple-400" />
+                      <span>Скрывать пустые теги</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={hideOrphanTags}
+                      onChange={e => setHideOrphanTags(e.target.checked)}
                       className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>

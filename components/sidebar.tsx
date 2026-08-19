@@ -113,8 +113,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   }
 
   useEffect(() => {
-    const handleConfigChange = () => {
-      setSidebarConfig(getInitialSidebarConfig())
+    const handleConfigChange = (e?: any) => {
+      if (e?.detail && typeof e.detail === 'object' && Array.isArray(e.detail.folders)) {
+        setSidebarConfig(e.detail)
+      } else {
+        setSidebarConfig(getInitialSidebarConfig())
+      }
     }
     window.addEventListener('zerf_sidebar_config_changed', handleConfigChange)
     return () => window.removeEventListener('zerf_sidebar_config_changed', handleConfigChange)
@@ -150,6 +154,9 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           if (data.connected && data.name) {
             setTgUser({ name: data.name, username: data.username || 'Telegram', photoUrl: undefined })
             if (data.isAdmin) setIsAdmin(true)
+            if (data.sidebarConfig) {
+              setSidebarConfig(data.sidebarConfig)
+            }
             dispatch({
               type: 'UPDATE_SETTINGS',
               updates: {
@@ -179,7 +186,8 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
               try {
                 localStorage.setItem('zerf_sidebar_config_v2', JSON.stringify(data.sidebarConfig))
                 localStorage.setItem('zerf_sidebar_config', JSON.stringify(data.sidebarConfig))
-                window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+                setSidebarConfig(data.sidebarConfig)
+                window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed', { detail: data.sidebarConfig }))
               } catch {}
             }
             dispatch({
@@ -306,6 +314,14 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   // Map of extensions for quick lookup strictly from user's installed extensions
   const extensionsMap = useMemo(() => {
     const map = new Map<string, Partial<ExtensionItem>>()
+    // Built-in starter extension fallback so custom folders with Entropy AI Search never render blank during network load
+    map.set('ext_entropy_search', {
+      id: 'ext_entropy_search',
+      title: 'Entropy AI Search',
+      icon: '🔮',
+      isPublished: true,
+      minPlan: 'free',
+    })
     installedExts.forEach(e => map.set(e.id, e))
     return map
   }, [installedExts])

@@ -48,6 +48,8 @@ export interface PlanLimits {
   siriLifetimeRequests: number
   /** Total voice recognition seconds per day */
   voiceSecondsPerDay: number
+  /** Maximum single audio recording / meeting summarizer duration in seconds (0 = locked) */
+  meetingSummarizerMaxSeconds: number
   /** Photo (OCR) recognitions per day — 0 = feature locked */
   photosPerDay: number
   /** Goals created per day */
@@ -56,7 +58,6 @@ export interface PlanLimits {
   chatMessagesPerDay: number
   /** CLI requests / mutations per day */
   cliRequestsPerDay: number
-  /** Shared tasks/reminders with friends require one plus+ participant */
   /** Maximum active projects */
   maxProjects: number
   /** Shared tasks/reminders with friends require one plus+ participant */
@@ -73,6 +74,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxExtensions: 5, // До 5 расширений на Базовом тарифе
     siriLifetimeRequests: 10,
     voiceSecondsPerDay: 90, // 1 мин 30 сек в день
+    meetingSummarizerMaxSeconds: 0, // Заблокировано на Free
     photosPerDay: 0,
     goalsPerDay: 5,
     chatMessagesPerDay: 10,
@@ -87,6 +89,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxExtensions: 10, // До 10 расширений на Plus
     siriLifetimeRequests: 100, // 100 запросов Siri в день
     voiceSecondsPerDay: 900, // 15 минут в день
+    meetingSummarizerMaxSeconds: 0, // Доступно только в Pro и Corp
     photosPerDay: 25,
     goalsPerDay: 25,
     chatMessagesPerDay: 150,
@@ -101,6 +104,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxExtensions: 50, // До 50 расширений на Pro
     siriLifetimeRequests: 500, // 500 запросов Siri в день
     voiceSecondsPerDay: 7200, // 2 часа голоса в день
+    meetingSummarizerMaxSeconds: 3600, // 1 час (60 мин) аудио встречи
     photosPerDay: 200,
     goalsPerDay: 100,
     chatMessagesPerDay: 1000, // 1000 запросов к ИИ в день
@@ -115,6 +119,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxExtensions: UNLIMITED, // Безлимитно на Corp
     siriLifetimeRequests: 25000,
     voiceSecondsPerDay: 28800, // 8 часов голоса в день (на команду из ~4 человек)
+    meetingSummarizerMaxSeconds: 14400, // 4 часа аудио встречи
     photosPerDay: 500,
     goalsPerDay: 500,
     chatMessagesPerDay: 4000, // 4000 запросов к ИИ в день
@@ -192,6 +197,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '1 000 активных напоминаний',
       '500 запросов Siri в день',
       '🎙 Голос: 2 часа (120 мин) в день',
+      '🎙 Audio Memo / Встречи: конспект аудиозаписей до 1 часа',
       '📷 Vision OCR: 200 распознаваний в день',
       '💬 ИИ-сообщения: 1 000 в день',
       '💻 Zerf CLI: 1 500 запросов в день',
@@ -218,6 +224,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '5 000 активных напоминаний',
       '25 000 запросов Siri в день',
       '🎙 Голос: 8 часов (480 мин) в день',
+      '🎙 Meeting Summarizer: расшифровка планёрок и митингов до 4 часов',
       '💬 ИИ-сообщения: 4 000 в день',
       '💻 Zerf CLI: 8 000 операций в день',
       '🏢 Неограниченные командные пространства (Workspaces)',

@@ -312,6 +312,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Real-Time Cross-Device Synchronization via SSE
+    try {
+      const { notifyDataChanged, broadcastToUser } = await import('@/lib/backend/sse')
+      notifyDataChanged(userCid)
+      if (sidebarConfig !== undefined) {
+        broadcastToUser(userCid, 'sidebar_config_changed', { sidebarConfig })
+      }
+    } catch {}
+
     return NextResponse.json({
       success: true,
       message: newsDisabledApplied
