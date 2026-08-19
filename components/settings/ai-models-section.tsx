@@ -13,11 +13,11 @@ interface AiModelsSectionProps {
 }
 
 const ALL_MODELS = [
-  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект для масштабных проектов и сложной логики' },
-  { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, отличное понимание структуры дел и русского языка' },
-  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', tier: 'plus', params: '20B', desc: 'Сверхбыстрый отклик (~150 мс), чистый русский язык, мгновенная обработка Siri и заметок' },
-  { id: 'groq/compound', name: 'Groq Compound', tier: 'plus', params: 'Compound', desc: 'Сбалансированная модель для комплексных вычислений' },
-  { id: 'allam-2-7b', name: 'ALLaM 2 7B Instant', tier: 'free', params: '7B', desc: 'Легковесная компактная модель (7B) для базовых задач' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Flagship', tier: 'free', params: '70B', desc: 'Флагманский максимальный интеллект, отличное понимание русского языка и сложной логики' },
+  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoning', tier: 'plus', params: '70B', desc: 'Продвинутая модель с пошаговым рассуждением и глубоким анализом' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Сверхбыстрый отклик (~150 мс), мгновенная обработка заметок и команд' },
+  { id: 'gemma2-9b-it', name: 'Gemma 2 9B (Google)', tier: 'plus', params: '9B', desc: 'Компактная сбалансированная модель от Google' },
+  { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B MoE', tier: 'plus', params: '8x7B', desc: 'Архитектура Mixture of Experts для многозадачности' },
 ]
 
 export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionProps) {
@@ -32,7 +32,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
     return m.tier === 'free'
   })
 
-  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'allam-2-7b')
+  const currentGlobalModel = settings.integrations?.aiModel || 'llama-3.3-70b-versatile'
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
@@ -342,7 +342,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 <p className="text-[11px] text-muted-foreground">Нейросеть для обработки голосовых команд через Siri и виджеты iPhone/Android</p>
               </div>
               <select
-                value={taskModels.siri || (isPlus ? 'openai/gpt-oss-20b' : 'openai/gpt-oss-20b')}
+                value={taskModels.siri || 'llama-3.1-8b-instant'}
                 onChange={(e) => handleTaskModelChange('siri' as any, e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-primary/40 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >

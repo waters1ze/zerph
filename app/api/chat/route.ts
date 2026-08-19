@@ -390,7 +390,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ content })
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[Chat API Error]:', err)
+    const msg = err instanceof Error && !err.message.includes('Groq') && !err.message.includes('Hugging')
+      ? err.message
+      : 'Сервис ИИ временно перегружен или недоступен. Пожалуйста, попробуйте чуть позже.'
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -218,10 +218,9 @@ export async function POST(req: NextRequest) {
       max_tokens: 220,
       response_format: { type: 'json_object' },
       fallbackModels: [
-        'allam-2-7b',
-        'openai/gpt-oss-20b',
-        'qwen/qwen3.6-27b',
-        'openai/gpt-oss-120b',
+        'llama-3.3-70b-versatile',
+        'llama-3.1-8b-instant',
+        'deepseek-r1-distill-llama-70b',
       ],
     })
     const rawResponse = completion.content

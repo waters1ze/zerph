@@ -340,7 +340,7 @@ export const BASE_COMMAND_REGISTRY: CommandDefinition[] = [
     usage: '/chat [@username] <текст>',
     handler: async (args, ctx) => {
       const friends = ctx.userData?.friends || []
-      const activeModel = ctx.config?.model || 'openai/gpt-oss-120b'
+      const activeModel = ctx.config?.model || 'llama-3.3-70b-versatile'
       return await handleChatCommand(`/chat ${args}`, ctx.creds, activeModel, friends)
     },
   },
@@ -503,7 +503,7 @@ export async function executeExtensionAction(
     : `Запрос для модуля «${extTitle}»: ${query}`
 
   try {
-    const activeModel = ctx.config?.model || 'openai/gpt-oss-120b'
+    const activeModel = ctx.config?.model || 'llama-3.3-70b-versatile'
     const aiRes = await sendAiQuery(ctx.creds, promptToRun, activeModel)
     return {
       ok: true,

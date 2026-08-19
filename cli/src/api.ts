@@ -166,7 +166,7 @@ export async function mutateItem(creds: ZerfCredentials, payload: any): Promise<
 export async function sendAiQuery(
   creds: ZerfCredentials,
   text: string,
-  model = 'openai/gpt-oss-120b'
+  model = 'llama-3.3-70b-versatile'
 ): Promise<{ type: 'created' | 'answer'; message: string; details?: string[] }> {
   if (!creds.token) throw new Error('Not logged in')
   const serverUrl = creds.serverUrl || DEFAULT_SERVER_URL

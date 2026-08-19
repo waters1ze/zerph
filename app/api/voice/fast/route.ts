@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     // 2. High-speed LLM instant structuring via Groq Key Pool (<250ms)
     try {
       const completion = await callGroqChatCompletion({
-        model: 'openai/gpt-oss-20b',
+        model: 'llama-3.1-8b-instant',
         messages: [
           {
             role: 'system',

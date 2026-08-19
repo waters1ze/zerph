@@ -282,10 +282,10 @@ export function ZerficAllayCompanion({
 }
 
 const AVAILABLE_MODELS = [
-  { id: 'allam-2-7b', name: 'ALLaM 2 7B Live', desc: 'Компактная базовая 7B модель', minPlan: 'free' },
-  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', desc: 'Ультра-быстрый живой диалог (~150ms)', minPlan: 'plus' },
-  { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B Chat', desc: 'Глубокое понимание контекста и логики', minPlan: 'plus' },
-  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', desc: 'Флагманская сверхмощная модель Zerf', minPlan: 'pro' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Flagship', desc: 'Флагманский максимальный интеллект Zerf', minPlan: 'free' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', desc: 'Ультра-быстрый живой диалог (~150ms)', minPlan: 'free' },
+  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoning', desc: 'Глубокое пошаговое рассуждение и анализ', minPlan: 'plus' },
+  { id: 'gemma2-9b-it', name: 'Gemma 2 9B (Google)', desc: 'Сбалансированная модель от Google', minPlan: 'plus' },
 ]
 
 export function ZerficLiveView() {

@@ -5,7 +5,7 @@ import { runLocalCliBridge } from '../../local-cli.js'
 export async function handleChatCommand(
   rawText: string,
   creds: ZerfCredentials,
-  activeModel = 'openai/gpt-oss-120b',
+  activeModel = 'llama-3.3-70b-versatile',
   friends: any[] = []
 ): Promise<{ ok: boolean; message: string; details?: string[] }> {
   let text = rawText.trim()

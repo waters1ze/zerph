@@ -49,8 +49,8 @@ export interface AiModelOption {
 }
 
 export const CLOUD_MODELS: AiModelOption[] = [
-  { id: 'openai/gpt-oss-120b', name: 'OpenAI GPT-OSS 120B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
-  { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', desc: 'Флагман скорости и глубокой логики (120–200 мс)', type: 'cloud' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B', desc: 'Молниеносный отклик для быстрых задач', type: 'cloud' },
   { id: 'groq/compound', name: 'Groq Compound Router', desc: 'Авто-роутинг оптимальной модели под контекст', type: 'cloud' },
   { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B Instant', desc: 'Лёгкая модель для быстрых сводок и заметок', type: 'cloud' },
 ]

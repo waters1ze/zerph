@@ -19,23 +19,23 @@ import { normalizePlan } from '@/lib/plans'
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
 
 export const FREE_ALLOWED_MODELS = [
-  'allam-2-7b',
-  'openai/gpt-oss-20b',
-  'groq/compound-mini',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'deepseek-r1-distill-llama-70b',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
 ]
 
 export const PLUS_ALLOWED_MODELS = [
-  'qwen/qwen3.6-27b',
-  'openai/gpt-oss-20b',
-  'groq/compound',
-  'allam-2-7b',
+  'llama-3.3-70b-versatile',
+  'deepseek-r1-distill-llama-70b',
+  'llama-3.1-8b-instant',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
 ]
 
 /**
- * Model allocation based on subscription tier:
- * - Free: Compact 7B model (ALLaM 2 7B) and fast 20B
- * - Plus (99 ₽): Advanced models (Qwen 3.6 27B, GPT-OSS 20B, Compound)
- * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, Qwen 27B, etc.) and per-task custom routing
+ * Model allocation based on subscription tier
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -45,27 +45,19 @@ export function getModelForUserPlan(
   const norm = normalizePlan(plan)
   const req = requestedModel?.trim()
 
-  // Pro & Corp: full freedom to use ANY model for each task
   if (norm === 'pro' || norm === 'corp') {
     if (req && KNOWN_GROQ_CHAT_MODELS.has(req)) return req
-    if (taskKind === 'siri' || taskKind === 'voice') return 'openai/gpt-oss-20b'
-    if (taskKind === 'extensions') return 'openai/gpt-oss-120b'
-    return 'openai/gpt-oss-120b'
+    if (taskKind === 'siri' || taskKind === 'voice') return 'llama-3.1-8b-instant'
+    return 'llama-3.3-70b-versatile'
   }
 
-  // Plus: up to 27B (Qwen 3.6 27B, GPT-OSS 20B)
   if (norm === 'plus') {
-    if (req && PLUS_ALLOWED_MODELS.includes(req)) {
-      return req
-    }
-    return 'qwen/qwen3.6-27b'
+    if (req && PLUS_ALLOWED_MODELS.includes(req)) return req
+    return 'llama-3.3-70b-versatile'
   }
 
-  // Free: compact ALLaM 2 7B by default
-  if (req && FREE_ALLOWED_MODELS.includes(req)) {
-    return req
-  }
-  return 'allam-2-7b'
+  if (req && FREE_ALLOWED_MODELS.includes(req)) return req
+  return 'llama-3.3-70b-versatile'
 }
 
 interface KeyStatus {
@@ -93,13 +85,13 @@ export function stripThinkingTags(raw: string): string {
 }
 
 const KNOWN_GROQ_CHAT_MODELS = new Set([
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'qwen/qwen3.6-27b',
-  'groq/compound',
-  'groq/compound-mini',
-  'allam-2-7b',
-  'canopylabs/orpheus-v1-english',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'deepseek-r1-distill-llama-70b',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
 ])
 
 export function normalizeGroqChatModel(model?: string): string {
@@ -108,19 +100,19 @@ export function normalizeGroqChatModel(model?: string): string {
   if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) return trimmed
   
   const lower = trimmed.toLowerCase()
-  if (lower.includes('120b') || lower.includes('flagship') || lower.includes('pro') || lower.includes('70b') || lower.includes('deepseek') || lower.includes('r1')) {
-    return 'openai/gpt-oss-120b'
+  if (lower.includes('deepseek') || lower.includes('r1')) {
+    return 'deepseek-r1-distill-llama-70b'
   }
-  if (lower.includes('qwen') || lower.includes('3.6') || lower.includes('2.5') || lower.includes('27b')) {
-    return 'qwen/qwen3.6-27b'
+  if (lower.includes('8b') || lower.includes('instant') || lower.includes('fast') || lower.includes('mini') || lower.includes('20b')) {
+    return 'llama-3.1-8b-instant'
   }
-  if (lower.includes('compound-mini') || lower.includes('mini')) {
-    return 'openai/gpt-oss-20b'
+  if (lower.includes('gemma')) {
+    return 'gemma2-9b-it'
   }
-  if (lower.includes('compound')) {
-    return 'groq/compound'
+  if (lower.includes('mixtral')) {
+    return 'mixtral-8x7b-32768'
   }
-  return 'openai/gpt-oss-20b'
+  return 'llama-3.3-70b-versatile'
 }
 
 export function normalizeGroqWhisperModel(model?: string): string {
@@ -331,11 +323,11 @@ export async function callGroqChatCompletion(options: {
 
   const requestedModel = normalizeGroqChatModel(options.model)
   const defaultFallbacks = [
-    'openai/gpt-oss-20b',
-    'openai/gpt-oss-120b',
-    'qwen/qwen3.6-27b',
-    'groq/compound',
-    'allam-2-7b',
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'deepseek-r1-distill-llama-70b',
+    'gemma2-9b-it',
+    'mixtral-8x7b-32768',
   ]
   const normalizedFallbacks = (options.fallbackModels !== undefined && options.fallbackModels.length > 0)
     ? options.fallbackModels.map(m => normalizeGroqChatModel(m))
@@ -498,7 +490,7 @@ export async function callGroqChatCompletion(options: {
     }
   }
 
-  throw lastError || new Error('All Groq keys and Hugging Face fallback models failed.')
+  throw lastError || new Error('ИИ временно перегружен или недоступен. Пожалуйста, повторите попытку чуть позже.')
 }
 
 /**

@@ -1120,10 +1120,10 @@ async function processText(chatId: number, text: string) {
     const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
     const extensionsContext = await getUserExtensionsAIContext(chatId)
     const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext, extensionsContext)
-
     await saveAndRespondParsedItems(chatId, items)
   } catch (err: unknown) {
-    await send(chatId, `❌ Ошибка: ${String(err).slice(0, 200)}`)
+    console.error('[handleAiCommand error]:', err)
+    await send(chatId, `⚠️ *ИИ временно перегружен или недоступен.*\n\nПожалуйста, повторите запрос чуть позже.`)
   }
 }
 
@@ -1807,7 +1807,8 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
     const isConversational = items.some((i: any) => i.type === 'answer' || i.action === 'reply')
     sendVoiceResponse(chatId, spokenText, isConversational).catch(() => {})
   } catch (err: unknown) {
-    await send(chatId, `Ошибка: ${String(err).slice(0, 200)}`)
+    console.error('[handleVoiceMessage error]:', err)
+    await send(chatId, `⚠️ *ИИ временно перегружен или недоступен.*\n\nПожалуйста, повторите голосовое сообщение чуть позже.`)
   }
 }
 

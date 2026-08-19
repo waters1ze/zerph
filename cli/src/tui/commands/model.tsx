@@ -6,10 +6,10 @@ import { detectInstalledClis, type DetectedCli } from '../../local-cli.js'
 import { loadConfig, saveConfig } from '../../api.js'
 
 export const CLOUD_MODELS = [
-  { id: 'openai/gpt-oss-120b', name: 'openai/gpt-oss-120b', desc: 'Флагман · максимальный интеллект' },
-  { id: 'openai/gpt-oss-20b', name: 'openai/gpt-oss-20b', desc: 'Быстрый отклик' },
-  { id: 'groq/compound', name: 'groq/compound', desc: 'Авто-роутинг — выбирает оптимальную модель' },
-  { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'meta-llama/Llama-3.1-8B', desc: 'Лёгкая, для быстрых задач' },
+  { id: 'llama-3.3-70b-versatile', name: 'llama-3.3-70b', desc: 'Флагман · максимальный интеллект' },
+  { id: 'llama-3.1-8b-instant', name: 'llama-3.1-8b', desc: 'Быстрый отклик (~150ms)' },
+  { id: 'deepseek-r1-distill-llama-70b', name: 'deepseek-r1-70b', desc: 'Глубокое рассуждение и анализ' },
+  { id: 'gemma2-9b-it', name: 'gemma2-9b', desc: 'Сбалансированная модель от Google' },
 ]
 
 export function ModelScreen({ onSelect }: { onSelect?: (modelId: string, name: string) => void }) {
