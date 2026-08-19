@@ -29,53 +29,73 @@ export interface ZerfikVoiceProfile {
 export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   {
     id: 'zerfik_original',
-    name: 'Зерфик (Оригинал / Тихоня)',
-    subtitle: 'Звонкий, милый, дружелюбный',
+    name: 'Зерфик (Тихоня / Магический)',
+    subtitle: 'Звонкий, светлый, дружелюбный',
     tag: 'Фирменный',
     gender: 'male',
-    pitch: 1.24,
+    pitch: 1.45,
     rate: 1.05,
-    description: 'Фирменный светлый и живой голос Зерфика-Тихони для тёплого дружеского общения.',
+    description: 'Звонкий и светлый тембр духа-Тихони для волшебной и дружеской атмосферы.',
   },
   {
     id: 'zerfik_friend',
-    name: 'Зерфик (Разговорный друг)',
-    subtitle: 'Естественный, живой, с юмором',
+    name: 'Зерфик (Живой друг)',
+    subtitle: 'Естественный, живой, разговорный',
     tag: 'Человек',
     gender: 'male',
-    pitch: 1.0,
+    pitch: 0.95,
     rate: 1.08,
-    description: 'Живая человеческая речь, разговорные связки и быстрый диалог без роботоподобности.',
+    description: 'Естественная человеческая речь, разговорный стиль и быстрый диалог без роботоподобности.',
   },
   {
     id: 'alex_baritone',
-    name: 'Алекс (Эрудит / Бас)',
-    subtitle: 'Спокойный, глубокий и бархатный',
-    tag: 'Баритон',
+    name: 'Алекс (Бархатный бас)',
+    subtitle: 'Глубокий, плотный мужской баритон',
+    tag: 'Бас',
     gender: 'male',
-    pitch: 0.76,
-    rate: 0.94,
-    description: 'Глубокий бархатный тембр для спокойного разбора дня и вдумчивых советов.',
+    pitch: 0.55,
+    rate: 0.88,
+    description: 'Глубокий бархатный мужской бас для спокойного разбора дня и солидных ответов.',
+  },
+  {
+    id: 'viktor_brutal',
+    name: 'Виктор (Суровый командир)',
+    subtitle: 'Грубый, низкий, с хрипотцой',
+    tag: 'Брутал',
+    gender: 'male',
+    pitch: 0.45,
+    rate: 0.92,
+    description: 'Суровый, низкий и грубый мужской голос для дисциплины и железной продуктивности.',
   },
   {
     id: 'dmitry_business',
     name: 'Дмитрий (Коуч / Драйв)',
-    subtitle: 'Энергичный, мотивирующий, быстрый',
-    tag: 'Энергия',
+    subtitle: 'Энергичный, мотивирующий, четкий',
+    tag: 'Драйв',
     gender: 'male',
-    pitch: 1.06,
-    rate: 1.22,
-    description: 'Динамичный и чёткий темп для продуктивного тайм-менеджмента и фокуса.',
+    pitch: 0.72,
+    rate: 1.20,
+    description: 'Динамичный и напористый мужской тембр для тайм-менеджмента и продуктивного фокуса.',
   },
   {
     id: 'alisa_soft',
-    name: 'Алиса (Мягкий / Светлый)',
-    subtitle: 'Нежный, женский, умиротворяющий',
-    tag: 'Мягкий',
+    name: 'Алиса (Нежный / Мягкий)',
+    subtitle: 'Светлый, женский, умиротворяющий',
+    tag: 'Нежный',
     gender: 'female',
-    pitch: 1.30,
+    pitch: 1.32,
     rate: 1.02,
     description: 'Приятный женский голос с мягкими интонациями для уютных разговоров.',
+  },
+  {
+    id: 'elena_business',
+    name: 'Елена (Деловой / Четкий)',
+    subtitle: 'Уверенный, структурный, женский',
+    tag: 'Бизнес',
+    gender: 'female',
+    pitch: 1.02,
+    rate: 1.10,
+    description: 'Четкий и выразительный женский голос персонального бизнес-ассистента.',
   },
 ]
 
@@ -183,6 +203,25 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     }
   }, [isActive, isSpeaking, isThinking, isListening, statusText, interimText])
 
+  const browserVoicesRef = useRef<SpeechSynthesisVoice[]>([])
+
+  // Preload and cache browser synthesizer voices
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices()
+      if (v && v.length > 0) {
+        browserVoicesRef.current = v
+      }
+    }
+
+    loadVoices()
+    window.speechSynthesis.onvoiceschanged = loadVoices
+    const timer = setTimeout(loadVoices, 300)
+    return () => clearTimeout(timer)
+  }, [])
+
   const selectedVoice = useMemo(() => {
     return ZERFIK_VOICE_PROFILES.find(v => v.id === selectedVoiceId) || ZERFIK_VOICE_PROFILES[0]
   }, [selectedVoiceId])
@@ -198,7 +237,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     isInterruptedRef.current = true
   }, [])
 
-  // Speech synthesis
+  // Speech synthesis with distinct timbres and pitch modulation
   const speakText = useCallback((textToSpeak: string) => {
     if (typeof window === 'undefined') return
     stopSpeaking()
@@ -214,31 +253,35 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       utterance.volume = isMuted ? 0 : voiceVolume
       utterance.lang = 'ru-RU'
 
-      const voices = window.speechSynthesis.getVoices()
-      const ruVoices = voices.filter(v => v.lang.startsWith('ru') || v.lang.startsWith('RU'))
+      let voices = browserVoicesRef.current
+      if (!voices || voices.length === 0) {
+        voices = window.speechSynthesis.getVoices() || []
+      }
+      const ruVoices = voices.filter(v => v.lang.toLowerCase().startsWith('ru'))
 
       if (ruVoices.length > 0) {
         if (selectedVoice.gender === 'female') {
-          const femaleVoice = ruVoices.find(v =>
-            v.name.toLowerCase().includes('irina') ||
-            v.name.toLowerCase().includes('tatiana') ||
-            v.name.toLowerCase().includes('svetlana') ||
-            v.name.toLowerCase().includes('alisa') ||
-            v.name.toLowerCase().includes('female')
-          ) || ruVoices[0]
+          const femaleVoice = ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('irina') || n.includes('tatiana') || n.includes('svetlana') || n.includes('alisa') || n.includes('dariya') || n.includes('female')
+          }) || ruVoices[0]
           utterance.voice = femaleVoice
-        } else if (selectedVoice.id === 'alex_baritone') {
-          const bassVoice = ruVoices.find(v =>
-            v.name.toLowerCase().includes('dmitry') ||
-            v.name.toLowerCase().includes('aleksandr')
-          ) || ruVoices[0]
-          utterance.voice = bassVoice
+        } else if (selectedVoice.id === 'alex_baritone' || selectedVoice.id === 'viktor_brutal' || selectedVoice.id === 'dmitry_business') {
+          // Deep male voice priority: Dmitry, Aleksandr, Ivan, Boris, Male
+          const deepMale = ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('dmitry') || n.includes('aleksandr') || n.includes('ivan') || n.includes('boris')
+          }) || ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return !n.includes('irina') && !n.includes('tatiana') && !n.includes('svetlana') && !n.includes('female') && !n.includes('alisa')
+          }) || ruVoices[0]
+          utterance.voice = deepMale
         } else {
-          const maleVoice = ruVoices.find(v =>
-            v.name.toLowerCase().includes('pavel') ||
-            v.name.toLowerCase().includes('male') ||
-            v.name.toLowerCase().includes('русский')
-          ) || ruVoices[0]
+          // Standard / High male voices
+          const maleVoice = ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('pavel') || n.includes('male') || n.includes('русский')
+          }) || ruVoices[0]
           utterance.voice = maleVoice
         }
       }
