@@ -352,25 +352,53 @@ export function buildGraphData(
     })
   })
 
-  // 5. Add Tags as Graph Nodes
+  // 5. Add Tags as Graph Nodes (Only meaningful multi-item tags when hideOrphanTags is enabled)
   if (showTags) {
     const tagToNodeId = new Map<string, string>()
     const tagSources: Array<{ id: string; tags?: string[] }> = [...candidateNotes]
-    if (showTasks && tasks) {
-      tagSources.push(...tasks.filter(t => t.status !== 'draft').map(t => ({ id: `task_${t.id}`, tags: t.tags })))
+    if (showTasks && tasks && tasks.length > 0) {
+      tagSources.push(
+        ...tasks
+          .filter(t => t && t.id && t.title && t.status !== 'draft' && t.status !== 'done' && !(t as any).deleted)
+          .filter(t => existingNodeIds.has(`task_${t.id}`))
+          .map(t => ({ id: `task_${t.id}`, tags: t.tags }))
+      )
     }
 
+    // Count how many unique active notes/tasks contain each tag
+    const tagItemCounts = new Map<string, Set<string>>()
     tagSources.forEach(item => {
+      if (!existingNodeIds.has(item.id)) return
       (item.tags || []).forEach(tag => {
-        const cleanTag = tag.trim().replace(/^#/, '')
+        const cleanTag = tag.trim().replace(/^#/, '').toLowerCase()
         if (!cleanTag) return
-        const tagNodeId = `tag_${cleanTag.toLowerCase()}`
+        const set = tagItemCounts.get(cleanTag) || new Set<string>()
+        set.add(item.id)
+        tagItemCounts.set(cleanTag, set)
+      })
+    })
 
-        if (!tagToNodeId.has(cleanTag.toLowerCase())) {
-          tagToNodeId.set(cleanTag.toLowerCase(), tagNodeId)
+    tagSources.forEach(item => {
+      if (!existingNodeIds.has(item.id)) return
+      (item.tags || []).forEach(tag => {
+        const rawClean = tag.trim().replace(/^#/, '')
+        const cleanTag = rawClean.toLowerCase()
+        if (!cleanTag) return
+
+        const uniqueItemsCount = tagItemCounts.get(cleanTag)?.size || 0
+
+        // If hideOrphanTags is enabled: only create a tag node if it connects >= 2 distinct items
+        if (hideOrphanTags && uniqueItemsCount < 2) {
+          return // Skip isolated, dead, single-item tags completely!
+        }
+
+        const tagNodeId = `tag_${cleanTag}`
+
+        if (!tagToNodeId.has(cleanTag)) {
+          tagToNodeId.set(cleanTag, tagNodeId)
           const customColor = matchColorGroup({
             id: tagNodeId,
-            title: `#${cleanTag}`,
+            title: `#${rawClean}`,
             type: 'tag',
             color: '',
             connectionCount: 0,
@@ -378,11 +406,12 @@ export function buildGraphData(
 
           nodes.push({
             id: tagNodeId,
-            title: `#${cleanTag}`,
+            title: `#${rawClean}`,
             type: 'tag',
             color: customColor || '#a855f7', // Purple for tags
             connectionCount: 0,
           })
+          existingNodeIds.add(tagNodeId)
         }
 
         const edgeKey = [item.id, tagNodeId].sort().join(':::')
@@ -438,59 +467,19 @@ export function buildGraphData(
     counts.set(e.target, (counts.get(e.target) || 0) + 1)
   })
 
-  // Map each tag to its connected neighbor node IDs
-  const tagNeighbors = new Map<string, string[]>()
-  edges.forEach(e => {
-    if (e.type === 'tag') {
-      if (e.source.startsWith('tag_')) {
-        const list = tagNeighbors.get(e.source) || []
-        list.push(e.target)
-        tagNeighbors.set(e.source, list)
-      }
-      if (e.target.startsWith('tag_')) {
-        const list = tagNeighbors.get(e.target) || []
-        list.push(e.source)
-        tagNeighbors.set(e.target, list)
-      }
+  // Filter out any leftover isolated tag nodes with 0 connections
+  const finalNodes = nodes.filter(n => {
+    if (n.type === 'tag') {
+      return (counts.get(n.id) || 0) >= (hideOrphanTags ? 2 : 1)
     }
+    return true
   })
-
-  // Filter out disconnected/orphan tags and single-item dead tag pairs if hideOrphanTags is enabled (default: true)
-  let finalNodes = nodes
-  if (hideOrphanTags) {
-    finalNodes = nodes.filter(n => {
-      if (n.type === 'tag') {
-        const connectionCount = counts.get(n.id) || 0
-        if (connectionCount === 0) return false
-        // If a tag connects to only 1 item, but that item has no other connections in the graph, it's a dead island — prune it!
-        if (connectionCount === 1) {
-          const neighbors = tagNeighbors.get(n.id) || []
-          const singleNeighborId = neighbors[0]
-          if (singleNeighborId) {
-            const neighborTotalConnections = counts.get(singleNeighborId) || 0
-            // If the neighbor only has this single tag connection (total connections <= 1), hide this dead tag
-            if (neighborTotalConnections <= 1) {
-              return false
-            }
-          }
-        }
-      }
-      return true
-    })
-  }
 
   const validFinalNodeIds = new Set(finalNodes.map(n => n.id))
   const finalEdges = edges.filter(e => validFinalNodeIds.has(e.source) && validFinalNodeIds.has(e.target))
 
-  // Recompute final connection counts after pruning
-  const finalCounts = new Map<string, number>()
-  finalEdges.forEach(e => {
-    finalCounts.set(e.source, (finalCounts.get(e.source) || 0) + 1)
-    finalCounts.set(e.target, (finalCounts.get(e.target) || 0) + 1)
-  })
-
   finalNodes.forEach(n => {
-    n.connectionCount = finalCounts.get(n.id) || 0
+    n.connectionCount = counts.get(n.id) || 0
     if (n.type === 'tag') {
       n.radius = Math.max(4, Math.min(14, 4 + n.connectionCount * 1.8))
     } else if (n.type === 'folder') {
