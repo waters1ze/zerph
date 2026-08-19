@@ -239,6 +239,7 @@ export interface UserSettings {
       reschedule?: string
       analytics?: string
       siri?: string
+      extensions?: string
     }
     siriMode?: 'fast' | 'full'
   }

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Brain, Sparkles, Lock, Check, Zap, MessageSquare, ListTodo, Target, RotateCcw, BarChart2, Mic, Crown, Cpu, Terminal, Key, Eye, EyeOff, ExternalLink } from 'lucide-react'
+import { Brain, Sparkles, Lock, Check, Zap, MessageSquare, ListTodo, Target, RotateCcw, BarChart2, Mic, Crown, Cpu, Terminal, Key, Eye, EyeOff, ExternalLink, Puzzle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings, getAuthHeaders } from '@/lib/store'
 import { PlanId } from '@/lib/plans'
@@ -28,6 +28,12 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
   const isProOrCorp = userPlan === 'pro' || userPlan === 'corp'
   const isPlus = userPlan === 'plus'
   const isFree = userPlan === 'free'
+
+  const availableModelsForPlan = ALL_MODELS.filter(m => {
+    if (isProOrCorp) return true
+    if (isPlus) return m.tier === 'plus' || m.tier === 'free'
+    return m.tier === 'free'
+  })
 
   const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'llama-3.1-8b-instant')
   const taskModels = settings.integrations?.aiTaskModels || {}
@@ -57,7 +63,8 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
       return
     }
     // Prevent Plus users from selecting Pro-only models
-    if (isPlus && (modelId === 'openai/gpt-oss-120b' || modelId === 'llama-3.3-70b-versatile' || modelId === 'openai/gpt-oss-20b' || modelId === 'groq/compound')) {
+    const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
+    if (isPlus && selectedMeta?.tier === 'pro') {
       if (onUpgradeClick) onUpgradeClick()
       return
     }
@@ -72,8 +79,18 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
     showSaved()
   }
 
-  const handleTaskModelChange = (taskKey: 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'siri', modelId: string) => {
-    if (!isProOrCorp) return
+  const handleTaskModelChange = (taskKey: 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'siri' | 'extensions', modelId: string) => {
+    if (!isProOrCorp && !isPlus) {
+      if (onUpgradeClick) onUpgradeClick()
+      return
+    }
+
+    const selectedMeta = ALL_MODELS.find(m => m.id === modelId)
+    if (isPlus && selectedMeta?.tier === 'pro') {
+      if (onUpgradeClick) onUpgradeClick()
+      return
+    }
+
     const nextTaskModels = {
       ...taskModels,
       [taskKey]: modelId,
@@ -101,7 +118,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-bold text-foreground">
-              {isProOrCorp ? '👑 Режим Pro & Corp: Полная кастомизация ИИ' : isPlus ? '⚡ Режим Plus: 3 модели ИИ (до 27B)' : '🆓 Базовый режим: 2 легковесные модели (до 8B)'}
+              {isProOrCorp ? '👑 Режим Pro & Corp: Полная кастомизация ИИ' : isPlus ? '⚡ Режим Plus: Выбор моделей до 27B' : '🆓 Базовый режим: 2 легковесные модели (до 8B)'}
             </h4>
             <span className={cn(
               "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
@@ -112,9 +129,9 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {isProOrCorp
-              ? 'Вам доступен выбор любой нейросети под каждый тип задач отдельно, а также максимальный приоритет и кастомные системные промпты.'
+              ? 'Вам доступен выбор любой нейросети под каждый тип задач и расширений отдельно, а также максимальный приоритет и кастомные системные промпты.'
               : isPlus
-              ? 'Вам доступна продвинутая модель Qwen 3.6 27B + легкие модели. Оформите Pro для раздельной настройки моделей по каждой задаче!'
+              ? 'Вам доступен выбор моделей до 27 млрд параметров (Qwen 3.6 27B, GPT-OSS 20B Fast) для расширений и задач. Оформите Pro для доступа к флагманам 120B и DeepSeek R1!'
               : 'На бесплатном тарифе доступны 2 легковесные модели до 8 млрд параметров (Llama 3.1 8B Instant и Compound Mini).'}
           </p>
         </div>
@@ -147,13 +164,13 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
       </div>
 
       {/* Mode 1: Free & Plus Single Global Model Selector */}
-      {(!isProOrCorp) && (
+      {(!isProOrCorp && !isPlus) && (
         <div className="space-y-3">
           <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground px-1">
             Выбор основной ИИ-модели для задач и чата
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Llama 3.1 8B Instant (Free & Plus) */}
+            {/* Llama 3.1 8B Instant (Free) */}
             <button
               type="button"
               onClick={() => handleGlobalModelChange('llama-3.1-8b-instant')}
@@ -176,7 +193,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">8 млрд параметров</span>
             </button>
 
-            {/* Groq Compound Mini (Free & Plus) */}
+            {/* Groq Compound Mini (Free) */}
             <button
               type="button"
               onClick={() => handleGlobalModelChange('groq/compound-mini')}
@@ -198,59 +215,22 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
               <p className="text-[11px] text-muted-foreground">Компактная оптимизированная нейросеть для быстрых задач</p>
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">Легковесная</span>
             </button>
-
-            {/* Qwen 3.6 27B (Available on Plus, Locked on Free) */}
-            <button
-              type="button"
-              onClick={() => {
-                if (isPlus) {
-                  handleGlobalModelChange('qwen/qwen3.6-27b')
-                } else if (onUpgradeClick) {
-                  onUpgradeClick()
-                }
-              }}
-              className={cn(
-                "p-3.5 rounded-2xl border text-left flex flex-col justify-between space-y-2 transition-all sm:col-span-2",
-                isPlus && currentGlobalModel === 'qwen/qwen3.6-27b'
-                  ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/40"
-                  : isPlus
-                  ? "border-border bg-card hover:border-border/80 hover:bg-accent/40 cursor-pointer"
-                  : "border-border/60 bg-muted/40 opacity-75 cursor-pointer"
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-foreground">Qwen 3.6 27B</span>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                    {isPlus ? 'Рекомендуется' : 'Продвинутая'}
-                  </span>
-                </div>
-                {isPlus && currentGlobalModel === 'qwen/qwen3.6-27b' ? (
-                  <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5" />
-                  </span>
-                ) : !isPlus ? (
-                  <span className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Тариф Plus (99 ₽)
-                  </span>
-                ) : null}
-              </div>
-              <p className="text-[11px] text-muted-foreground">Продвинутая модель с мощной логикой, глубоким пониманием дел и точным структурированием расписания</p>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground w-fit">27 млрд параметров</span>
-            </button>
           </div>
         </div>
       )}
 
-      {/* Mode 2: Pro & Corp Per-Task Customization */}
-      {isProOrCorp ? (
+      {/* Per-Task Customization for Pro, Corp & Plus */}
+      {(isProOrCorp || isPlus) ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
               Индивидуальная настройка нейросетей по типам задач
             </h4>
-            <span className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Без ограничений
+            <span className={cn(
+              "text-[10px] font-bold flex items-center gap-1",
+              isProOrCorp ? "text-amber-500" : "text-primary"
+            )}>
+              <Sparkles className="w-3 h-3" /> {isProOrCorp ? 'Без ограничений' : 'Тариф Plus (до 27B)'}
             </span>
           </div>
 
@@ -269,7 +249,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 onChange={(e) => handleTaskModelChange('chat', e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {ALL_MODELS.map(m => (
+                {availableModelsForPlan.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
                 ))}
               </select>
@@ -289,7 +269,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 onChange={(e) => handleTaskModelChange('parser', e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {ALL_MODELS.map(m => (
+                {availableModelsForPlan.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
                 ))}
               </select>
@@ -309,7 +289,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 onChange={(e) => handleTaskModelChange('goals', e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {ALL_MODELS.map(m => (
+                {availableModelsForPlan.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
                 ))}
               </select>
@@ -329,7 +309,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 onChange={(e) => handleTaskModelChange('reschedule', e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {ALL_MODELS.map(m => (
+                {availableModelsForPlan.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
                 ))}
               </select>
@@ -349,30 +329,52 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 onChange={(e) => handleTaskModelChange('analytics', e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {ALL_MODELS.map(m => (
+                {availableModelsForPlan.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
                 ))}
               </select>
             </div>
 
             {/* 6. Siri & Voice Shortcuts */}
-            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-primary/5">
+            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <Mic className="w-4 h-4 text-primary" />
                   <span className="text-xs font-bold text-foreground">Siri & Action Button (Быстрые команды)</span>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20">
-                    Голос
-                  </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">Нейросеть для обработки голосовых команд через Siri и виджеты iPhone/Android</p>
               </div>
               <select
-                value={taskModels.siri || 'openai/gpt-oss-20b'}
+                value={taskModels.siri || (isPlus ? 'openai/gpt-oss-20b' : 'openai/gpt-oss-20b')}
                 onChange={(e) => handleTaskModelChange('siri' as any, e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-primary/40 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {ALL_MODELS.map(m => (
+                {availableModelsForPlan.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 7. Extensions & Custom Plugins AI Core */}
+            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-purple-500/5">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Puzzle className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-bold text-foreground">ИИ-ядро расширений и плагинов</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                    Расширения
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Нейросеть для обработки команд, инструкций и генерации контента в установленных расширениях и виджетах
+                </p>
+              </div>
+              <select
+                value={taskModels.extensions || (isPlus ? 'qwen/qwen3.6-27b' : currentGlobalModel)}
+                onChange={(e) => handleTaskModelChange('extensions', e.target.value)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-purple-500/40 text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer max-w-[220px]"
+              >
+                {availableModelsForPlan.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
                 ))}
               </select>

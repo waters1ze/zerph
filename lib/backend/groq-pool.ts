@@ -16,7 +16,7 @@
 import { GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
 import { normalizePlan } from '@/lib/plans'
 
-export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri'
+export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
 
 export const FREE_ALLOWED_MODELS = [
   'llama-3.1-8b-instant',
@@ -25,6 +25,7 @@ export const FREE_ALLOWED_MODELS = [
 
 export const PLUS_ALLOWED_MODELS = [
   'qwen/qwen3.6-27b',
+  'openai/gpt-oss-20b',
   'llama-3.1-8b-instant',
   'groq/compound-mini',
 ]
@@ -32,8 +33,8 @@ export const PLUS_ALLOWED_MODELS = [
 /**
  * Model allocation based on subscription tier:
  * - Free: Strictly limited to lightweight models <= 8B (Llama 3.1 8B Instant, Compound Mini)
- * - Plus (99 ₽): Models up to 27B (Qwen 3.6 27B, Llama 3.1 8B Instant)
- * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, GPT-OSS 20B, Llama 3.3 70B, etc.) and per-task custom routing
+ * - Plus (99 ₽): Models up to 27B (Qwen 3.6 27B, GPT-OSS 20B, Llama 3.1 8B Instant)
+ * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, DeepSeek R1, Llama 3.3 70B, etc.) and per-task custom routing
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -47,12 +48,13 @@ export function getModelForUserPlan(
   if (norm === 'pro' || norm === 'corp') {
     if (req) return req
     if (taskKind === 'siri' || taskKind === 'voice') return 'openai/gpt-oss-20b'
+    if (taskKind === 'extensions') return 'openai/gpt-oss-120b'
     return 'openai/gpt-oss-120b'
   }
 
-  // Plus: up to 27B (Qwen 3.6 27B or Llama 3.1 8B)
+  // Plus: up to 27B (Qwen 3.6 27B, GPT-OSS 20B, Llama 3.1 8B)
   if (norm === 'plus') {
-    if (req && (PLUS_ALLOWED_MODELS.includes(req) || req === 'qwen/qwen3.6-27b' || req === 'llama-3.1-8b-instant' || req === 'groq/compound-mini')) {
+    if (req && (PLUS_ALLOWED_MODELS.includes(req) || req === 'qwen/qwen3.6-27b' || req === 'openai/gpt-oss-20b' || req === 'llama-3.1-8b-instant' || req === 'groq/compound-mini')) {
       return req
     }
     return 'qwen/qwen3.6-27b'
