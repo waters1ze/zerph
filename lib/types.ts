@@ -170,12 +170,25 @@ export interface SharedTask extends Task {
   collaborators: string[]
 }
 
+export interface ChatAction {
+  type: 'task_created' | 'goal_created' | 'note_created' | 'task_completed' | 'task_deleted' | 'task_updated' | 'stats_summary' | 'schedule_view'
+  targetId?: string
+  targetType?: 'today' | 'tasks' | 'goals' | 'notes' | 'calendar' | 'stats' | 'friends' | 'clock'
+  title?: string
+  priority?: string
+  dueTime?: string | null
+  dueDate?: string | null
+  tags?: string[]
+  item?: any
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   createdAt: string
   references?: string[]
+  action?: ChatAction
 }
 
 export interface UserSettings {

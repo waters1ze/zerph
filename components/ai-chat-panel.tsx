@@ -7,7 +7,11 @@ import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Send, Sparkles, Bot, User, Loader2, X, ChevronLeft, AlertCircle, Mic, Terminal, Paperclip, Image as ImageIcon } from 'lucide-react'
+import {
+  Send, Sparkles, Bot, User, Loader2, X, ChevronLeft, AlertCircle,
+  Mic, Terminal, Paperclip, Image as ImageIcon, ArrowRight, ArrowUpRight,
+  CheckCircle2, Target, Calendar as CalendarIcon, FileText, BarChart3
+} from 'lucide-react'
 import type { ChatMessage } from '@/lib/types'
 
 const QUICK_PROMPTS = [
@@ -29,7 +33,7 @@ const COMMANDS = [
 ]
 
 export function AiChatPanel() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, syncData } = useApp()
   const isOpen = state.isChatOpen
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
@@ -94,13 +98,13 @@ export function AiChatPanel() {
   }
 
   const selectCommand = (cmd: string) => {
-    setInput(cmd + ' ')
+    setInput(cmd)
     setShowCommands(false)
-    inputRef.current?.focus()
+    send(cmd)
   }
 
-  const send = async () => {
-    const text = input.trim()
+  const send = async (overrideText?: string) => {
+    const text = (overrideText !== undefined ? overrideText : input).trim()
     if ((!text && !selectedImage) || isTyping) return
     setInput('')
     setShowCommands(false)
@@ -147,6 +151,11 @@ export function AiChatPanel() {
           role: 'assistant',
           content: reply,
           createdAt: new Date().toISOString(),
+          action: {
+            type: 'task_created',
+            targetType: 'tasks',
+            title: `Распознано ${tasks.length} задач`,
+          },
         }
         dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
       } catch (err: any) {
@@ -204,11 +213,25 @@ export function AiChatPanel() {
         throw new Error(data.error || 'Ошибка ИИ-ассистента')
       }
 
+      // If backend created/modified an item, reactively update client store immediately
+      if (data.action) {
+        if (data.action.type === 'task_created' && data.action.item) {
+          dispatch({ type: 'ADD_TASK', task: data.action.item })
+        } else if (data.action.type === 'goal_created' && data.action.item) {
+          dispatch({ type: 'ADD_GOAL', goal: data.action.item })
+        } else if (data.action.type === 'note_created' && data.action.item) {
+          dispatch({ type: 'ADD_NOTE', note: data.action.item })
+        } else if (data.action.type === 'task_completed' || data.action.type === 'task_deleted' || data.action.type === 'task_updated') {
+          syncData()
+        }
+      }
+
       const botMsg: ChatMessage = {
         id: `m-${Date.now()}-bot`,
         role: 'assistant',
         content: data.content,
         createdAt: new Date().toISOString(),
+        action: data.action,
       }
       dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
     } catch (err: unknown) {
@@ -331,8 +354,8 @@ export function AiChatPanel() {
               {QUICK_PROMPTS.map(prompt => (
                 <button
                   key={prompt}
-                  onClick={() => { setInput(prompt); inputRef.current?.focus() }}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all flex items-center gap-1"
+                  onClick={() => send(prompt)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground border border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all flex items-center gap-1 cursor-pointer"
                 >
                   <span className="mono-emoji">{prompt.slice(0, 2)}</span>
                   <span>{prompt.slice(2)}</span>
@@ -360,7 +383,7 @@ export function AiChatPanel() {
                     }
                   </div>
                   <div className={cn(
-                    'max-w-[84%] rounded-2xl px-3.5 py-2.5 shadow-xs',
+                    'max-w-[84%] rounded-2xl px-3.5 py-2.5 shadow-xs flex flex-col gap-1',
                     msg.role === 'user'
                       ? 'bg-primary text-primary-foreground rounded-tr-sm'
                       : 'bg-background border border-border rounded-tl-sm'
@@ -372,6 +395,71 @@ export function AiChatPanel() {
                     ) : (
                       <p className="text-[12px] leading-relaxed">{msg.content}</p>
                     )}
+
+                    {/* Interactive Action Card & Direct 1-Click Navigation */}
+                    {msg.action && msg.role === 'assistant' && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.96, y: 4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        className="mt-2.5 p-3 rounded-2xl bg-card/90 border border-primary/30 shadow-md backdrop-blur-md flex flex-col gap-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-primary flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-primary" />
+                            {msg.action.type === 'goal_created'
+                              ? 'Цель создана'
+                              : msg.action.type === 'note_created'
+                              ? 'Заметка сохранена'
+                              : msg.action.type === 'task_completed'
+                              ? 'Выполнено'
+                              : msg.action.type === 'task_deleted'
+                              ? 'Удалено'
+                              : msg.action.type === 'stats_summary'
+                              ? 'Сводка'
+                              : 'Задача добавлена'}
+                          </span>
+                          {msg.action.priority && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-foreground">
+                              {msg.action.priority === 'urgent'
+                                ? '🔴 Срочно'
+                                : msg.action.priority === 'high'
+                                ? '🟠 Высокий'
+                                : '🟢 Средний'}
+                            </span>
+                          )}
+                        </div>
+                        {msg.action.title && (
+                          <p className="text-xs font-bold text-foreground truncate">
+                            {msg.action.title}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const targetView = msg.action?.targetType || 'tasks'
+                            dispatch({ type: 'SET_VIEW', view: targetView as any })
+                            if (window.innerWidth < 768) {
+                              dispatch({ type: 'TOGGLE_CHAT' })
+                            }
+                          }}
+                          className="mt-1 flex items-center justify-center gap-1.5 w-full py-1.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-xs cursor-pointer group"
+                        >
+                          <span>
+                            {msg.action.targetType === 'goals'
+                              ? '🎯 Открыть в Целях'
+                              : msg.action.targetType === 'notes'
+                              ? '📝 Открыть в Заметках'
+                              : msg.action.targetType === 'stats'
+                              ? '📊 Открыть Аналитику'
+                              : msg.action.targetType === 'today'
+                              ? '📅 Открыть План на сегодня'
+                              : '↗️ Перейти к задаче'}
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </button>
+                      </motion.div>
+                    )}
+
                     <p className={cn(
                       'text-[10px] mt-1',
                       msg.role === 'user' ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'
@@ -510,7 +598,7 @@ export function AiChatPanel() {
                 </motion.button>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
-                  onClick={send}
+                  onClick={() => send()}
                   disabled={(!input.trim() && !selectedImage) || isTyping}
                   className="w-6 h-6 flex items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shrink-0 mb-0.5"
                   aria-label="Отправить сообщение"

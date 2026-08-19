@@ -2,16 +2,26 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useApp } from '@/lib/store'
+import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Send, Sparkles, Bot, User, Trash2, Loader2, Paperclip, X, Image as ImageIcon } from 'lucide-react'
+import {
+  Send, Sparkles, Bot, User, Trash2, Loader2, Paperclip, X,
+  Image as ImageIcon, ArrowRight, CheckCircle2, Target, Calendar as CalendarIcon, FileText, BarChart3
+} from 'lucide-react'
 import type { ChatMessage } from '@/lib/types'
 
+const QUICK_PROMPTS = [
+  '📊 Приоритеты задач',
+  '🎯 Сводка по целям',
+  '⏰ Что просрочено?',
+  '📅 План на сегодня',
+]
+
 export function ChatView() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, syncData } = useApp()
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -54,8 +64,8 @@ export function ChatView() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const send = async () => {
-    const text = input.trim()
+  const send = async (overrideText?: string) => {
+    const text = (overrideText !== undefined ? overrideText : input).trim()
     if ((!text && !selectedImage) || isTyping) return
     setInput('')
 
@@ -73,8 +83,10 @@ export function ChatView() {
       removeImage()
 
       try {
+        const qChatId = getTgChatId() || ''
         const formData = new FormData()
         formData.append('file', curImg)
+        if (qChatId) formData.append('chatId', qChatId)
 
         const res = await fetch('/api/vision/tasks', {
           method: 'POST',
@@ -98,6 +110,11 @@ export function ChatView() {
           role: 'assistant',
           content: reply,
           createdAt: new Date().toISOString(),
+          action: {
+            type: 'task_created',
+            targetType: 'tasks',
+            title: `Распознано ${tasks.length} задач`,
+          },
         }
         dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
       } catch (err: any) {
@@ -125,6 +142,8 @@ export function ChatView() {
     setIsTyping(true)
 
     try {
+      const qChatId = getTgChatId() || ''
+
       // Build context from current state
       const context = {
         tasks: state.tasks.slice(0, 20).map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate })),
@@ -138,14 +157,31 @@ export function ChatView() {
 
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+          ...(qChatId ? { 'x-chat-id': qChatId } : {})
+        },
         body: JSON.stringify({ messages, apiKey: state.settings.integrations.groqApiKey || '', context }),
       })
 
       const data = await res.json()
 
       if (!res.ok || data.error) {
-        throw new Error(data.error || 'Unknown error')
+        throw new Error(data.error || 'Ошибка ИИ-ассистента')
+      }
+
+      // Reactive update client store if item was created/modified
+      if (data.action) {
+        if (data.action.type === 'task_created' && data.action.item) {
+          dispatch({ type: 'ADD_TASK', task: data.action.item })
+        } else if (data.action.type === 'goal_created' && data.action.item) {
+          dispatch({ type: 'ADD_GOAL', goal: data.action.item })
+        } else if (data.action.type === 'note_created' && data.action.item) {
+          dispatch({ type: 'ADD_NOTE', note: data.action.item })
+        } else if (data.action.type === 'task_completed' || data.action.type === 'task_deleted' || data.action.type === 'task_updated') {
+          syncData()
+        }
       }
 
       const botMsg: ChatMessage = {
@@ -153,6 +189,7 @@ export function ChatView() {
         role: 'assistant',
         content: data.content,
         createdAt: new Date().toISOString(),
+        action: data.action,
       }
       dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
     } catch (err: unknown) {
@@ -160,7 +197,7 @@ export function ChatView() {
       const botMsg: ChatMessage = {
         id: `m-${Date.now()}-err`,
         role: 'assistant',
-        content: `❌ **Error:** ${msg}`,
+        content: `❌ **Ошибка:** ${msg}`,
         createdAt: new Date().toISOString(),
       }
       dispatch({ type: 'ADD_CHAT_MESSAGE', message: botMsg })
@@ -177,7 +214,7 @@ export function ChatView() {
   }
 
   return (
-    <div className="flex flex-col h-full max-w-2xl">
+    <div className="flex flex-col h-full max-w-3xl w-full">
       {/* Header */}
       <div className="flex items-center justify-between pb-4 mb-2 border-b border-border shrink-0">
         <div className="flex items-center gap-2.5">
@@ -185,40 +222,35 @@ export function ChatView() {
             <Sparkles className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Nexus AI</p>
-            <p className="text-[11px] text-muted-foreground">Your intelligent work assistant</p>
+            <p className="text-[13px] font-bold text-foreground">Zerf Note AI</p>
+            <p className="text-[11px] text-muted-foreground">Интеллектуальный ИИ-ассистент продуктивности</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--status-done)]/10 border border-[var(--status-done)]/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)]" />
-            <span className="text-[11px] text-[var(--status-done)] font-medium">Online</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-done)] animate-pulse" />
+            <span className="text-[11px] text-[var(--status-done)] font-bold">Online</span>
           </div>
-          <span className="text-[11px] text-muted-foreground/60">{state.settings.integrations.aiModel}</span>
         </div>
       </div>
 
       {/* Quick prompts */}
       <div className="flex gap-2 mb-4 flex-wrap shrink-0">
-        {[
-          'Prioritize my tasks today',
-          'Summarize my goals',
-          "What's overdue?",
-          'Help me write a note',
-        ].map(prompt => (
+        {QUICK_PROMPTS.map(prompt => (
           <button
             key={prompt}
-            onClick={() => { setInput(prompt); inputRef.current?.focus() }}
-            className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-muted/60 text-muted-foreground border border-border/50 hover:bg-accent/50 hover:text-foreground hover:border-primary/30 transition-all"
+            onClick={() => send(prompt)}
+            className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-muted/60 text-muted-foreground border border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all flex items-center gap-1 cursor-pointer"
           >
-            {prompt}
+            <span className="mono-emoji">{prompt.slice(0, 2)}</span>
+            <span>{prompt.slice(2)}</span>
           </button>
         ))}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-        {state.chat.map((msg, i) => (
+        {state.chat.map((msg) => (
           <motion.div
             key={msg.id}
             initial={{ opacity: 0, y: 8 }}
@@ -228,7 +260,7 @@ export function ChatView() {
           >
             {/* Avatar */}
             <div className={cn(
-              'w-7 h-7 rounded-xl shrink-0 flex items-center justify-center',
+              'w-7 h-7 rounded-xl shrink-0 flex items-center justify-center mt-0.5',
               msg.role === 'assistant' ? 'bg-primary/15' : 'bg-muted/80'
             )}>
               {msg.role === 'assistant'
@@ -239,18 +271,80 @@ export function ChatView() {
 
             {/* Bubble */}
             <div className={cn(
-              'max-w-[80%] rounded-2xl px-4 py-3',
+              'max-w-[80%] rounded-2xl px-4 py-3 flex flex-col gap-1 shadow-xs',
               msg.role === 'user'
                 ? 'bg-primary text-primary-foreground rounded-tr-sm'
                 : 'bg-card border border-border rounded-tl-sm'
             )}>
               {msg.role === 'assistant' ? (
-                <div className="prose-task text-sm">
+                <div className="prose-task text-sm leading-relaxed">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
               ) : (
                 <p className="text-[13px] leading-relaxed">{msg.content}</p>
               )}
+
+              {/* Interactive Action Card & Direct 1-Click Navigation */}
+              {msg.action && msg.role === 'assistant' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className="mt-2.5 p-3 rounded-2xl bg-card/90 border border-primary/30 shadow-md backdrop-blur-md flex flex-col gap-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-primary flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      {msg.action.type === 'goal_created'
+                        ? 'Цель создана'
+                        : msg.action.type === 'note_created'
+                        ? 'Заметка сохранена'
+                        : msg.action.type === 'task_completed'
+                        ? 'Выполнено'
+                        : msg.action.type === 'task_deleted'
+                        ? 'Удалено'
+                        : msg.action.type === 'stats_summary'
+                        ? 'Сводка'
+                        : 'Задача добавлена'}
+                    </span>
+                    {msg.action.priority && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-foreground">
+                        {msg.action.priority === 'urgent'
+                          ? '🔴 Срочно'
+                          : msg.action.priority === 'high'
+                          ? '🟠 Высокий'
+                          : '🟢 Средний'}
+                      </span>
+                    )}
+                  </div>
+                  {msg.action.title && (
+                    <p className="text-xs font-bold text-foreground truncate">
+                      {msg.action.title}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetView = msg.action?.targetType || 'tasks'
+                      dispatch({ type: 'SET_VIEW', view: targetView as any })
+                    }}
+                    className="mt-1 flex items-center justify-center gap-1.5 w-full py-1.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-xs cursor-pointer group"
+                  >
+                    <span>
+                      {msg.action.targetType === 'goals'
+                        ? '🎯 Открыть в Целях'
+                        : msg.action.targetType === 'notes'
+                        ? '📝 Открыть в Заметках'
+                        : msg.action.targetType === 'stats'
+                        ? '📊 Открыть Аналитику'
+                        : msg.action.targetType === 'today'
+                        ? '📅 Открыть План на сегодня'
+                        : '↗️ Перейти к задаче'}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                </motion.div>
+              )}
+
               <p className={cn(
                 'text-[10px] mt-1.5',
                 msg.role === 'user' ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'
@@ -351,7 +445,7 @@ export function ChatView() {
           />
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={send}
+            onClick={() => send()}
             disabled={(!input.trim() && !selectedImage) || isTyping}
             className="w-7 h-7 flex items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shrink-0 mb-0.5"
           >
