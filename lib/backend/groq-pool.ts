@@ -19,23 +19,21 @@ import { normalizePlan } from '@/lib/plans'
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
 
 export const FREE_ALLOWED_MODELS = [
-  'openai/gpt-oss-20b',
-  'qwen/qwen3.6-27b',
-  'groq/compound-mini',
   'allam-2-7b',
+  'openai/gpt-oss-20b',
+  'groq/compound-mini',
 ]
 
 export const PLUS_ALLOWED_MODELS = [
-  'openai/gpt-oss-20b',
   'qwen/qwen3.6-27b',
+  'openai/gpt-oss-20b',
   'groq/compound',
-  'groq/compound-mini',
   'allam-2-7b',
 ]
 
 /**
  * Model allocation based on subscription tier:
- * - Free: Highly optimized fast models (GPT-OSS 20B, Qwen 3.6 27B)
+ * - Free: Compact 7B model (ALLaM 2 7B) and fast 20B
  * - Plus (99 ₽): Advanced models (Qwen 3.6 27B, GPT-OSS 20B, Compound)
  * - Pro (299 ₽) & Corp: Full access to all models (GPT-OSS 120B Flagship, Qwen 27B, etc.) and per-task custom routing
  */
@@ -55,7 +53,7 @@ export function getModelForUserPlan(
     return 'openai/gpt-oss-120b'
   }
 
-  // Plus: up to 27B / fast models (Qwen 3.6 27B, GPT-OSS 20B)
+  // Plus: up to 27B (Qwen 3.6 27B, GPT-OSS 20B)
   if (norm === 'plus') {
     if (req && PLUS_ALLOWED_MODELS.includes(req)) {
       return req
@@ -63,11 +61,11 @@ export function getModelForUserPlan(
     return 'qwen/qwen3.6-27b'
   }
 
-  // Free: ultra-fast GPT-OSS 20B or Qwen 27B
+  // Free: compact ALLaM 2 7B by default
   if (req && FREE_ALLOWED_MODELS.includes(req)) {
     return req
   }
-  return 'openai/gpt-oss-20b'
+  return 'allam-2-7b'
 }
 
 interface KeyStatus {

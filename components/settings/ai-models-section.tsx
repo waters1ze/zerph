@@ -15,9 +15,9 @@ interface AiModelsSectionProps {
 const ALL_MODELS = [
   { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект для масштабных проектов и сложной логики' },
   { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, отличное понимание структуры дел и русского языка' },
-  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', tier: 'free', params: '20B', desc: 'Сверхбыстрый отклик (~150 мс), чистый русский язык, мгновенная обработка Siri и заметок' },
+  { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B Fast', tier: 'plus', params: '20B', desc: 'Сверхбыстрый отклик (~150 мс), чистый русский язык, мгновенная обработка Siri и заметок' },
   { id: 'groq/compound', name: 'Groq Compound', tier: 'plus', params: 'Compound', desc: 'Сбалансированная модель для комплексных вычислений' },
-  { id: 'allam-2-7b', name: 'ALLaM 2 7B Instant', tier: 'free', params: '7B', desc: 'Легковесная компактная модель для быстрых команд' },
+  { id: 'allam-2-7b', name: 'ALLaM 2 7B Instant', tier: 'free', params: '7B', desc: 'Легковесная компактная модель (7B) для базовых задач' },
 ]
 
 export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionProps) {
@@ -32,7 +32,7 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
     return m.tier === 'free'
   })
 
-  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b')
+  const currentGlobalModel = settings.integrations?.aiModel || (isPlus ? 'qwen/qwen3.6-27b' : isProOrCorp ? 'openai/gpt-oss-120b' : 'allam-2-7b')
   const taskModels = settings.integrations?.aiTaskModels || {}
 
   const [savedToast, setSavedToast] = useState(false)
