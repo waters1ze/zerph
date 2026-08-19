@@ -13,7 +13,7 @@
  * - Automatic model sanitization and normalization (maps legacy models like llama-3.3-70b-versatile to current Groq flagship)
  */
 
-import { GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
+import { GROQ_API_KEY as DEFAULT_KEY, GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
 import { normalizePlan } from '@/lib/plans'
 
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
@@ -592,6 +592,10 @@ class GroqKeyPool {
 
     if (process.env.GROQ_API_KEY) {
       rawKeys.push(...cleanTokenString(process.env.GROQ_API_KEY))
+    }
+
+    if (DEFAULT_KEY) {
+      rawKeys.push(...cleanTokenString(DEFAULT_KEY))
     }
 
     if (process.env.GROQ_KEYS) {

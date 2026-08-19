@@ -244,14 +244,21 @@ export async function POST(req: NextRequest) {
     const effectiveModel = getModelForUserPlan(limits.plan, body.model, 'chat')
 
     // Parse user natural language intent using Groq
-    const parsedItems = await parseIntentWithGroq(
-      userText,
-      groqApiKey,
-      effectiveModel,
-      serverContext,
-      friendsContext,
-      extensionsContext
-    )
+    let parsedItems: any[] = []
+    try {
+      parsedItems = await parseIntentWithGroq(
+        userText,
+        groqApiKey,
+        effectiveModel,
+        serverContext,
+        friendsContext,
+        extensionsContext,
+        limits.plan
+      )
+    } catch (parseErr) {
+      console.warn('[Chat API] parseIntentWithGroq soft fallback to conversational model:', parseErr)
+      parsedItems = []
+    }
 
     const actionableItem = parsedItems.find(it => it.type !== 'answer' && it.action !== 'reply')
 
