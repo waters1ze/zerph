@@ -9,7 +9,7 @@ import {
   Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon,
   RefreshCw, Smartphone
 } from 'lucide-react'
-import type { Task } from '@/lib/types'
+import type { Task, Note } from '@/lib/types'
 import { TaskItem } from '@/components/task-item'
 import { CalendarSyncModal } from '@/components/calendar-sync-modal'
 
@@ -38,40 +38,109 @@ function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+export function isNoteOnDate(n: Note, ymd: string): boolean {
+  if (!n) return false
+  if (n.dueDate === ymd) return true
+  const created = n.createdAt ? n.createdAt.slice(0, 10) : ''
+  if (created === ymd) return true
+  const updated = n.updatedAt ? n.updatedAt.slice(0, 10) : ''
+  if (!n.dueDate && updated === ymd) return true
+  return false
+}
+
+export function isTaskForCalendar(t: Task, ymd: string, todayYmd: string): boolean {
+  if (isTaskOnDate(t, ymd, todayYmd)) return true
+  if (t.status === 'done') {
+    if (t.completedAt && t.completedAt.slice(0, 10) === ymd) return true
+    if (t.dueDate === ymd) return true
+  }
+  return false
+}
+
 // ── Day Cell Component ────────────────────────────────────────────────────────
 function DayCell({
   date,
   tasks,
+  notes,
   isToday,
   isCurrentMonth,
   onClick,
 }: {
   date: Date
   tasks: Task[]
+  notes: Note[]
   isToday: boolean
   isCurrentMonth: boolean
   onClick: () => void
 }) {
   const dayNum = date.getDate()
-  const schoolTasks = tasks.filter(isSchoolTask)
-  const otherTasks = tasks.filter(t => !isSchoolTask(t))
+  const activeTasks = tasks.filter(t => t.status !== 'done')
+  const doneTasks = tasks.filter(t => t.status === 'done')
+  const schoolTasks = activeTasks.filter(isSchoolTask)
+  const otherActiveTasks = activeTasks.filter(t => !isSchoolTask(t))
 
-  const displayTasks: Array<{ id: string; title: string; priority: string; dueTime?: string | null }> = []
+  // Build unified display items for the cell
+  const displayItems: Array<{
+    id: string
+    title: string
+    priority?: string
+    dueTime?: string | null
+    type: 'school' | 'task' | 'note' | 'done'
+  }> = []
+
   if (schoolTasks.length >= 2) {
     const firstTime = schoolTasks[0].dueTime ? schoolTasks[0].dueTime.split(/[\s–-]+/)[0] : ''
-    displayTasks.push({
+    displayItems.push({
       id: `school_group_${schoolTasks[0].id}`,
       title: `🏫 Школа (${schoolTasks.length} ур.)`,
       priority: 'medium',
       dueTime: firstTime || null,
+      type: 'school',
     })
-    displayTasks.push(...otherTasks)
+    otherActiveTasks.forEach(t => {
+      displayItems.push({
+        id: t.id,
+        title: t.title,
+        priority: t.priority,
+        dueTime: t.dueTime,
+        type: 'task',
+      })
+    })
   } else {
-    displayTasks.push(...tasks)
+    activeTasks.forEach(t => {
+      displayItems.push({
+        id: t.id,
+        title: t.title,
+        priority: t.priority,
+        dueTime: t.dueTime,
+        type: 'task',
+      })
+    })
   }
 
-  const topTasks = displayTasks.slice(0, 2)
-  const more = displayTasks.length - 2
+  // Include notes on that day so past and current days are rich and populated
+  notes.forEach(n => {
+    displayItems.push({
+      id: `note_${n.id}`,
+      title: `📝 ${n.title || 'Заметка'}`,
+      type: 'note',
+    })
+  })
+
+  // Include completed tasks on that day
+  doneTasks.forEach(t => {
+    displayItems.push({
+      id: `done_${t.id}`,
+      title: `✓ ${t.title}`,
+      priority: t.priority,
+      dueTime: t.dueTime,
+      type: 'done',
+    })
+  })
+
+  const topItems = displayItems.slice(0, 2)
+  const more = displayItems.length - 2
+  const totalCount = tasks.length + notes.length
 
   return (
     <motion.div
@@ -98,27 +167,53 @@ function DayCell({
         >
           {dayNum}
         </span>
-        {tasks.length > 0 && (
+        {totalCount > 0 && (
           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-muted/80 text-muted-foreground border border-border/40 select-none">
-            {tasks.length}
+            {totalCount}
           </span>
         )}
       </div>
 
-      {/* Task list inside day */}
+      {/* Item list inside day */}
       <div className="flex flex-col gap-0.5 flex-1 justify-start overflow-hidden w-full mt-0.5">
-        {/* Desktop view (sm+): full task pills */}
+        {/* Desktop view (sm+): full item pills */}
         <div className="hidden sm:flex flex-col gap-[2px] overflow-hidden w-full">
-          {topTasks.map(t => (
-            <div key={t.id} className="flex items-center gap-1 w-full">
-              <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', PRIORITY_DOT[t.priority])} />
-              <div className={cn('h-[17px] rounded-md flex-1 px-1.5 flex items-center overflow-hidden', PRIORITY_BAR[t.priority])}>
-                <p className="text-[9.5px] font-medium truncate leading-none">
-                  {t.dueTime ? `${t.dueTime} ` : ''}{t.title}
-                </p>
+          {topItems.map(item => {
+            if (item.type === 'note') {
+              return (
+                <div key={item.id} className="flex items-center gap-1 w-full">
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400" />
+                  <div className="h-[17px] rounded-md flex-1 px-1.5 flex items-center overflow-hidden bg-amber-500/15 text-amber-300 border border-amber-500/25">
+                    <p className="text-[9.5px] font-medium truncate leading-none">
+                      {item.title}
+                    </p>
+                  </div>
+                </div>
+              )
+            }
+            if (item.type === 'done') {
+              return (
+                <div key={item.id} className="flex items-center gap-1 w-full opacity-65">
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400" />
+                  <div className="h-[17px] rounded-md flex-1 px-1.5 flex items-center overflow-hidden bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                    <p className="text-[9.5px] font-medium truncate leading-none line-through">
+                      {item.title}
+                    </p>
+                  </div>
+                </div>
+              )
+            }
+            return (
+              <div key={item.id} className="flex items-center gap-1 w-full">
+                <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', PRIORITY_DOT[item.priority || 'medium'] || 'bg-primary')} />
+                <div className={cn('h-[17px] rounded-md flex-1 px-1.5 flex items-center overflow-hidden', PRIORITY_BAR[item.priority || 'medium'] || 'bg-primary/80 text-primary-foreground')}>
+                  <p className="text-[9.5px] font-medium truncate leading-none">
+                    {item.dueTime ? `${item.dueTime} ` : ''}{item.title}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           {more > 0 && (
             <p className="text-[9px] text-muted-foreground/70 font-semibold pl-1.5">+{more} ещё</p>
           )}
@@ -126,11 +221,20 @@ function DayCell({
 
         {/* Mobile view (< sm): priority dot indicators */}
         <div className="flex sm:hidden flex-wrap items-center gap-1 pt-0.5">
-          {tasks.slice(0, 3).map(t => (
-            <div key={t.id} className={cn('w-1.5 h-1.5 rounded-full shrink-0', PRIORITY_DOT[t.priority] || 'bg-primary')} />
+          {notes.slice(0, 2).map(n => (
+            <div key={n.id} className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400" />
           ))}
-          {tasks.length > 3 && (
-            <span className="text-[8px] text-muted-foreground font-bold leading-none">+{tasks.length - 3}</span>
+          {tasks.slice(0, 3).map(t => (
+            <div
+              key={t.id}
+              className={cn(
+                'w-1.5 h-1.5 rounded-full shrink-0',
+                t.status === 'done' ? 'bg-emerald-400' : PRIORITY_DOT[t.priority] || 'bg-primary'
+              )}
+            />
+          ))}
+          {totalCount > 3 && (
+            <span className="text-[8px] text-muted-foreground font-bold leading-none">+{totalCount - 3}</span>
           )}
         </div>
       </div>
@@ -148,8 +252,8 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
   const year = date.getFullYear()
 
   const realTodayYMD = toYMD(new Date())
-  const dayTasks = state.tasks.filter(t => isTaskOnDate(t, dateStr, realTodayYMD))
-  const dayNotes = state.notes.filter(n => n.dueDate === dateStr)
+  const dayTasks = (state.tasks || []).filter(t => isTaskForCalendar(t, dateStr, realTodayYMD))
+  const dayNotes = (state.notes || []).filter(n => isNoteOnDate(n, dateStr))
   const activeTasks = dayTasks.filter(t => t.status !== 'done')
   const schoolActive = activeTasks.filter(isSchoolTask)
   const personalActive = activeTasks.filter(t => !isSchoolTask(t))
@@ -191,30 +295,39 @@ function DayDetail({ dateStr, onBack }: { dateStr: string; onBack: () => void })
       {/* Stats strip */}
       <div className="flex items-center gap-4 text-[13px] text-muted-foreground bg-card/60 p-3 rounded-xl border border-border/60">
         <span className="flex items-center gap-1.5 font-medium text-foreground"><Clock className="w-4 h-4 text-primary" />{activeTasks.length} к выполнению</span>
-        <span className="flex items-center gap-1.5 font-medium"><CalendarIcon className="w-4 h-4 text-muted-foreground" />{dayNotes.length} заметок</span>
+        <span className="flex items-center gap-1.5 font-medium text-amber-400"><CalendarIcon className="w-4 h-4" />{dayNotes.length} заметок</span>
         <span className="flex items-center gap-1.5 font-medium text-emerald-400"><CheckCircle2 className="w-4 h-4" />{doneTasks.length} завершено</span>
       </div>
 
       {/* Linked Notes Section */}
       {dayNotes.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] uppercase tracking-widest font-bold text-primary flex items-center gap-1.5">
-            📜 Привязанные заметки
+          <p className="text-[11px] uppercase tracking-widest font-bold text-amber-400 flex items-center gap-1.5">
+            📝 Заметки за этот день ({dayNotes.length})
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {dayNotes.map(n => (
               <div
                 key={n.id}
                 onClick={() => dispatch({ type: 'SET_VIEW', view: 'notes' })}
-                className="p-3.5 rounded-xl bg-primary/10 border border-primary/25 hover:bg-primary/15 cursor-pointer transition-all"
+                className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/15 cursor-pointer transition-all"
               >
                 <div className="flex items-center justify-between">
-                  <h4 className="text-[13px] font-bold text-foreground">{n.title}</h4>
-                  <span className="text-[11px] text-primary font-semibold">Открыть →</span>
+                  <h4 className="text-[13px] font-bold text-foreground">{n.title || 'Без названия'}</h4>
+                  <span className="text-[11px] text-amber-400 font-semibold">Открыть →</span>
                 </div>
                 <p className="text-[12px] text-muted-foreground line-clamp-2 mt-1">
-                  {n.content.replace(/#{1,6}\s/g, '').slice(0, 120)}
+                  {(n.content || '').replace(/#{1,6}\s/g, '').slice(0, 120) || 'Текст заметки...'}
                 </p>
+                {n.tags && n.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {n.tags.map((tag: string, idx: number) => (
+                      <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-medium">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -313,15 +426,25 @@ export function CalendarView() {
 
   const realTodayYMD = toYMD(new Date())
 
-  // Group tasks by date for all cells in the calendar grid
+  // Group tasks by date for all cells in the calendar grid (including completed past tasks)
   const tasksByDate = cells.reduce((acc, cellDate) => {
     const ymd = toYMD(cellDate)
-    const matching = state.tasks.filter(t => isTaskOnDate(t, ymd, realTodayYMD))
+    const matching = (state.tasks || []).filter(t => isTaskForCalendar(t, ymd, realTodayYMD))
     if (matching.length > 0) {
       acc[ymd] = matching
     }
     return acc
   }, {} as Record<string, Task[]>)
+
+  // Group notes by date for all cells in the calendar grid
+  const notesByDate = cells.reduce((acc, cellDate) => {
+    const ymd = toYMD(cellDate)
+    const matching = (state.notes || []).filter(n => isNoteOnDate(n, ymd))
+    if (matching.length > 0) {
+      acc[ymd] = matching
+    }
+    return acc
+  }, {} as Record<string, Note[]>)
 
   const prevMonth = () => setCurrentMonth(new Date(year, month - 1, 1))
   const nextMonth = () => setCurrentMonth(new Date(year, month + 1, 1))
@@ -330,7 +453,7 @@ export function CalendarView() {
   // Mini month strip for year overview
   const allMonths = Array.from({ length: 12 }, (_, i) => {
     const m = i
-    const hasTasks = state.tasks.some(t => {
+    const hasTasks = (state.tasks || []).some(t => {
       if (!t.dueDate || !t.dueDate.includes('-')) return false
       const [ty, tm] = t.dueDate.split('-').map(Number)
       const isYearly = isYearlyEventTask(t)
@@ -341,7 +464,13 @@ export function CalendarView() {
       }
       return ty === year && tm - 1 === m
     })
-    return { month: i, label: RU_MONTHS[i].slice(0, 3), hasTasks }
+    const hasNotes = (state.notes || []).some(n => {
+      const dStr = n.dueDate || (n.createdAt ? n.createdAt.slice(0, 10) : '')
+      if (!dStr.includes('-')) return false
+      const [ny, nm] = dStr.split('-').map(Number)
+      return ny === year && nm - 1 === m
+    })
+    return { month: i, label: RU_MONTHS[i].slice(0, 3), hasTasks: hasTasks || hasNotes }
   })
 
   return (
@@ -433,12 +562,14 @@ export function CalendarView() {
                 const ymd = toYMD(date)
                 const isCurrentMonth = date.getMonth() === month
                 const isToday = ymd === today
-                const tasks = (tasksByDate[ymd] || []).filter(t => t.status !== 'done')
+                const tasks = tasksByDate[ymd] || []
+                const notes = notesByDate[ymd] || []
                 return (
                   <DayCell
                     key={i}
                     date={date}
                     tasks={tasks}
+                    notes={notes}
                     isToday={isToday}
                     isCurrentMonth={isCurrentMonth}
                     onClick={() => setSelectedDate(ymd)}
@@ -449,12 +580,14 @@ export function CalendarView() {
 
             {/* Legend */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-5 pt-1">
-              <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Приоритеты:</span>
+              <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Легенда:</span>
               {[
                 { label: 'Срочно', color: 'bg-[var(--priority-urgent)]' },
                 { label: 'Высокий', color: 'bg-[var(--priority-high)]' },
                 { label: 'Средний', color: 'bg-primary/70' },
                 { label: 'Низкий', color: 'bg-[var(--priority-low)]' },
+                { label: 'Заметка', color: 'bg-amber-400' },
+                { label: 'Выполнено', color: 'bg-emerald-400' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5">
                   <div className={cn('w-2 h-2 rounded-full', l.color)} />
