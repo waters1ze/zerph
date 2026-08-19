@@ -37,131 +37,6 @@ export interface GroqModelMeta {
  * Verified Groq model registry matching official Groq documentation
  */
 export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
-  // ── Systems & Compound (Primary for Free & Plus) ──
-  {
-    id: 'groq/compound',
-    name: 'Groq Compound',
-    paramsBillions: 70,
-    category: 'systems',
-    minTier: 'free',
-    desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s, 131K контекст)',
-    speedTps: 450,
-    contextTokens: 131072,
-    maxCompletionTokens: 8192,
-  },
-  {
-    id: 'groq/compound-mini',
-    name: 'Groq Compound Mini',
-    paramsBillions: 20,
-    category: 'systems',
-    minTier: 'free',
-    desc: 'Компактная сверхбыстрая система оркестрации инструментов (450 T/s, 131K контекст)',
-    speedTps: 450,
-    contextTokens: 131072,
-    maxCompletionTokens: 8192,
-  },
-
-  // ── Cheap & Guard Models for Free Tier ──
-  {
-    id: 'openai/gpt-oss-20b',
-    name: 'GPT OSS 20B',
-    paramsBillions: 20,
-    category: 'production',
-    minTier: 'free',
-    desc: 'Сверхбыстрый отклик (1000 T/s, 131K контекст), чистый русский язык, мгновенная обработка заметок и Siri',
-    speedTps: 1000,
-    contextTokens: 131072,
-    maxCompletionTokens: 65536,
-  },
-  {
-    id: 'meta-llama/llama-prompt-guard-2-22m',
-    name: 'Prompt Guard 2 22M',
-    paramsBillions: 0.022,
-    category: 'guard',
-    minTier: 'free',
-    desc: 'Ультра-легковесная базовая модель Meta для фильтрации и быстрых команд ($0.03/1M)',
-    speedTps: 1000,
-    contextTokens: 512,
-    isGuard: true,
-    isExcluded: true,
-  },
-  {
-    id: 'meta-llama/llama-prompt-guard-2-86m',
-    name: 'Prompt Guard 2 86M',
-    paramsBillions: 0.086,
-    category: 'guard',
-    minTier: 'free',
-    desc: 'Компактная модель Meta ($0.04/1M) для базовой классификации',
-    speedTps: 1000,
-    contextTokens: 512,
-    isGuard: true,
-    isExcluded: true,
-  },
-  {
-    id: 'llama-3.1-8b-instant',
-    name: 'Llama 3.1 8B Instant',
-    paramsBillions: 8,
-    category: 'production',
-    minTier: 'free',
-    desc: 'Мгновенный отклик для базовых команд и заметок',
-    speedTps: 700,
-    contextTokens: 128000,
-  },
-  {
-    id: 'openai/gpt-oss-safeguard-20b',
-    name: 'Safety GPT OSS 20B',
-    paramsBillions: 20,
-    category: 'preview',
-    minTier: 'free',
-    desc: 'Безопасная скоростная 20B модель (1000 T/s, 131K контекст)',
-    speedTps: 1000,
-    contextTokens: 131072,
-    maxCompletionTokens: 65536,
-  },
-
-  // ── Plus Models (up to 70B) ──
-  {
-    id: 'qwen/qwen3.6-27b',
-    name: 'Qwen 3.6 27B',
-    paramsBillions: 27,
-    category: 'preview',
-    minTier: 'plus',
-    desc: 'Продвинутая логика, структурирование задач и анализ расписания (500 T/s, 131K контекст)',
-    speedTps: 500,
-    contextTokens: 131072,
-    maxCompletionTokens: 16384,
-  },
-  {
-    id: 'llama-3.3-70b-versatile',
-    name: 'Llama 3.3 70B Versatile',
-    paramsBillions: 70,
-    category: 'production',
-    minTier: 'plus',
-    desc: 'Универсальная мощная 70B модель для сложных текстов и рассуждений',
-    speedTps: 300,
-    contextTokens: 128000,
-  },
-  {
-    id: 'deepseek-r1-distill-llama-70b',
-    name: 'DeepSeek R1 70B Reasoning',
-    paramsBillions: 70,
-    category: 'preview',
-    minTier: 'plus',
-    desc: 'Пошаговое глубокое рассуждение и аналитическое мышление',
-    speedTps: 280,
-    contextTokens: 128000,
-  },
-  {
-    id: 'mixtral-8x7b-32768',
-    name: 'Mixtral 8x7B MoE',
-    paramsBillions: 47,
-    category: 'production',
-    minTier: 'plus',
-    desc: 'MoE архитектура с длинным контекстом 32K',
-    speedTps: 450,
-    contextTokens: 32768,
-  },
-
   // ── Pro Models (up to 120B) ──
   {
     id: 'openai/gpt-oss-120b',
@@ -188,7 +63,75 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     maxCompletionTokens: 131072,
   },
 
-  // ── Excluded expensive specialized preview models ──
+  // ── Plus Models (up to 70B) ──
+  {
+    id: 'qwen/qwen3.6-27b',
+    name: 'Qwen 3.6 27B',
+    paramsBillions: 27,
+    category: 'preview',
+    minTier: 'plus',
+    desc: 'Продвинутая логика, структурирование задач и анализ расписания (500 T/s, 131K контекст)',
+    speedTps: 500,
+    contextTokens: 131072,
+    maxCompletionTokens: 16384,
+  },
+  {
+    id: 'groq/compound',
+    name: 'Groq Compound',
+    paramsBillions: 70,
+    category: 'systems',
+    minTier: 'plus',
+    desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s, 131K контекст)',
+    speedTps: 450,
+    contextTokens: 131072,
+    maxCompletionTokens: 8192,
+  },
+
+  // ── Free Models (up to 20B) ──
+  {
+    id: 'openai/gpt-oss-20b',
+    name: 'GPT OSS 20B',
+    paramsBillions: 20,
+    category: 'production',
+    minTier: 'free',
+    desc: 'Сверхбыстрый отклик (1000 T/s, 131K контекст), чистый русский язык, мгновенная обработка заметок и Siri',
+    speedTps: 1000,
+    contextTokens: 131072,
+    maxCompletionTokens: 65536,
+  },
+  {
+    id: 'groq/compound-mini',
+    name: 'Groq Compound Mini',
+    paramsBillions: 20,
+    category: 'systems',
+    minTier: 'free',
+    desc: 'Компактная сверхбыстрая система оркестрации инструментов (450 T/s, 131K контекст)',
+    speedTps: 450,
+    contextTokens: 131072,
+    maxCompletionTokens: 8192,
+  },
+
+  // ── Excluded models ──
+  {
+    id: 'meta-llama/llama-prompt-guard-2-22m',
+    name: 'Prompt Guard 2 22M',
+    paramsBillions: 0.022,
+    category: 'guard',
+    minTier: 'free',
+    desc: 'Классификатор модерации',
+    isGuard: true,
+    isExcluded: true,
+  },
+  {
+    id: 'meta-llama/llama-prompt-guard-2-86m',
+    name: 'Prompt Guard 2 86M',
+    paramsBillions: 0.086,
+    category: 'guard',
+    minTier: 'free',
+    desc: 'Классификатор модерации',
+    isGuard: true,
+    isExcluded: true,
+  },
   {
     id: 'canopylabs/orpheus-v1-english',
     name: 'Orpheus V1 English',
@@ -400,10 +343,10 @@ export function getModelsForPlan(userPlan?: string | null, models: GroqModelMeta
 
 /**
  * Model allocation based on subscription tier:
- * - Free: groq/compound, groq/compound-mini, openai/gpt-oss-20b, llama-prompt-guard, llama-3.1-8b-instant
- * - Plus (99 ₽): models up to 70B (qwen/qwen3.6-27b, groq/compound, llama-3.3-70b-versatile, deepseek-r1-70b)
- * - Pro (299 ₽): models up to 120B (openai/gpt-oss-120b, and all Plus models)
- * - Corp & Admin: ALL models (minimaxai/minimax-m2.7, future 120B+ models, unrestricted)
+ * - Free: openai/gpt-oss-20b, groq/compound-mini
+ * - Plus (99 ₽): qwen/qwen3.6-27b, groq/compound
+ * - Pro (299 ₽): openai/gpt-oss-120b, and all Plus/Free models
+ * - Corp & Admin: minimaxai/minimax-m2.7, openai/gpt-oss-120b, and all models
  */
 export function getModelForUserPlan(
   plan?: string | null,
@@ -417,22 +360,21 @@ export function getModelForUserPlan(
 
   if (isCorp) {
     if (req && isModelHealthy(req)) return req
-    return isModelHealthy('openai/gpt-oss-120b') ? 'openai/gpt-oss-120b' : 'qwen/qwen3.6-27b'
+    return isModelHealthy('minimaxai/minimax-m2.7') ? 'minimaxai/minimax-m2.7' : 'openai/gpt-oss-120b'
   }
 
   if (norm === 'pro') {
     if (req && isModelAllowedForPlan(req, 'pro') && isModelHealthy(req)) return req
-    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'llama-3.1-8b-instant'
+    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
     if (isModelHealthy('openai/gpt-oss-120b')) return 'openai/gpt-oss-120b'
     if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
-    return 'llama-3.3-70b-versatile'
+    return 'groq/compound'
   }
 
   if (norm === 'plus') {
     if (req && isModelAllowedForPlan(req, 'plus') && isModelHealthy(req)) return req
-    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'llama-3.1-8b-instant'
+    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
     if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
-    if (isModelHealthy('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
     if (isModelHealthy('groq/compound')) return 'groq/compound'
     return 'openai/gpt-oss-20b'
   }
@@ -441,8 +383,6 @@ export function getModelForUserPlan(
   if (req && isModelAllowedForPlan(req, 'free') && isModelHealthy(req)) return req
   if (isModelHealthy('openai/gpt-oss-20b')) return 'openai/gpt-oss-20b'
   if (isModelHealthy('groq/compound-mini')) return 'groq/compound-mini'
-  if (isModelHealthy('llama-3.1-8b-instant')) return 'llama-3.1-8b-instant'
-  if (isModelHealthy('groq/compound')) return 'groq/compound'
   return 'openai/gpt-oss-20b'
 }
 
@@ -456,53 +396,36 @@ export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: s
     fullHierarchy = [
       'openai/gpt-oss-120b',
       'qwen/qwen3.6-27b',
-      'llama-3.3-70b-versatile',
-      'deepseek-r1-distill-llama-70b',
-      'openai/gpt-oss-20b',
-      'llama-3.1-8b-instant',
       'groq/compound',
+      'openai/gpt-oss-20b',
       'groq/compound-mini',
+      'minimaxai/minimax-m2.7',
     ]
   } else if (norm === 'plus') {
     fullHierarchy = [
       'qwen/qwen3.6-27b',
-      'llama-3.3-70b-versatile',
-      'deepseek-r1-distill-llama-70b',
-      'openai/gpt-oss-20b',
-      'llama-3.1-8b-instant',
       'groq/compound',
+      'openai/gpt-oss-20b',
       'groq/compound-mini',
     ]
   } else {
     fullHierarchy = [
       'openai/gpt-oss-20b',
-      'llama-3.1-8b-instant',
       'groq/compound-mini',
-      'groq/compound',
     ]
   }
 
   const filtered = fullHierarchy.filter(m => m !== requestedModel && isModelAllowedForPlan(m, userPlan) && isModelHealthy(m))
-  return filtered.length > 0 ? filtered : ['openai/gpt-oss-20b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile']
+  return filtered.length > 0 ? filtered : ['openai/gpt-oss-20b', 'groq/compound-mini', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b']
 }
 
 export const KNOWN_GROQ_CHAT_MODELS = new Set([
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
-  'openai/gpt-oss-safeguard-20b',
   'groq/compound',
   'groq/compound-mini',
   'qwen/qwen3.6-27b',
   'minimaxai/minimax-m2.7',
-  'meta-llama/llama-prompt-guard-2-86m',
-  'meta-llama/llama-prompt-guard-2-22m',
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-  'deepseek-r1-distill-llama-70b',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768',
-  'llama3-70b-8192',
-  'llama3-8b-8192',
 ])
 
 export function normalizeGroqChatModel(model?: string, userPlan?: string | null): string {
@@ -516,10 +439,10 @@ export function normalizeGroqChatModel(model?: string, userPlan?: string | null)
   if (lower.includes('120b') || lower.includes('flagship')) {
     return isModelAllowedForPlan('openai/gpt-oss-120b', userPlan) ? 'openai/gpt-oss-120b' : getModelForUserPlan(userPlan)
   }
-  if (lower.includes('deepseek') || lower.includes('r1')) {
-    return isModelAllowedForPlan('deepseek-r1-distill-llama-70b', userPlan) ? 'deepseek-r1-distill-llama-70b' : getModelForUserPlan(userPlan)
+  if (lower.includes('minimax') || lower.includes('m2.7')) {
+    return isModelAllowedForPlan('minimaxai/minimax-m2.7', userPlan) ? 'minimaxai/minimax-m2.7' : getModelForUserPlan(userPlan)
   }
-  if (lower.includes('qwen') || lower.includes('27b')) {
+  if (lower.includes('qwen') || lower.includes('27b') || lower.includes('70b')) {
     return isModelAllowedForPlan('qwen/qwen3.6-27b', userPlan) ? 'qwen/qwen3.6-27b' : getModelForUserPlan(userPlan)
   }
   if (lower.includes('compound-mini')) {
@@ -530,9 +453,6 @@ export function normalizeGroqChatModel(model?: string, userPlan?: string | null)
   }
   if (lower.includes('8b') || lower.includes('instant') || lower.includes('mini') || lower.includes('20b')) {
     return 'openai/gpt-oss-20b'
-  }
-  if (lower.includes('70b')) {
-    return isModelAllowedForPlan('llama-3.3-70b-versatile', userPlan) ? 'llama-3.3-70b-versatile' : 'groq/compound-mini'
   }
   return getModelForUserPlan(userPlan)
 }
