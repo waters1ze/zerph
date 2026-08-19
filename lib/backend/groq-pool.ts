@@ -330,8 +330,8 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
       const discovered: GroqModelMeta[] = []
       for (const item of rawList) {
         const id = item.id
-        if (!id || typeof id !== 'string') continue
-        if (id.startsWith('whisper') || id.includes('audio')) continue
+        if (id.startsWith('whisper') || id.includes('audio') || id.includes('tts')) continue
+        if (id.includes('guard') || id.includes('safeguard')) continue // Skip moderation classifiers
         if (id.includes('orpheus') || id.includes('arabic')) continue // Skip expensive specialized preview models
 
         const existing = knownMap.get(id)

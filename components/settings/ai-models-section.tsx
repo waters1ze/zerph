@@ -16,14 +16,11 @@ const ALL_MODELS = [
   { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект (500 T/s, 131K контекст) для масштабных проектов и сложной логики' },
   { id: 'minimaxai/minimax-m2.7', name: 'MiniMax M2.7 Enterprise', tier: 'corp', params: '150B', desc: 'Сверхмощная Enterprise-модель для комплексных многоэтапных проектов (196K контекст)' },
   { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, структурирование задач и анализ расписания (500 T/s, 131K контекст)' },
-  { id: 'groq/compound', name: 'Groq Compound System', tier: 'plus', params: '70B', desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s, 131K контекст)' },
   { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', tier: 'plus', params: '70B', desc: 'Универсальная мощная 70B модель для сложных текстов и рассуждений' },
   { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B Reasoning', tier: 'plus', params: '70B', desc: 'Пошаговое глубокое рассуждение и аналитическое мышление' },
+  { id: 'groq/compound', name: 'Groq Compound System', tier: 'plus', params: '70B', desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s)' },
   { id: 'openai/gpt-oss-20b', name: 'GPT OSS 20B Fast', tier: 'free', params: '20B', desc: 'Сверхбыстрый отклик (1000 T/s, 131K контекст), чистый русский язык, мгновенная обработка заметок и Siri' },
   { id: 'groq/compound-mini', name: 'Groq Compound Mini', tier: 'free', params: '20B', desc: 'Компактная быстрая система оркестрации инструментов (450 T/s, 131K контекст)' },
-  { id: 'groq/compound', name: 'Groq Compound', tier: 'free', params: '70B', desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s)' },
-  { id: 'meta-llama/llama-prompt-guard-2-86m', name: 'Meta Prompt Guard 86M', tier: 'free', params: '86M', desc: 'Супер-экономная базовая модель Meta для фильтрации и быстрых команд ($0.04/1M)' },
-  { id: 'meta-llama/llama-prompt-guard-2-22m', name: 'Meta Prompt Guard 22M', tier: 'free', params: '22M', desc: 'Ультра-легковесная модель Meta ($0.03/1M)' },
   { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'free', params: '8B', desc: 'Мгновенный отклик для базовых команд и заметок (~150 мс)' },
 ]
 

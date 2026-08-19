@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     console.error('Error fetching AI models:', err)
     return NextResponse.json({
       success: true,
-      models: VERIFIED_GROQ_MODELS,
+      models: VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded),
       error: 'Failed to query live models, using verified fallback list',
     })
   }
