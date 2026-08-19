@@ -1749,63 +1749,125 @@ export async function saveParsedItemToDb(
     }
   }
 
-  // Update action
-  if (item.action === 'update' && item.targetId) {
-    const updateData: Record<string, unknown> = {}
-    if (item.title) updateData.title = item.title
-    if (item.summary) updateData.description = item.summary
-    if (item.dueDate !== undefined) updateData.dueDate = item.dueDate
-    if (item.dueTime !== undefined) updateData.dueTime = item.dueTime
-    if (item.priority) updateData.priority = item.priority
+  // Update action (Notes, Tasks, Reminders, Goals)
+  if (item.action === 'update') {
+    const targetQuery = (item.targetTitle || item.title || item.rawText || '').trim()
 
-    // Try updating task first (ownership-scoped)
-    try {
-      const taskScope = taskActorScope(ownerChatId)
-      if (taskScope) {
-        const allowed = await prisma.task.findFirst({ where: { id: item.targetId, ...taskScope } })
-        if (!allowed) throw new Error('access denied')
+    // 1. If target is a Note (or user asked to update note)
+    if (item.type === 'note' || /заметк|конспект|мысл|иде[еяю]/i.test(item.rawText || '')) {
+      const notes = await getAllNotes(ownerChatId)
+      let matchedNote = item.targetId ? notes.find(n => n.id === item.targetId) : null
+      if (!matchedNote && targetQuery) {
+        let bestScore = 0
+        for (const n of notes) {
+          const score = stringSimilarity(targetQuery, n.title)
+          if (score > 0.25 && score > bestScore) {
+            bestScore = score
+            matchedNote = n
+          }
+        }
       }
+
+      if (matchedNote) {
+        const newTitle = item.title && item.title !== item.targetTitle ? item.title : matchedNote.title
+        let newContent = matchedNote.content
+        if (item.summary) {
+          const isAppend = /добавь|дополни|припиши/i.test(item.rawText || '')
+          newContent = isAppend ? `${matchedNote.content}\n\n${item.summary}` : item.summary
+        }
+        const newTags = item.tags && item.tags.length > 0 ? Array.from(new Set([...(matchedNote.tags || []), ...item.tags])) : matchedNote.tags
+
+        await prisma.note.update({
+          where: { id: matchedNote.id },
+          data: {
+            title: newTitle,
+            content: newContent,
+            tags: newTags,
+            updatedAt: new Date().toISOString(),
+          } as never
+        })
+        item.targetId = matchedNote.id
+        item.title = newTitle
+        item.summary = newContent
+        item.type = 'note'
+        return { item, updatedItem: true }
+      }
+    }
+
+    // 2. If target is a Goal (or user asked to update goal)
+    if (item.type === 'goal' || /цел|прогресс|дедлайн/i.test(item.rawText || '')) {
+      const goals = await getAllGoals(ownerChatId)
+      let matchedGoal = item.targetId ? goals.find(g => g.id === item.targetId) : null
+      if (!matchedGoal && targetQuery) {
+        let bestScore = 0
+        for (const g of goals) {
+          const score = stringSimilarity(targetQuery, g.title)
+          if (score > 0.25 && score > bestScore) {
+            bestScore = score
+            matchedGoal = g
+          }
+        }
+      }
+
+      if (matchedGoal) {
+        const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+        if (item.title && item.title !== item.targetTitle) updateData.title = item.title
+        if (item.summary) updateData.description = item.summary
+        if (item.dueDate !== undefined) updateData.deadline = item.dueDate
+        if ((item as any).progress !== undefined) updateData.progress = Number((item as any).progress)
+
+        await prisma.goal.update({
+          where: { id: matchedGoal.id },
+          data: updateData as never
+        })
+        item.targetId = matchedGoal.id
+        item.type = 'goal'
+        return { item, updatedItem: true }
+      }
+    }
+
+    // 3. Target is a Task or Reminder
+    const tasks = await getAllTasks(ownerChatId)
+    let matchedTask = item.targetId ? tasks.find(t => t.id === item.targetId) : null
+    if (!matchedTask && targetQuery) {
+      let bestScore = 0
+      for (const t of tasks) {
+        const score = stringSimilarity(targetQuery, t.title)
+        if (score > 0.25 && score > bestScore) {
+          bestScore = score
+          matchedTask = t
+        }
+      }
+    }
+
+    if (matchedTask) {
+      const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+      if (item.title && item.title !== item.targetTitle) updateData.title = item.title
+      if (item.summary) updateData.description = item.summary
+      if (item.dueDate !== undefined) updateData.dueDate = item.dueDate
+      if (item.dueTime !== undefined) updateData.dueTime = item.dueTime
+      if (item.priority) updateData.priority = item.priority
+      if (item.reminderOffsetMinutes !== undefined && item.reminderOffsetMinutes !== null) {
+        updateData.reminderOffsetMinutes = item.reminderOffsetMinutes
+      }
+      if (item.subtasks && item.subtasks.length > 0) {
+        const existingSubtasks = Array.isArray(matchedTask.subtasks) ? matchedTask.subtasks : []
+        const newSubtasks = item.subtasks.map((st: any, i: number) => ({
+          id: `st_${Date.now()}_${i}`,
+          title: typeof st === 'string' ? st : st.title,
+          done: false,
+        }))
+        updateData.subtasks = [...existingSubtasks, ...newSubtasks]
+      }
+
       await prisma.task.update({
-        where: { id: item.targetId },
-        data: updateData as never,
+        where: { id: matchedTask.id },
+        data: updateData as never
       })
+      item.targetId = matchedTask.id
+      item.type = 'task'
       return { item, updatedItem: true }
-    } catch {}
-
-    // Try updating goal (ownership-scoped)
-    try {
-      const goalUpdateData: Record<string, unknown> = {}
-      if (item.title) goalUpdateData.title = item.title
-      if (item.summary) goalUpdateData.description = item.summary
-      if (item.dueDate !== undefined) goalUpdateData.deadline = item.dueDate
-      const goalScope = ownerActorScope(ownerChatId)
-      if (goalScope) {
-        const allowed = await prisma.goal.findFirst({ where: { id: item.targetId, ...goalScope } })
-        if (!allowed) throw new Error('access denied')
-      }
-      await prisma.goal.update({
-        where: { id: item.targetId },
-        data: goalUpdateData as never,
-      })
-      return { item, updatedItem: true }
-    } catch {}
-
-    // Try updating note (ownership-scoped)
-    try {
-      const noteUpdateData: Record<string, unknown> = {}
-      if (item.title) noteUpdateData.title = item.title
-      if (item.summary) noteUpdateData.content = item.summary
-      const noteScope = ownerActorScope(ownerChatId)
-      if (noteScope) {
-        const allowed = await prisma.note.findFirst({ where: { id: item.targetId, ...noteScope } })
-        if (!allowed) throw new Error('access denied')
-      }
-      await prisma.note.update({
-        where: { id: item.targetId },
-        data: noteUpdateData as never,
-      })
-      return { item, updatedItem: true }
-    } catch {}
+    }
   }
 
   // Completion intent — mark existing task done

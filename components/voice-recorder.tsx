@@ -2,14 +2,18 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mic, Square, Check, X, Loader2, AlertCircle, Sparkles, Volume2, CheckCircle2, Search } from 'lucide-react'
+import {
+  Mic, Square, Check, X, Loader2, AlertCircle, Sparkles, Volume2,
+  CheckCircle2, Search, ArrowRight, Target, FileText, Calendar as CalendarIcon, Edit3, Trash2
+} from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Task, Goal, Note } from '@/lib/types'
 import { GROQ_API_KEY } from '@/lib/config'
 
 interface ParsedResult {
-  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion' | 'answer'
+  action?: string
+  type: 'task' | 'goal' | 'note' | 'project' | 'reminder' | 'completion' | 'answer' | 'delegate'
   title: string
   summary: string
   priority: 'urgent' | 'high' | 'medium' | 'low'
@@ -36,11 +40,11 @@ const PRIORITY_DOT: Record<string, string> = {
 }
 
 const TYPE_EMOJI: Record<string, string> = {
-  task: '▪', goal: '★', note: '▫', project: '◈', reminder: '✦', completion: '✓', answer: '💡',
+  task: '📌', goal: '🎯', note: '📝', project: '📁', reminder: '⏰', completion: '✔️', answer: '💡', delegate: '👤'
 }
 
 export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, syncData } = useApp()
   const [stage, setStage] = useState<'idle' | 'requesting' | 'recording' | 'processing' | 'result' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ParsedResult | null>(null)
@@ -114,7 +118,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
     } catch {
       setStage('error')
-      setError('Microphone access denied. Please allow it in browser settings.')
+      setError('Доступ к микрофону отклонен. Пожалуйста, разрешите доступ в настройках браузера.')
     }
   }
 
@@ -139,73 +143,25 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
         body: fd 
       })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Processing failed')
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка распознавания голоса')
 
-      setResult(data.item)
+      const firstItem = (data.items && data.items[0]) || data.item
+      setResult(firstItem)
       if (data.completedTask) setCompletedTask(data.completedTask)
+      
+      // Auto-sync store immediately with database
+      await syncData()
+
       setStage('result')
     } catch (err: unknown) {
       setStage('error')
-      setError(err instanceof Error ? err.message : 'Failed to process voice')
+      setError(err instanceof Error ? err.message : 'Не удалось обработать голос')
     }
   }
 
-  const confirmResult = () => {
-    if (!result) return
-    const now = new Date().toISOString()
-    const id = 'v_' + Math.random().toString(36).substring(2, 9)
-
-    if (result.type === 'completion') {
-      const targetTitle = result.targetTitle || result.title
-      const found = state.tasks.find(t =>
-        t.status !== 'done' &&
-        (t.title.toLowerCase().includes(targetTitle.toLowerCase()) ||
-         targetTitle.toLowerCase().includes(t.title.toLowerCase()))
-      )
-      if (found) {
-        dispatch({ type: 'UPDATE_TASK', id: found.id, updates: { status: 'done', completedAt: new Date().toISOString() } })
-      }
-      onClose()
-      return
-    }
-
-    if (result.type === 'answer') {
-      onClose()
-      return
-    }
-
-    if (result.type === 'goal') {
-      const goal: Goal = {
-        id, title: result.title, description: result.summary,
-        motivation: result.motivation, status: 'on_track',
-        deadline: result.dueDate || undefined, progress: 0,
-        milestones: (result.milestones || []).map((m, i) => ({ id: `m_${id}_${i}`, title: m, done: false })),
-        projectIds: [], noteIds: [], createdAt: now, updatedAt: now, color: '#2d7a4f',
-      }
-      dispatch({ type: 'ADD_GOAL', goal })
-    } else if (result.type === 'note') {
-      const note: Note = {
-        id, title: result.title,
-        content: result.summary.includes('#') ? result.summary : `# ${result.title}\n\n${result.summary}`,
-        originalText: result.rawText,
-        type: 'note', tags: result.tags || [], taskIds: [],
-        createdAt: now, updatedAt: now, aiGenerated: true,
-      }
-      dispatch({ type: 'ADD_NOTE', note })
-    } else {
-      const task: Task = {
-        id, title: result.title, description: result.summary,
-        priority: result.priority || 'medium', status: 'todo',
-        dueDate: result.dueDate || new Date().toISOString().slice(0, 10),
-        dueTime: result.dueTime || undefined,
-        tags: result.tags || [], assignees: [], isShared: false,
-        createdAt: now, updatedAt: now, aiGenerated: true,
-        source: `🎙️ "${result.rawText.slice(0, 60)}${result.rawText.length > 60 ? '…' : ''}"`,
-        subtasks: (result.subtasks || []).map((st, i) => ({ id: `st_${id}_${i}`, title: st, done: false })),
-      }
-      dispatch({ type: 'ADD_TASK', task })
-    }
-
+  const navigateToTarget = (targetView: 'today' | 'tasks' | 'goals' | 'notes' | 'calendar') => {
+    dispatch({ type: 'SET_VIEW', view: targetView as any })
+    reset()
     onClose()
   }
 
@@ -230,14 +186,14 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-[13px] font-semibold text-foreground">Voice Command</p>
+                    <p className="text-[13px] font-bold text-foreground">Голосовой ассистент Zerf Note</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {stage === 'recording' ? `🔴 ${fmt(duration)}` : 'Groq Whisper AI'}
+                      {stage === 'recording' ? `🔴 Запись: ${fmt(duration)}` : 'Groq Whisper AI + Intent Engine'}
                     </p>
                   </div>
                 </div>
                 <button onClick={() => { reset(); onClose() }}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground">
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -248,13 +204,14 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                 {stage === 'idle' && (
                   <div className="flex flex-col items-center gap-4 py-3">
                     <p className="text-[12px] text-muted-foreground text-center leading-relaxed">
-                      Say a task, goal, or note — or say <span className="text-primary font-medium">"I finished…"</span> to complete one.
+                      Создавайте или изменяйте задачи, заметки, цели, напоминания:<br />
+                      <span className="text-primary font-medium">«Купить продукты в 18:00»</span>, <span className="text-primary font-medium">«Перенеси созвон на 19:00»</span>, <span className="text-primary font-medium">«Дополни заметку идеи...»</span>
                     </p>
                     <motion.button whileTap={{ scale: 0.95 }} whileHover={{ scale: 1.03 }} onClick={startRecording}
-                      className="w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xl shadow-primary/30">
+                      className="w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xl shadow-primary/30 cursor-pointer">
                       <Mic className="w-7 h-7" />
                     </motion.button>
-                    <p className="text-[11px] text-muted-foreground">Tap to record</p>
+                    <p className="text-[11px] text-muted-foreground">Нажмите для записи голоса</p>
                   </div>
                 )}
 
@@ -262,7 +219,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                 {stage === 'requesting' && (
                   <div className="flex flex-col items-center gap-3 py-4">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                    <p className="text-[13px] text-muted-foreground">Requesting microphone…</p>
+                    <p className="text-[13px] text-muted-foreground">Запрос доступа к микрофону…</p>
                   </div>
                 )}
 
@@ -275,13 +232,13 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                       <motion.div animate={{ scale: 1 + audioLevel * 0.3 }} transition={{ duration: 0.05 }}
                         className="absolute w-20 h-20 rounded-full bg-red-500/15" />
                       <motion.button whileTap={{ scale: 0.95 }} onClick={stopRecording}
-                        className="relative w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-500/40 z-10">
+                        className="relative w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-500/40 z-10 cursor-pointer">
                         <Square className="w-6 h-6 fill-current" />
                       </motion.button>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      <span className="text-[14px] font-mono font-semibold">{fmt(duration)}</span>
+                      <span className="text-[14px] font-mono font-bold">{fmt(duration)}</span>
                     </div>
                     <div className="flex items-end gap-0.5 h-6">
                       {Array.from({ length: 20 }).map((_, i) => (
@@ -290,7 +247,7 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                           transition={{ duration: 0.08 }} />
                       ))}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Recording… tap ■ to stop</p>
+                    <p className="text-[11px] text-muted-foreground">Говорите… нажмите ■ для завершения</p>
                   </div>
                 )}
 
@@ -300,51 +257,36 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                     <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center">
                       <Loader2 className="w-7 h-7 text-primary animate-spin" />
                     </div>
-                    <p className="text-[13px] font-medium">Zerf Note is thinking…</p>
-                    <p className="text-[11px] text-muted-foreground text-center">Transcribing · Classifying · Structuring</p>
+                    <p className="text-[13px] font-bold text-foreground">Zerf Note обрабатывает голос…</p>
+                    <p className="text-[11px] text-muted-foreground text-center">Распознавание · Анализ намерения · Синхронизация</p>
                   </div>
                 )}
 
                 {/* RESULT — COMPLETION */}
-                {stage === 'result' && result?.type === 'completion' && (
+                {stage === 'result' && (result?.type === 'completion' || result?.action === 'completion') && (
                   <div className="space-y-3">
                     <div className="flex flex-col items-center gap-3 py-3">
                       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}
                         className="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center">
                         <CheckCircle2 className="w-9 h-9 text-emerald-500" />
                       </motion.div>
-                      <p className="text-[14px] font-semibold text-foreground">Task completed!</p>
-                      {completedTask ? (
-                        <div className="w-full p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
-                          <p className="text-[12px] text-muted-foreground">Matched task:</p>
-                          <p className="text-[13px] font-semibold text-foreground mt-0.5 line-through decoration-emerald-500">
-                            {completedTask.title}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/30 border border-border w-full">
-                          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <p className="text-[12px] text-muted-foreground">
-                            Looking for: <span className="text-foreground font-medium">{result.targetTitle || result.title}</span>
-                          </p>
-                        </div>
-                      )}
-                      {result.rawText && (
-                        <p className="text-[11px] text-muted-foreground/60 italic text-center">
-                          "{result.rawText.slice(0, 80)}"
+                      <p className="text-[14px] font-bold text-foreground">Задача успешно выполнена!</p>
+                      <div className="w-full p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                        <p className="text-[13px] font-bold text-foreground line-through decoration-emerald-500">
+                          {result.targetTitle || result.title}
                         </p>
-                      )}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={reset}
-                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors">
-                        Record again
+                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        Сказать еще
                       </button>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={confirmResult}
-                        className="flex-1 h-9 rounded-xl bg-emerald-600 text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 hover:opacity-90">
-                        <Check className="w-3.5 h-3.5" />
-                        Confirm
-                      </motion.button>
+                      <button onClick={() => navigateToTarget('tasks')}
+                        className="flex-1 h-9 rounded-xl bg-emerald-600 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 hover:opacity-90 cursor-pointer">
+                        <span>В задачи</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 )}
@@ -355,86 +297,78 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                     <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">💡</span>
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-amber-500 px-2 py-0.5 rounded-full bg-amber-500/15">
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-amber-500 px-2 py-0.5 rounded-full bg-amber-500/15">
                           Ответ ИИ
                         </span>
                       </div>
-                      <p className="text-[13px] font-semibold text-foreground leading-snug">{result.title}</p>
+                      <p className="text-[13px] font-bold text-foreground leading-snug">{result.title}</p>
                       <div className="text-[12px] text-foreground/90 leading-relaxed whitespace-pre-wrap bg-background/60 p-3 rounded-lg border border-border/50 max-h-48 overflow-y-auto">
                         {result.summary}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50 italic">
-                      <Volume2 className="w-3 h-3 shrink-0" />
-                      <span className="line-clamp-1">"{result.rawText}"</span>
-                    </div>
                     <div className="flex gap-2 pt-1">
                       <button onClick={reset}
-                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors">
+                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                         Спросить еще
                       </button>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={confirmResult}
-                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-semibold flex items-center justify-center gap-1.5 hover:opacity-90">
+                      <button onClick={() => { reset(); onClose() }}
+                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold flex items-center justify-center gap-1.5 hover:opacity-90 cursor-pointer">
                         <Check className="w-3.5 h-3.5" />
                         Понятно
-                      </motion.button>
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* RESULT — NORMAL */}
-                {stage === 'result' && result && result.type !== 'completion' && result.type !== 'answer' && (
+                {/* RESULT — NORMAL / UPDATE / CREATE */}
+                {stage === 'result' && result && result.type !== 'completion' && result.action !== 'completion' && result.type !== 'answer' && (
                   <div className="space-y-3">
-                    <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2.5">
+                    <div className="p-4 rounded-2xl bg-card border border-primary/30 shadow-md space-y-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">{TYPE_EMOJI[result.type] || '✅'}</span>
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
-                          {result.type}
+                        <span className="text-base">{TYPE_EMOJI[result.type] || '✨'}</span>
+                        <span className="text-[11px] font-bold text-primary px-2 py-0.5 rounded-full bg-primary/10">
+                          {result.action === 'update'
+                            ? (result.type === 'note' ? 'Заметка обновлена' : result.type === 'goal' ? 'Цель обновлена' : 'Задача обновлена')
+                            : result.action === 'delete' || result.action === 'delete_all'
+                            ? 'Удалено'
+                            : (result.type === 'note' ? 'Заметка создана' : result.type === 'goal' ? 'Цель создана' : 'Задача добавлена')}
                         </span>
-                        <div className="ml-auto flex items-center gap-1.5">
-                          <span className={cn('w-2 h-2 rounded-full', PRIORITY_DOT[result.priority])} />
-                          <span className="text-[11px] font-semibold capitalize">{result.priority}</span>
-                        </div>
+                        {result.priority && (
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <span className={cn('w-2 h-2 rounded-full', PRIORITY_DOT[result.priority])} />
+                            <span className="text-[10px] font-bold uppercase">{result.priority}</span>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-[14px] font-semibold text-foreground leading-snug">{result.title}</p>
-                      {result.type !== 'note' && (
+                      <p className="text-[13px] font-bold text-foreground leading-snug">{result.title}</p>
+                      {result.summary && result.summary !== result.title && (
                         <p className="text-[12px] text-muted-foreground leading-relaxed line-clamp-3">{result.summary}</p>
                       )}
                       <div className="flex items-center gap-3 flex-wrap text-[11px] text-muted-foreground">
                         {result.dueDate && <span>📅 {result.dueDate}</span>}
-                        {result.dueTime && <span className="text-primary font-semibold">⏰ {result.dueTime}</span>}
+                        {result.dueTime && <span className="text-primary font-bold">⏰ {result.dueTime}</span>}
                       </div>
-                      {result.tags.length > 0 && (
+                      {result.tags && result.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {result.tags.map(tag => (
                             <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">#{tag}</span>
                           ))}
                         </div>
                       )}
-                      {result.subtasks && result.subtasks.length > 0 && (
-                        <div className="space-y-0.5 pt-0.5">
-                          {result.subtasks.map((st, i) => (
-                            <p key={i} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />{st}
-                            </p>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50 italic">
-                      <Volume2 className="w-3 h-3 shrink-0" />
-                      <span className="line-clamp-1">"{result.rawText}"</span>
-                    </div>
+
                     <div className="flex gap-2 pt-1">
                       <button onClick={reset}
-                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors">
-                        Discard
+                        className="flex-1 h-9 rounded-xl border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        Сказать еще
                       </button>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={confirmResult}
-                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-semibold flex items-center justify-center gap-1.5 hover:opacity-90">
-                        <Check className="w-3.5 h-3.5" />
-                        Add to Zerf
-                      </motion.button>
+                      <button
+                        onClick={() => navigateToTarget(result.type === 'goal' ? 'goals' : result.type === 'note' ? 'notes' : 'tasks')}
+                        className="flex-1 h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold flex items-center justify-center gap-1.5 hover:opacity-90 cursor-pointer"
+                      >
+                        <span>{result.type === 'goal' ? '🎯 В Цели' : result.type === 'note' ? '📝 В Заметки' : '↗️ К задаче'}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 )}
@@ -447,8 +381,8 @@ export function VoiceRecorder({ open, onClose }: VoiceRecorderProps) {
                       <p className="text-[12px] text-foreground/80 leading-snug">{error}</p>
                     </div>
                     <button onClick={() => setStage('idle')}
-                      className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-semibold hover:opacity-90">
-                      Try again
+                      className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-[12px] font-bold hover:opacity-90 cursor-pointer">
+                      Попробовать снова
                     </button>
                   </div>
                 )}
