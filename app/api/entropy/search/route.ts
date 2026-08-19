@@ -15,7 +15,28 @@ import {
   incrementDailyCount,
   COUNTERS,
 } from '@/lib/backend/plans'
-import { getUserUsageAndLimits } from '@/lib/backend/db'
+import { getUserUsageAndLimits, parseBirthday } from '@/lib/backend/db'
+
+function getDaysUntilBirthday(bdayStr: string, now: Date): number | null {
+  const parsed = parseBirthday(bdayStr)
+  if (!parsed) return null
+
+  const curYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1 // 1-12
+  const currentDay = now.getDate()
+
+  // Target date this year or next year
+  let targetYear = curYear
+  if (parsed.month < currentMonth || (parsed.month === currentMonth && parsed.day < currentDay)) {
+    targetYear = curYear + 1
+  }
+
+  const targetDate = new Date(targetYear, parsed.month - 1, parsed.day)
+  const todayDate = new Date(curYear, now.getMonth(), now.getDate())
+
+  const diffMs = targetDate.getTime() - todayDate.getTime()
+  return Math.round(diffMs / (1000 * 60 * 60 * 24))
+}
 
 // ── Standard Search Daily Limits (Per-Day Quota) ───────────────────────────
 export const ENTROPY_ROLE_LIMITS: Record<string, number> = {
@@ -240,6 +261,13 @@ export async function POST(req: NextRequest) {
       'очень', 'просто', 'тоже', 'также', 'только', 'еще', 'ещё', 'уже',
     ])
 
+    const now = new Date()
+    const mskParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(now)
+    const todayStr = `${mskParts.find(p => p.type === 'year')?.value}-${mskParts.find(p => p.type === 'month')?.value}-${mskParts.find(p => p.type === 'day')?.value}`
+
     const isPersonalWorkspaceQuery = (
       mode === 'notes' ||
       /\b(?:мои|моя|моё|мое|мой|моих|мне|моем|моём|задач[аиеу]|дела|план[ыаов]|заметк[аиеу]|расписани[еи]|список|цел[ьи]|напоминани[яе])\b/i.test(cleanQuery)
@@ -250,10 +278,19 @@ export async function POST(req: NextRequest) {
       .split(/[\s,.;:!?\-#]+/)
       .filter(w => w.length >= 3 && !STOPWORDS.has(w))
 
+    const isActualPendingTask = (t: any) => {
+      if (t.status === 'done' || t.status === 'draft') return false
+      if (t.completedAt) return false
+      if (t.dueDate && t.dueDate < todayStr) return false // Past date
+      // Exclude raw birthday reminder tasks (they are processed in the birthday engine)
+      if (t.tags?.includes('день рождения') || t.tags?.includes('мой день рождения') || t.title.startsWith('🎂')) return false
+      return true
+    }
+
     // 2. Smart Client Workspace Context Integration (Notes, Tasks, Goals)
     const clientSources: any[] = []
 
-    if (Array.isArray(userNotes) && userNotes.length > 0 && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
+    if (Array.isArray(userNotes) && userNotes.length > 0 && isPersonalWorkspaceQuery && meaningfulWords.length > 0) {
       const matchedClientNotes = userNotes.filter((n: any) => {
         const combined = ((n.title || '') + ' ' + (n.content || '') + ' ' + (n.tags || []).join(' ')).toLowerCase()
         return meaningfulWords.some(w => combined.includes(w))
@@ -270,29 +307,28 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (Array.isArray(userTasks) && userTasks.length > 0 && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
+    if (Array.isArray(userTasks) && userTasks.length > 0 && isPersonalWorkspaceQuery) {
       const matchedClientTasks = userTasks.filter((t: any) => {
+        if (!isActualPendingTask(t)) return false
+        if (meaningfulWords.length === 0) return true // general tasks question
         const combined = ((t.title || '') + ' ' + (t.tags || []).join(' ')).toLowerCase()
         return meaningfulWords.some(w => combined.includes(w))
       })
       matchedClientTasks.slice(0, 3).forEach((t: any) => {
-        const isDone = t.status === 'done' || Boolean(t.completedAt)
-        const statusLabel = isDone
-          ? ' [СТАТУС: ВЫПОЛНЕНА / ЗАВЕРШЕНА РАНЕЕ. Дело уже сделано в прошлом, НЕ предлагать к выполнению на сегодня!]'
-          : ` [СТАТУС: АКТИВНА / В ПРОЦЕССЕ.${t.dueDate ? ` Запланирована на: ${t.dueDate}` : ''}]`
         clientSources.push({
           title: `✓ Задача: «${t.title}»`,
           url: `/tasks?id=${t.id}`,
           domain: 'zerf.tasks',
-          snippet: `Задача из Zerf Note: «${t.title}»${statusLabel}`,
+          snippet: `Актуальная задача: «${t.title}» (Срок: ${t.dueDate || 'сегодня'}, статус: в процессе)`,
           type: 'task',
           taskId: t.id,
         })
       })
     }
 
-    if (Array.isArray(userGoals) && userGoals.length > 0 && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
+    if (Array.isArray(userGoals) && userGoals.length > 0 && isPersonalWorkspaceQuery) {
       const matchedClientGoals = userGoals.filter((g: any) => {
+        if (meaningfulWords.length === 0) return true
         const combined = (g.title || '').toLowerCase()
         return meaningfulWords.some(w => combined.includes(w))
       })
@@ -301,7 +337,7 @@ export async function POST(req: NextRequest) {
           title: `🎯 Цель: «${g.title}»`,
           url: `/goals?id=${g.id}`,
           domain: 'zerf.goals',
-          snippet: `Цель пользователя (Прогресс: ${g.progress || 0}%${g.deadline ? `, дедлайн: ${g.deadline}` : ''})`,
+          snippet: `Цель: «${g.title}» (Прогресс: ${g.progress || 0}%${g.deadline ? `, дедлайн: ${g.deadline}` : ''})`,
           type: 'goal',
           goalId: g.id,
         })
@@ -312,19 +348,17 @@ export async function POST(req: NextRequest) {
       liveSources = [...clientSources, ...liveSources]
     }
 
-    // 3. Search user's internal notes, tasks and graph knowledge in DB
-    if (ownerChatId !== 'guest' && (isPersonalWorkspaceQuery || meaningfulWords.length > 0)) {
+    // 3. Search user's internal notes, tasks in DB (ONLY if personal workspace query)
+    if (ownerChatId !== 'guest' && isPersonalWorkspaceQuery) {
       try {
         const numericOwnerId = BigInt(ownerChatId)
 
-        // Fetch recent notes for user
         const notes = await prisma.note.findMany({
           where: { ownerChatId: numericOwnerId },
           take: 35,
           orderBy: { updatedAt: 'desc' },
         })
 
-        // Fetch recent tasks & reminders for user
         const tasks = await prisma.task.findMany({
           where: { ownerChatId: numericOwnerId },
           take: 35,
@@ -332,21 +366,21 @@ export async function POST(req: NextRequest) {
         })
 
         const matchedNotes = notes.filter((n: any) => {
+          if (meaningfulWords.length === 0) return true
           const tagsStr = (n.tags || []).join(' ').toLowerCase()
           const combined = (n.title + ' ' + (n.content || '') + ' ' + tagsStr).toLowerCase()
           return meaningfulWords.some(w => combined.includes(w))
         })
 
         const matchedTasks = tasks.filter((t: any) => {
+          if (!isActualPendingTask(t)) return false
+          if (meaningfulWords.length === 0) return true
           const tagsStr = (t.tags || []).join(' ').toLowerCase()
           const combined = (t.title + ' ' + (t.description || '') + ' ' + tagsStr).toLowerCase()
           return meaningfulWords.some(w => combined.includes(w))
         })
 
-        const chosenNotes = mode === 'notes' && matchedNotes.length === 0
-          ? notes.slice(0, 4)
-          : matchedNotes.slice(0, 4)
-
+        const chosenNotes = matchedNotes.slice(0, 3)
         const chosenTasks = matchedTasks.slice(0, 3)
 
         const internalSources: any[] = [
@@ -358,41 +392,108 @@ export async function POST(req: NextRequest) {
             type: 'note',
             noteId: n.id,
           })),
-          ...chosenTasks.map((t: any) => {
-            const isDone = t.status === 'done' || Boolean(t.completedAt)
-            const statusLabel = isDone
-              ? ' [СТАТУС: ВЫПОЛНЕНА / ЗАВЕРШЕНА РАНЕЕ. Дело уже сделано, НЕ предлагать к выполнению на сегодня!]'
-              : ` [СТАТУС: АКТИВНА / В ПРОЦЕССЕ.${t.dueDate ? ` Срок: ${t.dueDate} ${t.dueTime || ''}` : ''}]`
-            return {
-              title: `✓ Задача: «${t.title}»`,
-              url: `/tasks?id=${t.id}`,
-              domain: 'zerf.task',
-              snippet: (t.description || t.title) + statusLabel,
-              type: 'task',
-              taskId: t.id,
-            }
-          }),
+          ...chosenTasks.map((t: any) => ({
+            title: `✓ Задача: «${t.title}»`,
+            url: `/tasks?id=${t.id}`,
+            domain: 'zerf.task',
+            snippet: `Актуальная задача: «${t.title}» (Срок: ${t.dueDate || 'сегодня'}, статус: в процессе)`,
+            type: 'task',
+            taskId: t.id,
+          })),
         ]
 
         if (internalSources.length > 0) {
-          if (mode === 'notes') {
-            liveSources = [...internalSources, ...liveSources.slice(0, 3)]
-          } else {
-            const existingTitles = new Set(liveSources.map(s => s.title))
-            const newInternal = internalSources.filter(s => !existingTitles.has(s.title))
-            liveSources = [...newInternal, ...liveSources.slice(0, 6)]
-          }
+          const existingTitles = new Set(liveSources.map(s => s.title))
+          const newInternal = internalSources.filter(s => !existingTitles.has(s.title))
+          liveSources = [...newInternal, ...liveSources.slice(0, 6)]
         }
       } catch (err) {
         console.warn('[Entropy API] Internal notes/tasks lookup error:', err)
       }
     }
 
+    // 4. Calculate Upcoming Birthdays within 7 days (За неделю до самого ДР)
+    const upcomingBirthdays: { name: string; daysLeft: number; displayDate: string }[] = []
+
+    const allBdayTasks = [
+      ...(Array.isArray(userTasks) ? userTasks : []),
+    ].filter((t: any) => t.tags?.includes('день рождения') || t.title.startsWith('🎂'))
+
+    for (const bt of allBdayTasks) {
+      if (bt.dueDate) {
+        const days = getDaysUntilBirthday(bt.dueDate, now)
+        if (days !== null && days >= 0 && days <= 7) {
+          const cleanName = bt.title.replace(/^🎂\s*(?:День рождения:?\s*)?/, '').trim() || 'Друг'
+          if (!upcomingBirthdays.some(b => b.name.toLowerCase() === cleanName.toLowerCase())) {
+            upcomingBirthdays.push({
+              name: cleanName,
+              daysLeft: days,
+              displayDate: bt.dueDate,
+            })
+          }
+        }
+      }
+    }
+
+    if (ownerChatId !== 'guest') {
+      try {
+        const numericOwnerId = BigInt(ownerChatId)
+        const userChat = await prisma.telegramChat.findUnique({
+          where: { chatId: numericOwnerId },
+          select: { birthday: true, firstName: true },
+        })
+        if (userChat?.birthday) {
+          const days = getDaysUntilBirthday(userChat.birthday, now)
+          if (days !== null && days >= 0 && days <= 7) {
+            upcomingBirthdays.unshift({
+              name: 'Твой День рождения',
+              daysLeft: days,
+              displayDate: userChat.birthday,
+            })
+          }
+        }
+
+        const friendships = await prisma.friendship.findMany({
+          where: { OR: [{ userChatId: numericOwnerId }, { friendChatId: numericOwnerId }] },
+        })
+        const friendIds = friendships.map(f => f.userChatId === numericOwnerId ? f.friendChatId : f.userChatId)
+        if (friendIds.length > 0) {
+          const friendChats = await prisma.telegramChat.findMany({
+            where: { chatId: { in: friendIds }, birthday: { not: null } },
+            select: { firstName: true, username: true, birthday: true },
+          })
+          for (const fc of friendChats) {
+            if (fc.birthday) {
+              const days = getDaysUntilBirthday(fc.birthday, now)
+              if (days !== null && days >= 0 && days <= 7) {
+                const fName = fc.firstName || (fc.username ? `@${fc.username}` : 'Друг')
+                if (!upcomingBirthdays.some(b => b.name.toLowerCase() === fName.toLowerCase())) {
+                  upcomingBirthdays.push({
+                    name: fName,
+                    daysLeft: days,
+                    displayDate: fc.birthday,
+                  })
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
     liveSources = liveSources.map((s: any, idx: number) => ({ ...s, id: idx + 1 }))
 
-    const liveContext = liveSources.length > 0
+    let liveContext = liveSources.length > 0
       ? `\n\nФАКТИЧЕСКИЕ ПЕРВОИСТОЧНИКИ И ЗАМЕТКИ:\n` + liveSources.map(s => `[${s.id}] "${s.title}" (${s.domain})\nURL: ${s.url}\nВыжимка: ${s.snippet}`).join('\n\n')
       : ''
+
+    if (upcomingBirthdays.length > 0) {
+      const bdaysText = upcomingBirthdays.map(b => {
+        const when = b.daysLeft === 0 ? 'СЕГОДНЯ! 🎉' : b.daysLeft === 1 ? 'ЗАВТРА! 🎁' : `через ${b.daysLeft} дн. (${b.displayDate})`
+        return `• 🎂 ${b.name}: ${when}`
+      }).join('\n')
+      liveContext += `\n\n🎂 БЛИЖАЙШИЕ ДНИ РОЖДЕНИЯ (в течение 7 дней):\n${bdaysText}\n(ОБЯЗАТЕЛЬНО упомяни эти ближайшие праздники в предложениях/рекомендациях и предложи идеи подарков/поздравлений!)`
+    }
 
     let modePriorityInstruction = ''
     if (mode === 'academic') modePriorityInstruction = 'Академические исследования, научные публикации, методология.'
@@ -442,9 +543,12 @@ ${liveContext}
 2. ГЛУБОКИЙ КОНТЕКСТУАЛЬНЫЙ ИНТЕЛЛЕКТ:
    - Если вопрос касается ОБЩЕЙ СВОДКИ ИЛИ НОВОСТЕЙ НА СЕГОДНЯ («какую информацию на сегодня мне дашь?», «новости на сегодня», «что произошло в мире»):
      • Сформируй структурированную картину главных актуальных новостей дня (мировые события, технологии, культура, экономика) на основе новостных первоисточников.
-     • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО подмешивать личные выполненные задачи пользователя в мировые новости, если пользователь прямо не спрашивал про свои задачи!
+     • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО подмешивать личные выполненные задачи пользователя в мировые новости!
+   - Если в контексте есть блок «БЛИЖАЙШИЕ ДНИ РОЖДЕНИЯ» (дни рождения за 7 дней до даты):
+     • Обязательно выдели их в предложениях/рекомендациях: напомни поздравить человека и предложи 2–3 классные идеи подарка/сюрприза!
+     • Внимание: упоминай дни рождения ТОЛЬКО если они указаны в блоке ближайших (до 7 дней). Если праздников нет или они дальше чем через неделю — не придумывай их.
    - Если вопрос касается ЗАДАЧ И РАСПИСАНИЯ ПОЛЬЗОВАТЕЛЯ:
-     • Обращай внимание на статус задач: если задача помечена как [СТАТУС: ВЫПОЛНЕНА / ЗАВЕРШЕНА РАНЕЕ], она УЖЕ завершена пользователем в прошлом! КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать, что пользователю «нужно сделать эту задачу» или «ваша задача на сегодня — провести...». Если пользователь спрашивает, отвечай, что она уже выполнена.
+     • Учитывай ИСКЛЮЧИТЕЛЬНО активные предстоящие задачи на сегодня и будущее. Прошлые выполненные дела полностью исключены.
    - Если вопрос касается ПОДАРКА или ДНЯ РОЖДЕНИЯ (например: «Что подарить на день рождения: Лерочч?»):
      • Предложи 4 конкретные вдохновляющие категории подарков:
        1) 🎁 Впечатления и эмоции (мастер-классы, спа, концерты, квесты).
