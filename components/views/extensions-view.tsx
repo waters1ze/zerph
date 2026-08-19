@@ -1125,33 +1125,34 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   }
 
   const handleToggleEnable = async (extensionId: string) => {
+    const isCurrentlyEnabled = enabledIds.includes(extensionId)
+    const nextEnabled = isCurrentlyEnabled
+      ? enabledIds.filter(id => id !== extensionId)
+      : [...enabledIds, extensionId]
+    
+    // Instant optimistic update
+    setEnabledIds(nextEnabled)
+
     try {
-      setActionLoading(`enable_${extensionId}`)
-      const isCurrentlyEnabled = enabledIds.includes(extensionId)
-      const nextState = !isCurrentlyEnabled
-
-      // Optimistic UI update
-      setEnabledIds(prev =>
-        nextState ? [...prev, extensionId] : prev.filter(id => id !== extensionId)
-      )
-
+      setActionLoading(`toggle_${extensionId}`)
       const res = await fetch('/api/extensions', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle_enable', extensionId, enabled: nextState }),
+        body: JSON.stringify({ action: 'toggle_enable', extensionId }),
       })
       const data = await res.json()
-      if (data.success && Array.isArray(data.enabledIds)) {
-        setEnabledIds(data.enabledIds)
-      } else if (!data.success) {
-        // Revert on error
-        setEnabledIds(prev =>
-          isCurrentlyEnabled ? [...prev, extensionId] : prev.filter(id => id !== extensionId)
-        )
-        showToast(data.error || 'Ошибка изменения статуса расширения', 'error')
+      if (data.success) {
+        setEnabledIds(data.enabledIds || nextEnabled)
+        window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+        window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+        showToast(isCurrentlyEnabled ? '⚪ Расширение отключено' : '🟢 Расширение включено', 'info')
+      } else {
+        setEnabledIds(enabledIds) // rollback
+        showToast(data.error || 'Ошибка изменения статуса', 'error')
       }
     } catch {
-      showToast('Ошибка сети при изменении статуса расширения', 'error')
+      setEnabledIds(enabledIds) // rollback
+      showToast('Ошибка изменения статуса', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1188,6 +1189,9 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       if (data.success) {
         setInstalledIds(data.installedIds || [])
         if (data.enabledIds) setEnabledIds(data.enabledIds)
+        window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+        window.dispatchEvent(new CustomEvent('zerf_extension_installed', { detail: { extensionId } }))
+        window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
         showToast('✓ Расширение успешно установлено!', 'success')
       } else {
         // Rollback
@@ -1235,6 +1239,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       if (data.success) {
         setInstalledIds(data.installedIds || [])
         if (data.enabledIds) setEnabledIds(data.enabledIds)
+        window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+        window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
         showToast('✓ Расширение удалено из вашего списка', 'info')
       } else {
         // Rollback

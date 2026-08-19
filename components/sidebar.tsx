@@ -16,6 +16,7 @@ import type { ExtensionItem } from '@/app/api/extensions/route'
 import { ExtensionIcon } from '@/components/views/extensions-view'
 import { ZerfAvatar } from '@/components/ui/zerf-avatar'
 import { planAtLeast, type PlanId } from '@/lib/plans'
+import { ZerficLiveModal } from '@/components/views/zerfic-live-modal'
 
 export interface NavItem {
   id: View
@@ -62,6 +63,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
   const [enabledExtIds, setEnabledExtIds] = useState<string[]>([])
   const [disabledNotice, setDisabledNotice] = useState<string | null>(null)
+  const [showZerficLiveModal, setShowZerficLiveModal] = useState<boolean>(false)
 
   // User Avatar Emoji State
   const [userAvatarEmoji, setUserAvatarEmoji] = useState<string>(() => {
@@ -272,14 +274,25 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     }
     fetchInstalledExts()
 
-    const handleExtsChanged = () => fetchInstalledExts(true)
+    const handleExtsChanged = () => {
+      cachedInstalledExts = null
+      fetchInstalledExts(true)
+    }
+    const handleOpenZerficLive = () => setShowZerficLiveModal(true)
+
     window.addEventListener('zerf_sidebar_config_changed', handleExtsChanged)
+    window.addEventListener('zerf_extensions_updated', handleExtsChanged)
+    window.addEventListener('zerf_extension_installed', handleExtsChanged)
+    window.addEventListener('zerf_open_zerfic_live', handleOpenZerficLive)
     window.addEventListener('zerf_sync', handleExtsChanged)
 
     const interval = setInterval(fetchPendingTeamRequests, 10 * 60 * 1000)
     return () => {
       clearInterval(interval)
       window.removeEventListener('zerf_sidebar_config_changed', handleExtsChanged)
+      window.removeEventListener('zerf_extensions_updated', handleExtsChanged)
+      window.removeEventListener('zerf_extension_installed', handleExtsChanged)
+      window.removeEventListener('zerf_open_zerfic_live', handleOpenZerficLive)
       window.removeEventListener('zerf_sync', handleExtsChanged)
     }
   }, [dispatch])
@@ -529,9 +542,14 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                             if (isEntropy) {
                               dispatch({ type: 'SET_VIEW', view: 'entropy' })
                               window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
-                            } else {
-                              dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                              return
                             }
+                            const isZerfic = itemId === 'ext_zerfic_live' || itemId === 'zerfic-live' || extensionItem.id === 'ext_zerfic_live' || extensionItem.id === 'zerfic-live' || extensionItem.title?.toLowerCase().includes('zerfic')
+                            if (isZerfic) {
+                              setShowZerficLiveModal(true)
+                              return
+                            }
+                            dispatch({ type: 'SET_VIEW', view: 'extensions' })
                           }}
                           className={cn(
                             'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
@@ -631,9 +649,14 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                       if (isEntropy) {
                         dispatch({ type: 'SET_VIEW', view: 'entropy' })
                         window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
-                      } else {
-                        dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                        return
                       }
+                      const isZerfic = ext.id === 'ext_zerfic_live' || ext.id === 'zerfic-live' || ext.title?.toLowerCase().includes('zerfic')
+                      if (isZerfic) {
+                        setShowZerficLiveModal(true)
+                        return
+                      }
+                      dispatch({ type: 'SET_VIEW', view: 'extensions' })
                     }}
                     className={cn(
                       'w-full flex items-center rounded-xl text-xs font-medium transition-all duration-150 font-sans cursor-pointer',
@@ -795,6 +818,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Zerfic Live Voice Companion Dedicated Modal */}
+      <ZerficLiveModal
+        isOpen={showZerficLiveModal}
+        onClose={() => setShowZerficLiveModal(false)}
+      />
     </aside>
   )
 }
