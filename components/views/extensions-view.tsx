@@ -16,6 +16,7 @@ import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { ExtensionItem } from '@/app/api/extensions/route'
+import { ZerficLiveModal } from './zerfic-live-modal'
 
 export function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
@@ -148,7 +149,6 @@ const SAMPLE_MANIFEST = `{
 
 export const EXTENSION_CATEGORIES = [
   { id: 'Виджеты & Фокус', icon: '⏱️', label: 'Виджеты & Фокус', desc: 'Таймеры, интервалы, трекеры и виджеты' },
-  { id: 'ИИ & Промпты', icon: '🔮', label: 'ИИ & Промпты', desc: 'Поисковые движки, AI синтез, Perplexity, CLI' },
   { id: 'Бизнес & Стартапы', icon: '🚀', label: 'Бизнес & Стартапы', desc: 'Запуск проектов, шаблоны задач, аналитика' },
   { id: 'Привычки & Здоровье', icon: '💪', label: 'Привычки & Здоровье', desc: 'Спорт, гидратация, режим сна и баланс' },
   { id: 'Утилиты & Экспорт', icon: '🔌', label: 'Утилиты & Экспорт', desc: 'Вебхуки, интеграции, экспорт заметок и CLI' },
@@ -256,7 +256,7 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     version: '1.0.0',
     description: 'Интеллектуальный поисково-аналитический движок инсайтов в стиле Perplexity: глубокий синтез фактов, цитаты со ссылками на проверенные источники [1][2] и авто-экспорт в заметки.',
     type: 'widget',
-    category: 'ИИ & Промпты',
+    category: 'Виджеты & Фокус',
     icon: '🔮',
     githubUrl: 'https://github.com/waters1ze/Entropy',
     authorChatId: 'system',
@@ -353,6 +353,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   // Modals & Interactive preview
   const [selectedExt, setSelectedExt] = useState<ExtensionItem | null>(null)
   const [activeWidgetExt, setActiveWidgetExt] = useState<ExtensionItem | null>(null)
+  const [showZerficLiveModal, setShowZerficLiveModal] = useState<boolean>(false)
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false)
   const [showSpecModal, setShowSpecModal] = useState<boolean>(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -835,6 +836,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     if (ext.id === 'ext_entropy_search' || ext.title.toLowerCase().includes('entropy')) {
       dispatch({ type: 'SET_VIEW', view: 'entropy' })
       window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
+      return
+    }
+    if (ext.id === 'ext_zerfic_live' || ext.title.toLowerCase().includes('zerfic')) {
+      setShowZerficLiveModal(true)
       return
     }
     setActiveWidgetExt(ext)
@@ -1485,7 +1490,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         <div className="space-y-5">
           {/* Filters, Top sorting and Search Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 min-w-0 flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div 
+              className="flex items-center gap-1.5 overflow-x-auto py-1 min-w-0 flex-1 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
               {[
                 { id: 'core', label: '🌟 Основное' },
                 { id: 'all', label: 'Все категории' },
@@ -1493,7 +1501,6 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 { id: 'template', label: '🎯 Шаблоны' },
                 { id: 'theme', label: '🌌 Темы' },
                 { id: 'integration', label: '🔌 Интеграции' },
-                { id: 'prompt', label: '🔮 ИИ & Промпты' },
               ].map(cat => (
                 <button
                   key={cat.id}
@@ -4401,6 +4408,12 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Zerfic Live Voice Companion Modal */}
+      <ZerficLiveModal
+        isOpen={showZerficLiveModal}
+        onClose={() => setShowZerficLiveModal(false)}
+      />
     </div>
   )
 }
