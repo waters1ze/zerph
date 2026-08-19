@@ -134,9 +134,9 @@ export function ZerfikMascot({
   }
 
   const dimensions = {
-    sm: { width: 52, height: 52, aura: 68 },
-    md: { width: 78, height: 78, aura: 100 },
-    lg: { width: 106, height: 106, aura: 136 },
+    sm: { width: 72, height: 72, aura: 88 },
+    md: { width: 104, height: 104, aura: 124 },
+    lg: { width: 144, height: 144, aura: 168 },
   }[size]
 
   const isThinking = currentMood === 'thinking'
@@ -326,7 +326,7 @@ export function ZerfikMascot({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -3 }}
               transition={{ duration: 0.2 }}
-              className="text-xs text-foreground/90 font-medium leading-relaxed"
+              className="text-xs sm:text-sm text-foreground font-semibold leading-snug"
             >
               {displayStatus}
             </motion.p>
