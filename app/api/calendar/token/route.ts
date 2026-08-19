@@ -57,73 +57,84 @@ export async function GET(req: NextRequest) {
     const isCalendarRequested = Boolean(decodedState.includeCalendar)
     let targetChatId = decodedState.chatId
 
-    // If web OAuth login or guest mode without valid chatId
-    if (!targetChatId || targetChatId === 'web' || targetChatId === 'web_oauth_login' || targetChatId.startsWith('guest_')) {
-      if (googleEmail) {
-        let user = await prisma.telegramChat.findFirst({
-          where: {
-            OR: [
-              { googleEmail: googleEmail },
-              { email: googleEmail },
-            ]
-          }
-        })
+    if (googleEmail) {
+      // Find if this Google Email is already attached to any existing account
+      const existingUserWithEmail = await prisma.telegramChat.findFirst({
+        where: {
+          OR: [
+            { googleEmail: googleEmail },
+            { email: googleEmail },
+          ],
+        },
+      })
 
-        if (!user) {
-          let newCid = generateEmailChatId()
-          for (let i = 0; i < 5; i++) {
-            const clash = await prisma.telegramChat.findUnique({ where: { chatId: newCid } })
-            if (!clash) break
-            newCid = generateEmailChatId()
-          }
+      const isExplicitLink = targetChatId && !targetChatId.startsWith('guest_') && targetChatId !== 'web' && targetChatId !== 'web_oauth_login'
 
-          user = await prisma.telegramChat.create({
-            data: {
-              chatId: newCid,
-              email: googleEmail,
-              googleEmail: googleEmail,
-              authProvider: 'google',
-              firstName: googleName || googleEmail.split('@')[0],
-              ...(isCalendarRequested ? {
-                googleCalendarToken: JSON.stringify(tokens),
-                googleCalendarSync: true,
-              } : {
-                googleCalendarSync: false,
-              }),
-              lastActiveAt: new Date(),
-            }
-          })
-        } else {
-          await prisma.telegramChat.update({
-            where: { chatId: user.chatId },
-            data: {
-              googleEmail: googleEmail,
-              ...(isCalendarRequested ? {
-                googleCalendarToken: JSON.stringify(tokens),
-                googleCalendarSync: true,
-              } : {}),
-              lastActiveAt: new Date(),
-            }
-          })
+      if (isExplicitLink) {
+        // Active user is linking Google to their existing account
+        const primaryCid = BigInt(targetChatId)
+
+        // If a separate dummy account was previously created with this email, merge it
+        if (existingUserWithEmail && existingUserWithEmail.chatId !== primaryCid) {
+          try {
+            await prisma.task.updateMany({ where: { ownerChatId: existingUserWithEmail.chatId }, data: { ownerChatId: primaryCid } })
+            await prisma.note.updateMany({ where: { ownerChatId: existingUserWithEmail.chatId }, data: { ownerChatId: primaryCid } })
+            await prisma.telegramChat.delete({ where: { chatId: existingUserWithEmail.chatId } })
+          } catch {}
         }
 
-        targetChatId = String(user.chatId)
-      }
-    } else {
-      // Existing user linking Google
-      try {
-        const cid = BigInt(targetChatId)
         await prisma.telegramChat.update({
-          where: { chatId: cid },
+          where: { chatId: primaryCid },
           data: {
-            ...(googleEmail ? { googleEmail } : {}),
+            googleEmail: googleEmail,
             ...(isCalendarRequested ? {
               googleCalendarToken: JSON.stringify(tokens),
               googleCalendarSync: true,
             } : {}),
+            lastActiveAt: new Date(),
+          },
+        }).catch(() => {})
+      } else if (existingUserWithEmail) {
+        // User logging in via Google OAuth — log into their existing unified account
+        targetChatId = String(existingUserWithEmail.chatId)
+        await prisma.telegramChat.update({
+          where: { chatId: existingUserWithEmail.chatId },
+          data: {
+            googleEmail: googleEmail,
+            ...(isCalendarRequested ? {
+              googleCalendarToken: JSON.stringify(tokens),
+              googleCalendarSync: true,
+            } : {}),
+            lastActiveAt: new Date(),
+          },
+        }).catch(() => {})
+      } else {
+        // Brand new user registering via Google OAuth
+        let newCid = generateEmailChatId()
+        for (let i = 0; i < 5; i++) {
+          const clash = await prisma.telegramChat.findUnique({ where: { chatId: newCid } })
+          if (!clash) break
+          newCid = generateEmailChatId()
+        }
+
+        const newUser = await prisma.telegramChat.create({
+          data: {
+            chatId: newCid,
+            email: googleEmail,
+            googleEmail: googleEmail,
+            authProvider: 'google',
+            firstName: googleName || googleEmail.split('@')[0],
+            ...(isCalendarRequested ? {
+              googleCalendarToken: JSON.stringify(tokens),
+              googleCalendarSync: true,
+            } : {
+              googleCalendarSync: false,
+            }),
+            lastActiveAt: new Date(),
           },
         })
-      } catch {}
+        targetChatId = String(newUser.chatId)
+      }
     }
 
     if (targetChatId && !targetChatId.startsWith('guest_') && targetChatId !== 'web') {
