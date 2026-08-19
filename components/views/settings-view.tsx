@@ -12,7 +12,7 @@ import {
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
   Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen,
-  Share2, Heart, Calendar
+  Share2, Heart, Calendar, CreditCard
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -282,6 +282,102 @@ export function SettingsView() {
     } catch {}
   }
 
+  // User Payment Card & Auto-Renew State
+  const [userPaymentCard, setUserPaymentCard] = useState<{
+    payoutType: 'card' | 'sbp' | 'yoomoney'
+    cardNumber: string
+    phone: string
+    bankName: string
+    recipientName?: string
+  } | null>(null)
+  const [autoRenew, setAutoRenew] = useState<boolean>(false)
+  const [autoRenewLoading, setAutoRenewLoading] = useState<boolean>(false)
+  const [showCardForm, setShowCardForm] = useState<boolean>(false)
+  const [cardFormType, setCardFormType] = useState<'card' | 'sbp' | 'yoomoney'>('card')
+  const [cardFormNumber, setCardFormNumber] = useState<string>('')
+  const [cardFormPhone, setCardFormPhone] = useState<string>('')
+  const [cardFormBank, setCardFormBank] = useState<string>('')
+  const [cardFormName, setCardFormName] = useState<string>('')
+
+  const fetchAutoRenew = () => {
+    fetch('/api/subscription/autorenew', { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setAutoRenew(Boolean(d.autoRenew))
+          if (d.cardData) {
+            setUserPaymentCard(d.cardData)
+            setCardFormType(d.cardData.payoutType || 'card')
+            setCardFormNumber(d.cardData.cardNumber || '')
+            setCardFormPhone(d.cardData.phone || '')
+            setCardFormBank(d.cardData.bankName || '')
+            setCardFormName(d.cardData.recipientName || '')
+          }
+        }
+      })
+      .catch(() => {})
+  }
+
+  const handleToggleAutoRenew = async () => {
+    const nextVal = !autoRenew
+    setAutoRenewLoading(true)
+    try {
+      const res = await fetch('/api/subscription/autorenew', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          autoRenew: nextVal,
+          payoutType: cardFormType,
+          cardNumber: cardFormNumber,
+          phone: cardFormPhone,
+          bankName: cardFormBank,
+          recipientName: cardFormName,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAutoRenew(data.autoRenew)
+        if (data.cardData) setUserPaymentCard(data.cardData)
+        setSettingsSavedBadge(true)
+        setTimeout(() => setSettingsSavedBadge(false), 2500)
+      }
+    } catch {
+      alert('Ошибка при сохранении настройки автопродления')
+    } finally {
+      setAutoRenewLoading(false)
+    }
+  }
+
+  const handleSavePaymentCard = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAutoRenewLoading(true)
+    try {
+      const res = await fetch('/api/subscription/autorenew', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          autoRenew,
+          payoutType: cardFormType,
+          cardNumber: cardFormNumber,
+          phone: cardFormPhone,
+          bankName: cardFormBank,
+          recipientName: cardFormName,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setUserPaymentCard(data.cardData)
+        setShowCardForm(false)
+        setSettingsSavedBadge(true)
+        setTimeout(() => setSettingsSavedBadge(false), 2500)
+      }
+    } catch {
+      alert('Ошибка сохранения карты')
+    } finally {
+      setAutoRenewLoading(false)
+    }
+  }
+
   // Generic DB preference updater
   const syncPreferenceToServer = async (payload: Record<string, any>) => {
     if (!currentChatId) return
@@ -400,6 +496,7 @@ export function SettingsView() {
   useEffect(() => {
     fetchProfile()
     fetchUsage()
+    fetchAutoRenew()
   }, [currentChatId, activeTab])
 
   useEffect(() => {
@@ -3829,6 +3926,144 @@ GOOGLE_REDIRECT_URI=https://zeprh.vercel.app/api/calendar/token
                   </button>
                 </div>
               )}
+
+              {/* ── PAYMENT CARD & AUTO-RENEW SECTION ── */}
+              <div className="p-5 rounded-2xl bg-card border border-border space-y-4 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground">Банковская карта и автопродление</h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        Управление картой для платежей и автоматическим продлением подписки
+                      </p>
+                    </div>
+                  </div>
+
+                  {userPaymentCard && !showCardForm && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCardForm(true)}
+                      className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-[11px] font-semibold transition-colors cursor-pointer self-start sm:self-auto"
+                    >
+                      Изменить карту
+                    </button>
+                  )}
+                </div>
+
+                {/* Card Status / Display */}
+                {userPaymentCard && !showCardForm ? (
+                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 border border-border/60">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-card border border-border flex items-center justify-center text-lg shadow-2xs">
+                        {userPaymentCard.payoutType === 'sbp' ? '⚡' : userPaymentCard.payoutType === 'yoomoney' ? '🟣' : '💳'}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-foreground font-mono">
+                            {userPaymentCard.payoutType === 'sbp'
+                              ? `СБП: ${userPaymentCard.phone || 'Номер привязан'}`
+                              : userPaymentCard.payoutType === 'yoomoney'
+                              ? `ЮMoney: ${userPaymentCard.cardNumber ? '•••• ' + userPaymentCard.cardNumber.slice(-4) : 'Кошелек привязан'}`
+                              : `Карта: •••• ${userPaymentCard.cardNumber ? userPaymentCard.cardNumber.slice(-4) : '••••'}`}
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-bold">
+                            Привязана
+                          </span>
+                        </div>
+                        {userPaymentCard.bankName && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{userPaymentCard.bankName} {userPaymentCard.recipientName ? `• ${userPaymentCard.recipientName}` : ''}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSavePaymentCard} className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border/60">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">
+                        {userPaymentCard ? 'Обновить данные карты' : 'Привязать банковскую карту'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-medium text-muted-foreground block mb-1">Номер карты / СБП телефон</label>
+                        <input
+                          type="text"
+                          value={cardFormNumber}
+                          onChange={e => setCardFormNumber(e.target.value)}
+                          placeholder="2200 0000 0000 0000"
+                          className="w-full h-8 px-3 rounded-lg bg-card border border-border text-xs font-mono text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground block mb-1">Банк</label>
+                        <input
+                          type="text"
+                          value={cardFormBank}
+                          onChange={e => setCardFormBank(e.target.value)}
+                          placeholder="Сбербанк, Т-Банк..."
+                          className="w-full h-8 px-3 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={autoRenewLoading || !cardFormNumber.trim()}
+                        className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                      >
+                        {autoRenewLoading ? 'Сохранение...' : 'Сохранить реквизиты'}
+                      </button>
+                      {userPaymentCard && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCardForm(false)}
+                          className="px-3 py-1.5 rounded-xl bg-muted text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                        >
+                          Отмена
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                )}
+
+                {/* Auto-Renew Toggle */}
+                <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-muted/20 border border-border/40">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">Автоплатёж (Автопродление)</span>
+                      <span className={cn(
+                        "px-1.5 py-0.2 rounded-md text-[9px] font-bold uppercase",
+                        autoRenew ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-muted text-muted-foreground"
+                      )}>
+                        {autoRenew ? 'Включен' : 'Выключен (по умолчанию)'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      При включении в день окончания периода будет автоматически продлена ваша текущая подписка <b>{profileData.plan ? profileData.plan.toUpperCase() : 'PLUS'}</b>. Вы можете выключить автопродление в любой момент в 1 клик.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={autoRenewLoading}
+                    onClick={handleToggleAutoRenew}
+                    className={cn(
+                      'relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-60 cursor-pointer',
+                      autoRenew ? 'bg-primary' : 'bg-muted border border-border'
+                    )}
+                  >
+                    <span className={cn(
+                      'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all',
+                      autoRenew ? 'left-[22px]' : 'left-0.5'
+                    )} />
+                  </button>
+                </div>
+              </div>
 
               {/* Promo Code Activation Box */}
               <div className="p-4 rounded-2xl bg-card border border-border space-y-3">

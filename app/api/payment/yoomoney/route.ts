@@ -204,15 +204,44 @@ export async function POST(req: NextRequest) {
             create: { key: `author_balance_${authorChatId}`, value: JSON.stringify(authorStats) },
           })
 
+          // Check author's payout card / SBP
+          let cardInfoText = ''
+          try {
+            const cardRow = (await prisma.config.findUnique({ where: { key: `author_payout_card_${authorChatId}` } }))
+              || (await prisma.config.findUnique({ where: { key: `user_payment_card_${authorChatId}` } }))
+            if (cardRow?.value) {
+              const card = JSON.parse(cardRow.value)
+              const mask = card.payoutType === 'sbp'
+                ? `⚡ СБП (${card.phone})`
+                : card.payoutType === 'yoomoney'
+                ? `🟣 ЮMoney (${card.cardNumber ? '•••• ' + card.cardNumber.slice(-4) : 'Кошелек'})`
+                : `💳 Карту (•••• ${card.cardNumber ? card.cardNumber.slice(-4) : '••••'})`
+              cardInfoText = `\n💳 *Мгновенный перевод*: направлен на вашу привязанную ${mask}`
+            }
+          } catch {}
+
           await sendTgNotification(
             authorChatId,
             `🎉 *Покупка вашего расширения!*\n\n` +
             `Пользователь приобрёл ваше расширение за *${price} ₽* в Zerf Note.\n` +
             `• Комиссия платёжного шлюза (3.5%): -${finalGatewayFee} ₽\n` +
             `• Чистая сумма: ${finalNet} ₽\n` +
-            `💰 *Вам начислено (80%): +${finalAuthorShare} ₽* на баланс автора!\n` +
-            `• Проверить баланс и запросить вывод: https://zeprh.vercel.app`
+            `💰 *Ваша выплата (80%): +${finalAuthorShare} ₽*${cardInfoText}\n` +
+            `• Проверить баланс и историю: https://zeprh.vercel.app`
           )
+
+          // Notify platform owner (20% platform share)
+          const adminChatId = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || '1177651034'
+          if (adminChatId && String(adminChatId) !== String(authorChatId)) {
+            await sendTgNotification(
+              adminChatId,
+              `💎 *Доход платформы с продажи расширения (20%)*\n\n` +
+              `• Расширение: \`${extensionId}\`\n` +
+              `• Сумма покупки: *${price} ₽*\n` +
+              `• Выплата автору (80%): +${finalAuthorShare} ₽\n` +
+              `💰 *Комиссия платформы (20%): +${finalPlatformShare} ₽*`
+            )
+          }
         }
 
         // 4. Notify buyer
