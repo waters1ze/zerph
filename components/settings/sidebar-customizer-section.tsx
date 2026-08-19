@@ -49,6 +49,7 @@ export const DEFAULT_MENU_ITEMS: Record<string, { title: string; icon: any; isEx
   goals:              { title: 'Цели',                 icon: Target },
   projects:           { title: 'Проекты',              icon: FolderOpen },
   ext_entropy_search: { title: 'Entropy AI Search',    icon: '🔮', isExt: true },
+  ext_zerfic_live:    { title: 'Зерфик Live',          icon: '🎙️', isExt: true },
   stats:              { title: 'Аналитика',            icon: BarChart2 },
   friends:            { title: 'Друзья',               icon: UserCheck },
   teams:              { title: 'Команды',              icon: Building2 },

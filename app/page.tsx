@@ -28,6 +28,8 @@ import { ClockView } from '@/components/views/clock-view'
 import { GraphView } from '@/components/views/graph-view'
 import { ExtensionsView } from '@/components/views/extensions-view'
 import { EntropySearchView } from '@/components/views/entropy-search-view'
+import { ZerficLiveView } from '@/components/views/zerfic-live-view'
+import { ZerficLiveFloatingPill } from '@/components/ui/zerfic-live-floating-pill'
 import { AuthGateModal } from '@/components/auth-gate-modal'
 import { PullToRefresh } from '@/components/ui/pull-to-refresh'
 import { cn } from '@/lib/utils'
@@ -151,12 +153,13 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
     teams:      <TeamsView />,
     extensions: <ExtensionsView />,
     entropy:    <EntropySearchView />,
+    live:       <ZerficLiveView />,
     settings:   <SettingsView />,
     projects:   <ProjectsView />,
     admin:      <AdminView />,
   }
 
-  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings'
+  const isFullHeight = state.currentView === 'notes' || state.currentView === 'graph' || state.currentView === 'settings' || state.currentView === 'live'
 
   return (
     <div className="app-shell flex h-[100dvh] min-h-[100dvh] bg-background overflow-hidden relative w-full pb-[env(safe-area-inset-bottom,0px)]">
@@ -314,6 +317,9 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
           </div>
         )}
       </AnimatePresence>
+
+      {/* Global Persistent Zerfic Live Floating Pill */}
+      <ZerficLiveFloatingPill />
     </div>
   )
 }

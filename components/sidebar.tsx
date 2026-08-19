@@ -518,7 +518,8 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                         !planAtLeast(userPlan, extensionItem.minPlan as PlanId)
                       )
                       const isEntropy = itemId === 'ext_entropy_search' || extensionItem.id === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')
-                      const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
+                      const isZerfic = itemId === 'ext_zerfic_live' || itemId === 'zerfic-live' || extensionItem.id === 'ext_zerfic_live' || extensionItem.id === 'zerfic-live' || extensionItem.title?.toLowerCase().includes('zerfic')
+                      const isSelected = isEntropy ? currentView === 'entropy' : isZerfic ? currentView === 'live' : currentView === 'extensions'
                       const isOwnerDisabled = extensionItem.isPublished === false || (extensionItem as any).isDisabledByOwner === true
                       const isUserDisabled = Boolean(extensionItem.id && !enabledExtIds.includes(extensionItem.id) && !isOwnerDisabled)
 
@@ -544,9 +545,9 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                               window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
                               return
                             }
-                            const isZerfic = itemId === 'ext_zerfic_live' || itemId === 'zerfic-live' || extensionItem.id === 'ext_zerfic_live' || extensionItem.id === 'zerfic-live' || extensionItem.title?.toLowerCase().includes('zerfic')
                             if (isZerfic) {
-                              setShowZerficLiveModal(true)
+                              dispatch({ type: 'SET_VIEW', view: 'live' })
+                              window.dispatchEvent(new CustomEvent('zerf_open_zerfic_live'))
                               return
                             }
                             dispatch({ type: 'SET_VIEW', view: 'extensions' })
@@ -635,7 +636,8 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                   !planAtLeast(userPlan, ext.minPlan as PlanId)
                 )
                 const isEntropy = ext.id === 'ext_entropy_search' || ext.title?.toLowerCase().includes('entropy')
-                const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
+                const isZerfic = ext.id === 'ext_zerfic_live' || ext.id === 'zerfic-live' || ext.title?.toLowerCase().includes('zerfic')
+                const isSelected = isEntropy ? currentView === 'entropy' : isZerfic ? currentView === 'live' : currentView === 'extensions'
                 const isOwnerDisabled = ext.isPublished === false || (ext as any).isDisabledByOwner === true
                 const isUserDisabled = !enabledExtIds.includes(ext.id) && !isOwnerDisabled
 
@@ -661,9 +663,9 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                         window.dispatchEvent(new CustomEvent('zerf_open_entropy_search'))
                         return
                       }
-                      const isZerfic = ext.id === 'ext_zerfic_live' || ext.id === 'zerfic-live' || ext.title?.toLowerCase().includes('zerfic')
                       if (isZerfic) {
-                        setShowZerficLiveModal(true)
+                        dispatch({ type: 'SET_VIEW', view: 'live' })
+                        window.dispatchEvent(new CustomEvent('zerf_open_zerfic_live'))
                         return
                       }
                       dispatch({ type: 'SET_VIEW', view: 'extensions' })

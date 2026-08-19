@@ -19,6 +19,7 @@ export type View =
   | 'teams'
   | 'extensions'
   | 'entropy'
+  | 'live'
   | 'settings'
   | 'admin'
 
