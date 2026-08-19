@@ -49,7 +49,7 @@ function StatCard({
 function BarMini({ pct, count, color, label }: { pct: number; count: number; color: string; label: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[12px] text-muted-foreground w-24 shrink-0 text-right">{label}</span>
+      <span className="text-[12px] text-muted-foreground w-20 shrink-0 text-left sm:text-right">{label}</span>
       <div className="flex-1 h-2 rounded-full bg-border overflow-hidden">
         <motion.div
           className="h-full rounded-full"
@@ -59,7 +59,9 @@ function BarMini({ pct, count, color, label }: { pct: number; count: number; col
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
-      <span className="text-[12px] font-semibold text-foreground w-12 shrink-0">{count} ({pct}%)</span>
+      <span className="text-[12px] font-semibold text-foreground min-w-[70px] text-right shrink-0 whitespace-nowrap">
+        {count} ({pct}%)
+      </span>
     </div>
   )
 }
@@ -84,6 +86,11 @@ export function StatsView() {
   const overdue = tasks.filter(t => t.status === 'overdue' || (t.dueDate && t.dueDate < dayKey(new Date()) && t.status !== 'done')).length
   const total = tasks.length
   const completionRate = total > 0 ? Math.round((done / total) * 100) : 0
+
+  const activePendingTasks = useMemo(() => {
+    return tasks.filter(t => t.status !== 'done')
+  }, [tasks])
+  const activeTotal = activePendingTasks.length
 
   const activeFriendsSet = new Set(state.friends.map(f => String(f.chatId || f.id || f.username)))
   const hasCollab = state.friends.length > 0
@@ -121,10 +128,30 @@ export function StatsView() {
   const maxWeekly = Math.max(...weeklyBars.map(b => b.count), 1)
 
   const priorityBreakdown = [
-    { label: 'Срочные', count: tasks.filter(t => t.priority === 'urgent').length, pct: total ? Math.round((tasks.filter(t => t.priority === 'urgent').length / total) * 100) : 0, color: 'var(--priority-urgent)' },
-    { label: 'Высокие', count: tasks.filter(t => t.priority === 'high').length, pct: total ? Math.round((tasks.filter(t => t.priority === 'high').length / total) * 100) : 0, color: 'var(--priority-high)' },
-    { label: 'Средние', count: tasks.filter(t => t.priority === 'medium').length, pct: total ? Math.round((tasks.filter(t => t.priority === 'medium').length / total) * 100) : 0, color: 'var(--priority-medium)' },
-    { label: 'Низкие', count: tasks.filter(t => t.priority === 'low').length, pct: total ? Math.round((tasks.filter(t => t.priority === 'low').length / total) * 100) : 0, color: 'var(--priority-low)' },
+    {
+      label: 'Срочные',
+      count: activePendingTasks.filter(t => t.priority === 'urgent').length,
+      pct: activeTotal ? Math.round((activePendingTasks.filter(t => t.priority === 'urgent').length / activeTotal) * 100) : 0,
+      color: 'var(--priority-urgent)'
+    },
+    {
+      label: 'Высокие',
+      count: activePendingTasks.filter(t => t.priority === 'high').length,
+      pct: activeTotal ? Math.round((activePendingTasks.filter(t => t.priority === 'high').length / activeTotal) * 100) : 0,
+      color: 'var(--priority-high)'
+    },
+    {
+      label: 'Средние',
+      count: activePendingTasks.filter(t => t.priority === 'medium').length,
+      pct: activeTotal ? Math.round((activePendingTasks.filter(t => t.priority === 'medium').length / activeTotal) * 100) : 0,
+      color: 'var(--priority-medium)'
+    },
+    {
+      label: 'Низкие',
+      count: activePendingTasks.filter(t => t.priority === 'low').length,
+      pct: activeTotal ? Math.round((activePendingTasks.filter(t => t.priority === 'low').length / activeTotal) * 100) : 0,
+      color: 'var(--priority-low)'
+    },
   ]
 
   const todayDate = new Date()
@@ -332,9 +359,14 @@ export function StatsView() {
 
           {/* Priority breakdown */}
           <div className="p-4 rounded-2xl bg-card border border-border">
-            <div className="flex items-center gap-2 mb-3">
-              <Flame className="w-4 h-4 text-orange-400" />
-              <p className="text-[13px] font-bold text-foreground">Распределение по приоритетам</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-400" />
+                <p className="text-[13px] font-bold text-foreground">Распределение по приоритетам</p>
+              </div>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                {activeTotal} активных
+              </span>
             </div>
             <div className="space-y-2.5">
               {priorityBreakdown.map(p => (
