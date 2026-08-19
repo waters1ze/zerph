@@ -1346,7 +1346,20 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   // Filtered and Sorted catalog
   const filteredCatalog = useMemo(() => {
-    const list = catalog.filter(ext => {
+    const seenGh = new Set<string>()
+    const seenIds = new Set<string>()
+
+    const uniqueCatalog: ExtensionItem[] = []
+    catalog.forEach(ext => {
+      if (seenIds.has(ext.id)) return
+      const gh = (ext.githubUrl || '').trim().toLowerCase().replace(/\/$/, '')
+      if (gh && seenGh.has(gh)) return
+      if (gh) seenGh.add(gh)
+      seenIds.add(ext.id)
+      uniqueCatalog.push(ext)
+    })
+
+    const list = uniqueCatalog.filter(ext => {
       // Hide unpublished drafts from public store
       if (ext.isPublished === false) return false
 
@@ -1359,7 +1372,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         (ext.githubUrl && ext.githubUrl.toLowerCase().includes(searchQuery.toLowerCase()))
       
       if (selectedCategory === 'core') {
-        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.id === 'ext_entropy_search' || ext.id === 'ext_zerfic_live' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy') || ext.title.toLowerCase().includes('zerfic')
+        const isCore = ext.isOfficial || ext.authorChatId === 'system' || ext.id === 'ext_entropy_search' || ext.id.startsWith('ext_starter_') || ext.title.toLowerCase().includes('entropy') || ext.title.toLowerCase().includes('zerfic')
         return matchesSearch && isCore
       }
       if (selectedCategory === 'all') return matchesSearch

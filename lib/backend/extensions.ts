@@ -91,49 +91,6 @@ export const STARTER_EXTENSIONS: ExtensionItem[] = [
     createdAt: '2026-08-17T20:00:00Z',
     updatedAt: '2026-08-17T22:00:00Z',
   },
-  {
-    id: 'ext_zerfic_live',
-    title: 'Zerfic Live: Голосовой компаньон',
-    version: '1.0.0',
-    description: 'Полноценный живой разговорный ИИ-собеседник с мужским голосом Зерфика, живой речью, анимациями (сидит на стуле, машет руками), жестами и интеграцией во все ваши дела.',
-    type: 'widget',
-    category: 'Виджеты & Фокус',
-    icon: '🎙️',
-    githubUrl: 'https://github.com/waters1ze/zerfic-live',
-    authorChatId: 'system',
-    authorName: 'Zerf Official',
-    authorGithub: 'waters1ze',
-    price: 0,
-    minPlan: 'plus',
-    isOfficial: true,
-    isPublished: true,
-    isRunnable: true,
-    changelog: 'Релиз v1.0.0: Мужские голоса Зерфика, анимация сидения на стуле, жесты, Push-to-Talk и ответы голосовыми в Telegram-боте.',
-    rating: 5.0,
-    ratingCount: 0,
-    likesCount: 0,
-    installCount: 0,
-    aiInstructions: 'Когда пользователь обращается к Зерфику или запускает Zerfic Live — веди живой разговор от мужского лица, используй естественные междометия («а...», «мм...», «кстати»), проявляй дружелюбие и помогай по задачам и планам.',
-    triggers: ['/live', '/zerfic', 'зерфик', 'поговори со мной', 'зерфик лайв', 'zerfic live'],
-    aiSkills: [
-      {
-        name: 'Zerfic Live Conversation',
-        description: 'Живой двусторонний голосовой диалог с мужским голосом Зерфика, рассуждениями и эмоциями',
-        action: 'zerfic_live_chat',
-      },
-    ],
-    content: {
-      engine: 'zerfic_live_voice',
-      voices: [
-        { id: 'zerfik_original', name: 'Зерфик (Фирменный)', gender: 'male', desc: 'Задорный, молодой, живой тембр' },
-        { id: 'zerfik_intellect', name: 'Зерфик (Интеллект)', gender: 'male', desc: 'Вдумчивый, глубокий мужской голос' },
-        { id: 'zerfik_coach', name: 'Зерфик (Драйв / Коуч)', gender: 'male', desc: 'Бодрый, мотивирующий тембр' },
-      ],
-      features: ['voice_synthesis', 'gestures', 'mascot_animations', 'telegram_voice_replies'],
-    },
-    createdAt: '2026-08-19T18:00:00Z',
-    updatedAt: '2026-08-19T18:00:00Z',
-  },
 ]
 
 export async function getDeletedExtensionIds(): Promise<string[]> {
@@ -191,13 +148,26 @@ export async function loadExtensionsCatalog(): Promise<ExtensionItem[]> {
     const deletedIds = await getDeletedExtensionIds()
     const customItems = await getCustomExtensions()
     const allMap = new Map<string, ExtensionItem>()
+    const seenGhUrls = new Set<string>()
 
-    STARTER_EXTENSIONS.forEach(e => {
-      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
-    })
+    // 1. Custom DB items take priority
     customItems.forEach(e => {
-      if (!deletedIds.includes(e.id)) allMap.set(e.id, e)
+      if (deletedIds.includes(e.id)) return
+      const cleanGh = (e.githubUrl || '').trim().toLowerCase().replace(/\/$/, '')
+      if (cleanGh) seenGhUrls.add(cleanGh)
+      allMap.set(e.id, e)
     })
+
+    // 2. Starters only if not deleted or overridden
+    STARTER_EXTENSIONS.forEach(e => {
+      if (deletedIds.includes(e.id)) return
+      const cleanGh = (e.githubUrl || '').trim().toLowerCase().replace(/\/$/, '')
+      if (cleanGh && seenGhUrls.has(cleanGh)) return
+      if (!allMap.has(e.id)) {
+        allMap.set(e.id, e)
+      }
+    })
+
     return Array.from(allMap.values())
   } catch {
     return STARTER_EXTENSIONS
