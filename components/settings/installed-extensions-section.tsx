@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ExtensionIcon } from '@/components/views/extensions-view'
 import type { ExtensionItem } from '@/app/api/extensions/route'
+import { planAtLeast, type PlanId } from '@/lib/plans'
 
 interface SettingField {
   key: string
@@ -498,6 +499,12 @@ export function InstalledExtensionsSettingsSection() {
       {!loading && filteredExtensions.length > 0 && (
         <div className="space-y-3">
           {filteredExtensions.map(ext => {
+            const userPlan = (state.settings?.userPlan as PlanId) || 'free'
+            const isPlanRestricted = Boolean(
+              ext.minPlan &&
+              ext.minPlan !== 'free' &&
+              !planAtLeast(userPlan, ext.minPlan as PlanId)
+            )
             const isExpanded = expandedIds.has(ext.id)
             const settingsSchema = extractSettingsSchema(ext)
             const hasSettings = settingsSchema.length > 0
@@ -515,7 +522,7 @@ export function InstalledExtensionsSettingsSection() {
                 key={ext.id}
                 className={cn(
                   "rounded-2xl bg-card border shadow-2xs overflow-hidden transition-all",
-                  isEnabled ? "border-border hover:border-border/90" : "border-border/60 opacity-85 hover:opacity-100"
+                  isEnabled && !isPlanRestricted ? "border-border hover:border-border/90" : "border-border/60 opacity-85 hover:opacity-100"
                 )}
               >
                 {/* Extension Main Header Card */}
@@ -540,6 +547,11 @@ export function InstalledExtensionsSettingsSection() {
                           <span className="px-1.5 py-0.2 rounded-md bg-rose-500/10 text-rose-400 text-[9px] font-bold border border-rose-500/25 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             Отключено автором
+                          </span>
+                        ) : isPlanRestricted ? (
+                          <span className="px-1.5 py-0.2 rounded-md bg-rose-500/10 text-rose-400 text-[9px] font-bold border border-rose-500/25 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Приостановлено (тариф {ext.minPlan?.toUpperCase() || 'PRO'})
                           </span>
                         ) : isEnabled ? (
                           <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 text-[9px] font-semibold border border-emerald-500/25 flex items-center gap-1">

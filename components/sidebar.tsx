@@ -15,6 +15,7 @@ import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, t
 import type { ExtensionItem } from '@/app/api/extensions/route'
 import { ExtensionIcon } from '@/components/views/extensions-view'
 import { ZerfAvatar } from '@/components/ui/zerf-avatar'
+import { planAtLeast, type PlanId } from '@/lib/plans'
 
 export interface NavItem {
   id: View
@@ -481,6 +482,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                     }
 
                     if (extensionItem) {
+                      const userPlan = (state.settings?.userPlan as PlanId) || 'free'
+                      const isPlanRestricted = Boolean(
+                        extensionItem.minPlan &&
+                        extensionItem.minPlan !== 'free' &&
+                        !planAtLeast(userPlan, extensionItem.minPlan as PlanId)
+                      )
                       const isEntropy = itemId === 'ext_entropy_search' || extensionItem.id === 'ext_entropy_search' || extensionItem.title?.toLowerCase().includes('entropy')
                       const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
                       const isOwnerDisabled = extensionItem.isPublished === false || (extensionItem as any).isDisabledByOwner === true
@@ -494,6 +501,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                             if (isOwnerDisabled) {
                               setDisabledNotice(`🔴 Расширение «${extensionItem.title}» отключено автором или снято с публикации`)
                               setTimeout(() => setDisabledNotice(null), 4000)
+                              dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                              return
+                            }
+                            if (isPlanRestricted) {
+                              setDisabledNotice(`🔒 Расширение «${extensionItem.title}» приостановлено: требуется тариф ${extensionItem.minPlan?.toUpperCase() || 'PRO'}. Оно сохранено на вашей панели!`)
+                              setTimeout(() => setDisabledNotice(null), 5000)
                               dispatch({ type: 'SET_VIEW', view: 'extensions' })
                               return
                             }
@@ -514,21 +527,23 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                           title={
                             isOwnerDisabled
                               ? `${extensionItem.title} (🔴 Отключено автором)`
-                              : isUserDisabled
-                                ? `${extensionItem.title} (⚪ Отключено в настройках)`
-                                : extensionItem.title
+                              : isPlanRestricted
+                                ? `${extensionItem.title} (🔴 Приостановлено: требуется тариф ${extensionItem.minPlan?.toUpperCase()})`
+                                : isUserDisabled
+                                  ? `${extensionItem.title} (⚪ Отключено в настройках)`
+                                  : extensionItem.title
                           }
                         >
                           <ExtensionIcon icon={extensionItem.icon} className="w-4 h-4 text-xs shrink-0" />
                           {!isCollapsed && (
                             <>
-                              <span className={cn('flex-1 text-left line-clamp-1 truncate text-xs', isOwnerDisabled && 'text-muted-foreground')}>
+                              <span className={cn('flex-1 text-left line-clamp-1 truncate text-xs', (isOwnerDisabled || isPlanRestricted) && 'text-muted-foreground')}>
                                 {extensionItem.title}
                               </span>
                               <span
                                 className={cn(
                                   'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
-                                  isOwnerDisabled
+                                  isOwnerDisabled || isPlanRestricted
                                     ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]'
                                     : isUserDisabled
                                       ? 'bg-muted-foreground/40'
@@ -537,9 +552,11 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                                 title={
                                   isOwnerDisabled
                                     ? '🔴 Отключено автором / Недоступно'
-                                    : isUserDisabled
-                                      ? '⚪ Отключено в настройках'
-                                      : '🟢 Активно'
+                                    : isPlanRestricted
+                                      ? `🔴 Приостановлено (требуется тариф ${extensionItem.minPlan?.toUpperCase()})`
+                                      : isUserDisabled
+                                        ? '⚪ Отключено в настройках'
+                                        : '🟢 Активно'
                                 }
                               />
                             </>
@@ -567,6 +584,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
             )}
             <div className="space-y-0.5 mt-0.5">
               {unassignedActiveExts.map(ext => {
+                const userPlan = (state.settings?.userPlan as PlanId) || 'free'
+                const isPlanRestricted = Boolean(
+                  ext.minPlan &&
+                  ext.minPlan !== 'free' &&
+                  !planAtLeast(userPlan, ext.minPlan as PlanId)
+                )
                 const isEntropy = ext.id === 'ext_entropy_search' || ext.title?.toLowerCase().includes('entropy')
                 const isSelected = isEntropy ? currentView === 'entropy' : currentView === 'extensions'
                 const isOwnerDisabled = ext.isPublished === false || (ext as any).isDisabledByOwner === true
@@ -580,6 +603,12 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                       if (isOwnerDisabled) {
                         setDisabledNotice(`🔴 Расширение «${ext.title}» отключено автором или снято с публикации`)
                         setTimeout(() => setDisabledNotice(null), 4000)
+                        dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                        return
+                      }
+                      if (isPlanRestricted) {
+                        setDisabledNotice(`🔒 Расширение «${ext.title}» приостановлено: требуется тариф ${ext.minPlan?.toUpperCase() || 'PRO'}. Оно сохранено на вашей панели!`)
+                        setTimeout(() => setDisabledNotice(null), 5000)
                         dispatch({ type: 'SET_VIEW', view: 'extensions' })
                         return
                       }
@@ -600,21 +629,23 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                     title={
                       isOwnerDisabled
                         ? `${ext.title} (🔴 Отключено автором)`
-                        : isUserDisabled
-                          ? `${ext.title} (⚪ Отключено в настройках)`
-                          : ext.title
+                        : isPlanRestricted
+                          ? `${ext.title} (🔴 Приостановлено: требуется тариф ${ext.minPlan?.toUpperCase()})`
+                          : isUserDisabled
+                            ? `${ext.title} (⚪ Отключено в настройках)`
+                            : ext.title
                     }
                   >
                     <ExtensionIcon icon={ext.icon} className="w-4 h-4 text-xs shrink-0" />
                     {!isCollapsed && (
                       <>
-                        <span className={cn('flex-1 text-left line-clamp-1 truncate text-xs', isOwnerDisabled && 'text-muted-foreground')}>
+                        <span className={cn('flex-1 text-left line-clamp-1 truncate text-xs', (isOwnerDisabled || isPlanRestricted) && 'text-muted-foreground')}>
                           {ext.title}
                         </span>
                         <span
                           className={cn(
                             'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
-                            isOwnerDisabled
+                            isOwnerDisabled || isPlanRestricted
                               ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]'
                               : isUserDisabled
                                 ? 'bg-muted-foreground/40'
@@ -623,9 +654,11 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
                           title={
                             isOwnerDisabled
                               ? '🔴 Отключено автором / Недоступно'
-                              : isUserDisabled
-                                ? '⚪ Отключено в настройках'
-                                : '🟢 Активно'
+                              : isPlanRestricted
+                                ? `🔴 Приостановлено (требуется тариф ${ext.minPlan?.toUpperCase()})`
+                                : isUserDisabled
+                                  ? '⚪ Отключено в настройках'
+                                  : '🟢 Активно'
                           }
                         />
                       </>

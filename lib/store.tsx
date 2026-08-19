@@ -887,6 +887,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           syncBackendData(false)
         })
 
+        eventSource.addEventListener('task_update', () => {
+          syncBackendData(false)
+        })
+
+        eventSource.addEventListener('task_created', () => {
+          syncBackendData(false)
+        })
+
+        eventSource.addEventListener('task_deleted', () => {
+          syncBackendData(false)
+        })
+
         eventSource.addEventListener('reminder', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data)
@@ -909,6 +921,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     connectSse()
 
+    // 15s Background Live Sync Interval (Ensures phone and PC sync even if SSE is sleeping on mobile)
+    const liveSyncInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncBackendData(false)
+      }
+    }, 15000)
+
     // Hydrate currentView safely on client mount
     try {
       const savedView = localStorage.getItem('zerf_current_view') as View | null
@@ -923,6 +942,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('online', handleSyncNow)
       window.removeEventListener('zerf:sync', handleSyncWithSpinner)
       document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(liveSyncInterval)
       if (reconnectTimeout) clearTimeout(reconnectTimeout)
       try { eventSource?.close() } catch {}
       try { channel?.close() } catch {}
