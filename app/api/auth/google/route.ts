@@ -19,7 +19,15 @@ const COOKIE_OPTS = {
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin || 'https://zeprh.vercel.app'
   const redirectUri = getRedirectUri(origin)
-  const authUrl = getGoogleAuthUrl('web_oauth_login', redirectUri)
+  
+  // Detect active logged in user from session or cookies or query
+  const authUser = await getAuthenticatedUser(req)
+  const cookieCid = req.cookies.get('zerf_chat_id')?.value
+  const paramCid = req.nextUrl.searchParams.get('chatId')
+  const includeCalendar = req.nextUrl.searchParams.get('includeCalendar') === 'true'
+
+  const targetChatId = authUser?.chatId ? String(authUser.chatId) : (cookieCid || paramCid || 'web_oauth_login')
+  const authUrl = getGoogleAuthUrl(targetChatId, redirectUri, includeCalendar)
   return NextResponse.redirect(authUrl)
 }
 

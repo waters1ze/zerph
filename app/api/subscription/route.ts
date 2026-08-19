@@ -53,11 +53,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown plan or period' }, { status: 400 })
     }
 
-    const catalogEntry = PLAN_CATALOG.find(c => c.id === plan)!
-    const sum = String(isYear ? catalogEntry.priceYearly : catalogEntry.priceMonthly)
-    const targets = isYear
-      ? `Подписка Zerf ${catalogEntry.name} на 1 год (со скидкой 15%)`
-      : `Подписка Zerf ${catalogEntry.name} (30 дней)`
+    // Check if user has an active applied promo discount
+    let discountPercent = 0
+    let promoCodeUsed: string | null = null
+    const discountKey = `user_promo_discount_${ownerChatId}`
+    const activeDiscountRow = await prisma.config.findUnique({ where: { key: discountKey } })
+    if (activeDiscountRow?.value) {
+      try {
+        const dInfo = JSON.parse(activeDiscountRow.value)
+        if (dInfo.discountPercent && (dInfo.targetPlan === 'all' || dInfo.targetPlan === plan)) {
+          discountPercent = Number(dInfo.discountPercent) || 0
+          promoCodeUsed = dInfo.code || null
+        }
+      } catch {}
+    }
+
+    const catalogEntry = PLAN_CATALOG.find(c => c.id === plan)
+    if (!catalogEntry) {
+      return NextResponse.json({ error: 'Тарифный план не найден' }, { status: 400 })
+    }
+
+    const basePrice = (isYear ? catalogEntry.priceYearly : catalogEntry.priceMonthly) ?? 0
+    const finalPrice = discountPercent > 0
+      ? Math.max(1, Math.round(basePrice * (1 - discountPercent / 100)))
+      : basePrice
+
+    const sum = String(finalPrice)
+    const targets = discountPercent > 0
+      ? `Подписка Zerf ${catalogEntry.name} (${isYear ? '1 год' : '30 дней'}, промокод: -${discountPercent}%)`
+      : isYear
+        ? `Подписка Zerf ${catalogEntry.name} на 1 год (со скидкой 15%)`
+        : `Подписка Zerf ${catalogEntry.name} (30 дней)`
     const label = `${ownerChatId}_${product.labelSuffix}`
 
     const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
@@ -81,6 +107,8 @@ export async function POST(req: NextRequest) {
       success: true,
       paymentUrl,
       amount: Number(sum),
+      basePrice,
+      discountPercent,
       plan,
       period: isYear ? 'year' : 'month',
       days: isYear ? 365 : 30,

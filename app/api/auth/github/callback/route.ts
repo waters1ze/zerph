@@ -1,0 +1,104 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/backend/prisma'
+import { createServerSession } from '@/lib/backend/auth'
+
+export const dynamic = 'force-dynamic'
+
+const COOKIE_OPTS = {
+  path: '/',
+  maxAge: 60 * 60 * 24 * 365,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+}
+
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li34b9d1469e88aa'
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'a1b2c3d4e5f678901234567890abcdef12345678'
+
+export async function GET(req: NextRequest) {
+  const host = req.headers.get('host') || 'zeprh.vercel.app'
+  const protocol = host.includes('localhost') ? 'http' : 'https'
+  const origin = `${protocol}://${host}`
+
+  try {
+    const { searchParams } = new URL(req.url)
+    const code = searchParams.get('code')
+    const state = searchParams.get('state')
+    const error = searchParams.get('error')
+
+    if (error || !code) {
+      return NextResponse.redirect(`${origin}/?github_auth_error=${encodeURIComponent(error || 'no_code')}#settings`)
+    }
+
+    let decodedState: any = {}
+    if (state) {
+      try {
+        decodedState = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8'))
+      } catch {}
+    }
+
+    const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
+
+    // Exchange code for access token
+    const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: GITHUB_CLIENT_ID,
+        client_secret: GITHUB_CLIENT_SECRET,
+        code,
+        redirect_uri: redirectUri,
+      }),
+    })
+
+    const tokenData = await tokenRes.json()
+    const accessToken = tokenData.access_token
+
+    if (!accessToken) {
+      // Fallback: If client secret is not configured in environment, parse simulated/dummy login or show clean message
+      console.warn('GitHub OAuth token exchange response:', tokenData)
+      return NextResponse.redirect(`${origin}/?github_auth_error=token_failed#settings`)
+    }
+
+    // Fetch user profile from GitHub
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'User-Agent': 'Zerf-AI-App',
+      },
+    })
+    const githubUser = await userRes.json()
+    const ghUsername = githubUser.login
+
+    if (!ghUsername) {
+      throw new Error('Не удалось получить логин пользователя от GitHub')
+    }
+
+    const targetChatId = decodedState.chatId || req.cookies.get('zerf_chat_id')?.value
+
+    if (targetChatId && /^\d+$/.test(targetChatId)) {
+      const cid = BigInt(targetChatId)
+      // Save linked GitHub username and token in database
+      await prisma.config.upsert({
+        where: { key: `user_github_${cid}` },
+        update: { value: ghUsername },
+        create: { key: `user_github_${cid}`, value: ghUsername },
+      })
+      await prisma.config.upsert({
+        where: { key: `user_github_token_${cid}` },
+        update: { value: accessToken },
+        create: { key: `user_github_token_${cid}`, value: accessToken },
+      })
+
+      const res = NextResponse.redirect(`${origin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+      return res
+    }
+
+    return NextResponse.redirect(`${origin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+  } catch (err: any) {
+    console.error('GitHub OAuth error:', err)
+    return NextResponse.redirect(`${origin}/?github_auth_error=${encodeURIComponent(err.message || 'unknown')}#settings`)
+  }
+}

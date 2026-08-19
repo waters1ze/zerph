@@ -62,13 +62,14 @@ export async function POST(req: NextRequest) {
       where: { chatId: numericChatId },
     })
 
+    const isFullFree = !promo.discountPercent || promo.discountPercent === 100
+
     // Determine target plan without downgrading higher tiers
-    // (legacy DB values premium/unlimited normalize to plus/corp)
     const promoPlanRaw = (promo.targetPlan || 'all').toLowerCase()
     let targetPlan: 'plus' | 'pro' | 'corp'
-    if (promoPlanRaw === 'unlimited') targetPlan = 'corp'
-    else if (promoPlanRaw === 'pro') targetPlan = 'pro'
-    else targetPlan = 'plus'
+    if (promoPlanRaw === 'corp' || promoPlanRaw === 'unlimited') targetPlan = 'corp'
+    else if (promoPlanRaw === 'plus' || promoPlanRaw === 'premium') targetPlan = 'plus'
+    else targetPlan = 'pro' // 'all' or 'pro' gives Pro by default
 
     const userPlanRank = PLAN_RANK[normalizePlan(user?.plan)]
     if (userPlanRank > PLAN_RANK[targetPlan]) {
@@ -77,43 +78,70 @@ export async function POST(req: NextRequest) {
 
     const daysToAdd = promo.durationDays || 30
 
-    let newExpiry = new Date()
-    if (user?.subscriptionExpiry && user.subscriptionExpiry > new Date()) {
-      newExpiry = new Date(user.subscriptionExpiry.getTime() + daysToAdd * 86400000)
+    if (isFullFree) {
+      // ── 100% FREE ACTIVATION: Instantly grant/extend subscription ──
+      let newExpiry = new Date()
+      if (user?.subscriptionExpiry && user.subscriptionExpiry > new Date()) {
+        newExpiry = new Date(user.subscriptionExpiry.getTime() + daysToAdd * 86400000)
+      } else {
+        newExpiry = new Date(Date.now() + daysToAdd * 86400000)
+      }
+
+      // Update user subscription & plan
+      await prisma.telegramChat.upsert({
+        where: { chatId: numericChatId },
+        update: {
+          plan: targetPlan,
+          subscriptionExpiry: newExpiry,
+        },
+        create: {
+          chatId: numericChatId,
+          plan: targetPlan,
+          subscriptionExpiry: newExpiry,
+        },
+      })
+
+      // Record promo code activation
+      await prisma.promoCode.update({
+        where: { id: promo.id },
+        data: {
+          usedCount: { increment: 1 },
+          usedByChatIds: { push: strChatId },
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: `🎉 Промокод активирован! Тариф «${PLAN_NAMES_RU[targetPlan]}» предоставлен бесплатно на ${daysToAdd} дн.`,
+        plan: targetPlan,
+        expiresAt: newExpiry.toISOString(),
+        discountPercent: 100,
+        isFree: true,
+      })
     } else {
-      newExpiry = new Date(Date.now() + daysToAdd * 86400000)
+      // ── PARTIAL DISCOUNT (e.g. 30%, 50% off): Save discount for checkout ──
+      const discountKey = `user_promo_discount_${strChatId}`
+      const discountPayload = {
+        code: cleanCode,
+        discountPercent: promo.discountPercent,
+        targetPlan: promo.targetPlan,
+        durationDays: promo.durationDays,
+        activatedAt: new Date().toISOString(),
+      }
+      await prisma.config.upsert({
+        where: { key: discountKey },
+        update: { value: JSON.stringify(discountPayload) },
+        create: { key: discountKey, value: JSON.stringify(discountPayload) },
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: `🎉 Промокод применён! Вы получили скидку ${promo.discountPercent}% на тариф «${promo.targetPlan === 'all' ? 'Любой' : promo.targetPlan.toUpperCase()}». Скидка будет учтена при оформлении подписки.`,
+        discountPercent: promo.discountPercent,
+        targetPlan: promo.targetPlan,
+        isFree: false,
+      })
     }
-
-    // Update user subscription & plan
-    await prisma.telegramChat.upsert({
-      where: { chatId: numericChatId },
-      update: {
-        plan: targetPlan,
-        subscriptionExpiry: newExpiry,
-      },
-      create: {
-        chatId: numericChatId,
-        plan: targetPlan,
-        subscriptionExpiry: newExpiry,
-      },
-    })
-
-    // Record promo code activation
-    await prisma.promoCode.update({
-      where: { id: promo.id },
-      data: {
-        usedCount: { increment: 1 },
-        usedByChatIds: { push: strChatId },
-      },
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: `Промокод успешно активирован! Тариф «${PLAN_NAMES_RU[targetPlan]}» продлен на ${daysToAdd} дн.`,
-      plan: targetPlan,
-      expiresAt: newExpiry.toISOString(),
-      discountPercent: promo.discountPercent,
-    })
   } catch (error: any) {
     console.error('Promo activation error:', error)
     return NextResponse.json({ error: error.message || 'Ошибка активации' }, { status: 500 })

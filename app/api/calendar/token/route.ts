@@ -140,13 +140,13 @@ export async function GET(req: NextRequest) {
         req.headers.get('user-agent') || undefined
       )
 
-      const res = NextResponse.redirect(`${origin}/?google_auth_success=1`)
+      const res = NextResponse.redirect(`${origin}/?google_auth_success=1${googleEmail ? `&email=${encodeURIComponent(googleEmail)}` : ''}#settings`)
       res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
       res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
       return res
     }
 
-    return NextResponse.redirect(`${origin}/?google_calendar_success=1`)
+    return NextResponse.redirect(`${origin}/?google_calendar_success=1${googleEmail ? `&email=${encodeURIComponent(googleEmail)}` : ''}#settings`)
   } catch (err: any) {
     console.error('Google OAuth callback error:', err)
     return NextResponse.redirect(`${origin}/?google_calendar_error=${encodeURIComponent(String(err.message || err))}`)
