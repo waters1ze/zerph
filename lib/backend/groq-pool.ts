@@ -83,6 +83,7 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     speedTps: 1000,
     contextTokens: 512,
     isGuard: true,
+    isExcluded: true,
   },
   {
     id: 'meta-llama/llama-prompt-guard-2-86m',
@@ -94,6 +95,7 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     speedTps: 1000,
     contextTokens: 512,
     isGuard: true,
+    isExcluded: true,
   },
   {
     id: 'llama-3.1-8b-instant',
@@ -420,27 +422,28 @@ export function getModelForUserPlan(
 
   if (norm === 'pro') {
     if (req && isModelAllowedForPlan(req, 'pro') && isModelHealthy(req)) return req
-    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
+    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'llama-3.1-8b-instant'
     if (isModelHealthy('openai/gpt-oss-120b')) return 'openai/gpt-oss-120b'
     if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
-    return 'groq/compound'
+    return 'llama-3.3-70b-versatile'
   }
 
   if (norm === 'plus') {
     if (req && isModelAllowedForPlan(req, 'plus') && isModelHealthy(req)) return req
-    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('groq/compound-mini') ? 'groq/compound-mini' : 'openai/gpt-oss-20b'
+    if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'llama-3.1-8b-instant'
     if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
-    if (isModelHealthy('groq/compound')) return 'groq/compound'
     if (isModelHealthy('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
-    return 'groq/compound-mini'
+    if (isModelHealthy('groq/compound')) return 'groq/compound'
+    return 'openai/gpt-oss-20b'
   }
 
   // Free:
   if (req && isModelAllowedForPlan(req, 'free') && isModelHealthy(req)) return req
-  if (isModelHealthy('groq/compound-mini')) return 'groq/compound-mini'
-  if (isModelHealthy('groq/compound')) return 'groq/compound'
   if (isModelHealthy('openai/gpt-oss-20b')) return 'openai/gpt-oss-20b'
-  return 'llama-3.1-8b-instant'
+  if (isModelHealthy('groq/compound-mini')) return 'groq/compound-mini'
+  if (isModelHealthy('llama-3.1-8b-instant')) return 'llama-3.1-8b-instant'
+  if (isModelHealthy('groq/compound')) return 'groq/compound'
+  return 'openai/gpt-oss-20b'
 }
 
 export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: string): string[] {
@@ -453,35 +456,34 @@ export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: s
     fullHierarchy = [
       'openai/gpt-oss-120b',
       'qwen/qwen3.6-27b',
-      'groq/compound',
-      'groq/compound-mini',
-      'openai/gpt-oss-20b',
       'llama-3.3-70b-versatile',
       'deepseek-r1-distill-llama-70b',
+      'openai/gpt-oss-20b',
       'llama-3.1-8b-instant',
+      'groq/compound',
+      'groq/compound-mini',
     ]
   } else if (norm === 'plus') {
     fullHierarchy = [
       'qwen/qwen3.6-27b',
-      'groq/compound',
-      'groq/compound-mini',
       'llama-3.3-70b-versatile',
       'deepseek-r1-distill-llama-70b',
       'openai/gpt-oss-20b',
       'llama-3.1-8b-instant',
+      'groq/compound',
+      'groq/compound-mini',
     ]
   } else {
     fullHierarchy = [
+      'openai/gpt-oss-20b',
+      'llama-3.1-8b-instant',
       'groq/compound-mini',
       'groq/compound',
-      'openai/gpt-oss-20b',
-      'meta-llama/llama-prompt-guard-2-86m',
-      'meta-llama/llama-prompt-guard-2-22m',
-      'llama-3.1-8b-instant',
     ]
   }
 
-  return fullHierarchy.filter(m => m !== requestedModel && isModelAllowedForPlan(m, userPlan) && isModelHealthy(m))
+  const filtered = fullHierarchy.filter(m => m !== requestedModel && isModelAllowedForPlan(m, userPlan) && isModelHealthy(m))
+  return filtered.length > 0 ? filtered : ['openai/gpt-oss-20b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile']
 }
 
 export const KNOWN_GROQ_CHAT_MODELS = new Set([
@@ -795,7 +797,7 @@ export async function callGroqChatCompletion(options: {
           if (options.max_tokens) body.max_tokens = options.max_tokens
           if (options.response_format) body.response_format = options.response_format
 
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          let res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${key}`,
@@ -804,6 +806,20 @@ export async function callGroqChatCompletion(options: {
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(6000),
           })
+
+          // Smart recovery: if 400 occurred with response_format, retry immediately without response_format
+          if (res.status === 400 && body.response_format) {
+            delete body.response_format
+            res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${key}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+              signal: AbortSignal.timeout(6000),
+            })
+          }
 
           if (res.status === 429) {
             groqPool.markKeyRateLimited(key, 60)
@@ -815,7 +831,7 @@ export async function callGroqChatCompletion(options: {
             const errText = await res.text()
             lastError = new Error(`Groq Chat error (404): ${errText}`)
             console.warn(`[GroqChat] Model ${m} returned 404, marking unavailable and auto-discovering replacements...`)
-            markModelFailed(m, '404 Model Not Found', 60)
+            markModelFailed(m, '404 Model Not Found', 15)
             modelNotFound = true
             break // Skip all remaining keys for this 404 model, jump directly to next model
           }
@@ -827,7 +843,7 @@ export async function callGroqChatCompletion(options: {
               continue
             }
             if (res.status === 400 && (errText.includes('model') || errText.includes('not supported') || errText.includes('decommissioned'))) {
-              markModelFailed(m, `HTTP ${res.status}: ${errText}`, 60)
+              markModelFailed(m, `HTTP ${res.status}: ${errText}`, 15)
               modelNotFound = true
               break
             }
