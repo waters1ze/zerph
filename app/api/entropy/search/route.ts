@@ -401,19 +401,30 @@ export async function POST(req: NextRequest) {
     else if (mode === 'fast') modePriorityInstruction = 'Быстрый факт-чекинг, краткость, точность.'
     else modePriorityInstruction = 'Всемирная сеть, всесторонний поиск фактов и синтез источников.'
 
+    const isDeepReport = depth === 'max' || isPro
+
     let depthInstruction = ''
     if (depth === 'lite') {
-      depthInstruction = `ОБЪЁМ ОТВЕТА: РЕЖИМ LITE (КРАТКИЙ БЛИЦ).
-- Длина ответа: СТРОГО ДО 500 СИМВОЛОВ.
-- Стиль: 1-2 кратких емких предложения с ключевой сутью и сносками [1], [2]. Без лишних вводных слов.`
+      depthInstruction = `ОБЪЁМ И СТРУКТУРА: РЕЖИМ LITE (КРАТКИЙ БЛИЦ, ДО 400 СИМВОЛОВ).
+- Напиши краткий, ёмкий ответ в 1–2 предложения с главными фактами и сносками [1], [2]. Без лишних вводных слов.`
     } else if (depth === 'max') {
-      depthInstruction = `ОБЪЁМ ОТВЕТА: РЕЖИМ MAX (ГЛУБОКИЙ АНАЛИТИЧЕСКИЙ ОТЧЕТ).
-- Длина ответа: ДО 2000 СИМВОЛОВ (полноценный развернутый лонгрид).
-- Стиль: исчерпывающий разбор предыстории, хронологии, ключевых нюансов, мнений экспертов и последствий. Используй структурированные абзацы и множественные сноски [1], [2], [3], [4].`
+      depthInstruction = `ОБЪЁМ И СТРУКТУРА: РЕЖИМ MAX (РАЗВЕРНУТЫЙ ГЛУБОКИЙ ЛОНГРИД, 1500–2500 СИМВОЛОВ).
+- ТРЕБОВАНИЕ: Напиши масштабный, детальный и всесторонний аналитический отчет из 3–5 развернутых абзацев!
+- КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать короткий ответ в один абзац. Обязательно раскрой тему глубоко и подробно:
+  1) 📌 Полная картина и ключевой контекст темы/событий;
+  2) 🔍 Детальный разбор каждого факта или новости с цитатами и сносками [1], [2], [3], [4];
+  3) 📊 Причины, статистика, историческая ретроспектива и мнения экспертов;
+  4) 🔮 Анализ последствий, влияние на индустрию/общество и дальнейшие сценарии развития.
+- Длина ответа "answer" ДОЛЖНА быть не менее 1500 символов!`
     } else {
-      depthInstruction = `ОБЪЁМ ОТВЕТА: РЕЖИМ HIGH (СТАНДАРТНЫЙ АНАЛИЗ).
-- Длина ответа: ДО 1000 СИМВОЛОВ.
-- Стиль: подробный структурированный ответ с ключевыми подробностями, аргументами, фактами и сносками [1], [2].`
+      depthInstruction = `ОБЪЁМ И СТРУКТУРА: РЕЖИМ HIGH (СТАНДАРТНЫЙ АНАЛИЗ, 800–1200 СИМВОЛОВ).
+- Напиши структурированный ответ из 2–3 содержательных абзацев с ключевыми деталями, аргументами и сносками [1], [2], [3].`
+    }
+
+    if (isPro) {
+      depthInstruction += `\n\n⚡ РЕЖИМ PRO SEARCH АКТИВИРОВАН:
+- Проведи глубокую перекрестную верификацию источников, выдели неочевидные инсайты, скрытые нюансы и расширенную экспертную аналитику.
+- Сделай ответ максимально профессиональным и всесторонне проработанным.`
     }
 
     // Build prompt for high-intelligence factual, human-friendly search with citations
@@ -448,7 +459,7 @@ ${liveContext}
      • Проведи объективный анализ первоисточников, укажи точные факты, хронологию и расставь сноски [1], [2], [3].
 3. Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал вопрос по программированию!
 4. Если предоставлены первоисточники или личные заметки/задачи, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
-5. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 500 симв.' : depth === 'max' ? 'до 2000 симв.' : 'до 1000 симв.'}).
+5. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 400 симв.' : depth === 'max' ? 'ОТ 1500 ДО 2500 симв. (длинный лонгрид!)' : 'до 1000 симв.'}).
 6. Сформируй 2-4 ключевых вывода/инсайта ("takeaways").
 7. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
 8. Напиши умный, тёплый и живой комментарий от Зерфика ("tikhonyaComment"), отражающий суть вопроса.
@@ -480,12 +491,18 @@ ${liveContext}
     const effectiveModel = modelInfo.model
     let llmResult: any = null
 
+    const systemPrompt = isDeepReport
+      ? 'You are Zerfik — a deep, comprehensive and analytical AI research engine (like Perplexity Pro Search). Write extensive, multi-paragraph in-depth reports in Russian with rich context, timeline, data points, nuances and precise source citations [1], [2], [3]. Never output short summaries when in Max or Pro Search mode. Always output pure valid JSON.'
+      : depth === 'lite'
+      ? 'You are Zerfik — a fast, ultra-concise AI search engine (Lite mode). Write brief 1-2 sentence answers in Russian with key source citations. Always output pure valid JSON.'
+      : 'You are Zerfik — a smart, structured and factual AI search engine. Write well-rounded, balanced answers in Russian with key details and source citations [1], [2]. Always output pure valid JSON.'
+
     try {
       const completion = await callGroqChatCompletion({
         messages: [
           {
             role: 'system',
-            content: 'You are Zerfik — a factual, concise and smart AI search engine. Always output pure valid JSON adhering to schema. Answer in natural Russian directly to the point. Cite sources as [1], [2]. Never output irrelevant technical jargon or engineering templates when asked about everyday, news, or general knowledge topics.',
+            content: systemPrompt,
           },
           {
             role: 'user',
@@ -495,7 +512,8 @@ ${liveContext}
         model: effectiveModel,
         apiKey: apiKey || process.env.GROQ_API_KEY,
         response_format: { type: 'json_object' },
-        temperature: 0.2,
+        temperature: isDeepReport ? 0.35 : 0.2,
+        max_tokens: isDeepReport ? 3500 : 1500,
       })
 
       const raw = completion.content || '{}'
