@@ -62,21 +62,39 @@ export async function POST(req: NextRequest) {
       where: { chatId: numericChatId },
     })
 
-    const isFullFree = !promo.discountPercent || promo.discountPercent === 100
+    const userCurrentPlan = normalizePlan(user?.plan)
+    const isUserSubActive = Boolean(user?.subscriptionExpiry && user.subscriptionExpiry > new Date())
+    const userPlanRank = isUserSubActive ? (PLAN_RANK[userCurrentPlan] || 0) : 0
 
-    // Determine target plan without downgrading higher tiers
+    // Determine target plan for this promo code
     const promoPlanRaw = (promo.targetPlan || 'all').toLowerCase()
-    let targetPlan: 'plus' | 'pro' | 'corp'
-    if (promoPlanRaw === 'corp' || promoPlanRaw === 'unlimited') targetPlan = 'corp'
-    else if (promoPlanRaw === 'plus' || promoPlanRaw === 'premium') targetPlan = 'plus'
-    else targetPlan = 'pro' // 'all' or 'pro' gives Pro by default
+    let promoTargetPlan: 'plus' | 'pro' | 'corp' | 'all'
+    if (promoPlanRaw === 'corp' || promoPlanRaw === 'unlimited') promoTargetPlan = 'corp'
+    else if (promoPlanRaw === 'plus' || promoPlanRaw === 'premium') promoTargetPlan = 'plus'
+    else if (promoPlanRaw === 'pro') promoTargetPlan = 'pro'
+    else promoTargetPlan = 'all'
 
-    const userPlanRank = PLAN_RANK[normalizePlan(user?.plan)]
-    if (userPlanRank > PLAN_RANK[targetPlan]) {
-      targetPlan = normalizePlan(user?.plan) as 'plus' | 'pro' | 'corp'
+    // Strict validation: If user has an active higher-tier plan, REJECT the lower promo code!
+    if (isUserSubActive && promoTargetPlan !== 'all') {
+      const promoRank = PLAN_RANK[promoTargetPlan] || 0
+      if (userPlanRank > promoRank) {
+        const userPlanName = PLAN_NAMES_RU[userCurrentPlan] || userCurrentPlan.toUpperCase()
+        const promoPlanName = PLAN_NAMES_RU[promoTargetPlan] || promoTargetPlan.toUpperCase()
+        return NextResponse.json({
+          error: `Данный промокод предназначен для тарифа «${promoPlanName}». У вас уже активен более высокий тариф «${userPlanName}» — промокод не подходит для продления вашей текущей подписки.`,
+        }, { status: 400 })
+      }
+    }
+
+    let targetPlan: 'plus' | 'pro' | 'corp'
+    if (promoTargetPlan === 'all') {
+      targetPlan = isUserSubActive && userCurrentPlan !== 'free' ? (userCurrentPlan as 'plus' | 'pro' | 'corp') : 'pro'
+    } else {
+      targetPlan = promoTargetPlan
     }
 
     const daysToAdd = promo.durationDays || 30
+    const isFullFree = !promo.discountPercent || promo.discountPercent === 100
 
     if (isFullFree) {
       // ── 100% FREE ACTIVATION: Instantly grant/extend subscription ──

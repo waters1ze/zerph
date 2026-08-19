@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { planAtLeast, normalizePlan } from '@/lib/backend/plans'
+import { planAtLeast, normalizePlan, PLAN_RANK, PLAN_NAMES_RU } from '@/lib/backend/plans'
 import { after } from 'next/server'
 import { transcribeAudioWithGroq, parseIntentWithGroq, ParsedItem, generateSmartReschedulePlan, extractCleanRecipientAndSharing } from '@/lib/backend/groq'
 import {
@@ -3513,6 +3513,76 @@ export async function POST(req: NextRequest) {
             }
           } catch (e) {
             console.error('Failed to process referral:', e)
+          }
+        }
+      } else if (cmd === '/promo' || (cmd === '/start' && param?.startsWith('promo_'))) {
+        const rawCode = cmd === '/promo' ? (parts[1] || '') : (param ? param.replace(/^promo_/, '') : '')
+        if (!rawCode.trim()) {
+          await send(chatId, '🎟️ Чтобы активировать промокод, отправьте: `/promo КОД`')
+        } else {
+          try {
+            const cleanCode = rawCode.trim().toUpperCase()
+            const promo = await prisma.promoCode.findUnique({ where: { code: cleanCode } })
+            if (!promo || !promo.isActive) {
+              await send(chatId, '❌ Промокод не найден или недействителен.')
+            } else if (promo.expiresAt && new Date() > promo.expiresAt) {
+              await send(chatId, '❌ Срок действия этого промокода истёк.')
+            } else if (promo.usedCount >= promo.maxActivations) {
+              await send(chatId, '❌ Лимит активаций этого промокода исчерпан.')
+            } else if ((promo.usedByChatIds || []).includes(String(chatId))) {
+              await send(chatId, '⚠️ Вы уже активировали этот промокод ранее.')
+            } else {
+              const user = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+              const userCurrentPlan = normalizePlan(user?.plan)
+              const isUserSubActive = Boolean(user?.subscriptionExpiry && user.subscriptionExpiry > new Date())
+              const userPlanRank = isUserSubActive ? (PLAN_RANK[userCurrentPlan] || 0) : 0
+
+              const promoPlanRaw = (promo.targetPlan || 'all').toLowerCase()
+              let promoTargetPlan: 'plus' | 'pro' | 'corp' | 'all'
+              if (promoPlanRaw === 'corp' || promoPlanRaw === 'unlimited') promoTargetPlan = 'corp'
+              else if (promoPlanRaw === 'plus' || promoPlanRaw === 'premium') promoTargetPlan = 'plus'
+              else if (promoPlanRaw === 'pro') promoTargetPlan = 'pro'
+              else promoTargetPlan = 'all'
+
+              if (isUserSubActive && promoTargetPlan !== 'all' && userPlanRank > (PLAN_RANK[promoTargetPlan] || 0)) {
+                const userPlanName = PLAN_NAMES_RU[userCurrentPlan] || userCurrentPlan.toUpperCase()
+                const promoPlanName = PLAN_NAMES_RU[promoTargetPlan] || promoTargetPlan.toUpperCase()
+                await send(chatId, `❌ Данный промокод предназначен для тарифа *${promoPlanName}*.\nУ вас уже активен более высокий тариф *${userPlanName}* — промокод не подходит для продления вашей текущей подписки.`)
+              } else {
+                let targetPlan: 'plus' | 'pro' | 'corp'
+                if (promoTargetPlan === 'all') {
+                  targetPlan = isUserSubActive && userCurrentPlan !== 'free' ? (userCurrentPlan as 'plus' | 'pro' | 'corp') : 'pro'
+                } else {
+                  targetPlan = promoTargetPlan
+                }
+                const daysToAdd = promo.durationDays || 30
+                let newExpiry = new Date()
+                if (user?.subscriptionExpiry && user.subscriptionExpiry > new Date()) {
+                  newExpiry = new Date(user.subscriptionExpiry.getTime() + daysToAdd * 86400000)
+                } else {
+                  newExpiry = new Date(Date.now() + daysToAdd * 86400000)
+                }
+
+                await prisma.telegramChat.upsert({
+                  where: { chatId: BigInt(chatId) },
+                  update: { plan: targetPlan, subscriptionExpiry: newExpiry },
+                  create: { chatId: BigInt(chatId), plan: targetPlan, subscriptionExpiry: newExpiry },
+                })
+
+                await prisma.promoCode.update({
+                  where: { id: promo.id },
+                  data: {
+                    usedCount: { increment: 1 },
+                    usedByChatIds: { push: String(chatId) },
+                  },
+                })
+
+                await send(chatId, `🎉 Промокод *${cleanCode}* успешно активирован!\nВам предоставлен доступ к тарифу *${PLAN_NAMES_RU[targetPlan]}* на *${daysToAdd} дн.* (до ${newExpiry.toLocaleDateString('ru-RU')}).`)
+              }
+            }
+          } catch (err) {
+            console.error('Error activating promo in bot:', err)
+            await send(chatId, '❌ Ошибка при активации промокода. Попробуйте позже.')
           }
         }
       } else if (cmd === '/invite' || cmd === '/friend' || cmd === '/addfriend') {
