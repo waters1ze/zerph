@@ -12,7 +12,371 @@ import { cn } from '@/lib/utils'
 import { ZerfikMascot, type ZerfikMood } from '@/components/views/tikhonya-mascot'
 import { planAtLeast, type PlanId } from '@/lib/plans'
 
-export type ZerfikGesture = 'none' | 'chair_sit' | 'waving_arms' | 'jump_and_float' | 'spread'
+export type ZerfikGesture = 'none' | 'chair_sit' | 'waving_arms' | 'jump_and_float' | 'spread' | 'head_tilt' | 'nod'
+
+export interface ZerficCompanionProps {
+  mood: ZerfikMood | 'curious' | 'surprised'
+  gesture?: ZerfikGesture
+  isListening: boolean
+  isThinking: boolean
+  isSpeaking: boolean
+  audioLevel: number
+  onClick?: () => void
+}
+
+/**
+ * High-Definition Interactive Animated Vector Companion for Zerfic Live
+ * 60 FPS physics, eye-tracking, audio-reactive mouth waveform, and animated particle aura.
+ */
+export function ZerficLivingCompanion({
+  mood,
+  gesture = 'none',
+  isListening,
+  isThinking,
+  isSpeaking,
+  audioLevel,
+  onClick,
+}: ZerficCompanionProps) {
+  const [blink, setBlink] = useState(false)
+  const [lookOffset, setLookOffset] = useState({ x: 0, y: 0, tilt: 0 })
+  const [interactiveWave, setInteractiveWave] = useState(0)
+
+  // Natural blinking cycle (blinks every 3.5 - 6 seconds)
+  useEffect(() => {
+    let blinkTimeout: NodeJS.Timeout
+    const scheduleBlink = () => {
+      const delay = Math.random() * 2500 + 3500
+      blinkTimeout = setTimeout(() => {
+        setBlink(true)
+        setTimeout(() => {
+          setBlink(false)
+          scheduleBlink()
+        }, 180)
+      }, delay)
+    }
+    scheduleBlink()
+    return () => clearTimeout(blinkTimeout)
+  }, [])
+
+  // Dynamic soundwave mouth animation frame when speaking
+  useEffect(() => {
+    if (!isSpeaking) return
+    const interval = setInterval(() => {
+      setInteractiveWave(prev => (prev + 1) % 6)
+    }, 120)
+    return () => clearInterval(interval)
+  }, [isSpeaking])
+
+  // Mouse cursor gaze tracking
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const cx = window.innerWidth / 2
+      const cy = window.innerHeight / 2
+      const dx = (e.clientX - cx) / (window.innerWidth / 2)
+      const dy = (e.clientY - cy) / (window.innerHeight / 2)
+      setLookOffset({
+        x: Math.max(-6, Math.min(6, dx * 7)),
+        y: Math.max(-5, Math.min(5, dy * 6)),
+        tilt: Math.max(-8, Math.min(8, dx * 10)),
+      })
+    }
+    window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
+
+  // Aura Color and Pulse Dynamics
+  const auraGlowColor = isSpeaking
+    ? 'rgba(56, 189, 248, 0.45)'
+    : isListening
+      ? 'rgba(52, 211, 153, 0.45)'
+      : isThinking
+        ? 'rgba(251, 191, 36, 0.45)'
+        : mood === 'happy' || mood === 'celebrate'
+          ? 'rgba(168, 85, 247, 0.4)'
+          : 'rgba(56, 189, 248, 0.25)'
+
+  const isHappy = mood === 'happy' || mood === 'celebrate'
+  const isCurious = mood === 'curious' || gesture === 'head_tilt'
+  const isWink = mood === 'wink'
+
+  return (
+    <div
+      onClick={onClick}
+      className="relative flex items-center justify-center cursor-pointer select-none group"
+      style={{ width: 280, height: 280 }}
+    >
+      {/* ── Sound & Energy Aura Rings (reactive to microphone decibels) ── */}
+      <AnimatePresence>
+        {isListening && (
+          <>
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{
+                scale: [1, 1.35 + audioLevel * 1.8, 1],
+                opacity: [0.3, 0.7, 0.3],
+              }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute inset-0 rounded-full border-2 border-emerald-400/40 pointer-events-none"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{
+                scale: [1.1, 1.6 + audioLevel * 2.2, 1.1],
+                opacity: [0.15, 0.45, 0.15],
+              }}
+              transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
+              className="absolute inset-0 rounded-full border border-emerald-400/25 pointer-events-none"
+            />
+          </>
+        )}
+
+        {isSpeaking && (
+          <motion.div
+            animate={{
+              scale: [1, 1.25, 1],
+              opacity: [0.25, 0.6, 0.25],
+            }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+            className="absolute inset-0 rounded-full border-2 border-sky-400/40 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Soft Glow Ambient Backdrop ── */}
+      <div
+        className="absolute w-52 h-52 rounded-full blur-3xl transition-all duration-500 pointer-events-none"
+        style={{ background: auraGlowColor }}
+      />
+
+      {/* ── Floating Character Physical Rig ── */}
+      <motion.div
+        animate={{
+          y: isSpeaking
+            ? [-4, 4, -4]
+            : isListening
+              ? [-2, 2, -2]
+              : isThinking
+                ? [-3, 3, -3]
+                : [-6, 6, -6],
+          rotate: isCurious
+            ? 12 + lookOffset.tilt
+            : isThinking
+              ? -5 + lookOffset.tilt * 0.5
+              : lookOffset.tilt,
+          scale: isSpeaking ? [1, 1.02, 1] : 1,
+        }}
+        transition={{
+          duration: isSpeaking ? 1.4 : isThinking ? 2.2 : 3.8,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+        className="relative z-10 flex flex-col items-center justify-center"
+      >
+        {/* Top Floating Cyber-Antenna with pulsing beacon */}
+        <div className="relative flex flex-col items-center -mb-2 z-20">
+          <motion.div
+            animate={{
+              scale: isThinking ? [1, 1.4, 1] : isSpeaking ? [1, 1.2, 1] : [1, 1.1, 1],
+              boxShadow: isThinking
+                ? '0 0 16px rgba(251, 191, 36, 0.9)'
+                : isListening
+                  ? '0 0 16px rgba(52, 211, 153, 0.9)'
+                  : '0 0 16px rgba(56, 189, 248, 0.9)',
+            }}
+            transition={{ duration: 1.2, repeat: Infinity }}
+            className={cn(
+              'w-3.5 h-3.5 rounded-full border border-white/60 transition-colors',
+              isThinking ? 'bg-amber-400' : isListening ? 'bg-emerald-400' : 'bg-sky-400'
+            )}
+          />
+          <div className="w-1 h-3 bg-gradient-to-b from-slate-400 to-slate-700 rounded-full" />
+        </div>
+
+        {/* ── Main Head & Body Capsule Rig ── */}
+        <div className="relative">
+          {/* Side Retractable Cyber Wings */}
+          <motion.div
+            animate={{
+              rotate: isHappy ? [-15, 15, -15] : isSpeaking ? [-4, 4, -4] : 0,
+              scaleX: isSpeaking ? [1, 1.08, 1] : 1,
+            }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+            className="absolute -left-7 top-6 w-8 h-12 bg-gradient-to-l from-slate-700 to-sky-600/60 rounded-l-2xl border-l border-t border-sky-400/40 shadow-lg -z-10"
+          />
+          <motion.div
+            animate={{
+              rotate: isHappy ? [15, -15, 15] : isSpeaking ? [4, -4, 4] : 0,
+              scaleX: isSpeaking ? [1, 1.08, 1] : 1,
+            }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+            className="absolute -right-7 top-6 w-8 h-12 bg-gradient-to-r from-slate-700 to-sky-600/60 rounded-r-2xl border-r border-t border-sky-400/40 shadow-lg -z-10"
+          />
+
+          {/* Head Chassis */}
+          <div className="w-44 h-36 rounded-3xl bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 p-2.5 border-2 border-sky-500/40 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+            {/* Subtle Metallic Reflex Glow */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none" />
+
+            {/* Dark Visor Screen */}
+            <div className="w-full h-full rounded-2xl bg-black/90 border border-slate-700/60 relative p-3 flex flex-col items-center justify-between overflow-hidden shadow-inner">
+              {/* Top Sensor Notch */}
+              <div className="w-12 h-1 rounded-full bg-slate-800/80 border border-slate-700/50" />
+
+              {/* ── Expressive Digital Eyes Area ── */}
+              <div
+                className="flex items-center justify-center gap-7 my-auto transition-transform duration-150"
+                style={{
+                  transform: `translate(${lookOffset.x}px, ${lookOffset.y}px)`,
+                }}
+              >
+                {/* Left Eye */}
+                {isHappy ? (
+                  // Smiling Crescent Eye ( ^ )
+                  <motion.div
+                    animate={{ scaleY: [1, 1.2, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                    className="w-8 h-4 border-t-4 border-sky-300 rounded-t-full drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]"
+                  />
+                ) : blink ? (
+                  // Closed Blink Line ( - )
+                  <div className="w-8 h-1 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
+                ) : isThinking ? (
+                  // Thinking Eye (looking up with data pulse)
+                  <motion.div
+                    animate={{ y: [-1, -3, -1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="w-7 h-8 rounded-xl bg-amber-400 border border-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.9)] flex items-center justify-center overflow-hidden"
+                  >
+                    <div className="w-3 h-3 rounded-full bg-slate-950" />
+                  </motion.div>
+                ) : isListening ? (
+                  // Listening Eye (wide attentive with pulsing radar pupil)
+                  <motion.div
+                    animate={{ scale: [1, 1.12 + audioLevel * 0.4, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity }}
+                    className="w-8 h-8 rounded-full bg-emerald-400 border-2 border-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.9)] flex items-center justify-center"
+                  >
+                    <div className="w-3.5 h-3.5 rounded-full bg-slate-950" />
+                  </motion.div>
+                ) : (
+                  // Normal Lively Eye
+                  <motion.div
+                    animate={{ scaleY: isSpeaking ? [1, 1.08, 1] : 1 }}
+                    transition={{ duration: 0.8, repeat: Infinity }}
+                    className="w-7 h-8 rounded-2xl bg-sky-400 border border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.85)] flex items-center justify-center"
+                  >
+                    <div className="w-3 h-3 rounded-full bg-slate-950" />
+                  </motion.div>
+                )}
+
+                {/* Right Eye */}
+                {isWink ? (
+                  // Winking Eye ( - )
+                  <div className="w-8 h-1 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
+                ) : isHappy ? (
+                  // Smiling Crescent Eye ( ^ )
+                  <motion.div
+                    animate={{ scaleY: [1, 1.2, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                    className="w-8 h-4 border-t-4 border-sky-300 rounded-t-full drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]"
+                  />
+                ) : blink ? (
+                  // Closed Blink Line ( - )
+                  <div className="w-8 h-1 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
+                ) : isThinking ? (
+                  // Thinking Eye (looking up with data pulse)
+                  <motion.div
+                    animate={{ y: [-1, -3, -1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="w-7 h-8 rounded-xl bg-amber-400 border border-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.9)] flex items-center justify-center overflow-hidden"
+                  >
+                    <div className="w-3 h-3 rounded-full bg-slate-950" />
+                  </motion.div>
+                ) : isListening ? (
+                  // Listening Eye (wide attentive with pulsing radar pupil)
+                  <motion.div
+                    animate={{ scale: [1, 1.12 + audioLevel * 0.4, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity }}
+                    className="w-8 h-8 rounded-full bg-emerald-400 border-2 border-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.9)] flex items-center justify-center"
+                  >
+                    <div className="w-3.5 h-3.5 rounded-full bg-slate-950" />
+                  </motion.div>
+                ) : (
+                  // Normal Lively Eye
+                  <motion.div
+                    animate={{ scaleY: isSpeaking ? [1, 1.08, 1] : 1 }}
+                    transition={{ duration: 0.8, repeat: Infinity }}
+                    className="w-7 h-8 rounded-2xl bg-sky-400 border border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.85)] flex items-center justify-center"
+                  >
+                    <div className="w-3 h-3 rounded-full bg-slate-950" />
+                  </motion.div>
+                )}
+              </div>
+
+              {/* ── Holographic Mouth / Audio-reactive Spectrum on Visor ── */}
+              <div className="w-full flex items-center justify-center gap-1 h-3.5">
+                {isSpeaking ? (
+                  // 5-bar energetic voice equalizer mouth
+                  [0.4, 0.9, 1.0, 0.8, 0.5].map((scale, idx) => (
+                    <motion.div
+                      key={idx}
+                      animate={{
+                        scaleY: [
+                          scale * 0.4,
+                          Math.sin(interactiveWave + idx) * 0.5 + 0.9,
+                          scale * 0.4,
+                        ],
+                      }}
+                      transition={{ duration: 0.25, repeat: Infinity }}
+                      className="w-1.5 h-3.5 bg-sky-300 rounded-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]"
+                    />
+                  ))
+                ) : isListening ? (
+                  // Listening wave pulse matching mic
+                  <motion.div
+                    animate={{ scaleX: [0.6, 1 + audioLevel * 1.5, 0.6] }}
+                    transition={{ duration: 0.4, repeat: Infinity }}
+                    className="w-8 h-1 bg-emerald-400 rounded-full shadow-[0_0_6px_rgba(52,211,153,0.9)]"
+                  />
+                ) : isHappy ? (
+                  // Smiling glowing mouth
+                  <div className="w-6 h-2 border-b-2 border-sky-300 rounded-b-full drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
+                ) : (
+                  // Calm standby pulse
+                  <div className="w-3 h-1 bg-sky-400/60 rounded-full shadow-[0_0_4px_rgba(56,189,248,0.5)]" />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Lower Thruster / Jet Plasma Plume ── */}
+          <div className="flex flex-col items-center -mt-1">
+            {/* Thruster Nozzle */}
+            <div className="w-8 h-2.5 bg-slate-800 border-x border-b border-slate-600 rounded-b-lg" />
+            {/* Plasma Flame */}
+            <motion.div
+              animate={{
+                scaleY: isSpeaking ? [1, 1.4, 1] : [0.9, 1.15, 0.9],
+                opacity: isSpeaking ? [0.8, 1, 0.8] : [0.6, 0.85, 0.6],
+              }}
+              transition={{ duration: 0.35, repeat: Infinity }}
+              className={cn(
+                'w-4 h-6 rounded-b-full blur-xs transition-colors shadow-lg',
+                isSpeaking
+                  ? 'bg-gradient-to-b from-sky-300 via-sky-500 to-transparent'
+                  : isListening
+                    ? 'bg-gradient-to-b from-emerald-300 via-emerald-500 to-transparent'
+                    : isThinking
+                      ? 'bg-gradient-to-b from-amber-300 via-amber-500 to-transparent'
+                      : 'bg-gradient-to-b from-sky-400 via-sky-600 to-transparent'
+              )}
+            />
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
 
 export interface ZerfikMaleVoice {
   id: string
@@ -729,12 +1093,13 @@ export function ZerficLiveView() {
                 else if (isSpeaking) stopSpeaking()
               }}
             >
-              <ZerfikMascot
+              <ZerficLivingCompanion
                 mood={mood}
-                size="lg"
-                interactive={true}
-                showSpeechBubble={false}
-                className="scale-110 sm:scale-125"
+                gesture={gesture}
+                isListening={isListening}
+                isThinking={isThinking}
+                isSpeaking={isSpeaking}
+                audioLevel={audioLevel}
               />
             </motion.div>
 
