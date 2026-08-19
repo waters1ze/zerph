@@ -70,6 +70,24 @@ async function getAdminChatIds(): Promise<number[]> {
   return Array.from(adminIds)
 }
 
+const IMPLEMENTED_FEATURES_SUMMARY = `
+УЖЕ РЕАЛИЗОВАНО В ZERF (НЕ ПРЕДЛАГАТЬ И НЕ ВКЛЮЧАТЬ В ОПРОСЫ):
+1. Голосовой ввод дел через Whisper (голос -> задача/цель/заметка/напоминание)
+2. Точечные напоминания с повторами (Telegram, VK, Web Push)
+3. Матрица Эйзенхауэра (срочно/важно)
+4. Канбан-доски и совместные командные проекты
+5. Трекер долгосрочных целей и майлстоунов
+6. Трекер привычек со стриками активности
+7. Помодоро таймер с фокус-режимом
+8. Синхронизация с Google Календарем и iCal
+9. Вики-ссылки [[Заметка]] и граф связей
+10. Каталог расширений (темы, пресеты, виджеты)
+11. Entropy AI глубокий поиск инсайтов
+12. Синтез голосовых ответов (TTS)
+13. Утренние и вечерние ИИ-дайджесты
+14. Real-time Server-Sent Events (SSE)
+`
+
 /** 1. Post Weekly Friday 09:00 MSK Poll to Channel (Minimalist B&W) */
 export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force = false): Promise<boolean> {
   const { mskDate } = getMskDateTime()
@@ -84,13 +102,13 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force 
       if (existing) return false
     }
 
-    let question = '✦ Какое улучшение или функцию добавить в Zerf AI?'
+    let question = '✦ Какую новую функцию добавить в Zerf в следующем релизе?'
     let options = [
-      '▪ Утренний аудио-дайджест голосом',
-      '▪ Виджет на экран блокировки смартфона',
-      '▪ Сетка активности и трекер стриков',
-      '▪ Импорт задач по фото расписания',
-      '▪ Синхронизация с Notion и Obsidian'
+      '▪ Синхронизация с Notion и Obsidian',
+      '▪ Виджеты на рабочий стол смартфона',
+      '▪ Импорт задач по фото расписания (OCR)',
+      '▪ ИИ-декомпозиция проектов (диаграмма Ганта)',
+      '▪ Зашифрованный сейф приватных заметок'
     ]
 
     try {
@@ -99,16 +117,16 @@ export async function postDailyPollToChannel(channelId = DEFAULT_CHANNEL, force 
         messages: [
           {
             role: 'system',
-            content: 'Ты — комьюнити-менеджер Telegram-канала экосистемы Zerf AI (@zerph_off). Создай 1 лаконичный опрос для пользователей с выбором самого ожидаемого улучшения или функции сервиса. Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪). Верни строго JSON: {"question": "...", "options": ["...", "..."]}'
+            content: `Ты — продуктовый аналитик Telegram-канала экосистемы Zerf AI (@zerph_off).\nСоздай 1 лаконичный опрос для пользователей с выбором САМОГО ОЖИДАЕМОГО НОВОГО улучшения, которого ещё нет в сервисе.\n\n${IMPLEMENTED_FEATURES_SUMMARY}\n\nНАПРАВЛЕНИЯ ДЛЯ ВАРИАНТОВ (выбери 4-5 неповторяющихся вариантов, строго до 50 символов каждый):\n- Двусторонняя синхронизация с Notion и Obsidian\n- Виджеты на экран блокировки и рабочий стол iOS/Android\n- Сканирование и импорт задач по фото расписания (OCR)\n- Авто-конспект совещаний/лекций из длинных аудио с Action Items\n- Диаграмма Ганта и таймлайн декомпозиции проектов\n- Голосовой ассистент-собеседник в реальном времени (Live Voice)\n- Синхронизация с Яндекс.Календарем и Mail.ru Календарем\n- E2E сквозное шифрование приватных заметок\n- Командные чат-треды внутри задач\n- AI-копилот по биоритмам и авто-балансировка дня\n\nСтиль: строгий минимализм, ч/б символы (✦, ◈, ▪). Верни строго JSON: {"question": "✦ ...", "options": ["▪ ...", "▪ ...", "▪ ...", "▪ ..."]}`
           },
           {
             role: 'user',
-            content: `Дата: ${mskDate}. Сгенерируй еженедельный пятничный опрос по улучшению функционала Zerf AI.`
+            content: `Дата: ${mskDate}. Сгенерируй еженедельный пятничный опрос по выбору следующей крупной фичи Zerf AI.`
           }
         ],
         response_format: { type: 'json_object' },
         temperature: 0.7,
-        max_tokens: 300,
+        max_tokens: 350,
       })
       const parsed = JSON.parse(result.content || '{}')
       if (parsed.question && Array.isArray(parsed.options) && parsed.options.length >= 2) {
@@ -568,19 +586,24 @@ export async function generateAndSendFridayAiProposal(): Promise<boolean> {
     }
 
     const prompt =
-      `Ты — ведущий AI-Архитектор Zerf AI. Проанализируй данные за неделю и предложи 1 ключевую фичу для разработки.\n\n` +
-      `Статистика:\n${JSON.stringify(statsContext, null, 2)}\n\n` +
-      `Стиль: минимализм, ч/б символы (✦, ◈, ▪), Telegram HTML.\n` +
-      `1. Название и суть фичи.\n` +
-      `2. Проблема пользователей.\n` +
-      `3. Архитектура и интерфейс.\n` +
-      `4. Прогноз удержания (Retention).`
+      `Ты — ведущий AI-Архитектор экосистемы Zerf AI. Проанализируй агрегированные данные использования и предложи 1 новую ключевую фичу для следующего спринта разработки, которой ЕЩЁ НЕТ в Zerf.\n\n` +
+      `${IMPLEMENTED_FEATURES_SUMMARY}\n\n` +
+      `Статистика активности за неделю:\n${JSON.stringify(statsContext, null, 2)}\n\n` +
+      `ПРАВИЛА:\n` +
+      `- Предложи совершенно новую, неизбитую фичу (например, OCR распознавание фото расписания, Live WebRTC Voice, синхронизация с Notion/Obsidian, E2E-шифрование, декомпозиция на диаграмму Ганта, AI-биоритмы, командные чат-треды внутри задач).\n` +
+      `- Запрещено предлагать то, что уже перечислено в списке "УЖЕ РЕАЛИЗОВАНО".\n` +
+      `- Стиль: строгий минимализм, ч/б символы (✦, ◈, ▪), Telegram HTML.\n` +
+      `Структура ответа:\n` +
+      `1. ✦ <b>Название и суть инновации</b>\n` +
+      `2. ◈ <b>Какую боль пользователей решает</b>\n` +
+      `3. ▪ <b>Техническая архитектура и UI/UX</b>\n` +
+      `4. 📈 <b>Влияние на Retention и вовлеченность</b>`
 
     const result = await callGroqChatCompletion({
       model: GROQ_CHAT_MODEL,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 900,
+      max_tokens: 950,
     })
 
     const proposal = result.content?.trim()

@@ -41,15 +41,16 @@ export default function VkPage() {
         const vkSign = urlParams.get('sign') || hashParams.get('sign')
 
         if (vkUserId && /^\d+$/.test(vkUserId) && vkSign) {
-          const vkLaunch = [
+          const allEntries = [
             ...Array.from(urlParams.entries()),
             ...Array.from(hashParams.entries()),
           ]
-            .filter(([k]) => k.startsWith('vk_'))
-            .map(([k, v]) => `${k}=${v}`)
+          const fullLaunch = allEntries
+            .filter(([k]) => k.startsWith('vk_') || k === 'sign')
+            .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
             .join('&')
           localStorage.setItem('zerf_chat_id', vkUserId)
-          localStorage.setItem('zerf_vk_launch', vkLaunch)
+          localStorage.setItem('zerf_vk_launch', fullLaunch)
           document.cookie = `zerf_chat_id=${vkUserId}; path=/; max-age=31536000`
         }
 

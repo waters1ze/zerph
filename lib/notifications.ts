@@ -1,4 +1,13 @@
-// Browser Web Notifications and Web Audio API synthesized chime/alarms
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray
+}
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -27,16 +36,43 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
   if (granted && swReg && 'pushManager' in swReg) {
     try {
-      const sub = await swReg.pushManager.getSubscription()
-      const chatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
-      if (sub && chatId) {
-        fetch('/api/push/subscribe', {
+      let sub = await swReg.pushManager.getSubscription()
+      
+      if (!sub) {
+        // Fetch VAPID public key from backend
+        const res = await fetch('/api/push/subscribe').catch(() => null)
+        const data = await res?.json().catch(() => null)
+        if (data?.publicKey) {
+          const convertedKey = urlBase64ToUint8Array(data.publicKey)
+          sub = await swReg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: convertedKey,
+          })
+        }
+      }
+
+      const chatId =
+        localStorage.getItem('zerf_chat_id') ||
+        sessionStorage.getItem('zerf_chat_id') ||
+        null
+
+      if (sub) {
+        const authToken = localStorage.getItem('zerf_auth_token') || ''
+        const initData = typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initData || ''
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (chatId) headers['x-chat-id'] = chatId
+        if (authToken) headers['x-auth-token'] = authToken
+        if (initData) headers['x-tg-init-data'] = initData
+
+        await fetch('/api/push/subscribe', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ subscription: sub.toJSON(), chatId }),
         }).catch(() => {})
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Web push subscription failed:', err)
+    }
   }
 
   return granted

@@ -18,6 +18,7 @@ import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
 import { runAllCronTasks } from '@/lib/backend/cron-runner'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
+import { notifyDataChanged } from '@/lib/backend/sse'
 
 startReminderScheduler()
 
@@ -179,6 +180,7 @@ export async function POST(req: NextRequest) {
       parentTaskId: body.parentTaskId || null,
       ownerChatId: ownerChatId,
     })
+    notifyDataChanged(ownerChatId, 'tasks')
     return NextResponse.json(serialize({ success: true, task }))
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -196,6 +198,7 @@ export async function PATCH(req: NextRequest) {
     if (body.id && (body.itemType === 'goal' || body.type === 'goal')) {
       const { id, itemType, type, ...updates } = body
       const goal = await updateGoal(id, updates, ownerChatId)
+      notifyDataChanged(ownerChatId, 'goals')
       return NextResponse.json(serialize({ success: true, goal }))
     }
 
@@ -203,6 +206,7 @@ export async function PATCH(req: NextRequest) {
     if (body.id && (body.itemType === 'note' || body.type === 'note')) {
       const { id, itemType, type, ...updates } = body
       const note = await updateNote(id, updates, ownerChatId)
+      notifyDataChanged(ownerChatId, 'notes')
       return NextResponse.json(serialize({ success: true, note }))
     }
 
@@ -210,6 +214,7 @@ export async function PATCH(req: NextRequest) {
     if (body.id && (body.itemType === 'habit' || body.type === 'habit')) {
       const { id, itemType, type, ...updates } = body
       const habit = await updateHabit(id, updates, ownerChatId)
+      notifyDataChanged(ownerChatId, 'habits')
       return NextResponse.json(serialize({ success: true, habit }))
     }
 
@@ -219,6 +224,7 @@ export async function PATCH(req: NextRequest) {
       if (!completed) {
         return NextResponse.json({ error: 'No matching task found', notFound: true }, { status: 404 })
       }
+      notifyDataChanged(ownerChatId, 'tasks')
       return NextResponse.json(serialize({ success: true, task: completed, action: 'completed' }))
     }
 
@@ -232,6 +238,7 @@ export async function PATCH(req: NextRequest) {
     if (body.id) {
       const { id, ...updates } = body
       const task = await updateTask(id, updates, ownerChatId)
+      notifyDataChanged(ownerChatId, 'tasks')
       return NextResponse.json(serialize({ success: true, task }))
     }
 
@@ -259,6 +266,7 @@ export async function DELETE(req: NextRequest) {
     else if (type === 'habit') await deleteHabit(id, ownerChatId)
     else await deleteTask(id, ownerChatId)
 
+    notifyDataChanged(ownerChatId, 'all')
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

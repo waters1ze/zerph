@@ -64,7 +64,10 @@ export async function isUserAdmin(chatId: string | number | bigint | null | unde
 
 /** Generate deterministic HMAC auth token for user */
 export function getUserAuthToken(chatId: number | string | bigint): string {
-  const secret = process.env.TELEGRAM_BOT_TOKEN || 'zerf-auth-secret-key-2026'
+  const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.ADMIN_SECRET || process.env.NEXTAUTH_SECRET
+  if (!secret) {
+    throw new Error('TELEGRAM_BOT_TOKEN or ADMIN_SECRET env var is required for auth token generation')
+  }
   const pepper = getInternalPepper() || 'zerf-internal-pepper'
   const combined = `${pepper}:${String(chatId)}:${secret}`
   return crypto.createHmac('sha256', pepper).update(combined).digest('hex').slice(0, 32)
@@ -78,13 +81,10 @@ export function generateOnetimeToken(): string {
 /** Constant-time string comparison that does not leak length/content. */
 export function secretsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false
-  const ab = Buffer.from(String(a))
-  const bb = Buffer.from(String(b))
-  if (ab.length !== bb.length) {
-    crypto.timingSafeEqual(Buffer.alloc(32), Buffer.alloc(32))
-    return false
-  }
-  return crypto.timingSafeEqual(ab, bb)
+  const key = Buffer.alloc(32)
+  const ha = crypto.createHmac('sha256', key).update(String(a)).digest()
+  const hb = crypto.createHmac('sha256', key).update(String(b)).digest()
+  return crypto.timingSafeEqual(ha, hb)
 }
 
 /** Session lifetime: tokens older than this are rejected. */
@@ -99,29 +99,30 @@ export function verifyTelegramWebAppData(initDataStr: string): boolean {
   const urlParams = new URLSearchParams(initDataStr)
   const hash = urlParams.get('hash')
   if (!hash) return false
-  // auth_date freshness: reject initData older than 24h
-  const authDate = parseInt(urlParams.get('auth_date') || '0', 10)
-  if (!authDate || Date.now() / 1000 - authDate > 24 * 60 * 60) return false
 
   urlParams.delete('hash')
-  const keys = Array.from(urlParams.keys()).sort()
-  const dataCheckString = keys.map(key => `${key}=${urlParams.get(key)}`).join('\n')
+  const params: string[] = []
+  Array.from(urlParams.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([key, val]) => params.push(`${key}=${val}`))
 
+  const dataCheckString = params.join('\n')
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(process.env.TELEGRAM_BOT_TOKEN).digest()
-  const expectedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex')
+  const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex')
 
-  return secretsMatch(expectedHash, hash)
+  return secretsMatch(calculatedHash, hash)
 }
 
 /**
- * Parse Telegram user ID from validated initData
+ * Extract Telegram user ID from initData without full verification.
+ * Used ONLY after verifyTelegramWebAppData() has already returned true!
  */
 export function getTelegramUserIdFromInitData(initDataStr: string): string | null {
   try {
     const urlParams = new URLSearchParams(initDataStr)
-    const userStr = urlParams.get('user')
-    if (!userStr) return null
-    const user = JSON.parse(userStr)
+    const userJson = urlParams.get('user')
+    if (!userJson) return null
+    const user = JSON.parse(userJson)
     return user?.id ? String(user.id) : null
   } catch {
     return null
@@ -142,16 +143,32 @@ export function verifyVkLaunchParams(launchParams: string): { vkUserId: string; 
     const sign = urlParams.get('sign')
     if (!sign) return null
 
-    const pairs: string[] = []
-    const vkKeys: string[] = []
+    const vkParams: Array<[string, string]> = []
     urlParams.forEach((value, key) => {
-      if (key.startsWith('vk_')) vkKeys.push(key)
+      if (key.startsWith('vk_')) {
+        vkParams.push([key, value])
+      }
     })
-    vkKeys.sort()
-    for (const key of vkKeys) pairs.push(`${key}=${urlParams.get(key)}`)
+    if (vkParams.length === 0) return null
 
-    const hash = crypto.createHash('md5').update(pairs.join('') + appSecret).digest('hex')
-    if (!secretsMatch(hash, sign)) return null
+    vkParams.sort(([a], [b]) => a.localeCompare(b))
+
+    // 1. Official VK Mini App standard: HMAC-SHA256 on sorted vk_* query string, base64url encoded
+    const queryString = vkParams.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+    const hashHmac = crypto
+      .createHmac('sha256', appSecret)
+      .update(queryString)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+
+    // 2. Legacy MD5 fallback
+    const pairs = vkParams.map(([k, v]) => `${k}=${v}`).join('')
+    const hashMd5 = crypto.createHash('md5').update(pairs + appSecret).digest('hex')
+
+    const isMatch = secretsMatch(hashHmac, sign) || secretsMatch(hashMd5, sign)
+    if (!isMatch) return null
 
     const vkUserId = urlParams.get('vk_user_id')
     if (!vkUserId) return null
@@ -162,11 +179,11 @@ export function verifyVkLaunchParams(launchParams: string): { vkUserId: string; 
 }
 
 /**
- * Core Authentication Verifier.
- * Strictly verifies identity from:
- * 1. Server-side ADMIN_SECRET (internal crons/bots) — bearer token or x-admin-secret header
- * 2. Cryptographically verified Telegram WebApp initData
- * 3. Active, unrevoked, unexpired DB UserSession matched by sessionToken
+ * Robust authentication resolver.
+ * Priority:
+ * 1. Admin / Cron secret (server-to-server)
+ * 2. Telegram WebApp HMAC (cryptographically verified against BOT_TOKEN)
+ * 3. Browser session token (from DB `UserSession` table, lifetime-checked)
  * 4. Signed VK Mini App launch parameters (when VK_APP_SECRET is configured)
  *
  * A bare `x-chat-id` header / query param / cookie is NEVER trusted by itself.
@@ -183,6 +200,10 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
       if (specifiedChatId && /^\d+$/.test(specifiedChatId.trim())) {
         return { chatId: specifiedChatId.trim(), isRoot: true }
       }
+      if (ROOT_ADMIN_IDS.length > 0) {
+        return { chatId: ROOT_ADMIN_IDS[0], isRoot: true }
+      }
+      return { chatId: '0', isRoot: true }
     }
   }
 

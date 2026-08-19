@@ -31,6 +31,8 @@ import {
   generateAndSendFridayAiProposal
 } from './channel-poster'
 import { syncGoogleCalendar } from './google-calendar'
+import { sendWebPushNotification } from './web-push'
+import { broadcastToUser } from './sse'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
@@ -48,7 +50,7 @@ function isGoalForUser(g: any, chatId: number): boolean {
   return Boolean(g.ownerChatId && Number(g.ownerChatId) === chatId)
 }
 
-async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any) {
+async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any): Promise<boolean> {
   let delivered = false
   try {
     const payload: Record<string, any> = {
@@ -89,9 +91,12 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
         .replace(/\*([^*]+)\*/g, '$1')
         .replace(/_([^_]+)_/g, '$1')
         .replace(/`([^`]+)`/g, '$1')
-      await sendVkMessage(String(chatId), cleanText)
+      const vkRes = await sendVkMessage(String(chatId), cleanText)
+      if (vkRes) delivered = true
     } catch {}
   }
+
+  return delivered
 }
 
 export async function runReminderCheck() {
@@ -222,7 +227,27 @@ export async function runReminderCheck() {
         }
 
         for (const recipient of Array.from(recipients)) {
+          // 1. Deliver to Telegram / VK
           await sendTelegramMessage(recipient, text, replyMarkup).catch(() => {})
+
+          // 2. Deliver via Browser Web Push (even if browser tab is closed / mobile screen locked)
+          sendWebPushNotification(recipient, {
+            title: isQuickNote ? '💬 Напоминание о заметке' : `⏰ Напоминание: ${task.title}`,
+            body: `${task.title}${task.description ? ` — ${task.description}` : ''} (${task.dueTime})`,
+            icon: '/icon-192.png',
+            url: `/?task=${task.id}`,
+            tag: `rem_${task.id}_${sentCount + 1}`,
+          }).catch(() => {})
+
+          // 3. Deliver via real-time SSE stream if client is actively open
+          broadcastToUser(recipient, 'reminder', {
+            taskId: task.id,
+            title: task.title,
+            dueTime: task.dueTime,
+            stageText,
+            timestamp: Date.now(),
+          })
+
           // Count the pushed reminder against the daily quota
           if (ownerChatId) {
             const quota = await getQuota(ownerChatId)
@@ -368,8 +393,9 @@ export async function runMorningGreeting() {
 
         if (greeting) {
           const sent = await sendTelegramMessage(chatId, greeting)
-          // Mark as done ONLY after successful delivery
-          await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+          if (sent) {
+            await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+          }
         } else {
           // Fallback immediately
           const bdayLine = todayBirthdays.length ? `🎂 *Праздники сегодня:*\n${todayBirthdays.map(b => `▪ ${b}`).join('\n')}\n\n` : ''
@@ -380,8 +406,10 @@ export async function runMorningGreeting() {
               ? `📋 *На сегодня (${userPending.length}):*\n` + userPending.slice(0, 5).map(t => `▪ ${t}`).join('\n') + `\n\n`
               : `✓ На сегодня задач нет — отличная возможность спланировать день!\n\n`) +
             `_Продуктивного дня! ✦_`
-          await sendTelegramMessage(chatId, fallbackGreeting)
-          await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+          const sent = await sendTelegramMessage(chatId, fallbackGreeting)
+          if (sent) {
+            await markUserCronDoneToday('morning_greeting', chatId, todayStr)
+          }
         }
 
         await new Promise(r => setTimeout(r, 300))

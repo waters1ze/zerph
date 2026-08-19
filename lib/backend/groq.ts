@@ -323,15 +323,6 @@ Default priority is "medium". Output ONLY pure JSON.`
   return prompt
 }
 
-/**
- * Transcribe audio using Groq Whisper (whisper-large-v3)
- */
-function getGroqKeys(providedKey?: string): string[] {
-  const raw = providedKey || DEFAULT_KEY || process.env.GROQ_API_KEY || ''
-  const keys = raw.split(/[\s,]+/).map(k => k.trim()).filter(Boolean)
-  return keys.length > 0 ? keys : []
-}
-
 import { callGroqChatCompletion, callGroqWhisper } from './groq-pool'
 
 /**
@@ -377,84 +368,84 @@ export async function parseIntentWithGroq(
 
   const raw = result.content || '{}'
 
-      // Clean up any markdown json wrappers the LLM might have output
-      let cleanRaw = raw.trim()
-      if (cleanRaw.startsWith('```json')) cleanRaw = cleanRaw.replace(/^```json\s*/i, '')
-      if (cleanRaw.startsWith('```')) cleanRaw = cleanRaw.replace(/^```\s*/i, '')
-      if (cleanRaw.endsWith('```')) cleanRaw = cleanRaw.replace(/```\s*$/i, '')
-      cleanRaw = cleanRaw.trim()
+  // Clean up any markdown json wrappers the LLM might have output
+  let cleanRaw = raw.trim()
+  if (cleanRaw.startsWith('```json')) cleanRaw = cleanRaw.replace(/^```json\s*/i, '')
+  if (cleanRaw.startsWith('```')) cleanRaw = cleanRaw.replace(/^```\s*/i, '')
+  if (cleanRaw.endsWith('```')) cleanRaw = cleanRaw.replace(/```\s*$/i, '')
+  cleanRaw = cleanRaw.trim()
 
-      try {
-        const p = JSON.parse(cleanRaw)
-        let rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
+  try {
+    const p = JSON.parse(cleanRaw)
+    let rawItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [p]
 
-        rawItems = rawItems.filter((item: any) => {
-          if (item.action === 'set_my_birthday') return true
-          if (item.action === 'delete_all') return true
-          const t = (item.title || '').toLowerCase()
-          return item.title && !t.includes('неизвестное сообщение') && !t.includes('нечитаемое сообщение') && !t.includes('неизвестный текст')
-        })
+    rawItems = rawItems.filter((item: any) => {
+      if (item.action === 'set_my_birthday') return true
+      if (item.action === 'delete_all') return true
+      const t = (item.title || '').toLowerCase()
+      return item.title && !t.includes('неизвестное сообщение') && !t.includes('нечитаемое сообщение') && !t.includes('неизвестный текст')
+    })
 
-        if (rawItems.length === 0) return []
+    if (rawItems.length === 0) return []
 
-        return rawItems.map((item: any) => {
-          const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
-            text,
-            item.recipientName,
-            item.isBothShared
-          )
+    return rawItems.map((item: any) => {
+      const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(
+        text,
+        item.recipientName,
+        item.isBothShared
+      )
 
-          const effectiveType = (cleanRecName || item.type === 'delegate') ? 'delegate' : (item.type || 'task')
+      const effectiveType = (cleanRecName || item.type === 'delegate') ? 'delegate' : (item.type || 'task')
 
-            const { dueDate: smartDueDate, dueTime: smartDueTime } = normalizeSmartTimeAndDate(
-              item.dueDate,
-              item.dueTime,
-              text
-            )
+      const { dueDate: smartDueDate, dueTime: smartDueTime } = normalizeSmartTimeAndDate(
+        item.dueDate,
+        item.dueTime,
+        text
+      )
 
-            return {
-              action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
-              targetId: item.targetId || null,
-              type: effectiveType,
-              title: item.title || text.slice(0, 50),
-              summary: item.summary || text,
-              priority: item.priority || 'medium',
-              dueDate: smartDueDate,
-              dueTime: smartDueTime,
-              daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
-              recipientName: cleanRecName,
-              isBothShared: cleanIsBothShared,
-              repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
-              targetTitle: item.targetTitle || null,
-              projectId: item.projectId || null,
-              goalId: item.goalId || null,
-              folder: item.folder || null,
-              members: Array.isArray(item.members) ? item.members : null,
-              tags: Array.isArray(item.tags) ? item.tags : [],
-              subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
-              milestones: Array.isArray(item.milestones) ? item.milestones : [],
-              motivation: item.motivation || null,
-              rawText: text,
-              originalText: text,
-            }
-          })
-      } catch {
-        const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(text)
-        const { dueDate: smartDueDate, dueTime: smartDueTime } = normalizeSmartTimeAndDate(null, null, text)
-        return [{
-          type: cleanRecName ? 'delegate' : 'task',
-          recipientName: cleanRecName,
-          isBothShared: cleanIsBothShared,
-          title: text.slice(0, 50),
-          summary: text,
-          priority: 'medium',
-          dueDate: smartDueDate,
-          dueTime: smartDueTime,
-          tags: ['voice-input'],
-          rawText: text,
-          originalText: text,
-        }]
+      return {
+        action: item.action || (item.type === 'completion' ? 'completion' : 'create'),
+        targetId: item.targetId || null,
+        type: effectiveType,
+        title: item.title || text.slice(0, 50),
+        summary: item.summary || text,
+        priority: item.priority || 'medium',
+        dueDate: smartDueDate,
+        dueTime: smartDueTime,
+        daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
+        recipientName: cleanRecName,
+        isBothShared: cleanIsBothShared,
+        repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
+        targetTitle: item.targetTitle || null,
+        projectId: item.projectId || null,
+        goalId: item.goalId || null,
+        folder: item.folder || null,
+        members: Array.isArray(item.members) ? item.members : null,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
+        milestones: Array.isArray(item.milestones) ? item.milestones : [],
+        motivation: item.motivation || null,
+        rawText: text,
+        originalText: text,
       }
+    })
+  } catch {
+    const { recipientName: cleanRecName, isBothShared: cleanIsBothShared } = extractCleanRecipientAndSharing(text)
+    const { dueDate: smartDueDate, dueTime: smartDueTime } = normalizeSmartTimeAndDate(null, null, text)
+    return [{
+      type: cleanRecName ? 'delegate' : 'task',
+      recipientName: cleanRecName,
+      isBothShared: cleanIsBothShared,
+      title: text.slice(0, 50),
+      summary: text,
+      priority: 'medium',
+      dueDate: smartDueDate,
+      dueTime: smartDueTime,
+      tags: ['voice-input'],
+      rawText: text,
+      originalText: text,
+    }]
+  }
 }
 
 /**

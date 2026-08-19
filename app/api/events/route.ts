@@ -6,6 +6,8 @@
 import { NextRequest } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 
+import { addSseClient } from '@/lib/backend/sse'
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -25,12 +27,15 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream({
     start(controller) {
-      // 1. Send initial connected event
+      // 1. Register with SSE manager
+      addSseClient(chatId, controller, req.signal)
+
+      // 2. Send initial connected event
       controller.enqueue(
         encoder.encode(`event: connected\ndata: ${JSON.stringify({ status: 'connected', chatId, timestamp: Date.now() })}\n\n`)
       )
 
-      // 2. Keep-alive heartbeat every 25 seconds
+      // 3. Keep-alive heartbeat every 20 seconds
       const heartbeatInterval = setInterval(() => {
         try {
           controller.enqueue(
@@ -39,9 +44,9 @@ export async function GET(req: NextRequest) {
         } catch {
           clearInterval(heartbeatInterval)
         }
-      }, 25000)
+      }, 20000)
 
-      // 3. Clean up on client disconnect / request abort
+      // 4. Clean up on client disconnect / request abort
       req.signal.addEventListener('abort', () => {
         clearInterval(heartbeatInterval)
         try {

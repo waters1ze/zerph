@@ -49,33 +49,13 @@ async function sendAction(chatId: number, action = 'typing') {
   return tg('sendChatAction', { chat_id: chatId, action })
 }
 
-// ── DB helpers (read directly from JSON) ─────────────────────────────────────
-
-import fs from 'fs'
-const DB_PATH = path.join(process.cwd(), 'zerf-db.json')
-
-function getDb() {
-  try {
-    if (!fs.existsSync(DB_PATH)) return { tasks: [], goals: [], notes: [], chatIds: [] }
-    const raw = fs.readFileSync(DB_PATH, 'utf-8')
-    const db = JSON.parse(raw)
-    if (!db.chatIds) db.chatIds = []
-    return db
-  } catch { return { tasks: [], goals: [], notes: [], chatIds: [] } }
-}
-
-function saveDb(db: object) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf-8')
-}
-
-function registerChatId(chatId: number) {
-  const db = getDb()
-  if (!db.chatIds.includes(chatId)) {
-    db.chatIds.push(chatId)
-    saveDb(db)
-    console.log(`📲 Registered chat ID: ${chatId}`)
-  }
-}
+import {
+  registerChatId as dbRegisterChatId,
+  getAllTasks,
+  getAllGoals,
+  getAllNotes,
+} from '@/lib/backend/db'
+import { getAdminSecret } from '@/lib/backend/auth'
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
@@ -83,8 +63,8 @@ const MINIAPP_KB = { inline_keyboard: [[{ text: '📱 Open Zerf App', web_app: {
 const P_EMOJI: Record<string, string> = { urgent: '🔴', high: '🟠', medium: '🟡', low: '🟢' }
 const G_EMOJI: Record<string, string> = { on_track: '✅', at_risk: '⚠️', delayed: '❌', completed: '🏆' }
 
-async function cmdStart(chatId: number, firstName: string) {
-  registerChatId(chatId)
+async function cmdStart(chatId: number, firstName: string, username?: string, lastName?: string) {
+  await dbRegisterChatId(chatId, firstName, username, lastName).catch(() => {})
   await send(chatId,
     `👋 Привет, ${firstName}!\n\n` +
     `Я *Zerf AI* — твой личный помощник по задачам и целям.\n\n` +
@@ -99,22 +79,30 @@ async function cmdStart(chatId: number, firstName: string) {
 }
 
 async function cmdToday(chatId: number) {
-  const db = getDb()
-  const today = new Date().toISOString().slice(0, 10)
+  const allTasks = await getAllTasks(chatId)
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
   const now = new Date()
-  const dayName = now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
+  const parts = formatter.formatToParts(now)
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+  const today = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+  const dayName = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', weekday: 'long', day: 'numeric', month: 'long' })
 
-  const pending = db.tasks.filter((t: { dueDate?: string; status: string }) =>
+  const pending = allTasks.filter((t: { dueDate?: string | null; status: string }) =>
     t.status !== 'done' && (t.dueDate === today || !t.dueDate)
   )
-  const done = db.tasks.filter((t: { status: string }) => t.status === 'done')
+  const done = allTasks.filter((t: { status: string }) => t.status === 'done')
 
   let msg = `📅 *${dayName}*\n\n`
   if (pending.length === 0) {
     msg += '✅ Всё готово на сегодня! Отличная работа 🎉\n'
   } else {
     msg += `*${pending.length} задач${pending.length === 1 ? 'а' : pending.length < 5 ? 'и' : ''} осталось:*\n`
-    pending.slice(0, 12).forEach((t: { priority: string; title: string; dueTime?: string }) => {
+    pending.slice(0, 12).forEach((t: { priority: string; title: string; dueTime?: string | null }) => {
       const time = t.dueTime ? ` _(${t.dueTime})_` : ''
       msg += `${P_EMOJI[t.priority] || '⚪'} ${t.title}${time}\n`
     })
@@ -126,13 +114,12 @@ async function cmdToday(chatId: number) {
 }
 
 async function cmdGoals(chatId: number) {
-  const db = getDb()
-  const goals = db.goals || []
+  const goals = await getAllGoals(chatId)
   let msg = `🎯 *Твои цели*\n\n`
   if (goals.length === 0) {
     msg += 'Нет целей. Отправь голосовое — создам!'
   } else {
-    goals.slice(0, 8).forEach((g: { status: string; title: string; progress: number; deadline?: string }) => {
+    goals.slice(0, 8).forEach((g: { status: string; title: string; progress: number; deadline?: string | null }) => {
       const dl = g.deadline ? ` · ${g.deadline}` : ''
       msg += `${G_EMOJI[g.status] || '📌'} *${g.title}* — ${g.progress}%${dl}\n`
     })
@@ -141,14 +128,13 @@ async function cmdGoals(chatId: number) {
 }
 
 async function cmdNotes(chatId: number) {
-  const db = getDb()
-  const notes = db.notes || []
+  const notes = await getAllNotes(chatId)
   let msg = `📌 *Последние заметки*\n\n`
   const ICON: Record<string, string> = { note: '📌', journal: '📓', meeting: '🤝' }
   if (notes.length === 0) {
     msg += 'Нет заметок.'
   } else {
-    notes.slice(0, 6).forEach((n: { title: string; type: string; createdAt: string }) => {
+    notes.slice(0, 6).forEach((n: { title: string; type: string; createdAt: Date | string }) => {
       const date = new Date(n.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
       msg += `${ICON[n.type] || '📌'} *${n.title}* _${date}_\n`
     })
@@ -163,6 +149,7 @@ async function processWithAI(chatId: number, text?: string, voiceFileId?: string
 
   try {
     let transcript = text || ''
+    const adminSecret = getAdminSecret() || process.env.ADMIN_SECRET || ''
 
     // Download voice from Telegram, send to /api/voice
     if (voiceFileId) {
@@ -183,9 +170,15 @@ async function processWithAI(chatId: number, text?: string, voiceFileId?: string
       // Send to /api/voice
       const fd = new FormData()
       fd.append('file', new Blob([audioBuffer], { type: 'audio/ogg' }), `voice.${ext}`)
-      fd.append('apiKey', GROQ_KEY)
 
-      const res = await fetch(`${APP_URL}/api/voice`, { method: 'POST', body: fd })
+      const res = await fetch(`${APP_URL}/api/voice`, {
+        method: 'POST',
+        headers: {
+          'x-admin-secret': adminSecret,
+          'x-chat-id': String(chatId),
+        },
+        body: fd,
+      })
       const data = await res.json()
 
       if (!res.ok || data.error) throw new Error(data.error)
@@ -198,8 +191,14 @@ async function processWithAI(chatId: number, text?: string, voiceFileId?: string
     // Text message → send as text to /api/voice (text-only mode)
     const fd = new FormData()
     fd.append('text', transcript)
-    fd.append('apiKey', GROQ_KEY)
-    const res = await fetch(`${APP_URL}/api/voice`, { method: 'POST', body: fd })
+    const res = await fetch(`${APP_URL}/api/voice`, {
+      method: 'POST',
+      headers: {
+        'x-admin-secret': adminSecret,
+        'x-chat-id': String(chatId),
+      },
+      body: fd,
+    })
     const data = await res.json()
     if (!res.ok || data.error) throw new Error(data.error)
     await sendAIResult(chatId, data)
@@ -293,12 +292,12 @@ async function poll() {
         console.log(`📨 ${firstName} (${chatId}): ${text || (voice ? '[voice]' : '[other]')}`)
 
         // Register chat for reminders
-        registerChatId(chatId)
+        dbRegisterChatId(chatId, firstName, msg.from?.username, msg.from?.last_name).catch(() => {})
 
         // Commands
         if (text.startsWith('/')) {
           const cmd = text.split(' ')[0].toLowerCase()
-          if (cmd === '/start' || cmd === '/help') await cmdStart(chatId, firstName)
+          if (cmd === '/start' || cmd === '/help') await cmdStart(chatId, firstName, msg.from?.username, msg.from?.last_name)
           else if (cmd === '/today') await cmdToday(chatId)
           else if (cmd === '/goals') await cmdGoals(chatId)
           else if (cmd === '/notes') await cmdNotes(chatId)

@@ -233,9 +233,16 @@ export function applyVisualsToDocument(opts: ApplyVisualsOptions) {
     }
   }
 
-  // Custom CSS & Animations Injection (from GitHub themes or custom styles)
+  // Custom CSS & Animations Injection (from GitHub themes or custom styles) with security sanitation
   let styleEl = document.getElementById('zerf-custom-theme-style') as HTMLStyleElement | null
   if (opts.customCss && opts.customCss.trim()) {
+    const BLOCKED_CSS = /(@import|url\s*\(|javascript\s*:|expression\s*\(|behavior\s*:|<script)/i
+    if (BLOCKED_CSS.test(opts.customCss)) {
+      console.warn('[Zerf Theme] Кастомный CSS содержит заблокированные конструкции (@import, url, javascript:) и не был применён.')
+      if (styleEl) styleEl.remove()
+      return
+    }
+
     if (!styleEl) {
       styleEl = document.createElement('style')
       styleEl.id = 'zerf-custom-theme-style'

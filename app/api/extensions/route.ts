@@ -204,39 +204,48 @@ export async function GET(req: NextRequest) {
     let boundCard: any = null
     let userPlan = 'free'
     let userGithubUsername: string | null = null
+    let autoRenewEnabled = true
 
     if (chatId) {
-      installedIds = await getUserInstalledExtensions(chatId)
-      enabledIds = await getUserEnabledExtensions(chatId)
-      likedIds = await getUserLikedExtensions(chatId)
-      authorStats = await getAuthorBalance(chatId)
-      boundCard = await getAuthorPayoutCard(chatId)
       try {
-        const [userRec, ghRow] = await Promise.all([
+        const [
+          instIds,
+          enIds,
+          lkIds,
+          stats,
+          card,
+          userRec,
+          ghRow,
+          arRow
+        ] = await Promise.all([
+          getUserInstalledExtensions(chatId),
+          getUserEnabledExtensions(chatId),
+          getUserLikedExtensions(chatId),
+          getAuthorBalance(chatId),
+          getAuthorPayoutCard(chatId),
           prisma.telegramChat.findUnique({
             where: { chatId: BigInt(chatId) },
             select: { plan: true },
           }),
           prisma.config.findUnique({ where: { key: `user_github_${chatId}` } }),
+          prisma.config.findUnique({ where: { key: `user_autorenew_${chatId}` } }),
         ])
+
+        installedIds = instIds
+        enabledIds = enIds
+        likedIds = lkIds
+        authorStats = stats
+        boundCard = card
         userPlan = normalizePlan(userRec?.plan)
         if (ghRow?.value) userGithubUsername = ghRow.value
-      } catch {}
-    }
-
-    const userLimits = (PLANS as any)[userPlan] || PLANS.free
-    const maxExtensions = userLimits.maxExtensions ?? 5
-
-    // Check if autoRenew is enabled for this user
-    let autoRenewEnabled = true
-    if (chatId) {
-      try {
-        const arRow = await prisma.config.findUnique({ where: { key: `user_autorenew_${chatId}` } })
         if (arRow?.value !== undefined) {
           autoRenewEnabled = arRow.value === 'true'
         }
       } catch {}
     }
+
+    const userLimits = (PLANS as any)[userPlan] || PLANS.free
+    const maxExtensions = userLimits.maxExtensions ?? 5
 
     return NextResponse.json({
       success: true,
@@ -341,28 +350,30 @@ export async function POST(req: NextRequest) {
       if (!ext) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
 
       const tasks = ext.content?.tasks || ext.content?.sections || []
-      const todayStr = new Date().toISOString().slice(0, 10)
-      let createdCount = 0
+      const taskEntries: any[] = []
 
       for (const t of tasks) {
         const title = typeof t === 'string' ? t : (t.title || t.name)
         if (title) {
-          await prisma.task.create({
-            data: {
-              title: String(title),
-              description: `Импортировано из шаблона Zerf Note: «${ext.title}»`,
-              priority: 'medium',
-              status: 'todo',
-              dueDate: todayStr,
-              ownerChatId: BigInt(chatId),
-              tags: ['шаблон', ext.category.toLowerCase()],
-            } as any
+          taskEntries.push({
+            title: String(title),
+            description: `Импортировано из шаблона Zerf Note: «${ext.title}»`,
+            priority: 'medium',
+            status: 'todo',
+            dueDate: null,
+            ownerChatId: BigInt(chatId),
+            tags: ['шаблон', ext.category.toLowerCase()],
           })
-          createdCount++
         }
       }
 
-      return NextResponse.json({ success: true, createdCount })
+      if (taskEntries.length > 0) {
+        await prisma.task.createMany({
+          data: taskEntries,
+        })
+      }
+
+      return NextResponse.json({ success: true, createdCount: taskEntries.length })
     }
 
     // ── ACTION: PARSE GITHUB MANIFEST IN REAL-TIME (0 AI Tokens) ──
@@ -634,7 +645,23 @@ export async function POST(req: NextRequest) {
       if (m.version) current.version = m.version
       if (m.minPlan && ['free', 'plus', 'pro', 'corp'].includes(m.minPlan)) current.minPlan = m.minPlan
       if (m.price !== undefined) current.price = Math.max(0, Math.min(5000, Number(m.price) || 0))
-      if (m.aiInstructions) current.aiInstructions = String(m.aiInstructions)
+      if (m.aiInstructions) {
+        const rawAiInstructions = String(m.aiInstructions)
+        const FORBIDDEN_AI_PATTERNS = [
+          /ignore\s+previous/i,
+          /system\s*:/i,
+          /jailbreak/i,
+          /bypass\s+safety/i,
+          /forget\s+all\s+instructions/i,
+        ]
+
+        for (const pattern of FORBIDDEN_AI_PATTERNS) {
+          if (pattern.test(rawAiInstructions)) {
+            return NextResponse.json({ error: 'Инструкции для ИИ из GitHub содержат недопустимые паттерны безопасности.' }, { status: 400 })
+          }
+        }
+        current.aiInstructions = rawAiInstructions
+      }
       if (m.triggers) current.triggers = Array.isArray(m.triggers) ? m.triggers : []
       if (m.aiSkills) current.aiSkills = Array.isArray(m.aiSkills) ? m.aiSkills : []
       current.content = m.content || m.config || current.content
@@ -832,10 +859,37 @@ export async function POST(req: NextRequest) {
       const platformShare = netDistributableRub - authorShare     // 20% of net after fee
 
       // Unique tracking label for YooMoney: ext_<id>_<chatId>_<timestamp>
-      const label = `ext_${ext.id}_${chatId}_${Date.now()}`
       const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
       const successUrl = `${appUrl}/?ext_purchased=${ext.id}`
+
+      // Check if active pending purchase already exists (within last 15 mins)
+      const pendingPrefix = `ext_pending_ext_${ext.id}_${chatId}_`
+      const existingPending = await prisma.config.findFirst({
+        where: { key: { startsWith: pendingPrefix } },
+      })
+
+      let label = `ext_${ext.id}_${chatId}_${Date.now()}`
+      if (existingPending) {
+        label = existingPending.key.replace('ext_pending_', '')
+      } else {
+        await prisma.config.create({
+          data: {
+            key: `ext_pending_${label}`,
+            value: JSON.stringify({
+              extensionId: ext.id,
+              buyerChatId: chatId,
+              authorChatId: ext.authorChatId,
+              price: ext.price,
+              gatewayFeeRub,
+              netDistributableRub,
+              authorShare,
+              platformShare,
+              createdAt: new Date().toISOString(),
+            }),
+          },
+        })
+      }
 
       // Create YooMoney QuickPay checkout URL
       const params = new URLSearchParams({
@@ -849,24 +903,6 @@ export async function POST(req: NextRequest) {
       })
 
       const paymentUrl = `https://yoomoney.ru/quickpay/confirm?${params.toString()}`
-
-      // Store pending purchase record in DB
-      await prisma.config.create({
-        data: {
-          key: `ext_pending_${label}`,
-          value: JSON.stringify({
-            extensionId: ext.id,
-            buyerChatId: chatId,
-            authorChatId: ext.authorChatId,
-            price: ext.price,
-            gatewayFeeRub,
-            netDistributableRub,
-            authorShare,
-            platformShare,
-            createdAt: new Date().toISOString(),
-          }),
-        },
-      })
 
       return NextResponse.json({
         success: true,

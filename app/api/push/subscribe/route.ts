@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 
+import { getVapidPublicKey } from '@/lib/backend/web-push'
+
 export const dynamic = 'force-dynamic'
+
+export async function GET() {
+  try {
+    const publicKey = await getVapidPublicKey()
+    return NextResponse.json({ success: true, publicKey })
+  } catch (err: unknown) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

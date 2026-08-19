@@ -9,6 +9,7 @@ import {
   applyVisualsToDocument, normalizeTheme, accentPaletteFor,
   type TextScaleStep, type DensityMode, type RadiusMode,
 } from './theme-presets'
+import { showWebNotification, playAlarmChime } from './notifications'
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10)
@@ -184,27 +185,19 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, habits: state.habits.map(h => h.id === action.tempId ? action.habit : h) }
     case 'DELETE_HABIT':
       return { ...state, habits: state.habits.filter(h => h.id !== action.id) }
-    case 'ADD_SCHEDULE_GROUP': {
-      const nextGroups = [action.group, ...state.scheduleGroups]
-      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(nextGroups)) } catch {}
-      return { ...state, scheduleGroups: nextGroups }
-    }
-    case 'UPDATE_SCHEDULE_GROUP': {
-      const nextGroups = state.scheduleGroups.map(g =>
-        g.id === action.id ? { ...g, ...action.updates, updatedAt: new Date().toISOString() } : g
-      )
-      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(nextGroups)) } catch {}
-      return { ...state, scheduleGroups: nextGroups }
-    }
-    case 'DELETE_SCHEDULE_GROUP': {
-      const nextGroups = state.scheduleGroups.filter(g => g.id !== action.id)
-      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(nextGroups)) } catch {}
-      return { ...state, scheduleGroups: nextGroups }
-    }
-    case 'SET_SCHEDULE_GROUPS': {
-      try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(action.groups)) } catch {}
+    case 'ADD_SCHEDULE_GROUP':
+      return { ...state, scheduleGroups: [action.group, ...state.scheduleGroups] }
+    case 'UPDATE_SCHEDULE_GROUP':
+      return {
+        ...state,
+        scheduleGroups: state.scheduleGroups.map(g =>
+          g.id === action.id ? { ...g, ...action.updates, updatedAt: new Date().toISOString() } : g
+        ),
+      }
+    case 'DELETE_SCHEDULE_GROUP':
+      return { ...state, scheduleGroups: state.scheduleGroups.filter(g => g.id !== action.id) }
+    case 'SET_SCHEDULE_GROUPS':
       return { ...state, scheduleGroups: action.groups }
-    }
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chat: [...state.chat, action.message] }
     case 'UPDATE_SETTINGS': {
@@ -387,8 +380,7 @@ export function getTgChatId(): string | null {
     }
 
     // 6. Saved authenticated session on this device (check both localStorage and permanent cookie for PWA)
-    let savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
-    let savedToken = localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')
+    const savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
 
     if (savedChatId) {
       return savedChatId
@@ -536,7 +528,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else if (action.type === 'REMOVE_FRIEND') {
       recentlyDeletedIdsRef.current.set(action.id, Date.now())
     } else if (action.type === 'TOGGLE_TASK') {
-      const target = state.tasks.find(t => t.id === action.id)
+      const target = stateRef.current.tasks.find(t => t.id === action.id)
       const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
       fetch('/api/tasks', {
         method: 'PATCH',
@@ -631,8 +623,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers,
         body: JSON.stringify({ id: action.id, itemType: 'habit', ...action.updates }),
       }).catch(() => {})
+    } else if (action.type === 'ADD_PROJECT') {
+      recentlyAddedIdsRef.current.set(action.project.id, Date.now())
+      fetch('/api/projects', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(action.project),
+      }).catch(() => {})
+    } else if (action.type === 'UPDATE_PROJECT') {
+      fetch('/api/projects', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: action.id, ...action.updates }),
+      }).catch(() => {})
     }
-  }, [state.tasks, broadcastSync])
+  }, [broadcastSync])
 
   // Apply visual preset: theme class, accent override, density, radius, text scale
   useEffect(() => {
@@ -654,35 +659,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.settings])
 
-  // Persist all workspace state scoped to active user profile
+  // Persist schedule groups to localStorage
   useEffect(() => {
     try {
-      const currentChatId = getTgChatId()
-      const filteredTasks = state.tasks.filter(t => !recentlyDeletedIdsRef.current.has(t.id))
-      const filteredGoals = state.goals.filter(g => !recentlyDeletedIdsRef.current.has(g.id))
-      const filteredNotes = state.notes.filter(n => !recentlyDeletedIdsRef.current.has(n.id))
-      const filteredProjects = state.projects.filter(p => !recentlyDeletedIdsRef.current.has(p.id))
-      const filteredFriends = state.friends.filter(f => !recentlyDeletedIdsRef.current.has(f.id))
-      const filteredHabits = state.habits.filter(h => !recentlyDeletedIdsRef.current.has(h.id))
-
-      localStorage.setItem('zerf_cached_state', JSON.stringify({
-        chatId: currentChatId,
-        tasks: filteredTasks,
-        goals: filteredGoals,
-        notes: filteredNotes,
-        projects: filteredProjects,
-        friends: filteredFriends,
-        habits: filteredHabits,
-      }))
+      localStorage.setItem('zerf_schedule_groups', JSON.stringify(state.scheduleGroups))
     } catch {}
+  }, [state.scheduleGroups])
+
+  // Persist all workspace state scoped to active user profile with debouncing
+  const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (saveDebounceTimerRef.current) clearTimeout(saveDebounceTimerRef.current)
+
+    saveDebounceTimerRef.current = setTimeout(() => {
+      try {
+        const currentChatId = getTgChatId()
+        const filteredTasks = state.tasks.filter(t => !recentlyDeletedIdsRef.current.has(t.id))
+        const filteredGoals = state.goals.filter(g => !recentlyDeletedIdsRef.current.has(g.id))
+        const filteredNotes = state.notes.filter(n => !recentlyDeletedIdsRef.current.has(n.id))
+        const filteredProjects = state.projects.filter(p => !recentlyDeletedIdsRef.current.has(p.id))
+        const filteredFriends = state.friends.filter(f => !recentlyDeletedIdsRef.current.has(f.id))
+        const filteredHabits = state.habits.filter(h => !recentlyDeletedIdsRef.current.has(h.id))
+
+        const saveFn = () => {
+          try {
+            localStorage.setItem('zerf_cached_state', JSON.stringify({
+              chatId: currentChatId,
+              tasks: filteredTasks,
+              goals: filteredGoals,
+              notes: filteredNotes,
+              projects: filteredProjects,
+              friends: filteredFriends,
+              habits: filteredHabits,
+            }))
+          } catch {}
+        }
+
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          window.requestIdleCallback(saveFn)
+        } else {
+          saveFn()
+        }
+      } catch {}
+    }, 400)
+
+    return () => {
+      if (saveDebounceTimerRef.current) clearTimeout(saveDebounceTimerRef.current)
+    }
   }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
 
   // Core Sync Function with strict throttling to prevent function invocation burnout
   const syncBackendData = useCallback(async (showIndicator = false) => {
     if (syncInFlightRef.current) return
     const now = Date.now()
-    // Throttle automatic background sync to at most once per 25 seconds unless explicitly requested by user action
-    if (!showIndicator && (now - lastSyncTimeRef.current < 25_000)) {
+    if (!showIndicator && (now - lastSyncTimeRef.current < 5_000)) {
       return
     }
     lastSyncTimeRef.current = now
@@ -772,7 +802,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 if (user.plan && user.plan !== curSettings.userPlan) {
                   updates.userPlan = user.plan
                 }
-                if (user.name && user.name !== 'Kirill Perekatnov' && user.name !== 'Пользователь Zerf' && (!curSettings.name || curSettings.name === 'Kirill Perekatnov')) {
+                if (user.name && user.name !== 'Пользователь Zerf' && !curSettings.name) {
                   updates.name = user.name
                 }
                 if (user.reminderIntervalMinutes !== undefined || user.reminderRepeatCount !== undefined) {
@@ -811,12 +841,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Sync from backend DB on mount, focus, visibility change, pageshow, and throttled live interval
+  // Event-driven real-time updates via Server-Sent Events (SSE) + Lifecycle events
   useEffect(() => {
     // Initial sync
     syncBackendData(false)
 
-    // Window and mobile lifecycle events (e.g. returning to app from home screen or other apps)
+    // Window and mobile lifecycle events
     const handleSyncNow = () => syncBackendData(false)
     const handleSyncWithSpinner = () => syncBackendData(true)
 
@@ -841,12 +871,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
-    // Background fallback sync (every 15 minutes). Primary sync is event-driven (focus, visibility, actions)
-    const syncInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        syncBackendData(false)
-      }
-    }, 15 * 60 * 1000)
+    // ── Real-Time SSE (Server-Sent Events) Stream (Zero Polling) ──
+    let eventSource: EventSource | null = null
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const connectSse = () => {
+      try {
+        const chatId = getTgChatId()
+        if (!chatId) return
+
+        const sseUrl = `/api/events?chatId=${encodeURIComponent(chatId)}`
+        eventSource = new EventSource(sseUrl)
+
+        eventSource.addEventListener('sync', () => {
+          syncBackendData(false)
+        })
+
+        eventSource.addEventListener('reminder', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data)
+            showWebNotification(data.title || '⏰ Напоминание', {
+              body: data.dueTime ? `Срок: ${data.dueTime}` : 'Время выполнить задачу!',
+              tag: `rem-${data.taskId}`,
+            })
+            playAlarmChime('alarm')
+          } catch {}
+        })
+
+        eventSource.onerror = () => {
+          eventSource?.close()
+          eventSource = null
+          // Reconnect with backoff
+          reconnectTimeout = setTimeout(connectSse, 10000)
+        }
+      } catch {}
+    }
+
+    connectSse()
 
     // Hydrate currentView safely on client mount
     try {
@@ -862,7 +923,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('online', handleSyncNow)
       window.removeEventListener('zerf:sync', handleSyncWithSpinner)
       document.removeEventListener('visibilitychange', handleVisibility)
-      clearInterval(syncInterval)
+      if (reconnectTimeout) clearTimeout(reconnectTimeout)
+      try { eventSource?.close() } catch {}
       try { channel?.close() } catch {}
     }
   }, [syncBackendData, state.currentView])

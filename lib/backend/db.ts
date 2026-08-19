@@ -38,8 +38,6 @@ export type DbTask = {
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
-// ── Tasks ─────────────────────────────────────────────────────────────────────
-
 export async function getAllTasks(ownerChatId?: number | bigint | string | null) {
   try {
     let allTasks: any[] = []
@@ -96,8 +94,19 @@ export async function getAllTasks(ownerChatId?: number | bigint | string | null)
     })
 
     const now = new Date()
-    const todayStr = now.toISOString().slice(0, 10)
-    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+    const currentTimeStr = `${getPart('hour')}:${getPart('minute')}`
 
     const autoCompletedIds: string[] = []
 
@@ -341,7 +350,7 @@ export async function createTask(data: {
       description: processed.description || '',
       priority: processed.priority || 'medium',
       status: processed.status || 'todo',
-      dueDate: processed.dueDate || new Date().toISOString().slice(0, 10),
+      dueDate: processed.dueDate || null,
       dueTime: processed.dueTime || null,
       repeat: processed.repeat || null,
       reminderOffsetMinutes: processed.reminderOffsetMinutes || 0,
@@ -361,31 +370,43 @@ export async function createTask(data: {
 }
 
 export function calculateNextRecurrenceDate(currentDueDate: string | null | undefined, repeat: string): string {
-  const baseDate = currentDueDate ? new Date(currentDueDate) : new Date()
-  const nextDate = new Date(baseDate)
-
-  if (repeat === 'yearly') {
-    nextDate.setFullYear(nextDate.getFullYear() + 1)
-  } else if (repeat === 'monthly') {
-    nextDate.setMonth(nextDate.getMonth() + 1)
-  } else if (repeat === 'weekly') {
-    nextDate.setDate(nextDate.getDate() + 7)
-  } else if (repeat === 'weekdays') {
-    const day = nextDate.getDay() // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
-    if (day === 5) {
-      nextDate.setDate(nextDate.getDate() + 3) // Friday -> Monday
-    } else if (day === 6) {
-      nextDate.setDate(nextDate.getDate() + 2) // Saturday -> Monday
-    } else {
-      nextDate.setDate(nextDate.getDate() + 1) // Sun-Thu -> next day
-    }
-  } else if (repeat === 'daily') {
-    nextDate.setDate(nextDate.getDate() + 1)
+  let year: number, month: number, day: number
+  if (currentDueDate && /^\d{4}-\d{2}-\d{2}$/.test(currentDueDate)) {
+    const parts = currentDueDate.split('-').map(Number)
+    year = parts[0]
+    month = parts[1] - 1
+    day = parts[2]
+  } else {
+    const now = new Date()
+    year = now.getFullYear()
+    month = now.getMonth()
+    day = now.getDate()
   }
 
-  const nextYearStr = nextDate.getFullYear()
-  const nextMonthStr = String(nextDate.getMonth() + 1).padStart(2, '0')
-  const nextDayStr = String(nextDate.getDate()).padStart(2, '0')
+  const nextDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+
+  if (repeat === 'yearly') {
+    nextDate.setUTCFullYear(nextDate.getUTCFullYear() + 1)
+  } else if (repeat === 'monthly') {
+    nextDate.setUTCMonth(nextDate.getUTCMonth() + 1)
+  } else if (repeat === 'weekly') {
+    nextDate.setUTCDate(nextDate.getUTCDate() + 7)
+  } else if (repeat === 'weekdays') {
+    const d = nextDate.getUTCDay() // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    if (d === 5) {
+      nextDate.setUTCDate(nextDate.getUTCDate() + 3) // Friday -> Monday
+    } else if (d === 6) {
+      nextDate.setUTCDate(nextDate.getUTCDate() + 2) // Saturday -> Monday
+    } else {
+      nextDate.setUTCDate(nextDate.getUTCDate() + 1) // Sun-Thu -> next day
+    }
+  } else if (repeat === 'daily') {
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  }
+
+  const nextYearStr = nextDate.getUTCFullYear()
+  const nextMonthStr = String(nextDate.getUTCMonth() + 1).padStart(2, '0')
+  const nextDayStr = String(nextDate.getUTCDate()).padStart(2, '0')
   return `${nextYearStr}-${nextMonthStr}-${nextDayStr}`
 }
 
@@ -485,22 +506,12 @@ export async function updateTask(
   actorChatId?: number | bigint | string | null
 ) {
   const scope = taskActorScope(actorChatId)
-  let existing = scope
+  const existing = scope
     ? await prisma.task.findFirst({ where: { id, ...scope } })
     : await prisma.task.findUnique({ where: { id } })
 
-  // Fallback: If not found by scope, check if task exists globally or has null ownerChatId
   if (!existing) {
-    existing = await prisma.task.findUnique({ where: { id } })
-    if (existing && actorChatId && !existing.ownerChatId && /^\d+$/.test(String(actorChatId))) {
-      // Claim task for current authenticated user
-      await prisma.task.update({
-        where: { id },
-        data: { ownerChatId: BigInt(actorChatId) },
-      })
-    } else if (!existing) {
-      throw new Error('Task not found')
-    }
+    throw new Error('Task not found or access denied')
   }
 
   // Sanitize and whitelist only valid Prisma Task fields
@@ -701,20 +712,15 @@ export async function getUserProductivityStats(ownerChatId: number | bigint | st
 export async function deleteTask(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = taskActorScope(actorChatId)
-    let res = await prisma.task.deleteMany({ where: scope ? { id, ...scope } : { id } })
-    if (res.count === 0) {
-      // Fallback: Delete directly by id so user deletion is permanently committed
-      res = await prisma.task.deleteMany({ where: { id } })
+    const res = await prisma.task.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count > 0) {
+      // Delete any subtasks
+      await prisma.task.deleteMany({ where: { parentTaskId: id } }).catch(() => {})
     }
-    // Delete any subtasks
-    await prisma.task.deleteMany({ where: { parentTaskId: id } }).catch(() => {})
     return res
-  } catch {
-    try {
-      return await prisma.task.deleteMany({ where: { id } })
-    } catch {
-      return { count: 0 }
-    }
+  } catch (err) {
+    console.error('deleteTask error:', err)
+    return { count: 0 }
   }
 }
 
@@ -768,17 +774,10 @@ export async function updateHabit(id: string, data: Partial<{
 export async function deleteHabit(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    let res = await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
-    if (res.count === 0) {
-      res = await prisma.habit.deleteMany({ where: { id } })
-    }
-    return res
-  } catch {
-    try {
-      return await prisma.habit.deleteMany({ where: { id } })
-    } catch {
-      return { count: 0 }
-    }
+    return await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
+  } catch (err) {
+    console.error('deleteHabit error:', err)
+    return { count: 0 }
   }
 }
 
@@ -868,17 +867,10 @@ export async function updateGoal(
 export async function deleteGoal(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    let res = await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
-    if (res.count === 0) {
-      res = await prisma.goal.deleteMany({ where: { id } })
-    }
-    return res
-  } catch {
-    try {
-      return await prisma.goal.deleteMany({ where: { id } })
-    } catch {
-      return { count: 0 }
-    }
+    return await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
+  } catch (err) {
+    console.error('deleteGoal error:', err)
+    return { count: 0 }
   }
 }
 
@@ -939,17 +931,10 @@ export async function updateNote(id: string, data: Partial<{
 export async function deleteNote(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    let res = await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
-    if (res.count === 0) {
-      res = await prisma.note.deleteMany({ where: { id } })
-    }
-    return res
-  } catch {
-    try {
-      return await prisma.note.deleteMany({ where: { id } })
-    } catch {
-      return { count: 0 }
-    }
+    return await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
+  } catch (err) {
+    console.error('deleteNote error:', err)
+    return { count: 0 }
   }
 }
 
@@ -1687,17 +1672,36 @@ export async function saveParsedItemToDb(
       const taskToDelete = taskScope
         ? await prisma.task.findFirst({ where: { id: item.targetId, ...taskScope } })
         : await prisma.task.findUnique({ where: { id: item.targetId } })
-      if (taskToDelete && taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
-         const friendId = taskToDelete.assignees[1]
-         await prisma.telegramChat.update({
-           where: { chatId: BigInt(friendId) },
-           data: { birthday: null }
-         }).catch(() => {})
+      if (taskToDelete) {
+        if (taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
+          const friendId = taskToDelete.assignees[1]
+          await prisma.telegramChat.update({
+            where: { chatId: BigInt(friendId) },
+            data: { birthday: null }
+          }).catch(() => {})
+        }
+        await deleteTask(item.targetId, ownerChatId)
+        return { item, updatedItem: true }
       }
-      await deleteTask(item.targetId, ownerChatId)
-      await deleteGoal(item.targetId, ownerChatId)
-      await deleteNote(item.targetId, ownerChatId)
-      return { item, updatedItem: true }
+
+      const goalScope = ownerActorScope(ownerChatId)
+      const goalToDelete = goalScope
+        ? await prisma.goal.findFirst({ where: { id: item.targetId, ...goalScope } })
+        : await prisma.goal.findUnique({ where: { id: item.targetId } })
+      if (goalToDelete) {
+        await deleteGoal(item.targetId, ownerChatId)
+        return { item, updatedItem: true }
+      }
+
+      const noteScope = ownerActorScope(ownerChatId)
+      const noteToDelete = noteScope
+        ? await prisma.note.findFirst({ where: { id: item.targetId, ...noteScope } })
+        : await prisma.note.findUnique({ where: { id: item.targetId } })
+      if (noteToDelete) {
+        await deleteNote(item.targetId, ownerChatId)
+        return { item, updatedItem: true }
+      }
+      return { item, updatedItem: false }
     } else {
       // Find matching task or goal by title similarity
       const targetName = item.targetTitle || item.title || item.rawText
@@ -1718,7 +1722,7 @@ export async function saveParsedItemToDb(
              data: { birthday: null }
            }).catch(() => {})
         }
-        await deleteTask(best.id)
+        await deleteTask(best.id, ownerChatId)
         return { item, updatedItem: true }
       } else {
         // Fallback: Delete most recent note or task if no title match
@@ -1732,11 +1736,11 @@ export async function saveParsedItemToDb(
             orderBy: { createdAt: 'desc' }
           })
           if (lastNote && (!lastTask || lastNote.createdAt > lastTask.createdAt)) {
-            await deleteNote(lastNote.id)
+            await deleteNote(lastNote.id, ownerChatId)
             item.title = `Заметка «${lastNote.title}» удалена`
             return { item, updatedItem: true }
           } else if (lastTask) {
-            await deleteTask(lastTask.id)
+            await deleteTask(lastTask.id, ownerChatId)
             item.title = `Задача «${lastTask.title}» удалена`
             return { item, updatedItem: true }
           }
@@ -1918,12 +1922,19 @@ export async function saveParsedItemToDb(
       ownerChatId,
     })
 
-    // Track note usage (so daily limits are enforced per-note)
-    if (ownerChatId) {
-      await incrementUserUsage(ownerChatId, 'note').catch(() => {})
-    }
-
-    const today = new Date().toISOString().slice(0, 10)
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    const now = new Date()
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+    const today = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
     
     // Auto-create tasks specified by AI in tasksToCreate
     if (item.tasksToCreate && item.tasksToCreate.length > 0) {
@@ -1989,17 +2000,31 @@ export async function saveParsedItemToDb(
       item.dueTime = extractedTime
     }
 
-    let finalDueDate = item.dueDate || new Date().toISOString().slice(0, 10)
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    const now = new Date()
+    const parts = formatter.formatToParts(now)
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+
+    let finalDueDate = item.dueDate || todayStr
     // If time is set but dueDate was not explicitly given, check if that time has already passed today
     if (!item.dueDate && extractedTime) {
-      const now = new Date()
       const [dueH, dueM] = extractedTime.split(':').map(Number)
-      const currentH = now.getHours()
-      const currentM = now.getMinutes()
+      const currentH = parseInt(getPart('hour'), 10)
+      const currentM = parseInt(getPart('minute'), 10)
       if (currentH > dueH || (currentH === dueH && currentM >= dueM)) {
-        const tomorrow = new Date(now)
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        finalDueDate = tomorrow.toISOString().slice(0, 10)
+        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+        const tmParts = formatter.formatToParts(tomorrow)
+        const getTmPart = (type: string) => tmParts.find(p => p.type === type)?.value || '00'
+        finalDueDate = `${getTmPart('year')}-${getTmPart('month')}-${getTmPart('day')}`
       }
     }
 
