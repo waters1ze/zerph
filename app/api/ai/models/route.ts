@@ -29,7 +29,11 @@ export async function GET(req: NextRequest) {
       !m.id.toLowerCase().includes('guard') && 
       !m.id.toLowerCase().includes('safeguard') && 
       !m.id.toLowerCase().includes('orpheus') && 
-      !m.id.toLowerCase().includes('arabic')
+      !m.id.toLowerCase().includes('arabic') &&
+      !m.id.toLowerCase().includes('allam') &&
+      !m.id.toLowerCase().includes('llama') &&
+      !m.id.toLowerCase().includes('mixtral') &&
+      !m.id.toLowerCase().includes('gemma')
     )
 
     // 2. Filter allowed models for the active user's plan

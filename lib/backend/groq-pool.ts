@@ -275,7 +275,8 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
         const id = item.id
         if (id.startsWith('whisper') || id.includes('audio') || id.includes('tts')) continue
         if (id.includes('guard') || id.includes('safeguard')) continue // Skip moderation classifiers
-        if (id.includes('orpheus') || id.includes('arabic')) continue // Skip expensive specialized preview models
+        if (id.includes('orpheus') || id.includes('arabic') || id.includes('allam')) continue // Skip specialized preview models
+        if (id.includes('llama') || id.includes('mixtral') || id.includes('gemma')) continue // Skip deprecated legacy models (llama-3.3, llama-3.1, mixtral, gemma)
 
         const existing = knownMap.get(id)
         if (existing && !existing.isExcluded) {

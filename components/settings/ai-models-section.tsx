@@ -40,7 +40,11 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
             !m.id.toLowerCase().includes('guard') &&
             !m.id.toLowerCase().includes('safeguard') &&
             !m.id.toLowerCase().includes('orpheus') &&
-            !m.id.toLowerCase().includes('arabic')
+            !m.id.toLowerCase().includes('arabic') &&
+            !m.id.toLowerCase().includes('allam') &&
+            !m.id.toLowerCase().includes('llama') &&
+            !m.id.toLowerCase().includes('mixtral') &&
+            !m.id.toLowerCase().includes('gemma')
           )
           if (chatOnly.length > 0) {
             setModelsList(chatOnly.map((m: any) => ({
