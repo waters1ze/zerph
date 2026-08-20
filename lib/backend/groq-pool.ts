@@ -818,8 +818,8 @@ export async function callGroqChatCompletion(options: {
           }
 
           if (res.status === 429) {
-            groqPool.markKeyRateLimited(key, 60)
-            console.warn(`[GroqChat] 429 Rate Limit on key ${key.slice(0, 7)}..., rotating to next key...`)
+            groqPool.markKeyRateLimited(key, 20)
+            console.warn(`[GroqChat] 429 Rate Limit on key ${key.slice(0, 7)}..., immediately switching to next pool key...`)
             continue
           }
 
@@ -832,7 +832,7 @@ export async function callGroqChatCompletion(options: {
           if (res.status === 404) {
             const errText = await res.text()
             lastError = new Error(`Groq Chat error (404): ${errText}`)
-            console.warn(`[GroqChat] Model ${m} returned 404, marking unavailable and auto-discovering replacements...`)
+            console.warn(`[GroqChat] Model ${m} returned 404, marking unavailable and trying next model in hierarchy...`)
             markModelFailed(m, '404 Model Not Found', 15)
             modelNotFound = true
             break // Skip all remaining keys for this 404 model, jump directly to next model
@@ -841,11 +841,12 @@ export async function callGroqChatCompletion(options: {
           if (!res.ok) {
             const errText = await res.text()
             if (errText.includes('rate_limit') || res.status === 413 || res.status === 503) {
-              groqPool.markKeyRateLimited(key, 45)
+              groqPool.markKeyRateLimited(key, 20)
+              console.warn(`[GroqChat] Rate/payload limit (${res.status}) on key ${key.slice(0, 7)}..., rotating to next key...`)
               continue
             }
             if (res.status >= 500) {
-              groqPool.markKeyRateLimited(key, 30) // 30s cooldown on transient server error
+              groqPool.markKeyRateLimited(key, 15) // 15s cooldown on transient server error
               console.warn(`[GroqChat] Server error ${res.status} on key ${key.slice(0, 7)}..., rotating to next key...`)
               continue
             }
