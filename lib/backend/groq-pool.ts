@@ -38,7 +38,7 @@ export interface GroqModelMeta {
  * Verified Groq model registry matching official Groq documentation
  */
 export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
-  // ── Pro Models (up to 120B) ──
+  // ── Pro & Corp Flagship Models (120B) ──
   {
     id: 'openai/gpt-oss-120b',
     name: 'GPT OSS 120B',
@@ -49,19 +49,6 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     speedTps: 500,
     contextTokens: 131072,
     maxCompletionTokens: 65536,
-  },
-
-  // ── Corp & Enterprise Models (Unlimited) ──
-  {
-    id: 'minimaxai/minimax-m2.7',
-    name: 'MiniMax M2.7 Enterprise',
-    paramsBillions: 150,
-    category: 'preview',
-    minTier: 'corp',
-    desc: 'Сверхмощная Enterprise-модель для комплексных многоэтапных задач (260 T/s, 196K контекст)',
-    speedTps: 260,
-    contextTokens: 196608,
-    maxCompletionTokens: 131072,
   },
 
   // ── Plus Models (up to 70B) ──
@@ -109,7 +96,7 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     desc: 'Сверхбыстрый отклик (1000 T/s, 131K контекст), чистый русский язык, мгновенная обработка заметок и Siri',
     speedTps: 1000,
     contextTokens: 131072,
-    maxCompletionTokens: 65536,
+    maxCompletionTokens: 8192,
   },
 
   // ── Excluded models ──
@@ -400,17 +387,13 @@ export function getModelForUserPlan(
   const norm = normalizePlan(plan)
   const req = requestedModel?.trim()
 
-  if (isCorp) {
-    if (req && isModelHealthy(req)) return req
-    return isModelHealthy('minimaxai/minimax-m2.7') ? 'minimaxai/minimax-m2.7' : 'openai/gpt-oss-120b'
-  }
-
-  if (norm === 'pro') {
-    if (req && isModelAllowedForPlan(req, 'pro') && isModelHealthy(req)) return req
+  if (isCorp || norm === 'pro') {
+    if (req && isModelAllowedForPlan(req, isCorp ? 'corp' : 'pro') && isModelHealthy(req)) return req
     if (taskKind === 'siri' || taskKind === 'voice') return isModelHealthy('openai/gpt-oss-20b') ? 'openai/gpt-oss-20b' : 'groq/compound-mini'
     if (isModelHealthy('openai/gpt-oss-120b')) return 'openai/gpt-oss-120b'
     if (isModelHealthy('qwen/qwen3.6-27b')) return 'qwen/qwen3.6-27b'
-    return 'groq/compound'
+    if (isModelHealthy('groq/compound')) return 'groq/compound'
+    return 'groq/compound-mini'
   }
 
   if (norm === 'plus') {
@@ -424,8 +407,8 @@ export function getModelForUserPlan(
   // Free:
   if (req && isModelAllowedForPlan(req, 'free') && isModelHealthy(req)) return req
   if (isModelHealthy('groq/compound-mini')) return 'groq/compound-mini'
-  if (isModelHealthy('groq/compound')) return 'groq/compound'
   if (isModelHealthy('openai/gpt-oss-20b')) return 'openai/gpt-oss-20b'
+  if (isModelHealthy('groq/compound')) return 'groq/compound'
   return 'groq/compound-mini'
 }
 
@@ -442,7 +425,7 @@ export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: s
       'groq/compound',
       'groq/compound-mini',
       'openai/gpt-oss-20b',
-      'minimaxai/minimax-m2.7',
+      'allam-2-7b',
     ]
   } else if (norm === 'plus') {
     fullHierarchy = [
@@ -454,13 +437,13 @@ export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: s
   } else {
     fullHierarchy = [
       'groq/compound-mini',
-      'groq/compound',
       'openai/gpt-oss-20b',
+      'groq/compound',
     ]
   }
 
   const filtered = fullHierarchy.filter(m => m !== requestedModel && isModelAllowedForPlan(m, userPlan) && isModelHealthy(m))
-  return filtered.length > 0 ? filtered : ['groq/compound-mini', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b']
+  return filtered.length > 0 ? filtered : ['groq/compound-mini', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b']
 }
 
 export const KNOWN_GROQ_CHAT_MODELS = new Set([
@@ -469,7 +452,7 @@ export const KNOWN_GROQ_CHAT_MODELS = new Set([
   'groq/compound',
   'groq/compound-mini',
   'qwen/qwen3.6-27b',
-  'minimaxai/minimax-m2.7',
+  'allam-2-7b',
 ])
 
 export function normalizeGroqChatModel(model?: string, userPlan?: string | null): string {

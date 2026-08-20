@@ -3101,10 +3101,13 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       })
     }
 
-    // Resolve the ACTIVE plan: paid plans require a valid expiry
+    // Resolve the ACTIVE plan: corp / unlimited / root admin are permanent
     let planId = normalizePlan(chat.plan)
-    if (planId !== 'free') {
-      const expired = chat.subscriptionExpiry
+    if (isRoot) {
+      planId = 'corp'
+    } else if (planId !== 'free') {
+      const isPermanent = planId === 'corp' || !chat.subscriptionExpiry
+      const expired = !isPermanent && chat.subscriptionExpiry
         ? new Date(chat.subscriptionExpiry) < new Date()
         : false
       if (expired) {

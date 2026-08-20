@@ -27,8 +27,11 @@ export async function GET(req: NextRequest) {
 
         if (chat) {
           const now = new Date()
-          let activePlan = normalizePlan(chat.plan)
-          if (activePlan !== 'free' && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < now) {
+          const { ROOT_ADMIN_IDS } = await import('@/lib/backend/admin')
+          const isRoot = ROOT_ADMIN_IDS.includes(String(chat.chatId).trim())
+          let activePlan = isRoot ? 'corp' : normalizePlan(chat.plan)
+          const isPermanent = activePlan === 'corp' || isRoot || !chat.subscriptionExpiry
+          if (activePlan !== 'free' && !isPermanent && chat.subscriptionExpiry && new Date(chat.subscriptionExpiry) < now) {
             activePlan = 'free'
           }
           const isPremium = activePlan !== 'free'

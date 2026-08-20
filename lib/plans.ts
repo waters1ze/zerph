@@ -13,12 +13,29 @@ export type PlanId = 'free' | 'plus' | 'pro' | 'corp'
 
 export const PLAN_RANK: Record<PlanId, number> = { free: 0, plus: 1, pro: 2, corp: 3 }
 
-const LEGACY_PLAN_MAP: Record<string, PlanId> = { premium: 'plus', unlimited: 'corp' }
+const LEGACY_PLAN_MAP: Record<string, PlanId> = {
+  premium: 'plus',
+  plus: 'plus',
+  pro: 'pro',
+  ultra: 'pro',
+  unlimited: 'corp',
+  corp: 'corp',
+  corporate: 'corp',
+  enterprise: 'corp',
+  business: 'corp',
+  admin: 'corp',
+  creator: 'corp',
+  root: 'corp',
+}
 
 export function normalizePlan(raw: string | null | undefined): PlanId {
-  const v = (raw || 'free').toLowerCase()
+  if (!raw) return 'free'
+  const v = String(raw).trim().toLowerCase()
   if (v in PLAN_RANK) return v as PlanId
   if (v in LEGACY_PLAN_MAP) return LEGACY_PLAN_MAP[v]
+  if (v.includes('corp') || v.includes('корп')) return 'corp'
+  if (v.includes('pro') || v.includes('про')) return 'pro'
+  if (v.includes('plus') || v.includes('плюс') || v.includes('prem')) return 'plus'
   return 'free'
 }
 
