@@ -13,6 +13,7 @@ import { prisma } from '@/lib/backend/prisma'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { createServerSession, secretsMatch } from '@/lib/backend/auth'
 import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
+import { notifyDataChanged } from '@/lib/backend/sse'
 import { GROQ_API_KEY } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
@@ -252,6 +253,10 @@ async function processShortcutsItems(
         spokenParts.push(`Контакт не найден в друзьях. Задача «${item.title}» сохранена в вашем личном списке.`)
       }
     }
+  }
+
+  if (items.length > 0) {
+    try { notifyDataChanged(chatId) } catch {}
   }
 
   const finalSpokenText = spokenParts.length > 0 ? spokenParts.join('. ') : createSpokenSummary(items)

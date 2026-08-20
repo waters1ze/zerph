@@ -77,9 +77,23 @@ export async function GET(req: NextRequest) {
     }
 
     const targetChatId = decodedState.chatId || req.cookies.get('zerf_chat_id')?.value
+    let finalChatId: string | null = targetChatId && /^\d+$/.test(targetChatId) ? targetChatId : null
 
-    if (targetChatId && /^\d+$/.test(targetChatId)) {
-      const cid = BigInt(targetChatId)
+    if (!finalChatId) {
+      // Find existing user with this GitHub username
+      const existingGhConfig = await prisma.config.findFirst({
+        where: {
+          key: { startsWith: 'user_github_' },
+          value: ghUsername,
+        }
+      })
+      if (existingGhConfig) {
+        finalChatId = existingGhConfig.key.replace(/^user_github_/, '')
+      }
+    }
+
+    if (finalChatId && /^\d+$/.test(finalChatId)) {
+      const cid = BigInt(finalChatId)
       // Save linked GitHub username and token in database
       await prisma.config.upsert({
         where: { key: `user_github_${cid}` },
@@ -92,7 +106,17 @@ export async function GET(req: NextRequest) {
         create: { key: `user_github_token_${cid}`, value: accessToken },
       })
 
+      const sessionToken = await createServerSession(
+        cid,
+        'GitHub OAuth Session',
+        'web',
+        req.headers.get('x-forwarded-for') || undefined,
+        req.headers.get('user-agent') || undefined
+      )
+
       const res = NextResponse.redirect(`${origin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+      res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
+      res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
       return res
     }
 

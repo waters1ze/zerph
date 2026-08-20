@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sparkles, Send, Lock, ExternalLink, Mail, Key, User, Loader2, CheckCircle2 } from 'lucide-react'
+import { GithubIcon } from '@/components/views/extensions-view'
 import { getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const [isAuth, setIsAuth] = useState(true)
-  const [authTab, setAuthTab] = useState<'google' | 'email' | 'tg' | 'vk'>('google')
+  const [authTab, setAuthTab] = useState<'google' | 'email' | 'tg' | 'vk' | 'github'>('google')
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -201,7 +202,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                 )}
               >
                 <Send className="w-3.5 h-3.5 text-[#229ED9]" />
-                <span>Telegram</span>
+                <span>TG</span>
               </button>
               <button
                 type="button"
@@ -213,6 +214,17 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
               >
                 <span className="font-bold text-xs text-[#0077FF]">VK</span>
                 <span>ВК</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthTab('github'); setError(null) }}
+                className={cn(
+                  'py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all',
+                  authTab === 'github' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <GithubIcon className="w-3.5 h-3.5" />
+                <span>GitHub</span>
               </button>
             </div>
 
@@ -427,6 +439,23 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
                   <span>Открыть диалог ВКонтакте</span>
                   <ExternalLink className="w-3 h-3 opacity-80" />
                 </a>
+              </div>
+            )}
+
+            {authTab === 'github' && (
+              <div className="flex flex-col gap-3 pt-1">
+                <a
+                  href="/api/auth/github"
+                  className="w-full h-11 rounded-2xl bg-[#24292e] hover:bg-[#1b1f23] text-white font-medium text-xs sm:text-[13px] transition-all flex items-center justify-center gap-2 shadow-md shadow-black/20 active:scale-95"
+                >
+                  <GithubIcon className="w-4 h-4 text-white" />
+                  <span>Войти через GitHub OAuth</span>
+                </a>
+
+                <div className="bg-muted/40 border border-border/50 rounded-2xl p-3.5 text-[12px] text-muted-foreground leading-relaxed flex flex-col gap-1">
+                  <p className="text-foreground font-semibold">Вход через GitHub аккаунт:</p>
+                  <p>Если вы привязали свой GitHub логин в Настройках, вы можете входить в 1 клик с любого устройства.</p>
+                </div>
               </div>
             )}
 
