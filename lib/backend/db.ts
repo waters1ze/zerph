@@ -9,6 +9,7 @@ import { ROOT_ADMIN_IDS } from './admin'
 import { tokenMatchesCandidateName } from './name-aliases'
 import { createServerSession } from './auth'
 import { PLANS, normalizePlan, planAtLeast, getDailyCount, getLifetimeCount, COUNTERS } from './plans'
+import { notifyDataChanged } from './sse'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
@@ -344,7 +345,7 @@ export async function createTask(data: {
 }) {
   const processed = processBirthdayTaskData(data)
 
-  return prisma.task.create({
+  const created = await prisma.task.create({
     data: {
       title: processed.title,
       description: processed.description || '',
@@ -367,6 +368,15 @@ export async function createTask(data: {
       authorChatId: (processed as any).authorChatId ? BigInt((processed as any).authorChatId) : (processed.ownerChatId ? BigInt(processed.ownerChatId) : null),
     },
   })
+
+  if (processed.ownerChatId) {
+    try { notifyDataChanged(processed.ownerChatId, 'tasks') } catch {}
+  }
+  if ((processed as any).authorChatId && String((processed as any).authorChatId) !== String(processed.ownerChatId)) {
+    try { notifyDataChanged((processed as any).authorChatId, 'tasks') } catch {}
+  }
+
+  return created
 }
 
 export function calculateNextRecurrenceDate(currentDueDate: string | null | undefined, repeat: string): string {
@@ -576,7 +586,14 @@ export async function updateTask(
     cleanData.completedAt = null
   }
 
-  return prisma.task.update({ where: { id }, data: cleanData })
+  const updated = await prisma.task.update({ where: { id }, data: cleanData })
+  if (updated.ownerChatId) {
+    try { notifyDataChanged(updated.ownerChatId, 'tasks') } catch {}
+  }
+  if (updated.authorChatId && String(updated.authorChatId) !== String(updated.ownerChatId)) {
+    try { notifyDataChanged(updated.authorChatId, 'tasks') } catch {}
+  }
+  return updated
 }
 
 export async function completeTask(id: string, actorChatId?: number | bigint | string | null) {
@@ -716,6 +733,9 @@ export async function deleteTask(id: string, actorChatId?: number | bigint | str
     if (res.count > 0) {
       // Delete any subtasks
       await prisma.task.deleteMany({ where: { parentTaskId: id } }).catch(() => {})
+      if (actorChatId) {
+        try { notifyDataChanged(actorChatId, 'tasks') } catch {}
+      }
     }
     return res
   } catch (err) {
@@ -746,7 +766,7 @@ export async function createHabit(data: {
   frequency?: string
   ownerChatId?: number | bigint | string | null
 }) {
-  return prisma.habit.create({
+  const habit = await prisma.habit.create({
     data: {
       title: data.title,
       icon: data.icon,
@@ -754,6 +774,10 @@ export async function createHabit(data: {
       ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
+  if (data.ownerChatId) {
+    try { notifyDataChanged(data.ownerChatId, 'habits') } catch {}
+  }
+  return habit
 }
 
 export async function updateHabit(id: string, data: Partial<{
@@ -768,13 +792,21 @@ export async function updateHabit(id: string, data: Partial<{
     ? await prisma.habit.findFirst({ where: { id, ...scope } })
     : await prisma.habit.findUnique({ where: { id } })
   if (!existing) throw new Error('Habit not found or access denied')
-  return prisma.habit.update({ where: { id }, data })
+  const updated = await prisma.habit.update({ where: { id }, data })
+  if (updated.ownerChatId) {
+    try { notifyDataChanged(updated.ownerChatId, 'habits') } catch {}
+  }
+  return updated
 }
 
 export async function deleteHabit(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    return await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    const res = await prisma.habit.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count > 0 && actorChatId) {
+      try { notifyDataChanged(actorChatId, 'habits') } catch {}
+    }
+    return res
   } catch (err) {
     console.error('deleteHabit error:', err)
     return { count: 0 }
@@ -811,6 +843,9 @@ export async function completeTaskByTitle(targetTitle: string, ownerChatId?: num
     where: { id: best.task.id },
     data: { status: 'done', completedAt: new Date() },
   })
+  if (updated.ownerChatId) {
+    try { notifyDataChanged(updated.ownerChatId, 'tasks') } catch {}
+  }
   return updated as DbTask
 }
 
@@ -825,7 +860,7 @@ export async function createGoal(data: {
   color?: string
   ownerChatId?: number | bigint | string | null
 }) {
-  return prisma.goal.create({
+  const goal = await prisma.goal.create({
     data: {
       title: data.title,
       description: data.description || '',
@@ -838,6 +873,10 @@ export async function createGoal(data: {
       ownerChatId: data.ownerChatId ? BigInt(data.ownerChatId) : null,
     },
   })
+  if (data.ownerChatId) {
+    try { notifyDataChanged(data.ownerChatId, 'goals') } catch {}
+  }
+  return goal
 }
 
 /** Whitelisted, type-safe goal fields — prevents mass assignment (e.g. ownerChatId). */
@@ -861,13 +900,21 @@ export async function updateGoal(
     ? await prisma.goal.findFirst({ where: { id, ...scope } })
     : await prisma.goal.findUnique({ where: { id } })
   if (!existing) throw new Error('Goal not found or access denied')
-  return prisma.goal.update({ where: { id }, data: data as never })
+  const updated = await prisma.goal.update({ where: { id }, data: data as never })
+  if (updated.ownerChatId) {
+    try { notifyDataChanged(updated.ownerChatId, 'goals') } catch {}
+  }
+  return updated
 }
 
 export async function deleteGoal(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    return await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    const res = await prisma.goal.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count > 0 && actorChatId) {
+      try { notifyDataChanged(actorChatId, 'goals') } catch {}
+    }
+    return res
   } catch (err) {
     console.error('deleteGoal error:', err)
     return { count: 0 }
@@ -905,6 +952,7 @@ export async function createNote(data: {
 
   if (data.ownerChatId) {
     await incrementUserUsage(data.ownerChatId, 'note').catch(() => {})
+    try { notifyDataChanged(data.ownerChatId, 'notes') } catch {}
   }
 
   return note
@@ -925,13 +973,21 @@ export async function updateNote(id: string, data: Partial<{
     ? await prisma.note.findFirst({ where: { id, ...scope } })
     : await prisma.note.findUnique({ where: { id } })
   if (!existing) throw new Error('Note not found or access denied')
-  return prisma.note.update({ where: { id }, data })
+  const updated = await prisma.note.update({ where: { id }, data })
+  if (updated.ownerChatId) {
+    try { notifyDataChanged(updated.ownerChatId, 'notes') } catch {}
+  }
+  return updated
 }
 
 export async function deleteNote(id: string, actorChatId?: number | bigint | string | null) {
   try {
     const scope = ownerActorScope(actorChatId)
-    return await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    const res = await prisma.note.deleteMany({ where: scope ? { id, ...scope } : { id } })
+    if (res.count > 0 && actorChatId) {
+      try { notifyDataChanged(actorChatId, 'notes') } catch {}
+    }
+    return res
   } catch (err) {
     console.error('deleteNote error:', err)
     return { count: 0 }

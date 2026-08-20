@@ -709,15 +709,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
 
   // Core Sync Function with strict throttling to prevent function invocation burnout
-  const syncBackendData = useCallback(async (showIndicator = false) => {
+  const syncBackendData = useCallback(async (force = false) => {
     if (syncInFlightRef.current) return
     const now = Date.now()
-    if (!showIndicator && (now - lastSyncTimeRef.current < 5_000)) {
+    if (!force && (now - lastSyncTimeRef.current < 2_000)) {
       return
     }
     lastSyncTimeRef.current = now
     syncInFlightRef.current = true
-    if (showIndicator) setIsSyncing(true)
+    if (force) setIsSyncing(true)
     try {
       const headers = getAuthHeaders()
       const chatId = headers['x-chat-id']
@@ -784,8 +784,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Sync profile, plan, avatar and sidebar configuration across devices
-        // Throttled to at most once per 5 seconds unless forced with showIndicator
-        const shouldFetchUser = showIndicator || (now - lastUserFetchTimeRef.current > 5000)
+        // Throttled to at most once per 5 seconds unless forced
+        const shouldFetchUser = force || (now - lastUserFetchTimeRef.current > 5000)
 
         if (shouldFetchUser) {
           lastUserFetchTimeRef.current = now
@@ -844,7 +844,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {} finally {
       syncInFlightRef.current = false
-      if (showIndicator) {
+      if (force) {
         setTimeout(() => setIsSyncing(false), 400)
       }
     }
@@ -896,19 +896,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         eventSource = new EventSource(sseUrl)
 
         eventSource.addEventListener('sync', () => {
-          syncBackendData(false)
+          syncBackendData(true)
         })
 
         eventSource.addEventListener('task_update', () => {
-          syncBackendData(false)
+          syncBackendData(true)
         })
 
         eventSource.addEventListener('task_created', () => {
-          syncBackendData(false)
+          syncBackendData(true)
         })
 
         eventSource.addEventListener('task_deleted', () => {
-          syncBackendData(false)
+          syncBackendData(true)
         })
 
         eventSource.addEventListener('ai_models_updated', (e: MessageEvent) => {

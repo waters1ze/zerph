@@ -30,6 +30,7 @@ import { recordChannelComment } from '@/lib/backend/comment-analyzer'
 import { getSiriUserKey } from '@/app/api/shortcuts/route'
 import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 import { NAME_TO_CLUSTER_MAP, tokenMatchesCandidateName, namesAreRelated } from '@/lib/backend/name-aliases'
+import { notifyDataChanged } from '@/lib/backend/sse'
 
 // Extend function timeout to 60s (active on Vercel Pro/Enterprise)
 export const maxDuration = 60
@@ -1501,6 +1502,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
   }
 
   await send(chatId, msg, { reply_markup: miniAppKeyboard(chatId) })
+  try { notifyDataChanged(chatId, 'all') } catch {}
 
   for (const item of items) {
     // If task was created with subtasks, send an interactive checklist message
