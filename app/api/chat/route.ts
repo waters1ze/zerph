@@ -19,7 +19,16 @@ import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 
-const SYSTEM_PROMPT = `Ты — Zerf AI, интеллектуальный персональный ассистент продуктивности в приложении Zerf.
+const SYSTEM_PROMPT = `Ты — Zerf AI, официальный интеллектуальный персональный ассистент продуктивности в приложении Zerf.
+
+══════════════════════════════════════════
+🛡️ КРИТИЧЕСКОЕ ПРАВИЛО ИДЕНТИЧНОСТИ (HIGHEST PRIORITY)
+══════════════════════════════════════════
+- Твоё единственное имя — Zerf AI (или Zerf Note Assistant).
+- Ты создан командой экосистемы Zerf (zerph).
+- КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО называть себя ChatGPT, OpenAI, Claude, Llama, Qwen, DeepSeek или любым другим сторонним именем!
+- Если пользователь спрашивает «кто ты?», «как тебя зовут?», «кто ты такой?», «что ты умеешь?», «ты чат гпт?», «ты openai?», «кто тебя создал?» — ВСЕГДА отвечай, что ты Zerf AI — персональный интеллектуальный ассистент продуктивности сервиса Zerf, который помогает организовывать задачи, цели, заметки, привычки, расписание и отвечать на любые вопросы!
+══════════════════════════════════════════
 
 У тебя есть полный доступ к рабочему пространству пользователя:
 1. 👤 ДРУЗЬЯ (Friends): Личные контакты, обмен заметками, совместные задачи с подтверждением, дни рождения и графики.
@@ -241,7 +250,27 @@ export async function POST(req: NextRequest) {
     const serverContext = ownerChatId ? await getExistingItemsContext(ownerChatId) : ''
     const friendsContext = ''
     const extensionsContext = ownerChatId ? await getUserExtensionsAIContext(ownerChatId) : ''
-    const effectiveModel = getModelForUserPlan(limits.plan, body.model, 'chat')
+    // Resolve user's preferred model (from request body or saved DB settings)
+    let requestedModel = body.model
+    if (!requestedModel && ownerChatId) {
+      try {
+        const [modelConf, taskConf] = await Promise.all([
+          prisma.config.findUnique({ where: { key: `user_ai_model_${ownerChatId}` } }),
+          prisma.config.findUnique({ where: { key: `user_ai_task_models_${ownerChatId}` } }),
+        ])
+        if (taskConf?.value) {
+          try {
+            const taskMap = JSON.parse(taskConf.value)
+            if (taskMap.chat) requestedModel = taskMap.chat
+          } catch {}
+        }
+        if (!requestedModel && modelConf?.value) {
+          requestedModel = modelConf.value
+        }
+      } catch {}
+    }
+
+    const effectiveModel = getModelForUserPlan(limits.plan, requestedModel, 'chat')
 
     // Parse user natural language intent using Groq
     let parsedItems: any[] = []

@@ -1119,7 +1119,21 @@ async function processText(chatId: number, text: string) {
     const friends = await getFriends(chatId)
     const friendsContext = friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n')
     const extensionsContext = await getUserExtensionsAIContext(chatId)
-    const items = await parseIntentWithGroq(text, key, undefined, context, friendsContext, extensionsContext, limits.plan)
+    let userModel: string | undefined
+    try {
+      const [modelConf, taskConf] = await Promise.all([
+        prisma.config.findUnique({ where: { key: `user_ai_model_${chatId}` } }),
+        prisma.config.findUnique({ where: { key: `user_ai_task_models_${chatId}` } }),
+      ])
+      if (taskConf?.value) {
+        try {
+          const tMap = JSON.parse(taskConf.value)
+          if (tMap.parser || tMap.chat) userModel = tMap.parser || tMap.chat
+        } catch {}
+      }
+      if (!userModel && modelConf?.value) userModel = modelConf.value
+    } catch {}
+    const items = await parseIntentWithGroq(text, key, userModel, context, friendsContext, extensionsContext, limits.plan)
     await saveAndRespondParsedItems(chatId, items)
   } catch (err: unknown) {
     console.error('[handleAiCommand error]:', err)
@@ -1799,7 +1813,21 @@ async function processVoice(chatId: number, fileId: string, duration: number = 1
     const friendsContext = friends.length > 0 ? friends.map((f: any) => `Имя: ${f.name} (@${f.username || 'no_username'})`).join('\n') : undefined
     const limits = await getUserUsageAndLimits(chatId)
     const extensionsContext = await getUserExtensionsAIContext(chatId)
-    const items = await parseIntentWithGroq(transcript, key, undefined, context, friendsContext, extensionsContext, limits.plan)
+    let userModel: string | undefined
+    try {
+      const [modelConf, taskConf] = await Promise.all([
+        prisma.config.findUnique({ where: { key: `user_ai_model_${chatId}` } }),
+        prisma.config.findUnique({ where: { key: `user_ai_task_models_${chatId}` } }),
+      ])
+      if (taskConf?.value) {
+        try {
+          const tMap = JSON.parse(taskConf.value)
+          if (tMap.voice || tMap.parser || tMap.chat) userModel = tMap.voice || tMap.parser || tMap.chat
+        } catch {}
+      }
+      if (!userModel && modelConf?.value) userModel = modelConf.value
+    } catch {}
+    const items = await parseIntentWithGroq(transcript, key, userModel, context, friendsContext, extensionsContext, limits.plan)
 
     await saveAndRespondParsedItems(chatId, items, transcript)
 

@@ -202,9 +202,14 @@ export function AiChatPanel() {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
-          ...(qChatId ? { 'x-chat-id': qChatId } : {})
+          ...(qChatId ? { 'x-chat-id': qChatId } : {}),
         },
-        body: JSON.stringify({ messages, apiKey: state.settings.integrations.groqApiKey || '', context }),
+        body: JSON.stringify({
+          messages,
+          apiKey: state.settings.integrations.groqApiKey || '',
+          context,
+          model: state.settings.integrations?.aiTaskModels?.chat || state.settings.integrations?.aiModel || undefined,
+        }),
       })
 
       const data = await res.json()

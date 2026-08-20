@@ -75,19 +75,30 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     contextTokens: 131072,
     maxCompletionTokens: 16384,
   },
+
+  // ── Free Models (up to 20B & Compound Systems) ──
+  {
+    id: 'groq/compound-mini',
+    name: 'Groq Compound Mini',
+    paramsBillions: 20,
+    category: 'systems',
+    minTier: 'free',
+    desc: 'Компактная сверхбыстрая 20B система оркестрации инструментов (450 T/s, 131K контекст)',
+    speedTps: 450,
+    contextTokens: 131072,
+    maxCompletionTokens: 8192,
+  },
   {
     id: 'groq/compound',
     name: 'Groq Compound',
     paramsBillions: 70,
     category: 'systems',
-    minTier: 'plus',
+    minTier: 'free',
     desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s, 131K контекст)',
     speedTps: 450,
     contextTokens: 131072,
     maxCompletionTokens: 8192,
   },
-
-  // ── Free Models (up to 20B) ──
   {
     id: 'openai/gpt-oss-20b',
     name: 'GPT OSS 20B',
@@ -98,17 +109,6 @@ export const VERIFIED_GROQ_MODELS: GroqModelMeta[] = [
     speedTps: 1000,
     contextTokens: 131072,
     maxCompletionTokens: 65536,
-  },
-  {
-    id: 'groq/compound-mini',
-    name: 'Groq Compound Mini',
-    paramsBillions: 20,
-    category: 'systems',
-    minTier: 'free',
-    desc: 'Компактная сверхбыстрая система оркестрации инструментов (450 T/s, 131K контекст)',
-    speedTps: 450,
-    contextTokens: 131072,
-    maxCompletionTokens: 8192,
   },
 
   // ── Excluded models ──
@@ -382,9 +382,10 @@ export function getModelForUserPlan(
 
   // Free:
   if (req && isModelAllowedForPlan(req, 'free') && isModelHealthy(req)) return req
-  if (isModelHealthy('openai/gpt-oss-20b')) return 'openai/gpt-oss-20b'
   if (isModelHealthy('groq/compound-mini')) return 'groq/compound-mini'
-  return 'openai/gpt-oss-20b'
+  if (isModelHealthy('groq/compound')) return 'groq/compound'
+  if (isModelHealthy('openai/gpt-oss-20b')) return 'openai/gpt-oss-20b'
+  return 'groq/compound-mini'
 }
 
 export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: string): string[] {
@@ -398,26 +399,27 @@ export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: s
       'openai/gpt-oss-120b',
       'qwen/qwen3.6-27b',
       'groq/compound',
-      'openai/gpt-oss-20b',
       'groq/compound-mini',
+      'openai/gpt-oss-20b',
       'minimaxai/minimax-m2.7',
     ]
   } else if (norm === 'plus') {
     fullHierarchy = [
       'qwen/qwen3.6-27b',
       'groq/compound',
-      'openai/gpt-oss-20b',
       'groq/compound-mini',
+      'openai/gpt-oss-20b',
     ]
   } else {
     fullHierarchy = [
-      'openai/gpt-oss-20b',
       'groq/compound-mini',
+      'groq/compound',
+      'openai/gpt-oss-20b',
     ]
   }
 
   const filtered = fullHierarchy.filter(m => m !== requestedModel && isModelAllowedForPlan(m, userPlan) && isModelHealthy(m))
-  return filtered.length > 0 ? filtered : ['openai/gpt-oss-20b', 'groq/compound-mini', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b']
+  return filtered.length > 0 ? filtered : ['groq/compound-mini', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b']
 }
 
 export const KNOWN_GROQ_CHAT_MODELS = new Set([

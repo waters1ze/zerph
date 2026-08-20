@@ -143,12 +143,12 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
   {
     id: 'free',
     name: 'Базовый',
-    aiModel: 'Llama 3.1 8B Instant',
+    aiModel: 'Groq Compound Mini (20B) / GPT-OSS 20B',
     priceMonthly: 0,
     priceYearly: 0,
     tagline: 'Начните пользоваться прямо сейчас',
     features: [
-      '🤖 ИИ: Llama 3.1 8B Instant',
+      '🤖 ИИ: Groq Compound 20B, Compound System & GPT-OSS 20B',
       '🧩 До 5 активных расширений и виджетов',
       'До 20 заметок в аккаунте',
       'До 10 активных напоминаний',
