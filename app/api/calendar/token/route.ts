@@ -79,6 +79,8 @@ export async function GET(req: NextRequest) {
           try {
             await prisma.task.updateMany({ where: { ownerChatId: existingUserWithEmail.chatId }, data: { ownerChatId: primaryCid } })
             await prisma.note.updateMany({ where: { ownerChatId: existingUserWithEmail.chatId }, data: { ownerChatId: primaryCid } })
+            await prisma.goal.updateMany({ where: { ownerChatId: existingUserWithEmail.chatId }, data: { ownerChatId: primaryCid } })
+            await prisma.habit.updateMany({ where: { ownerChatId: existingUserWithEmail.chatId }, data: { ownerChatId: primaryCid } })
             await prisma.telegramChat.delete({ where: { chatId: existingUserWithEmail.chatId } })
           } catch {}
         }

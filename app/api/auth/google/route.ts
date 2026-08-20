@@ -48,6 +48,24 @@ export async function POST(req: NextRequest) {
     // 1. If currently logged in, link Google Email to this active account
     if (authUser?.chatId) {
       const cid = BigInt(authUser.chatId)
+
+      // If a separate dummy account was previously created with this email, merge it
+      const clash = await prisma.telegramChat.findFirst({
+        where: {
+          chatId: { not: cid },
+          OR: [{ googleEmail: cleanEmail }, { email: cleanEmail }],
+        }
+      })
+      if (clash) {
+        try {
+          await prisma.task.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+          await prisma.note.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+          await prisma.goal.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+          await prisma.habit.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+          await prisma.telegramChat.delete({ where: { chatId: clash.chatId } })
+        } catch {}
+      }
+
       await prisma.telegramChat.update({
         where: { chatId: cid },
         data: { googleEmail: cleanEmail },
