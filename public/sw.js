@@ -1,31 +1,12 @@
-const CACHE_NAME = 'zerf-note-v2'
+const CACHE_NAME = 'zerf-note-v3'
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
-})
-
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return
-  const url = new URL(event.request.url)
-
-  // Bypass SW for APIs, Next.js assets, and auth pages
-  if (
-    url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/_next/') ||
-    url.pathname.startsWith('/cli-auth')
-  ) {
-    return
-  }
-
-  event.respondWith(
-    fetch(event.request).catch(async () => {
-      const match = await caches.match(event.request)
-      return match || new Response('Offline', { status: 503, statusText: 'Offline' })
-    })
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).then(() => self.clients.claim())
   )
 })
 
