@@ -221,9 +221,15 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
 
   // 3. Web Browser: verify active DB sessionToken if provided.
   //    Identity comes ONLY from the DB session — never from a client-sent chatId.
+  let searchToken: string | null = null
+  try {
+    searchToken = new URL(req.url).searchParams.get('token')
+  } catch {}
+
   const sessionToken =
     req.headers.get('x-auth-token') ||
     req.cookies.get('zerf_auth_token')?.value ||
+    searchToken ||
     (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim() || null
   if (sessionToken && sessionToken.length >= 16) {
     try {

@@ -9,6 +9,29 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray
 }
 
+function getStoredCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'))
+  return matches ? decodeURIComponent(matches[1]) : null
+}
+
+function getClientAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (typeof window === 'undefined') return headers
+
+  const chatId = localStorage.getItem('zerf_chat_id') || sessionStorage.getItem('zerf_chat_id') || getStoredCookie('zerf_chat_id')
+  const authToken = localStorage.getItem('zerf_auth_token') || getStoredCookie('zerf_auth_token')
+  const initData = (window as any).Telegram?.WebApp?.initData || ''
+  const vkLaunch = localStorage.getItem('zerf_vk_launch') || ''
+
+  if (chatId) headers['x-chat-id'] = chatId
+  if (authToken) headers['x-auth-token'] = authToken
+  if (initData) headers['x-tg-init-data'] = initData
+  if (vkLaunch) headers['x-vk-launch'] = vkLaunch
+
+  return headers
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false
@@ -54,16 +77,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
       const chatId =
         localStorage.getItem('zerf_chat_id') ||
         sessionStorage.getItem('zerf_chat_id') ||
+        getStoredCookie('zerf_chat_id') ||
         null
 
       if (sub) {
-        const authToken = localStorage.getItem('zerf_auth_token') || ''
-        const initData = typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initData || ''
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (chatId) headers['x-chat-id'] = chatId
-        if (authToken) headers['x-auth-token'] = authToken
-        if (initData) headers['x-tg-init-data'] = initData
-
+        const headers = getClientAuthHeaders()
         await fetch('/api/push/subscribe', {
           method: 'POST',
           headers,
@@ -76,6 +94,53 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 
   return granted
+}
+
+/**
+ * Ensures background push subscription is healthy without triggering permission prompts
+ */
+export async function ensurePushSubscribedOnBoot(): Promise<void> {
+  if (typeof window === 'undefined' || !('Notification' in window)) return
+  if (Notification.permission !== 'granted') return
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const swReg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+
+      if ('pushManager' in swReg) {
+        let sub = await swReg.pushManager.getSubscription()
+        if (!sub) {
+          const res = await fetch('/api/push/subscribe').catch(() => null)
+          const data = await res?.json().catch(() => null)
+          if (data?.publicKey) {
+            const convertedKey = urlBase64ToUint8Array(data.publicKey)
+            sub = await swReg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: convertedKey,
+            })
+          }
+        }
+
+        const chatId =
+          localStorage.getItem('zerf_chat_id') ||
+          sessionStorage.getItem('zerf_chat_id') ||
+          getStoredCookie('zerf_chat_id') ||
+          null
+
+        if (sub) {
+          const headers = getClientAuthHeaders()
+          await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ subscription: sub.toJSON(), chatId }),
+          }).catch(() => {})
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Push] Background sync notice:', e)
+  }
 }
 
 export async function sendTestNotification(): Promise<{ success: boolean; message: string }> {
@@ -98,14 +163,27 @@ export async function sendTestNotification(): Promise<{ success: boolean; messag
     requireInteraction: true,
   })
 
-  // Also hit the test endpoint for analytics
-  fetch('/api/push/test', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Тестовый пуш', message: 'Успешно доставлено' }),
-  }).catch(() => {})
+  // Hit the backend push test endpoint with full credentials
+  const chatId =
+    localStorage.getItem('zerf_chat_id') ||
+    sessionStorage.getItem('zerf_chat_id') ||
+    getStoredCookie('zerf_chat_id') ||
+    null
 
-  return { success: true, message: 'Тестовый пуш успешно отправлен!' }
+  try {
+    const headers = getClientAuthHeaders()
+    await fetch('/api/push/test', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        title: '🔔 Тестовый пуш Zerf Note',
+        message: 'Пуш-уведомление успешно доставлено на ваше устройство! 🚀',
+        chatId,
+      }),
+    })
+  } catch {}
+
+  return { success: true, message: 'Тестовый пуш успешно отправлен на ваши устройства!' }
 }
 
 export function showWebNotification(

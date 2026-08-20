@@ -20,28 +20,39 @@ export async function POST(req: NextRequest) {
     }
 
     const token = generateOnetimeToken()
+    const code = Math.floor(100000 + Math.random() * 900000).toString()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
-    await prisma.loginToken.create({
-      data: {
-        chatId: BigInt(chatId),
-        token,
-        expiresAt,
-      },
-    })
+    await Promise.all([
+      prisma.loginToken.create({
+        data: {
+          chatId: BigInt(chatId),
+          token,
+          expiresAt,
+        },
+      }),
+      prisma.loginToken.create({
+        data: {
+          chatId: BigInt(chatId),
+          token: code,
+          expiresAt,
+        },
+      }),
+    ])
 
-    return NextResponse.json({ token, expiresAt: expiresAt.toISOString() })
+    return NextResponse.json({ token, code, expiresAt: expiresAt.toISOString() })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
 
-// GET /api/auth/login-token?token=xxx — verify and consume a one-time token
+// GET /api/auth/login-token?token=xxx — verify and consume a one-time token or 6-digit PIN
 // Returns chatId + a long-lived session token, or sets cookies and redirects directly to /
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const token = searchParams.get('token')
+    const rawParam = searchParams.get('token') || searchParams.get('code')
+    const token = (rawParam || '').trim().replace(/\s+/g, '')
     const shouldRedirect = searchParams.get('redirect') === 'true' || req.headers.get('accept')?.includes('text/html')
 
     if (!token) {

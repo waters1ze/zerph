@@ -15,6 +15,7 @@
 
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_CHAT_MODEL, GROQ_WHISPER_MODEL } from '@/lib/config'
 import { normalizePlan } from '@/lib/plans'
+import { prisma } from './prisma'
 
 export type AiTaskKind = 'chat' | 'parser' | 'goals' | 'reschedule' | 'analytics' | 'voice' | 'siri' | 'extensions'
 
@@ -224,37 +225,33 @@ export function classifyTierByParams(billions: number, category?: string): 'free
   return 'corp'
 }
 
-const MODEL_CACHE_TTL_MS = 60 * 60 * 1000 // Exactly 1 hour
+const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // In-memory cache 24 hours
 
 let dynamicModelsCache: { timestamp: number; models: GroqModelMeta[] } | null = null
 let isRefreshingBackground = false
 
-function triggerBackgroundModelRefresh() {
+export function triggerBackgroundModelRefresh() {
   if (isRefreshingBackground) return
   isRefreshingBackground = true
   setTimeout(async () => {
     try {
       dynamicModelsCache = null
-      await getLiveGroqModels()
+      await syncLiveGroqModelsFromGroq(true)
     } catch (e) {
-      console.warn('[GroqPool] Background model scan error:', e)
+      console.warn('[GroqPool] Background model sync error:', e)
     } finally {
       isRefreshingBackground = false
     }
-  }, 500)
+  }, 300)
 }
 
 /**
- * Dynamically queries Groq /openai/v1/models every 1 hour upon AI message requests
- * and automatically adapts to newly released models without any hardcoding.
+ * Synchronizes live Groq models from Groq API once per day (run alongside scheduled cron jobs),
+ * persists the result into Prisma DB (system_groq_live_models), and broadcasts via SSE.
+ * Makes ZERO calls during standard user chat/actions.
  */
-export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[]> {
-  const now = Date.now()
-  if (dynamicModelsCache && (now - dynamicModelsCache.timestamp < MODEL_CACHE_TTL_MS)) {
-    return dynamicModelsCache.models
-  }
-
-  const keys = groqPool.getOrderedHealthyKeys(apiKey)
+export async function syncLiveGroqModelsFromGroq(force = false): Promise<GroqModelMeta[]> {
+  const keys = groqPool.getOrderedHealthyKeys()
   if (keys.length === 0) {
     return VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded)
   }
@@ -262,7 +259,7 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
   try {
     const res = await fetch('https://api.groq.com/openai/v1/models', {
       headers: { Authorization: `Bearer ${keys[0]}` },
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(6000),
     })
 
     if (res.ok) {
@@ -275,8 +272,8 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
         const id = item.id
         if (id.startsWith('whisper') || id.includes('audio') || id.includes('tts')) continue
         if (id.includes('guard') || id.includes('safeguard')) continue // Skip moderation classifiers
-        if (id.includes('orpheus') || id.includes('arabic') || id.includes('allam')) continue // Skip specialized preview models
-        if (id.includes('llama') || id.includes('mixtral') || id.includes('gemma')) continue // Skip deprecated legacy models (llama-3.3, llama-3.1, mixtral, gemma)
+        if (id.includes('orpheus') || id.includes('arabic') || id.includes('allam')) continue // Skip preview regional
+        if (id.includes('llama') || id.includes('mixtral') || id.includes('gemma')) continue // Skip legacy deprecated
 
         const existing = knownMap.get(id)
         if (existing && !existing.isExcluded) {
@@ -304,14 +301,58 @@ export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[
         }
       }
 
-      dynamicModelsCache = { timestamp: now, models: discovered }
+      dynamicModelsCache = { timestamp: Date.now(), models: discovered }
+
+      // Persist to Prisma DB Config table
+      try {
+        await prisma.config.upsert({
+          where: { key: 'system_groq_live_models' },
+          update: { value: JSON.stringify(discovered) },
+          create: { key: 'system_groq_live_models', value: JSON.stringify(discovered) },
+        })
+      } catch (dbErr) {
+        console.warn('[GroqPool] Failed to persist models to DB:', dbErr)
+      }
+
+      // Broadcast SSE event to any open frontend clients
+      try {
+        const { broadcastToAll } = await import('./sse')
+        broadcastToAll('ai_models_updated', { models: discovered, timestamp: Date.now() })
+      } catch {}
+
+      console.log(`[GroqPool] Successfully synchronized ${discovered.length} live Groq models to DB & SSE.`)
       return discovered
     }
   } catch (err) {
-    console.warn('[GroqModels] 1-hour cache query notice (using cached models):', err)
+    console.warn('[GroqPool] Daily model sync error:', err)
   }
 
   return dynamicModelsCache?.models || VERIFIED_GROQ_MODELS.filter(m => !m.isExcluded)
+}
+
+/**
+ * Returns live Groq models from in-memory cache or DB (zero Groq API calls on user requests).
+ */
+export async function getLiveGroqModels(apiKey?: string): Promise<GroqModelMeta[]> {
+  const now = Date.now()
+  if (dynamicModelsCache && (now - dynamicModelsCache.timestamp < MODEL_CACHE_TTL_MS)) {
+    return dynamicModelsCache.models
+  }
+
+  // 1. Try reading from Database
+  try {
+    const row = await prisma.config.findUnique({ where: { key: 'system_groq_live_models' } })
+    if (row?.value) {
+      const parsed = JSON.parse(row.value)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        dynamicModelsCache = { timestamp: now, models: parsed }
+        return parsed
+      }
+    }
+  } catch {}
+
+  // 2. If not yet in DB, perform single initial sync
+  return syncLiveGroqModelsFromGroq()
 }
 
 export function isModelAllowedForPlan(modelId: string, userPlan?: string | null): boolean {
@@ -581,10 +622,12 @@ class GroqKeyPool {
   public getOrderedHealthyKeys(providedKey?: string): string[] {
     this.ensureFresh()
 
+    const customKeys: string[] = []
     if (providedKey) {
       const parsedProvided = cleanTokenString(providedKey)
       if (parsedProvided.length > 0) {
         this.refreshKeys(parsedProvided)
+        customKeys.push(...parsedProvided)
       }
     }
 
@@ -612,7 +655,39 @@ class GroqKeyPool {
     // Advance round-robin index for next call
     this.currentIndex = (this.currentIndex + 1) % total
 
-    return [...healthy, ...cooling.map(c => c.key)]
+    // If custom keys were explicitly provided by the user, prioritize them first
+    const resultOrder: string[] = []
+    const seen = new Set<string>()
+
+    for (const ck of customKeys) {
+      if (healthy.includes(ck) && !seen.has(ck)) {
+        resultOrder.push(ck)
+        seen.add(ck)
+      }
+    }
+
+    for (const hk of healthy) {
+      if (!seen.has(hk)) {
+        resultOrder.push(hk)
+        seen.add(hk)
+      }
+    }
+
+    for (const ck of customKeys) {
+      if (!seen.has(ck)) {
+        resultOrder.push(ck)
+        seen.add(ck)
+      }
+    }
+
+    for (const ck of cooling.map(c => c.key)) {
+      if (!seen.has(ck)) {
+        resultOrder.push(ck)
+        seen.add(ck)
+      }
+    }
+
+    return resultOrder
   }
 
   public markKeySuccess(key: string) {
@@ -629,6 +704,20 @@ class GroqKeyPool {
       item.failedCount++
       item.cooldownUntil = Date.now() + cooldownSeconds * 1000
       console.warn(`[GroqPool] Key ${item.masked} rate-limited. Cooldown for ${cooldownSeconds}s.`)
+    }
+  }
+
+  public markKeyInvalid(key: string, reason = '401/403 Invalid or revoked key') {
+    const item = this.keys.find(k => k.key === key)
+    if (item) {
+      item.failedCount += 5
+      item.cooldownUntil = Date.now() + 24 * 60 * 60 * 1000 // 24-hour block
+      console.warn(`[GroqPool] Key ${item.masked} marked invalid (${reason}). Suppressing from pool.`)
+    }
+    // If key has failed repeatedly on authentication, purge it completely
+    if (item && item.failedCount >= 5) {
+      this.keys = this.keys.filter(k => k.key !== key)
+      console.warn(`[GroqPool] Key ${item.masked} purged permanently from active memory pool.`)
     }
   }
 
@@ -707,7 +796,7 @@ export async function callGroqChatCompletion(options: {
   ].filter((v, i, a) => a.indexOf(v) === i)
 
   let lastError: Error | null = null
-  const tier1Deadline = Date.now() + 14_000
+  const tier1Deadline = Date.now() + 25_000
 
   // ── Tier 1: Groq Multi-Account Round-Robin Pool ──
   if (keys.length > 0) {
@@ -731,7 +820,7 @@ export async function callGroqChatCompletion(options: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(6000),
+            signal: AbortSignal.timeout(10000),
           })
 
           // Smart recovery: if 400 occurred with response_format, retry immediately without response_format
@@ -744,13 +833,19 @@ export async function callGroqChatCompletion(options: {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify(body),
-              signal: AbortSignal.timeout(6000),
+              signal: AbortSignal.timeout(10000),
             })
           }
 
           if (res.status === 429) {
             groqPool.markKeyRateLimited(key, 60)
             console.warn(`[GroqChat] 429 Rate Limit on key ${key.slice(0, 7)}..., rotating to next key...`)
+            continue
+          }
+
+          if (res.status === 401 || res.status === 403) {
+            const errText = await res.text()
+            groqPool.markKeyInvalid(key, `HTTP ${res.status}: ${errText}`)
             continue
           }
 
@@ -767,6 +862,11 @@ export async function callGroqChatCompletion(options: {
             const errText = await res.text()
             if (errText.includes('rate_limit') || res.status === 413 || res.status === 503) {
               groqPool.markKeyRateLimited(key, 45)
+              continue
+            }
+            if (res.status >= 500) {
+              groqPool.markKeyRateLimited(key, 30) // 30s cooldown on transient server error
+              console.warn(`[GroqChat] Server error ${res.status} on key ${key.slice(0, 7)}..., rotating to next key...`)
               continue
             }
             if (res.status === 400 && (errText.includes('model') || errText.includes('not supported') || errText.includes('decommissioned'))) {
@@ -934,6 +1034,12 @@ export async function callGroqWhisper(options: {
             continue
           }
 
+          if (res.status === 401 || res.status === 403) {
+            const errText = await res.text()
+            groqPool.markKeyInvalid(key, `HTTP ${res.status}: ${errText}`)
+            continue
+          }
+
           if (res.status === 404) {
             const errText = await res.text()
             lastError = new Error(`Whisper error (404): ${errText}`)
@@ -944,8 +1050,13 @@ export async function callGroqWhisper(options: {
 
           if (!res.ok) {
             const errText = await res.text()
-            if (errText.includes('rate_limit') || res.status === 503) {
+            if (errText.includes('rate_limit') || res.status === 413 || res.status === 503) {
               groqPool.markKeyRateLimited(key, 45)
+              continue
+            }
+            if (res.status >= 500) {
+              groqPool.markKeyRateLimited(key, 30)
+              console.warn(`[GroqWhisper] Server error ${res.status} on key, rotating to next key...`)
               continue
             }
             lastError = new Error(`Whisper error (${res.status}): ${errText}`)

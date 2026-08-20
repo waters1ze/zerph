@@ -68,6 +68,21 @@ export function notifyDataChanged(
 }
 
 /**
+ * Broadcasts an event to all connected SSE clients (all users)
+ */
+export function broadcastToAll(event: string, data: any = {}) {
+  const encoder = new TextEncoder()
+  for (const [clientId, client] of activeClients.entries()) {
+    try {
+      const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+      client.controller.enqueue(encoder.encode(payload))
+    } catch {
+      activeClients.delete(clientId)
+    }
+  }
+}
+
+/**
  * Returns number of currently connected SSE clients
  */
 export function getActiveSseCount(): number {

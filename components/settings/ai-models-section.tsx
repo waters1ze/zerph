@@ -30,36 +30,52 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
 
   const [modelsList, setModelsList] = useState(() => ALL_MODELS)
 
+  const processModelsData = React.useCallback((rawModels: any[]) => {
+    if (!Array.isArray(rawModels) || rawModels.length === 0) return
+    const chatOnly = rawModels.filter((m: any) => 
+      !m.id.toLowerCase().includes('guard') &&
+      !m.id.toLowerCase().includes('safeguard') &&
+      !m.id.toLowerCase().includes('orpheus') &&
+      !m.id.toLowerCase().includes('arabic') &&
+      !m.id.toLowerCase().includes('allam') &&
+      !m.id.toLowerCase().includes('llama') &&
+      !m.id.toLowerCase().includes('mixtral') &&
+      !m.id.toLowerCase().includes('gemma')
+    )
+    if (chatOnly.length > 0) {
+      setModelsList(chatOnly.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        tier: m.minTier,
+        params: m.paramsBillions ? (m.paramsBillions >= 1 ? `${m.paramsBillions}B` : `${Math.round(m.paramsBillions * 1000)}M`) : 'Auto',
+        desc: m.desc || '',
+      })))
+    }
+  }, [])
+
   React.useEffect(() => {
     let isMounted = true
     fetch('/api/ai/models')
       .then(r => r.json())
       .then(d => {
-        if (isMounted && Array.isArray(d.models) && d.models.length > 0) {
-          const chatOnly = d.models.filter((m: any) => 
-            !m.id.toLowerCase().includes('guard') &&
-            !m.id.toLowerCase().includes('safeguard') &&
-            !m.id.toLowerCase().includes('orpheus') &&
-            !m.id.toLowerCase().includes('arabic') &&
-            !m.id.toLowerCase().includes('allam') &&
-            !m.id.toLowerCase().includes('llama') &&
-            !m.id.toLowerCase().includes('mixtral') &&
-            !m.id.toLowerCase().includes('gemma')
-          )
-          if (chatOnly.length > 0) {
-            setModelsList(chatOnly.map((m: any) => ({
-              id: m.id,
-              name: m.name,
-              tier: m.minTier,
-              params: m.paramsBillions ? (m.paramsBillions >= 1 ? `${m.paramsBillions}B` : `${Math.round(m.paramsBillions * 1000)}M`) : 'Auto',
-              desc: m.desc || '',
-            })))
-          }
+        if (isMounted && Array.isArray(d.models)) {
+          processModelsData(d.models)
         }
       })
       .catch(() => {})
-    return () => { isMounted = false }
-  }, [])
+
+    const handleRealtimeUpdate = (e: any) => {
+      if (isMounted && e.detail) {
+        processModelsData(e.detail)
+      }
+    }
+    window.addEventListener('zerf_ai_models_updated', handleRealtimeUpdate)
+
+    return () => {
+      isMounted = false
+      window.removeEventListener('zerf_ai_models_updated', handleRealtimeUpdate)
+    }
+  }, [processModelsData])
 
   const availableModelsForPlan = modelsList.filter(m => {
     if (isCorp) return true
@@ -145,6 +161,22 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
     syncToBackend({ aiTaskModels: nextTaskModels })
     showSaved()
   }
+
+  const fastModelsForSiri = React.useMemo(() => {
+    const filtered = availableModelsForPlan.filter(m => {
+      const id = m.id.toLowerCase()
+      return (
+        id.includes('20b') ||
+        id.includes('compound-mini') ||
+        id.includes('27b') ||
+        id.includes('8b') ||
+        id.includes('7b') ||
+        id.includes('mini') ||
+        id.includes('fast')
+      )
+    })
+    return filtered.length > 0 ? filtered : availableModelsForPlan
+  }, [availableModelsForPlan])
 
   return (
     <div className="space-y-6">
@@ -382,16 +414,19 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
                 <div className="flex items-center gap-2">
                   <Mic className="w-4 h-4 text-primary" />
                   <span className="text-xs font-bold text-foreground">Siri & Action Button (Быстрые команды)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                    ⚡ Сверхбыстрая
+                  </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground">Нейросеть для обработки голосовых команд через Siri и виджеты iPhone/Android</p>
+                <p className="text-[11px] text-muted-foreground">Только скоростные модели (до 1000 T/s) для моментального отклика Siri и голосовых виджетов без задержек</p>
               </div>
               <select
-                value={taskModels.siri || (isProOrCorp ? 'openai/gpt-oss-120b' : isPlus ? 'qwen/qwen3.6-27b' : 'openai/gpt-oss-20b')}
+                value={taskModels.siri || 'openai/gpt-oss-20b'}
                 onChange={(e) => handleTaskModelChange('siri' as any, e.target.value)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-background border border-primary/40 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer max-w-[220px]"
               >
-                {availableModelsForPlan.map(m => (
-                  <option key={m.id} value={m.id}>{m.name} ({m.params})</option>
+                {fastModelsForSiri.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.params}) — ⚡ Быстрая</option>
                 ))}
               </select>
             </div>

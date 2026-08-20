@@ -14,9 +14,36 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [googleEmail, setGoogleEmail] = useState('')
+  const [pinCode, setPinCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  const handlePinAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const cleanPin = pinCode.trim().replace(/\s+/g, '')
+    if (!cleanPin) return
+    setLoading(true)
+    setError(null)
+    setSuccessMsg(null)
+    try {
+      const res = await fetch(`/api/auth/login-token?token=${cleanPin}`)
+      const data = await res.json()
+      if (!res.ok || !data.valid) {
+        throw new Error(data.error || 'Неверный или устаревший код (действует 10 минут)')
+      }
+      if (data.chatId) localStorage.setItem('zerf_chat_id', String(data.chatId))
+      if (data.sessionToken) localStorage.setItem('zerf_auth_token', data.sessionToken)
+      setSuccessMsg('Успешный вход!')
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сети')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     const checkAuth = () => {
@@ -339,10 +366,34 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
 
             {authTab === 'tg' && (
               <div className="flex flex-col gap-3 pt-1">
-                <div className="bg-muted/40 border border-border/50 rounded-2xl p-4 text-[12px] text-muted-foreground leading-relaxed flex flex-col gap-2">
-                  <p className="text-foreground font-semibold">Вход через Telegram бота @Zerph_bot:</p>
-                  <p>1. Откройте бота и отправьте команду <code className="px-1 py-0.5 rounded bg-muted font-mono text-primary">/login</code></p>
-                  <p>2. Нажмите полученную ссылку для моментального входа без пароля.</p>
+                <div className="bg-muted/40 border border-border/50 rounded-2xl p-3.5 text-[12px] text-muted-foreground leading-relaxed flex flex-col gap-1">
+                  <p className="text-foreground font-semibold">Вход по коду из Telegram бота @Zerph_bot:</p>
+                  <p>1. Отправьте боту команду <code className="px-1 py-0.5 rounded bg-muted font-mono text-primary">/login</code></p>
+                  <p>2. Введите полученный 6-значный код или нажмите ссылку.</p>
+                </div>
+
+                <form onSubmit={handlePinAuth} className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={7}
+                    value={pinCode}
+                    onChange={e => setPinCode(e.target.value)}
+                    placeholder="Код: 123 456"
+                    className="flex-1 h-11 px-3 rounded-2xl bg-muted/50 border border-border text-center font-mono text-base tracking-widest text-foreground outline-none focus:border-primary transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading || !pinCode.trim()}
+                    className="px-4 h-11 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Войти</span>}
+                  </button>
+                </form>
+
+                <div className="relative flex py-0.5 items-center">
+                  <div className="flex-grow border-t border-border/60"></div>
+                  <span className="flex-shrink mx-2 text-[10px] text-muted-foreground uppercase font-bold tracking-wider">или</span>
+                  <div className="flex-grow border-t border-border/60"></div>
                 </div>
 
                 <a

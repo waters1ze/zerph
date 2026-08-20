@@ -11,8 +11,8 @@ interface PullToRefreshProps {
   className?: string
 }
 
-const PULL_THRESHOLD = 70
-const MAX_PULL = 90
+const PULL_THRESHOLD = 110
+const MAX_PULL = 135
 
 export function PullToRefresh({ onRefresh, children, className }: PullToRefreshProps) {
   const [pullDistance, setPullDistance] = useState(0)
@@ -59,8 +59,15 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
     const diff = currentY - startYRef.current
     const diffX = Math.abs(currentX - (startXRef.current ?? currentX))
 
+    // If scrolling up or swiping up, instantly cancel pull so natural scrolling is 100% fluid
+    if (diff <= 0) {
+      isPullingRef.current = false
+      setPullDistance(0)
+      return
+    }
+
     // If horizontal swipe is more dominant, cancel pull
-    if (diffX > Math.abs(diff) && diff < 30) {
+    if (diffX > Math.abs(diff)) {
       isPullingRef.current = false
       setPullDistance(0)
       return
@@ -78,9 +85,9 @@ export function PullToRefresh({ onRefresh, children, className }: PullToRefreshP
       parent = parent.parentElement
     }
 
-    // Require positive pull-down with clear intent (> 15px)
-    if (diff > 15) {
-      const distance = Math.min(MAX_PULL, Math.pow(diff - 15, 0.8))
+    // Require strong, deliberate pull-down (> 40px)
+    if (diff > 40) {
+      const distance = Math.min(MAX_PULL, Math.pow(diff - 40, 0.85))
       setPullDistance(distance)
     } else {
       setPullDistance(0)

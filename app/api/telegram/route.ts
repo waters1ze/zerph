@@ -3417,19 +3417,20 @@ export async function POST(req: NextRequest) {
           })
           const tokenData = await tokenRes.json()
           const loginUrl = tokenData.token ? `${APP_URL}/api/auth/login-token?token=${tokenData.token}&redirect=true` : APP_URL
+          const pinCode = tokenData.code || ''
+          const formattedPin = pinCode ? `${pinCode.slice(0, 3)} ${pinCode.slice(3)}` : ''
 
           await send(chatId,
-            `🔐 *Безопасный вход в Zerf*\n\n` +
-            `Для входа в Safari на iPhone или в браузере на компьютере используйте ссылку ниже:\n\n` +
-            `🌐 *Ссылка для входа (нажмите, чтобы скопировать):*\n` +
+            `🔐 *Вход и синхронизация Zerf*\n\n` +
+            (formattedPin ? `🔑 *Ваш 6-значный код синхронизации:*\n\`${formattedPin}\`\n_(введите этот код в приложении на телефоне или ПК в окне входа/настройках)_\n\n` : '') +
+            `🌐 *Либо перейдите по прямой ссылке в браузере:*\n` +
             `\`${loginUrl}\`\n\n` +
-            `⏱ Ссылка действует *10 минут* и предназначена для одного входа.\n` +
-            `💡 _Совет для iPhone:_ нажмите на ссылку в рамке выше, чтобы скопировать её, и откройте в браузере *Safari*.\n\n` +
-            `Либо нажмите на кнопку:`,
+            `⏱ Ссылка и код действуют *10 минут*.\n` +
+            `💡 После входа все ваши задачи («Гулять с Трофимовым» и другие), напоминания, заметки и аватарка будут синхронизированы!`,
             {
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: '🔑 Открыть Zerf в браузере', url: loginUrl }],
+                  [{ text: '🔑 Открыть Zerf в браузере Safari / Chrome', url: loginUrl }],
                   [{ text: '📱 Открыть в Telegram Mini App', web_app: { url: MINIAPP_URL } }],
                 ]
               }

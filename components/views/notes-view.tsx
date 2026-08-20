@@ -89,7 +89,7 @@ export function NotesView() {
   const [search, setSearch] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showMobileList, setShowMobileList] = useState(true)
-  const [isFoldersOpen, setIsFoldersOpen] = useState(true)
+  const [isFoldersOpen, setIsFoldersOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : false)
   const [isAiProcessing, setIsAiProcessing] = useState(false)
   
   // Folder Creation / Subfolder state
@@ -459,6 +459,9 @@ ${activeNote.content}"
           onClick={() => {
             setSelectedFolder(node.fullPath)
             setActiveFolderView(node.fullPath)
+            if (typeof window !== 'undefined' && window.innerWidth < 768) {
+              setIsFoldersOpen(false)
+            }
           }}
           style={{ paddingLeft: `${8 + depth * 14}px` }}
           className={cn(
@@ -530,90 +533,118 @@ ${activeNote.content}"
   return (
     <div className="flex h-[calc(100vh-100px)] rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xl font-sans relative">
       
-      {/* ── 1. Left Folder Tree Sidebar (Obsidian Style) ── */}
+      {/* ── 1. Left Folder Tree Sidebar (Obsidian Style Drawer on Mobile, Inline Column on Desktop) ── */}
       <AnimatePresence initial={false}>
         {isFoldersOpen && (
-          <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 260, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="border-r border-border bg-muted/20 flex flex-col shrink-0 overflow-hidden"
-          >
-            {/* Folder Header */}
-            <div className="p-3.5 border-b border-border/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FolderTree className="w-4 h-4 text-primary" />
-                <span className="text-xs font-bold uppercase tracking-wider text-foreground">Папки & База</span>
+          <>
+            {/* Mobile Drawer Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsFoldersOpen(false)}
+              className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-xs"
+            />
+
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 240, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed md:relative inset-y-0 left-0 z-50 md:z-auto h-full md:h-auto border-r border-border bg-card md:bg-muted/20 flex flex-col shrink-0 overflow-hidden shadow-2xl md:shadow-none"
+            >
+              {/* Folder Header */}
+              <div className="p-3.5 border-b border-border/60 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderTree className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">Папки & База</span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {/* Global Graph View Button */}
+                  <button
+                    onClick={() => {
+                      setGraphFolderFilter(null)
+                      setIsGraphModalOpen(true)
+                    }}
+                    className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 text-xs font-semibold flex items-center gap-1 transition-all"
+                    title="Открыть интерактивный граф знаний всей базы"
+                  >
+                    <Network className="w-3.5 h-3.5" />
+                    <span className="text-[11px]">Граф</span>
+                  </button>
+
+                  {/* New Root Folder */}
+                  <button
+                    onClick={() => {
+                      setParentFolderForNew(null)
+                      setShowNewFolderModal(true)
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Создать папку"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                  </button>
+
+                  {/* Close on mobile */}
+                  <button
+                    onClick={() => setIsFoldersOpen(false)}
+                    className="md:hidden p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Закрыть"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1">
-                {/* Global Graph View Button */}
+              {/* Quick Views: All, Pinned, Dated */}
+              <div className="p-2 space-y-0.5 border-b border-border/40">
                 <button
                   onClick={() => {
-                    setGraphFolderFilter(null)
-                    setIsGraphModalOpen(true)
+                    setSelectedFolder('all')
+                    setActiveFolderView(null)
+                    if (typeof window !== 'undefined' && window.innerWidth < 768) setIsFoldersOpen(false)
                   }}
-                  className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 text-xs font-semibold flex items-center gap-1 transition-all"
-                  title="Открыть интерактивный граф знаний всей базы"
+                  className={cn(
+                    'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                    selectedFolder === 'all' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  )}
                 >
-                  <Network className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Граф</span>
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Все заметки</span>
+                  </div>
+                  <span className="text-[10px] opacity-70">{notes.length}</span>
                 </button>
 
-                {/* New Root Folder */}
                 <button
                   onClick={() => {
-                    setParentFolderForNew(null)
-                    setShowNewFolderModal(true)
+                    setSelectedFolder('pinned')
+                    setActiveFolderView(null)
+                    if (typeof window !== 'undefined' && window.innerWidth < 768) setIsFoldersOpen(false)
                   }}
-                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title="Создать папку"
+                  className={cn(
+                    'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                    selectedFolder === 'pinned' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  )}
                 >
-                  <FolderPlus className="w-4 h-4" />
+                  <div className="flex items-center gap-2">
+                    <Pin className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Закрепленные</span>
+                  </div>
+                  <span className="text-[10px] opacity-70">{notes.filter(n => n.pinned).length}</span>
                 </button>
               </div>
-            </div>
 
-            {/* Quick Views: All, Pinned, Dated */}
-            <div className="p-2 space-y-0.5 border-b border-border/40">
-              <button
-                onClick={() => { setSelectedFolder('all'); setActiveFolderView(null) }}
-                className={cn(
-                  'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
-                  selectedFolder === 'all' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Все заметки</span>
+              {/* Nested Folder Tree */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                  Дерево папок
                 </div>
-                <span className="text-[10px] opacity-70">{notes.length}</span>
-              </button>
-
-              <button
-                onClick={() => { setSelectedFolder('pinned'); setActiveFolderView(null) }}
-                className={cn(
-                  'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
-                  selectedFolder === 'pinned' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Pin className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Закрепленные</span>
-                </div>
-                <span className="text-[10px] opacity-70">{notes.filter(n => n.pinned).length}</span>
-              </button>
-            </div>
-
-            {/* Nested Folder Tree */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
-              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                Дерево папок
+                {folderTree.map(node => renderFolderTreeNode(node))}
               </div>
-              {folderTree.map(node => renderFolderTreeNode(node))}
-            </div>
-          </motion.div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

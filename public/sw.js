@@ -32,22 +32,38 @@ self.addEventListener('fetch', (event) => {
 // Push notifications support
 self.addEventListener('push', (event) => {
   if (!event.data) return
-  let payload = { title: 'Zerf Note', body: 'Новое напоминание о задаче', icon: '/icon-192.png', url: '/' }
-  try {
-    payload = event.data.json()
-  } catch {
-    payload.body = event.data.text()
+  let payload = {
+    title: 'Zerf Note',
+    body: 'Новое напоминание о задаче',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    url: '/',
   }
+
+  try {
+    const json = event.data.json()
+    payload = { ...payload, ...json }
+  } catch {
+    payload.body = event.data.text() || payload.body
+  }
+
+  const targetUrl = payload.url || (payload.data && payload.data.url) || '/'
 
   const options = {
     body: payload.body,
     icon: payload.icon || '/icon-192.png',
-    badge: '/icon-192.png',
+    badge: payload.badge || '/icon-192.png',
     vibrate: [200, 100, 200, 100, 300],
-    data: { url: payload.url || '/' },
-    tag: payload.tag || `zerf-${Date.now()}`,
+    data: {
+      url: targetUrl,
+      timestamp: Date.now(),
+    },
+    tag: payload.tag || `zerf-push-${Date.now()}`,
     renotify: true,
-    requireInteraction: true
+    requireInteraction: true,
+    actions: [
+      { action: 'open', title: 'Открыть' }
+    ]
   }
 
   event.waitUntil(
@@ -58,10 +74,14 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const targetUrl = event.notification.data?.url || '/'
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (client.url && client.url.includes(self.location.origin) && 'focus' in client) {
+          if ('navigate' in client && targetUrl !== '/') {
+            client.navigate(targetUrl)
+          }
           return client.focus()
         }
       }

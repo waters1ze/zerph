@@ -45,12 +45,13 @@ export function ImportExportSection() {
   }, [])
 
   const handleExport = (format: 'json' | 'csv' | 'ics') => {
-    const authHeaders = getAuthHeaders()
-    const token = typeof window !== 'undefined' ? localStorage.getItem('zerf_session_token') || '' : ''
+    const token = typeof window !== 'undefined'
+      ? (localStorage.getItem('zerf_auth_token') || localStorage.getItem('zerf_session_token') || '')
+      : ''
     const chatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') || '' : ''
     
     // Direct trigger download with session token in query if needed
-    window.location.href = `/api/export?format=${format}&token=${token}&chatId=${chatId}`
+    window.location.href = `/api/export?format=${format}&token=${encodeURIComponent(token)}&chatId=${encodeURIComponent(chatId)}`
   }
 
   const handleImportSubmit = async (content: string, format = importFormat) => {

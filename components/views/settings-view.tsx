@@ -12,7 +12,7 @@ import {
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
   Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen,
-  Share2, Heart, Calendar, CreditCard
+  Share2, Heart, Calendar, CreditCard, Loader2
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -169,6 +169,10 @@ export function SettingsView() {
   const [showGithubLinkModal, setShowGithubLinkModal] = useState(false)
   const [githubInput, setGithubInput] = useState('')
   const [githubLoading, setGithubLoading] = useState(false)
+  const [showPinCodeModal, setShowPinCodeModal] = useState(false)
+  const [pinCodeInput, setPinCodeInput] = useState('')
+  const [pinLoading, setPinLoading] = useState(false)
+  const [pinError, setPinError] = useState<string | null>(null)
   const cachedGithub = typeof window !== 'undefined' ? localStorage.getItem('zerf_github_username') || '' : ''
   const [userGithub, setUserGithub] = useState(cachedGithub)
   const cachedUsage = typeof window !== 'undefined' ? localStorage.getItem('zerf-usage') : null
@@ -178,6 +182,28 @@ export function SettingsView() {
   const [copiedShortcut, setCopiedShortcut] = useState(false)
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
   const [cliOs, setCliOs] = useState<'windows' | 'mac' | 'linux'>('windows')
+
+  const handleSyncByPin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const clean = pinCodeInput.trim().replace(/\s+/g, '')
+    if (!clean) return
+    setPinLoading(true)
+    setPinError(null)
+    try {
+      const res = await fetch(`/api/auth/login-token?token=${clean}`)
+      const data = await res.json()
+      if (!res.ok || !data.valid) {
+        throw new Error(data.error || 'Неверный или устаревший код (действует 10 минут)')
+      }
+      if (data.chatId) localStorage.setItem('zerf_chat_id', String(data.chatId))
+      if (data.sessionToken) localStorage.setItem('zerf_auth_token', data.sessionToken)
+      window.location.reload()
+    } catch (err: any) {
+      setPinError(err.message || 'Ошибка синхронизации')
+    } finally {
+      setPinLoading(false)
+    }
+  }
 
   const cachedBirthday = typeof window !== 'undefined' ? localStorage.getItem('zerf_birthday') || '' : ''
   const [userBirthday, setUserBirthday] = useState(cachedBirthday)
@@ -459,52 +485,62 @@ export function SettingsView() {
   }
 
   const fetchProfile = () => {
-    if (currentChatId) {
-      fetch(`/api/telegram/user?chatId=${currentChatId}`, {
-        headers: getAuthHeaders(),
+    const url = currentChatId ? `/api/telegram/user?chatId=${currentChatId}` : '/api/telegram/user'
+    fetch(url, {
+      headers: getAuthHeaders(),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.connected) {
+          setProfileData({
+            email: d.email,
+            hasPassword: d.hasPassword,
+            vkId: d.vkId,
+            googleEmail: d.googleEmail,
+            username: d.username,
+            name: d.name,
+            avatarEmoji: d.avatarEmoji,
+            plan: d.plan,
+            isPremium: d.isPremium,
+            newsDisabled: d.newsDisabled,
+            ttsEnabled: d.ttsEnabled,
+            timezone: d.timezone,
+            city: d.city,
+            siriKey: d.siriKey,
+            reminderIntervalMinutes: d.reminderIntervalMinutes,
+            reminderRepeatCount: d.reminderRepeatCount,
+            subscriptionExpiry: d.subscriptionExpiry,
+            googleCalendarSync: Boolean(d.googleCalendarSync),
+          })
+          if (d.avatarEmoji) {
+            setUserAvatarEmoji(d.avatarEmoji)
+            try {
+              localStorage.setItem('zerf_avatar_emoji', d.avatarEmoji)
+              window.dispatchEvent(new CustomEvent('zerf_avatar_changed', { detail: d.avatarEmoji }))
+            } catch {}
+          }
+          if (d.chatId && typeof window !== 'undefined' && !localStorage.getItem('zerf_chat_id')) {
+            try { localStorage.setItem('zerf_chat_id', String(d.chatId)) } catch {}
+          }
+          if (d.email) setLinkEmail(d.email)
+          if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf' && !settings.name) {
+            setName(d.name)
+          }
+          if (d.timezone) {
+            setUserTimezone(d.timezone)
+            try { localStorage.setItem('zerf_timezone', d.timezone) } catch {}
+          }
+          if (d.city) {
+            setUserCity(d.city)
+            try { localStorage.setItem('zerf_city', d.city) } catch {}
+          }
+        }
+        if (d.birthday) {
+          setUserBirthday(d.birthday)
+          try { localStorage.setItem('zerf_birthday', d.birthday) } catch {}
+        }
       })
-        .then(r => r.json())
-        .then(d => {
-          if (d.connected) {
-            setProfileData({
-              email: d.email,
-              hasPassword: d.hasPassword,
-              vkId: d.vkId,
-              googleEmail: d.googleEmail,
-              username: d.username,
-              name: d.name,
-              plan: d.plan,
-              isPremium: d.isPremium,
-              newsDisabled: d.newsDisabled,
-              ttsEnabled: d.ttsEnabled,
-              timezone: d.timezone,
-              city: d.city,
-              siriKey: d.siriKey,
-              reminderIntervalMinutes: d.reminderIntervalMinutes,
-              reminderRepeatCount: d.reminderRepeatCount,
-              subscriptionExpiry: d.subscriptionExpiry,
-              googleCalendarSync: Boolean(d.googleCalendarSync),
-            })
-            if (d.email) setLinkEmail(d.email)
-            if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf' && !settings.name) {
-              setName(d.name)
-            }
-            if (d.timezone) {
-              setUserTimezone(d.timezone)
-              try { localStorage.setItem('zerf_timezone', d.timezone) } catch {}
-            }
-            if (d.city) {
-              setUserCity(d.city)
-              try { localStorage.setItem('zerf_city', d.city) } catch {}
-            }
-          }
-          if (d.birthday) {
-            setUserBirthday(d.birthday)
-            try { localStorage.setItem('zerf_birthday', d.birthday) } catch {}
-          }
-        })
-        .catch(() => {})
-    }
+      .catch(() => {})
   }
 
   useEffect(() => {
@@ -1476,23 +1512,40 @@ export function SettingsView() {
                       <div>
                         <p className="text-xs font-bold text-foreground">Telegram</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {profileData.username ? profileData.username : `@Zerph_bot (ID: ${currentChatId || 'не привязан'})`}
+                          {profileData.username ? profileData.username : `@Zerph_bot (ID: ${currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'не привязан'})`}
                         </p>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
-                      Подключен
-                    </span>
+                    {currentChatId && !currentChatId.startsWith('guest_') ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                        Подключен
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                        Не привязан
+                      </span>
+                    )}
                   </div>
-                  <a
-                    href="https://t.me/Zerph_bot?start=login"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <span>Открыть диалог с ботом</span>
-                    <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setShowPinCodeModal(true); setPinError(null) }}
+                      className="flex-1 py-1.5 rounded-xl bg-[#229ED9]/15 hover:bg-[#229ED9]/25 text-[#229ED9] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Key className="w-3 h-3" />
+                      <span>{currentChatId && !currentChatId.startsWith('guest_') ? 'Синхронизация (PIN)' : '⚡ Ввести код из бота'}</span>
+                    </button>
+                    <a
+                      href="https://t.me/Zerph_bot?start=login"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center gap-1 shrink-0"
+                      title="Открыть диалог с ботом"
+                    >
+                      <span>Бот</span>
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    </a>
+                  </div>
                 </div>
 
                 {/* 2. Email & Password Card */}
@@ -1758,6 +1811,70 @@ export function SettingsView() {
                   </div>
                 </div>
               </div>
+
+              {/* Inline Modal/Form for Telegram PIN Sync */}
+              <AnimatePresence>
+                {showPinCodeModal && (
+                  <motion.form
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    onSubmit={handleSyncByPin}
+                    className="p-4 rounded-2xl bg-[#229ED9]/10 border border-[#229ED9]/30 space-y-3 mt-3 overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-[#229ED9] text-white flex items-center justify-center font-bold text-[10px]">
+                          <Send className="w-3.5 h-3.5" />
+                        </div>
+                        <p className="text-xs font-bold text-foreground">
+                          Синхронизация по коду из Telegram бота (@Zerph_bot)
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      1. Откройте бота <a href="https://t.me/Zerph_bot" target="_blank" rel="noreferrer" className="text-[#229ED9] font-bold underline">@Zerph_bot</a> и отправьте команду <code className="px-1 py-0.5 rounded bg-muted font-mono text-primary font-bold">/login</code>.<br />
+                      2. Введите полученный 6-значный код ниже, чтобы мгновенно связать это устройство с вашим аккаунтом:
+                    </p>
+
+                    <div>
+                      <input
+                        type="text"
+                        required
+                        maxLength={7}
+                        value={pinCodeInput}
+                        onChange={e => setPinCodeInput(e.target.value)}
+                        placeholder="123 456"
+                        className="w-full h-11 px-3 rounded-xl bg-card border border-border text-sm text-foreground outline-none focus:border-primary font-mono tracking-widest text-center font-bold"
+                      />
+                    </div>
+
+                    {pinError && (
+                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+                        {pinError}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={pinLoading || !pinCodeInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-[#229ED9] text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {pinLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Синхронизировать</span>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowPinCodeModal(false)}
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
 
               {/* Inline Modal/Form for GitHub Linking */}
               <AnimatePresence>
@@ -2593,16 +2710,8 @@ GOOGLE_REDIRECT_URI=https://zerph.vercel.app/api/calendar/token
                         desktop: nextVal
                       }
                     })
-                    if (nextVal && typeof window !== 'undefined' && 'Notification' in window) {
-                      try {
-                        const perm = await Notification.requestPermission()
-                        if (perm === 'granted') {
-                          new Notification('⏰ Zerf Note: Уведомления включены!', {
-                            body: 'Теперь вы будете получать напоминания прямо на сайте и на рабочем столе.',
-                            icon: '/icon.png'
-                          })
-                        }
-                      } catch {}
+                    if (nextVal) {
+                      await requestNotificationPermission()
                     }
                   }}
                   className={cn(

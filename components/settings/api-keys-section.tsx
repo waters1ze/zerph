@@ -84,6 +84,9 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
           groqApiKey: groqKey.trim(),
+          openaiKey: openaiKey.trim(),
+          anthropicKey: anthropicKey.trim(),
+          geminiKey: geminiKey.trim(),
         })
       })
     } catch {}
@@ -125,16 +128,20 @@ export function ApiKeysSection({ siriKey, chatId, userPlan = 'free' }: ApiKeysSe
     setPushLoading(true)
     setPushResult(null)
     try {
-      const res = await fetch('/api/telegram/test-push', {
+      const res = await fetch('/api/push/test', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId }),
+        body: JSON.stringify({
+          title: '🔔 Тестовое уведомление Zerf',
+          message: 'Пуш-уведомления успешно доставлены на все ваши устройства!',
+          chatId,
+        }),
       })
       const data = await res.json()
-      if (data.ok) {
-        setPushResult({ ok: true, message: data.message || 'Тестовое уведомление доставлено!' })
+      if (data.success || data.webPushResult?.success) {
+        setPushResult({ ok: true, message: 'Тестовое уведомление успешно отправлено на ваши устройства!' })
       } else {
-        setPushResult({ ok: false, message: data.error || 'Ошибка отправки тестового пуша.' })
+        setPushResult({ ok: false, message: data.error || data.webPushResult?.error || 'Ошибка отправки пуша' })
       }
     } catch (err: any) {
       setPushResult({ ok: false, message: err?.message || 'Ошибка сети при отправке пуша.' })

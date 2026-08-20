@@ -358,10 +358,11 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
       const p = prompts[i]
       try {
         const result = await callGroqChatCompletion({
-          model: GROQ_CHAT_MODEL,
+          model: 'openai/gpt-oss-120b',
+          fallbackModels: ['qwen/qwen3.6-27b', 'groq/compound', 'openai/gpt-oss-20b'],
           messages: [{ role: 'user', content: p.prompt }],
           temperature: 0.5,
-          max_tokens: 1200,
+          max_tokens: 2200,
         })
 
         let text = result.content?.trim()
@@ -500,10 +501,11 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL,
       const p = prompts[i]
       try {
         const result = await callGroqChatCompletion({
-          model: GROQ_CHAT_MODEL,
+          model: 'openai/gpt-oss-120b',
+          fallbackModels: ['qwen/qwen3.6-27b', 'groq/compound', 'openai/gpt-oss-20b'],
           messages: [{ role: 'user', content: p.prompt }],
           temperature: 0.5,
-          max_tokens: 1500,
+          max_tokens: 2500,
         })
 
         let text = result.content?.trim()
@@ -600,10 +602,11 @@ export async function generateAndSendFridayAiProposal(): Promise<boolean> {
       `4. 📈 <b>Влияние на Retention и вовлеченность</b>`
 
     const result = await callGroqChatCompletion({
-      model: GROQ_CHAT_MODEL,
+      model: 'openai/gpt-oss-120b',
+      fallbackModels: ['qwen/qwen3.6-27b', 'groq/compound', 'openai/gpt-oss-20b'],
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 950,
+      max_tokens: 2000,
     })
 
     const proposal = result.content?.trim()

@@ -52,13 +52,17 @@ export async function GET(req: NextRequest) {
           let siriMode = 'fast'
           let githubUsername: string | null = null
           let sidebarConfig: any = null
+          let groqApiKey: string | null = null
+          let aiKeys: { openaiKey?: string; anthropicKey?: string; geminiKey?: string } = {}
           try {
-            const [modelConf, taskModelsConf, siriModeConf, githubConf, sidebarConf] = await Promise.all([
+            const [modelConf, taskModelsConf, siriModeConf, githubConf, sidebarConf, groqKeyConf, aiKeysConf] = await Promise.all([
               prisma.config.findUnique({ where: { key: `user_ai_model_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_ai_task_models_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_siri_mode_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_github_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_sidebar_config_${cid}` } }),
+              prisma.config.findUnique({ where: { key: `user_groq_api_key_${cid}` } }),
+              prisma.config.findUnique({ where: { key: `user_ai_keys_${cid}` } }),
             ])
             if (modelConf?.value) aiModel = modelConf.value
             if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value)
@@ -66,6 +70,10 @@ export async function GET(req: NextRequest) {
             if (githubConf?.value) githubUsername = githubConf.value
             if (sidebarConf?.value) {
               try { sidebarConfig = JSON.parse(sidebarConf.value) } catch {}
+            }
+            if (groqKeyConf?.value) groqApiKey = groqKeyConf.value
+            if (aiKeysConf?.value) {
+              try { aiKeys = JSON.parse(aiKeysConf.value) } catch {}
             }
           } catch {}
 
@@ -96,6 +104,10 @@ export async function GET(req: NextRequest) {
             aiTaskModels,
             siriMode,
             sidebarConfig,
+            groqApiKey,
+            openaiKey: aiKeys.openaiKey || null,
+            anthropicKey: aiKeys.anthropicKey || null,
+            geminiKey: aiKeys.geminiKey || null,
             googleCalendarSync: Boolean(chat.googleCalendarSync),
             plan: activePlan,
             isPremium,
@@ -128,7 +140,13 @@ export async function POST(req: NextRequest) {
     const cid = authUser.chatId
     const userCid = BigInt(cid)
 
-    const { birthday, name, email, password, currentPassword, vkId, googleEmail, githubUsername, githubToken, newsDisabled, timezone, city, reminderIntervalMinutes, reminderRepeatCount, ttsEnabled, avatarEmoji, aiModel, aiTaskModels, siriMode, sidebarConfig } = await req.json()
+    const {
+      birthday, name, email, password, currentPassword, vkId, googleEmail,
+      githubUsername, githubToken, newsDisabled, timezone, city,
+      reminderIntervalMinutes, reminderRepeatCount, ttsEnabled,
+      avatarEmoji, aiModel, aiTaskModels, siriMode, sidebarConfig,
+      groqApiKey, apiKey, openaiKey, anthropicKey, geminiKey
+    } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
 
@@ -137,6 +155,37 @@ export async function POST(req: NextRequest) {
         where: { key: `user_sidebar_config_${cid}` },
         update: { value: JSON.stringify(sidebarConfig) },
         create: { key: `user_sidebar_config_${cid}`, value: JSON.stringify(sidebarConfig) },
+      }).catch(() => {})
+    }
+
+    const effectiveGroqKey = groqApiKey !== undefined ? groqApiKey : apiKey
+    if (effectiveGroqKey !== undefined) {
+      const cleanKey = String(effectiveGroqKey).trim()
+      if (cleanKey) {
+        await prisma.config.upsert({
+          where: { key: `user_groq_api_key_${cid}` },
+          update: { value: cleanKey },
+          create: { key: `user_groq_api_key_${cid}`, value: cleanKey },
+        }).catch(() => {})
+      } else {
+        await prisma.config.delete({ where: { key: `user_groq_api_key_${cid}` } }).catch(() => {})
+      }
+    }
+
+    if (openaiKey !== undefined || anthropicKey !== undefined || geminiKey !== undefined) {
+      const currentAiKeysConf = await prisma.config.findUnique({ where: { key: `user_ai_keys_${cid}` } }).catch(() => null)
+      let parsedAiKeys: any = {}
+      if (currentAiKeysConf?.value) {
+        try { parsedAiKeys = JSON.parse(currentAiKeysConf.value) } catch {}
+      }
+      if (openaiKey !== undefined) parsedAiKeys.openaiKey = String(openaiKey).trim()
+      if (anthropicKey !== undefined) parsedAiKeys.anthropicKey = String(anthropicKey).trim()
+      if (geminiKey !== undefined) parsedAiKeys.geminiKey = String(geminiKey).trim()
+
+      await prisma.config.upsert({
+        where: { key: `user_ai_keys_${cid}` },
+        update: { value: JSON.stringify(parsedAiKeys) },
+        create: { key: `user_ai_keys_${cid}`, value: JSON.stringify(parsedAiKeys) },
       }).catch(() => {})
     }
 

@@ -9,7 +9,7 @@ import {
   applyVisualsToDocument, normalizeTheme, accentPaletteFor,
   type TextScaleStep, type DensityMode, type RadiusMode,
 } from './theme-presets'
-import { showWebNotification, playAlarmChime } from './notifications'
+import { showWebNotification, playAlarmChime, ensurePushSubscribedOnBoot } from './notifications'
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10)
@@ -802,6 +802,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 if (user.name && user.name !== 'Пользователь Zerf' && !curSettings.name) {
                   updates.name = user.name
                 }
+                if (user.avatarEmoji && typeof window !== 'undefined') {
+                  const curAvatar = localStorage.getItem('zerf_avatar_emoji')
+                  if (curAvatar !== user.avatarEmoji) {
+                    try {
+                      localStorage.setItem('zerf_avatar_emoji', user.avatarEmoji)
+                      window.dispatchEvent(new CustomEvent('zerf_avatar_changed', { detail: user.avatarEmoji }))
+                    } catch {}
+                  }
+                }
+                if (user.chatId && typeof window !== 'undefined' && !localStorage.getItem('zerf_chat_id')) {
+                  try { localStorage.setItem('zerf_chat_id', String(user.chatId)) } catch {}
+                }
                 if (user.reminderIntervalMinutes !== undefined || user.reminderRepeatCount !== undefined) {
                   updates.notifications = {
                     ...curSettings.notifications,
@@ -859,6 +871,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     document.addEventListener('visibilitychange', handleVisibility)
 
+    // Background sync of Web Push subscription if permission is active
+    ensurePushSubscribedOnBoot()
+
     // Cross-instance broadcast channel
     let channel: BroadcastChannel | null = null
     try {
@@ -894,6 +909,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         eventSource.addEventListener('task_deleted', () => {
           syncBackendData(false)
+        })
+
+        eventSource.addEventListener('ai_models_updated', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data)
+            if (data.models && typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('zerf_ai_models_updated', { detail: data.models }))
+            }
+          } catch {}
         })
 
         eventSource.addEventListener('sidebar_config_changed', (e: MessageEvent) => {

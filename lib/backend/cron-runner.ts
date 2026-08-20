@@ -726,11 +726,15 @@ export async function runChannelAndAiCron() {
       }
     }
 
-    // 2. Daily (Every day Mon-Sun) 08:00-14:00 MSK: Morning News Digest
+    // 2. Daily (Every day Mon-Sun) 08:00-14:00 MSK: Morning News Digest & Daily Groq Model Sync
     if (hour >= 8 && hour < 14) {
       const acquired = await tryAcquireCronLock('channel_morning_post', todayStr)
       if (acquired) {
-        await postDailyMorningPostToChannel(undefined, true)
+        const { syncLiveGroqModelsFromGroq } = await import('./groq-pool')
+        await Promise.allSettled([
+          postDailyMorningPostToChannel(undefined, true),
+          syncLiveGroqModelsFromGroq(),
+        ])
       }
     }
 
