@@ -69,8 +69,10 @@ Current Moscow Time: ${mskDate} ${mskTime} (24-hour MSK).
 
 CRITICAL TIME RULES:
 - Calculate all relative dates/times strictly relative to ${mskDate} ${mskTime}.
-- If user says a time like "в 6", "в 7 часов", "в 2 часа" without am/pm, and the morning hour has already passed today (${mskTime} > 06:00) but evening hour is ahead (${mskTime} < 18:00), use "18:00" on "${mskDate}". If both passed, set for tomorrow.
-- If user says time ranges ("с 8 до 15", "с 18:00 до 20:00"), set "dueTime": "08:00 - 15:00".
+- EXACT TIME: If user specifies format with minutes or exact time (e.g. "в 10:00", "в 11:30", "в 09:15"), STRICTLY keep that exact time ("10:00", "11:30", "09:15")!
+- FUTURE DAYS: If scheduled for tomorrow or a future date ("завтра в 10:00", "завтра в 10", "в пятницу в 9"), keep the morning hour ("10:00", "09:00").
+- TODAY'S BARE NUMBERS: Only for TODAY if user says a bare number without minutes ("в 6", "в 7 часов") and morning hour passed today (${mskTime} > 06:00), use evening ("18:00", "19:00").
+- Time ranges ("с 8 до 15", "с 18:00 до 20:00"): set "dueTime": "08:00 - 15:00".
 
 OUTPUT STRICT VALID PURE JSON ONLY without markdown fences:
 {
@@ -336,12 +338,12 @@ export function normalizeSmartTimeAndDate(
     const hasExplicitEvening = textLower.includes('вечера') || textLower.includes('вечером') || textLower.includes('дня') || textLower.includes('pm')
     const hasTomorrow = textLower.includes('завтра') || textLower.includes('послезавтра')
 
-    // If hour <= 12 and no explicit morning indicator, resolve ambiguity (e.g. 6 o'clock)
+    // If hour <= 12 and no explicit morning indicator, resolve ambiguity ONLY for TODAY
     if (hour <= 12 && !hasExplicitMorning) {
       if (hasExplicitEvening) {
         if (hour < 12) hour += 12
-      } else {
-        // Ambiguous hour (e.g. "в 6", "в 6 часов", "в 7", "в 2")
+      } else if (!hasTomorrow && (!dueDate || dueDate === todayStr)) {
+        // Ambiguous hour on TODAY (e.g. "в 6", "в 6 часов", "в 7", "в 2")
         // Check if morning hour has already passed today
         const morningPassed = curHour > hour || (curHour === hour && curMin >= min)
         const pmHour = hour === 12 ? 12 : hour + 12
@@ -353,9 +355,7 @@ export function normalizeSmartTimeAndDate(
         } else if (morningPassed && pmPassed) {
           // e.g. currently 19:30, user said "в 6" -> both passed today -> 18:00 tomorrow!
           hour = pmHour
-          if (!dueDate || dueDate === todayStr) {
-            finalDate = tomorrowStr
-          }
+          finalDate = tomorrowStr
         }
       }
     }
