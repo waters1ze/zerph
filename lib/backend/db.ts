@@ -1992,7 +1992,7 @@ export async function saveParsedItemToDb(
     })
   } else if (item.type === 'note') {
     const rawLower = (item.rawText || item.title || '').toLowerCase().trim()
-    const isExplicitNote = rawLower.startsWith('заметк') || rawLower.includes('запиши заметку') || rawLower.includes('сохрани заметку') || rawLower.includes('в заметки')
+    const isExplicitNote = /\b(заметк|запиши|сохрани|зафиксируй|мысль|идея|конспект|текст|информация|пароль|список|в заметки|черновик)\b/i.test(rawLower)
 
     // If it's a question, math problem or calculation, never create a note — treat as answer!
     const isQuestionOrMath = !isExplicitNote && (
@@ -2006,10 +2006,10 @@ export async function saveParsedItemToDb(
       return { item, updatedItem: false }
     }
 
-    // If it's not explicitly a note request and has dummy placeholder content, treat as task instead!
-    if (!isExplicitNote && (item.summary?.includes('Нет информации') || item.title === 'Новая заметка' || !item.summary || item.summary === item.title)) {
+    // Only fallback to task if it was NOT explicitly a note and has empty placeholder title/summary
+    if (!isExplicitNote && item.title === 'Новая заметка' && (!item.summary || item.summary === 'Нет информации')) {
       item.type = 'task'
-      if (item.title === 'Новая заметка' && item.rawText && item.rawText !== 'Новая заметка') {
+      if (item.rawText) {
         item.title = item.rawText
         item.summary = item.rawText
       }

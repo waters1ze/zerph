@@ -77,9 +77,19 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
     const handleAvatarChange = (e: any) => {
       if (e?.detail) setUserAvatarEmoji(e.detail)
     }
+    const handleNameChange = (e: any) => {
+      if (e?.detail) {
+        setTgUser(prev => prev ? { ...prev, name: e.detail } : { name: e.detail, username: 'Telegram' })
+        dispatch({ type: 'UPDATE_SETTINGS', updates: { name: e.detail } })
+      }
+    }
     window.addEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
-    return () => window.removeEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
-  }, [])
+    window.addEventListener('zerf_user_name_changed', handleNameChange as EventListener)
+    return () => {
+      window.removeEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
+      window.removeEventListener('zerf_user_name_changed', handleNameChange as EventListener)
+    }
+  }, [dispatch])
 
   // Local collapse state if not provided externally
   const [localCollapsed, setLocalCollapsed] = useState<boolean>(() => {

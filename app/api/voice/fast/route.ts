@@ -48,16 +48,19 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. High-speed LLM instant structuring via Groq Key Pool (<250ms)
+    let finalTask = heuristicTask
     try {
       const completion = await callGroqChatCompletion({
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b',
         messages: [
           {
             role: 'system',
-            content: `Ты — сверхбыстрый парсер голосовых задач Zerf Note. Текущее время: ${nowIso}.
-Извлеки из текста пользователя задачу в формате JSON:
+            content: `Ты — сверхбыстрый парсер голосовых задач и заметок Zerf Note. Текущее время: ${nowIso}.
+Извлеки из текста пользователя задачу или заметку в формате JSON:
 {
-  "title": "краткая суть задачи без вводных слов",
+  "type": "task" | "note",
+  "title": "краткая суть без вводных слов",
+  "summary": "полное описание",
   "dueDate": "YYYY-MM-DD или null",
   "dueTime": "HH:MM или null",
   "priority": "low" | "medium" | "high" | "urgent",
@@ -75,28 +78,49 @@ export async function POST(req: NextRequest) {
 
       if (completion.content) {
         const parsed = JSON.parse(completion.content)
-        return NextResponse.json({
-          ok: true,
-          fast: true,
-          source: completion.modelUsed || 'groq-openai-gpt-oss-20b',
-          task: {
-            title: parsed.title || heuristicTask.title,
-            dueDate: parsed.dueDate || heuristicTask.dueDate,
-            dueTime: parsed.dueTime || null,
-            priority: parsed.priority || heuristicTask.priority,
-            category: parsed.category || heuristicTask.category,
-            tags: Array.isArray(parsed.tags) ? parsed.tags : [],
-          }
-        })
+        finalTask = {
+          title: parsed.title || heuristicTask.title,
+          dueDate: parsed.dueDate || heuristicTask.dueDate,
+          dueTime: parsed.dueTime || null,
+          priority: parsed.priority || heuristicTask.priority,
+          category: parsed.category || heuristicTask.category,
+          tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+          confidence: 0.98,
+        }
       }
     } catch {}
 
-    // Fallback to heuristic
+    // 3. Save to database if user is authenticated or chatId is provided
+    const targetChatId = authUser?.chatId || body.chatId
+    let savedItem = null
+    if (targetChatId) {
+      try {
+        const { saveParsedItemToDb } = await import('@/lib/backend/db')
+        const { notifyDataChanged } = await import('@/lib/backend/sse')
+        const saveRes = await saveParsedItemToDb({
+          type: 'task',
+          action: 'create',
+          title: finalTask.title,
+          summary: finalTask.title,
+          dueDate: finalTask.dueDate,
+          dueTime: finalTask.dueTime,
+          priority: finalTask.priority,
+          tags: finalTask.tags,
+          rawText: text,
+        }, targetChatId)
+        savedItem = saveRes.item
+        notifyDataChanged(targetChatId, 'tasks')
+      } catch (saveErr) {
+        console.warn('[Voice Fast API] Database save failed:', saveErr)
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       fast: true,
-      source: 'heuristic_fallback',
-      task: heuristicTask,
+      saved: Boolean(savedItem),
+      savedItem,
+      task: finalTask,
     })
   } catch (err: any) {
     return NextResponse.json({

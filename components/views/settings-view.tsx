@@ -436,17 +436,24 @@ export function SettingsView() {
     const trimmed = newName.trim()
     if (!trimmed) return
     update({ name: trimmed })
-    if (currentChatId) {
+    dispatch({ type: 'UPDATE_SETTINGS', updates: { name: trimmed } })
+    if (typeof window !== 'undefined') {
       try {
-        await fetch(`/api/telegram/user?chatId=${currentChatId}`, {
-          method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: trimmed })
-        })
-        setNameSavedStatus(true)
-        setTimeout(() => setNameSavedStatus(false), 2500)
+        localStorage.setItem('zerf_user_name', trimmed)
+        window.dispatchEvent(new CustomEvent('zerf_user_name_changed', { detail: trimmed }))
       } catch {}
     }
+    setProfileData(prev => ({ ...prev, name: trimmed }))
+    try {
+      const url = currentChatId ? `/api/telegram/user?chatId=${currentChatId}` : '/api/telegram/user'
+      await fetch(url, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed })
+      })
+      setNameSavedStatus(true)
+      setTimeout(() => setNameSavedStatus(false), 2500)
+    } catch {}
   }
 
   const handleNameChange = (val: string) => {
@@ -522,9 +529,16 @@ export function SettingsView() {
           if (d.chatId && typeof window !== 'undefined' && !localStorage.getItem('zerf_chat_id')) {
             try { localStorage.setItem('zerf_chat_id', String(d.chatId)) } catch {}
           }
-          if (d.email) setLinkEmail(d.email)
-          if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf' && !settings.name) {
+          if (d.name && d.name !== 'Kirill Perekatnov' && d.name !== 'Пользователь Zerf') {
             setName(d.name)
+            if (settings.name !== d.name) {
+              update({ name: d.name })
+              dispatch({ type: 'UPDATE_SETTINGS', updates: { name: d.name } })
+              try {
+                localStorage.setItem('zerf_user_name', d.name)
+                window.dispatchEvent(new CustomEvent('zerf_user_name_changed', { detail: d.name }))
+              } catch {}
+            }
           }
           if (d.timezone) {
             setUserTimezone(d.timezone)

@@ -287,7 +287,6 @@ const AVAILABLE_MODELS = [
   { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', desc: 'Глубокое понимание контекста и структурирование', minPlan: 'plus' },
   { id: 'groq/compound', name: 'Groq Compound System', desc: 'Комплексная система с авто-роутингом инструментов', minPlan: 'plus' },
   { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B Flagship', desc: 'Флагманская сверхмощная модель Zerf (500 T/s)', minPlan: 'pro' },
-  { id: 'minimaxai/minimax-m2.7', name: 'MiniMax M2.7 Enterprise', desc: 'Enterprise-модель для комплексных задач (196K)', minPlan: 'corp' },
 ]
 
 export function ZerficLiveView() {

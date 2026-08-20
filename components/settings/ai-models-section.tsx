@@ -14,7 +14,6 @@ interface AiModelsSectionProps {
 
 const ALL_MODELS = [
   { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B Flagship', tier: 'pro', params: '120B', desc: 'Флагманский максимальный интеллект (500 T/s, 131K контекст) для масштабных проектов и сложной логики' },
-  { id: 'minimaxai/minimax-m2.7', name: 'MiniMax M2.7 Enterprise', tier: 'corp', params: '150B', desc: 'Сверхмощная Enterprise-модель для комплексных многоэтапных проектов (196K контекст)' },
   { id: 'qwen/qwen3.6-27b', name: 'Qwen 3.6 27B', tier: 'plus', params: '27B', desc: 'Продвинутая логика, структурирование задач и анализ расписания (500 T/s, 131K контекст)' },
   { id: 'groq/compound-mini', name: 'Groq Compound Mini (20B)', tier: 'free', params: '20B', desc: 'Компактная сверхбыстрая 20B система оркестрации инструментов (450 T/s, 131K контекст)' },
   { id: 'groq/compound', name: 'Groq Compound System', tier: 'free', params: '70B', desc: 'Комплексная система с авто-роутингом и оркестрацией инструментов (450 T/s)' },
@@ -202,10 +201,10 @@ export function AiModelsSection({ userPlan, onUpgradeClick }: AiModelsSectionPro
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {isProOrCorp
-              ? 'Вам доступен выбор любых флагманских нейросетей (GPT-OSS 120B, MiniMax M2.7 Enterprise, DeepSeek R1), максимальный приоритет и оркестрация инструментов.'
+              ? 'Вам доступен выбор любых флагманских нейросетей (GPT-OSS 120B Flagship, Qwen 3.6 27B, Groq Compound), максимальный приоритет и оркестрация инструментов.'
               : isPlus
-              ? 'Вам доступен выбор моделей до 70 млрд параметров (Qwen 3.6 27B, Llama 3.3 70B, DeepSeek R1 70B, Groq Compound). Оформите Pro для доступа к флагману 120B!'
-              : 'На бесплатном тарифе доступны быстрые системы Groq Compound, Compound Mini, GPT-OSS 20B и Prompt Guard.'}
+              ? 'Вам доступен выбор моделей уровня Plus (Qwen 3.6 27B, Groq Compound 70B, GPT-OSS 20B). Оформите Pro для доступа к флагману 120B!'
+              : 'На бесплатном тарифе доступны быстрые системы Groq Compound, Compound Mini и GPT-OSS 20B.'}
           </p>
         </div>
         {savedToast && (
