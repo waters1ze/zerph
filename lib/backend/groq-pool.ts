@@ -463,13 +463,10 @@ export function normalizeGroqChatModel(model?: string, userPlan?: string | null)
   }
   
   const lower = trimmed.toLowerCase()
-  if (lower.includes('120b') || lower.includes('flagship')) {
+  if (lower.includes('120b') || lower.includes('flagship') || lower.includes('minimax') || lower.includes('m2.7') || lower.includes('gpt-oss-120b')) {
     return isModelAllowedForPlan('openai/gpt-oss-120b', userPlan) ? 'openai/gpt-oss-120b' : getModelForUserPlan(userPlan)
   }
-  if (lower.includes('minimax') || lower.includes('m2.7')) {
-    return isModelAllowedForPlan('minimaxai/minimax-m2.7', userPlan) ? 'minimaxai/minimax-m2.7' : getModelForUserPlan(userPlan)
-  }
-  if (lower.includes('qwen') || lower.includes('27b') || lower.includes('70b')) {
+  if (lower.includes('qwen') || lower.includes('27b') || lower.includes('70b') || lower.includes('llama')) {
     return isModelAllowedForPlan('qwen/qwen3.6-27b', userPlan) ? 'qwen/qwen3.6-27b' : getModelForUserPlan(userPlan)
   }
   if (lower.includes('compound-mini')) {
