@@ -96,6 +96,69 @@ function formatDynamicModelName(modelId?: string | null): string {
   return result
 }
 
+function getCleanSiteName(source?: EntropySource | null, fallbackId?: number): { name: string; domain: string; isNote: boolean; isTask: boolean } {
+  if (!source) {
+    return { name: `источник ${fallbackId || 1}`, domain: 'web', isNote: false, isTask: false }
+  }
+
+  const isNote = source.type === 'note' || Boolean(source.noteId)
+  const isTask = source.type === 'task' || Boolean(source.taskId)
+
+  if (isNote) return { name: 'заметка', domain: 'note', isNote: true, isTask: false }
+  if (isTask) return { name: 'задача', domain: 'task', isNote: false, isTask: true }
+
+  let domain = source.domain || ''
+  if (!domain && source.url) {
+    try {
+      domain = new URL(source.url).hostname
+    } catch {}
+  }
+
+  let clean = domain
+    .replace(/^www\./i, '')
+    .replace(/^m\./i, '')
+    .replace(/^ru\./i, '')
+    .replace(/^en\./i, '')
+    .replace(/\.(org|com|ru|net|io|media|info|app|co|live|ai|tech|gov|edu|tv|fm|ua|by|kz)$/i, '')
+    .toLowerCase()
+    .trim()
+
+  if (clean.includes('wikipedia')) clean = 'wikipedia'
+  else if (clean.includes('youtube')) clean = 'youtube'
+  else if (clean.includes('saratov24')) clean = 'saratov24'
+  else if (clean.includes('apostrophe')) clean = 'apostrophe'
+  else if (clean.includes('sng')) clean = 'sng.fm'
+  else if (clean.includes('tass')) clean = 'tass'
+  else if (clean.includes('rbc')) clean = 'rbc'
+  else if (clean.includes('ria')) clean = 'ria'
+  else if (clean.includes('bbc')) clean = 'bbc'
+  else if (clean.includes('verstka')) clean = 'verstka'
+  else if (clean.includes('kommersant')) clean = 'kommersant'
+  else if (clean.includes('lenta')) clean = 'lenta'
+  else if (clean.includes('meduza')) clean = 'meduza'
+  else if (clean.includes('habr')) clean = 'habr'
+  else if (clean.includes('github')) clean = 'github'
+
+  if (!clean || clean === 'web' || clean === 'news.google') {
+    if (source.title) {
+      const parts = source.title.split(/[-–—|«»]/)
+      if (parts.length > 1) {
+        const candidate = parts[parts.length - 1].trim().toLowerCase()
+        if (candidate.length > 2 && candidate.length < 20) {
+          clean = candidate
+        }
+      }
+    }
+  }
+
+  return {
+    name: clean || (domain ? domain.replace(/^www\./, '') : `источник ${source.id}`),
+    domain: domain || 'web',
+    isNote: false,
+    isTask: false,
+  }
+}
+
 function PerplexityCitationBadge({
   sourceId,
   sources,
@@ -111,19 +174,15 @@ function PerplexityCitationBadge({
   const sourceList = sources && sources.length > 0 ? sources : []
   
   const initialIdx = Math.max(0, sourceList.findIndex(s => s.id === sourceId))
-  const [currentIndex, setCurrentIndex] = useState(initialIdx !== -1 ? initialIdx : 0)
+  const [currentIndex, setCurrentIndex] = useState(
+    initialIdx !== -1 ? initialIdx : (sourceId > 0 && sourceId <= sourceList.length ? sourceId - 1 : 0)
+  )
 
-  const currentSource = sourceList[currentIndex] || sourceList.find(s => s.id === sourceId)
+  const currentSource = sourceList[currentIndex] || sourceList.find(s => s.id === sourceId) || (sourceList.length > 0 ? sourceList[0] : null)
+  const siteInfo = getCleanSiteName(currentSource, sourceId)
 
-  const isNote = currentSource?.type === 'note' || Boolean(currentSource?.noteId)
-  const isTask = currentSource?.type === 'task' || Boolean(currentSource?.taskId)
-
-  const rawDomain = currentSource?.domain || 'источник'
-  const cleanDomain = rawDomain
-    .replace(/^www\./i, '')
-    .replace(/^m\./i, '')
-    .replace(/\.(org|com|ru|net|io|media|info|app|co|live|ai|tech|gov|edu)$/i, '')
-    .toLowerCase()
+  const isNote = siteInfo.isNote
+  const isTask = siteInfo.isTask
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -159,20 +218,20 @@ function PerplexityCitationBadge({
         type="button"
         onClick={handleClick}
         className={cn(
-          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-sans font-medium transition-all cursor-pointer shadow-2xs select-none hover:scale-105 active:scale-95 no-underline align-baseline my-0.5',
+          'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-sans font-medium transition-all cursor-pointer shadow-2xs select-none hover:scale-105 active:scale-95 no-underline align-baseline my-0.5 mx-0.5',
           isNote
             ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
             : isTask
             ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-            : 'bg-muted/70 hover:bg-muted text-foreground/80 hover:text-foreground border-border/80 hover:border-primary/40'
+            : 'bg-muted/80 hover:bg-muted text-foreground/90 hover:text-foreground border-border/80 hover:border-primary/40'
         )}
       >
         <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-        <span className="truncate max-w-[100px] font-mono lowercase">
-          {isNote ? 'заметка' : isTask ? 'задача' : cleanDomain}
+        <span className="truncate max-w-[120px] font-medium lowercase">
+          {siteInfo.name}
         </span>
         {sourceList.length > 1 && (
-          <span className="text-[9px] text-muted-foreground font-mono">+{sourceList.length - 1}</span>
+          <span className="text-[9px] text-muted-foreground font-mono font-normal">+{sourceList.length - 1}</span>
         )}
       </button>
 
@@ -215,7 +274,7 @@ function PerplexityCitationBadge({
                 )}
                 <div className="flex items-center gap-1 font-mono text-[10px] text-zinc-300">
                   <Globe className="w-3 h-3 text-primary shrink-0" />
-                  <span className="truncate max-w-[130px]">{cleanDomain}</span>
+                  <span className="truncate max-w-[130px]">{siteInfo.name}</span>
                 </div>
               </div>
 
@@ -253,7 +312,7 @@ function PerplexityCitationBadge({
                   ? 'Синтезировано из вашей персональной базы знаний Zerf Note.'
                   : isTask
                   ? 'Синтезировано из вашего активного трекера задач Zerf.'
-                  : `${cleanDomain} верифицирован поисковым ядром Entropy для точного факт-чекинга.`}
+                  : `${siteInfo.name} верифицирован поисковым ядром Entropy для точного факт-чекинга.`}
               </p>
 
               {/* Action Button */}
@@ -264,7 +323,7 @@ function PerplexityCitationBadge({
                   rel="noopener noreferrer"
                   className="w-full py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <span>Узнать больше на {cleanDomain}</span>
+                  <span>Узнать больше на {siteInfo.name}</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               ) : isNote && currentSource.noteId ? (
@@ -1277,6 +1336,7 @@ export function EntropySearchView() {
             <div className="text-sm md:text-base leading-relaxed space-y-3 prose prose-invert max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                urlTransform={(url) => url}
                 components={{
                   h1: ({ children }) => <h1 className="text-xl font-bold text-foreground mt-4 mb-2">{children}</h1>,
                   h2: ({ children }) => <h2 className="text-lg font-bold text-foreground mt-3 mb-2 border-b border-border/40 pb-1">{children}</h2>,
@@ -1305,8 +1365,12 @@ export function EntropySearchView() {
                     )
                   },
                   a: ({ href, children, title }) => {
-                    if (href?.startsWith('cite:') || href?.startsWith('#cite-')) {
-                      const sId = parseInt(href.replace(/^(cite:|#cite-)/, ''), 10)
+                    const hrefStr = String(href || '')
+                    const childStr = String(children || '')
+                    const isCite = hrefStr.includes('cite') || hrefStr.startsWith('#cite-') || childStr.startsWith('cite-') || /^cite-\d+$/.test(childStr)
+                    if (isCite) {
+                      const rawId = hrefStr.replace(/^https:\/\/cite\.internal\//, '').replace(/^(cite:|#cite-)/, '') || childStr.replace(/^cite-/, '')
+                      const sId = parseInt(rawId, 10) || 1
                       return (
                         <PerplexityCitationBadge
                           key={`cite-${sId}`}
@@ -1342,17 +1406,17 @@ export function EntropySearchView() {
                   (() => {
                     const raw = isStreaming ? streamedAnswer : (result.answer || '')
                     let parsed = raw
-                      // 1. Strip bold markers around citations: **[#1]** -> [cite-1](cite:1), [**#1**] -> [cite-1](cite:1)
-                      .replace(/\*\*\[#?(\d+)\]\*\*/g, '[cite-$1](cite:$1)')
-                      .replace(/\[\*\*#?(\d+)\*\*\]/g, '[cite-$1](cite:$1)')
-                      .replace(/\*\[#?(\d+)\]\*/g, '[cite-$1](cite:$1)')
-                      .replace(/\[\*#?(\d+)\*\]/g, '[cite-$1](cite:$1)')
-                      // 2. Multi/clustered citations: [#1][#4] -> [cite-1](cite:1) [cite-4](cite:4)
-                      .replace(/\[#?(\d+)\]\s*\[#?(\d+)\]/g, '[cite-$1](cite:$1) [cite-$2](cite:$2)')
-                      .replace(/\[#?(\d+),\s*#?(\d+)\]/g, '[cite-$1](cite:$1) [cite-$2](cite:$2)')
-                      .replace(/\[#?(\d+),\s*#?(\d+),\s*#?(\d+)\]/g, '[cite-$1](cite:$1) [cite-$2](cite:$2) [cite-$3](cite:$3)')
-                      // 3. Standalone citations: [#1] or [1] -> [cite-1](cite:1)
-                      .replace(/\[#?(\d+)\](?!\()/g, '[cite-$1](cite:$1)')
+                      // 1. Strip bold markers around citations: **[#1]** -> [cite-1](https://cite.internal/1)
+                      .replace(/\*\*\[#?(\d+)\]\*\*/g, '[cite-$1](https://cite.internal/$1)')
+                      .replace(/\[\*\*#?(\d+)\*\*\]/g, '[cite-$1](https://cite.internal/$1)')
+                      .replace(/\*\[#?(\d+)\]\*/g, '[cite-$1](https://cite.internal/$1)')
+                      .replace(/\[\*#?(\d+)\*\]/g, '[cite-$1](https://cite.internal/$1)')
+                      // 2. Multi/clustered citations: [#1][#4] -> [cite-1](https://cite.internal/1) [cite-4](https://cite.internal/4)
+                      .replace(/\[#?(\d+)\]\s*\[#?(\d+)\]/g, '[cite-$1](https://cite.internal/$1) [cite-$2](https://cite.internal/$2)')
+                      .replace(/\[#?(\d+),\s*#?(\d+)\]/g, '[cite-$1](https://cite.internal/$1) [cite-$2](https://cite.internal/$2)')
+                      .replace(/\[#?(\d+),\s*#?(\d+),\s*#?(\d+)\]/g, '[cite-$1](https://cite.internal/$1) [cite-$2](https://cite.internal/$2) [cite-$3](https://cite.internal/$3)')
+                      // 3. Standalone citations: [#1] or [1] -> [cite-1](https://cite.internal/1)
+                      .replace(/\[#?(\d+)\](?!\()/g, '[cite-$1](https://cite.internal/$1)')
                       .replace(/\\n/g, '\n')
                       .replace(/\\r/g, '')
                       .replace(/\\t/g, '  ')
