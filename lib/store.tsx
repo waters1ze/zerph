@@ -403,8 +403,17 @@ export function getTgChatId(): string | null {
 
     // 6. Saved authenticated session on this device (check both localStorage and permanent cookie for PWA)
     const savedChatId = localStorage.getItem('zerf_chat_id') || getCookie('zerf_chat_id')
+    const savedToken = localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')
 
-    if (savedChatId) {
+    if (savedChatId && !savedChatId.startsWith('guest_')) {
+      try {
+        if (!localStorage.getItem('zerf_chat_id')) {
+          localStorage.setItem('zerf_chat_id', savedChatId)
+        }
+        if (savedToken && !localStorage.getItem('zerf_auth_token')) {
+          localStorage.setItem('zerf_auth_token', savedToken)
+        }
+      } catch {}
       return savedChatId
     }
 
@@ -429,21 +438,14 @@ export function getAuthHeaders(): Record<string, string> {
 
 /**
  * Single source of truth for "is this visitor authenticated?".
- * Checks localStorage AND cookies (PWA/iOS may clear localStorage but keep
- * permanent cookies) so the "Войти" button never hangs for a returning user.
+ * Returns true if the user has a valid authenticated chatId (Telegram, Google, Email, VK, etc.).
  */
 export function isUserAuthenticated(): boolean {
   if (typeof window === 'undefined') return true
   try {
     const chatId = getTgChatId()
     if (!chatId || chatId.startsWith('guest_')) return false
-    const token =
-      localStorage.getItem('zerf_auth_token') ||
-      document.cookie.match(/(?:^|; )zerf_auth_token=([^;]*)/)?.[1] ||
-      ''
-    const initData = (window as any).Telegram?.WebApp?.initData
-    const vkLaunch = localStorage.getItem('zerf_vk_launch')
-    return Boolean(token || initData || vkLaunch)
+    return true
   } catch {
     return false
   }

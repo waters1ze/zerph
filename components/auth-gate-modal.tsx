@@ -195,7 +195,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
             </div>
 
             {/* Tab Selector */}
-            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-muted/60 border border-border/60">
+            <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-muted/60 border border-border/60">
               <button
                 type="button"
                 onClick={() => { setAuthTab('google'); setError(null) }}
