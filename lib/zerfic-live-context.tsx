@@ -360,8 +360,8 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
       const utterance = new SpeechSynthesisUtterance(formattedSpeech)
       utterance.rate = activeVoice.rate
-      // Clamp pitch: extreme values make some engines fall back to the default voice
-      utterance.pitch = Math.min(1.5, Math.max(0.4, activeVoice.pitch))
+      // Wide pitch range (0.15 to 1.95) to ensure each persona has a distinct, unmistakable vocal timbre
+      utterance.pitch = Math.min(1.95, Math.max(0.15, activeVoice.pitch))
       utterance.volume = isMuted ? 0 : voiceVolume
       utterance.lang = 'ru-RU'
 
@@ -375,24 +375,33 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
         const ruVoices = voices.filter(v => v.lang.toLowerCase().startsWith('ru'))
         if (ruVoices.length > 0) {
           const wantFemale = activeVoice.gender === 'female'
-          stableVoice = wantFemale
-            ? (ruVoices.find(v => {
-                const n = v.name.toLowerCase()
-                return n.includes('svetlana') || n.includes('milena') || n.includes('alisa') ||
-                       n.includes('google русский') || n.includes('dariya') || n.includes('ekaterina') ||
-                       n.includes('tatiana') || n.includes('irina')
-              })
-              || ruVoices.find(v => {
-                const n = v.name.toLowerCase()
-                return n.includes('female') || n.includes('женск') || !n.includes('pavel')
-              })
-              || ruVoices[0])
-            : (ruVoices.find(v => {
-                const n = v.name.toLowerCase()
-                return n.includes('pavel') || n.includes('dmitry') || n.includes('yuri') ||
-                       n.includes('male') || n.includes('мужск')
-              })
-              || ruVoices[0])
+          if (wantFemale) {
+            stableVoice = activeVoice.id === 'alisa_soft'
+              ? (ruVoices.find(v => {
+                  const n = v.name.toLowerCase()
+                  return n.includes('milena') || n.includes('alisa') || n.includes('svetlana') || n.includes('google русский')
+                }) || ruVoices.find(v => {
+                  const n = v.name.toLowerCase()
+                  return n.includes('female') || n.includes('женск') || !n.includes('pavel')
+                }) || ruVoices[0])
+              : (ruVoices.find(v => {
+                  const n = v.name.toLowerCase()
+                  return n.includes('irina') || n.includes('dariya') || n.includes('ekaterina') || n.includes('tatiana')
+                }) || ruVoices.find(v => {
+                  const n = v.name.toLowerCase()
+                  return n.includes('female') || n.includes('женск') || !n.includes('pavel')
+                }) || ruVoices[0])
+          } else {
+            stableVoice = activeVoice.id === 'viktor_brutal'
+              ? (ruVoices.find(v => {
+                  const n = v.name.toLowerCase()
+                  return n.includes('yuri') || n.includes('dmitry') || n.includes('male') || n.includes('мужск')
+                }) || ruVoices.find(v => v.name.toLowerCase().includes('pavel')) || ruVoices[0])
+              : (ruVoices.find(v => {
+                  const n = v.name.toLowerCase()
+                  return n.includes('pavel') || n.includes('male') || n.includes('мужск')
+                }) || ruVoices[0])
+          }
           if (stableVoice) chosenVoiceCacheRef.current.set(activeVoice.id, stableVoice)
         }
       }

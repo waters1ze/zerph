@@ -118,9 +118,12 @@ function PerplexityCitationBadge({
   const isNote = currentSource?.type === 'note' || Boolean(currentSource?.noteId)
   const isTask = currentSource?.type === 'task' || Boolean(currentSource?.taskId)
 
-  const cleanDomain = currentSource?.domain
-    ? currentSource.domain.replace(/^www\./, '').replace(/^m\./, '')
-    : 'источник'
+  const rawDomain = currentSource?.domain || 'источник'
+  const cleanDomain = rawDomain
+    .replace(/^www\./i, '')
+    .replace(/^m\./i, '')
+    .replace(/\.(org|com|ru|net|io|media|info|app|co|live|ai|tech|gov|edu)$/i, '')
+    .toLowerCase()
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -156,7 +159,7 @@ function PerplexityCitationBadge({
         type="button"
         onClick={handleClick}
         className={cn(
-          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg border text-[11px] font-sans font-medium transition-all cursor-pointer shadow-2xs select-none hover:scale-105 active:scale-95 no-underline align-baseline',
+          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-sans font-medium transition-all cursor-pointer shadow-2xs select-none hover:scale-105 active:scale-95 no-underline align-baseline my-0.5',
           isNote
             ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
             : isTask
@@ -165,8 +168,8 @@ function PerplexityCitationBadge({
         )}
       >
         <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-        <span className="truncate max-w-[110px]">
-          {isNote ? 'Заметка' : isTask ? 'Задача' : cleanDomain}
+        <span className="truncate max-w-[100px] font-mono lowercase">
+          {isNote ? 'заметка' : isTask ? 'задача' : cleanDomain}
         </span>
         {sourceList.length > 1 && (
           <span className="text-[9px] text-muted-foreground font-mono">+{sourceList.length - 1}</span>
@@ -383,6 +386,7 @@ export function EntropySearchView() {
   const [savedAsNote, setSavedAsNote] = useState(false)
   const [savedAsTasks, setSavedAsTasks] = useState(false)
   const [activeSourceHover, setActiveSourceHover] = useState<EntropySource | null>(null)
+  const [showAllSources, setShowAllSources] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const followUpInputRef = useRef<HTMLInputElement>(null)
@@ -1100,18 +1104,54 @@ export function EntropySearchView() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
         >
-          {/* 1. SOURCES — compact Perplexity-style bar with favicon circles */}
+          {/* 1. SOURCES — Rich Perplexity-Style Top Cards & Carousel */}
           {result.sources && result.sources.length > 0 && (
-            <div className="flex items-center gap-2.5 p-2.5 pl-3.5 rounded-2xl bg-card border border-border shadow-2xs">
-              <span className="text-xs font-bold text-foreground shrink-0">Источники</span>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center -space-x-1.5">
+                    {result.sources.slice(0, 4).map((s) => {
+                      const clean = (s.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
+                      const hue = Array.from(clean).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                      return (
+                        <div
+                          key={s.id}
+                          className="w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center border-2 border-background text-white shrink-0 shadow-2xs"
+                          style={{ backgroundColor: `hsl(${hue} 60% 45%)` }}
+                          title={s.title || clean}
+                        >
+                          {clean.charAt(0).toUpperCase()}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <span className="text-xs font-bold text-foreground">Источники</span>
+                  <span className="text-[11px] text-muted-foreground font-mono">({result.sources.length})</span>
+                </div>
 
-              <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar py-0.5">
-                {result.sources.map(source => {
+                {result.sources.length > 4 && (
+                  <button
+                    onClick={() => setShowAllSources(!showAllSources)}
+                    className="text-xs text-muted-foreground hover:text-foreground font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>{showAllSources ? 'Свернуть' : 'Смотреть все'}</span>
+                    <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', showAllSources && 'rotate-90')} />
+                  </button>
+                )}
+              </div>
+
+              {/* Perplexity Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {(showAllSources ? result.sources : result.sources.slice(0, 4)).map((source) => {
                   const isInternalNote = source.type === 'note' || Boolean(source.noteId)
                   const isInternalTask = source.type === 'task' || Boolean(source.taskId)
-                  const cleanDomain = (source.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
-                  // Deterministic brand-like color per domain
-                  const hue = Array.from(cleanDomain).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                  const rawDomain = source.domain || 'web'
+                  const cleanDomain = rawDomain
+                    .replace(/^www\./i, '')
+                    .replace(/^m\./i, '')
+                    .replace(/\.(org|com|ru|net|io|media|info|app|co|live|ai|tech|gov|edu)$/i, '')
+                    .toLowerCase()
+                  const hue = Array.from(rawDomain).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
 
                   const handleClick = (e: React.MouseEvent) => {
                     if (isInternalNote && source.noteId) {
@@ -1132,27 +1172,35 @@ export function EntropySearchView() {
                       target={isInternalNote || isInternalTask ? '_self' : '_blank'}
                       rel="noopener noreferrer"
                       onClick={handleClick}
-                      title={`${source.id}. ${source.title || cleanDomain}`}
-                      className={cn(
-                        'w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 border transition-all hover:scale-110 cursor-pointer',
-                        isInternalNote
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                          : isInternalTask
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                          : 'border-transparent text-white'
-                      )}
-                      style={!isInternalNote && !isInternalTask ? { backgroundColor: `hsl(${hue} 55% 42%)` } : undefined}
+                      className="p-3 rounded-2xl bg-card border border-border/80 hover:border-primary/50 hover:bg-muted/40 transition-all flex flex-col justify-between gap-2 text-left group shadow-2xs hover:shadow-xs cursor-pointer min-h-[92px]"
                     >
-                      {isInternalNote ? 'З' : isInternalTask ? '✓' : cleanDomain.charAt(0).toUpperCase()}
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors leading-snug">
+                          {source.title || cleanDomain}
+                        </h5>
+                        {source.snippet && (
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed font-normal">
+                            {source.snippet}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px] text-muted-foreground">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div
+                            className="w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center text-white shrink-0"
+                            style={{ backgroundColor: isInternalNote ? '#f59e0b' : isInternalTask ? '#10b981' : `hsl(${hue} 60% 45%)` }}
+                          >
+                            {isInternalNote ? 'З' : isInternalTask ? '✓' : cleanDomain.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="truncate font-medium">{cleanDomain}</span>
+                        </div>
+                        <span className="text-[9px] font-mono text-muted-foreground/70 shrink-0">#{source.id}</span>
+                      </div>
                     </a>
                   )
                 })}
               </div>
-
-              <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                {result.sources.length}
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </div>
           )}
 
@@ -1290,22 +1338,95 @@ export function EntropySearchView() {
                 }}
               >
                 {(
-                  // Perplexity-style LIVE citations: complete [n] tokens become
-                  // badges even mid-stream; only an incomplete trailing "[1" is
-                  // stripped until its closing bracket arrives.
-                  isStreaming
-                    ? streamedAnswer.replace(/\[(\d+)\](?!\()/g, '[[#$1]](cite:$1)').replace(/\[\d*$/, '')
-                    : (result.answer || '').replace(/\[(\d+)\]/g, '[[#$1]](cite:$1)')
-                )
-                  .replace(/\\n/g, '\n')
-                  .replace(/\\r/g, '')
-                  .replace(/\\t/g, '  ')
-                  .replace(/\\"/g, '"')}
+                  // Perplexity-style robust citation parser: converts [#1], [1], [#1][#4], [#1, #4] to interactive badges
+                  (() => {
+                    const raw = isStreaming ? streamedAnswer : (result.answer || '')
+                    let parsed = raw
+                      .replace(/\[#?(\d+)\]\s*\[#?(\d+)\]/g, '[[#$1]](cite:$1) [[#$2]](cite:$2)')
+                      .replace(/\[#?(\d+),\s*#?(\d+)\]/g, '[[#$1]](cite:$1) [[#$2]](cite:$2)')
+                      .replace(/\[#?(\d+),\s*#?(\d+),\s*#?(\d+)\]/g, '[[#$1]](cite:$1) [[#$2]](cite:$2) [[#$3]](cite:$3)')
+                      .replace(/\[#?(\d+)\](?!\()/g, '[[#$1]](cite:$1)')
+                      .replace(/\\n/g, '\n')
+                      .replace(/\\r/g, '')
+                      .replace(/\\t/g, '  ')
+                      .replace(/\\"/g, '"')
+
+                    if (isStreaming) {
+                      parsed = parsed.replace(/\[#?\d*$/, '')
+                    }
+                    return parsed
+                  })()
+                )}
               </ReactMarkdown>
 
               {/* Blinking typewriter streaming indicator */}
               {isStreaming && (
                 <span className="inline-block w-2 h-4.5 ml-1 bg-primary animate-pulse rounded-xs align-middle" />
+              )}
+            </div>
+
+            {/* Bottom Actions & Sources Pill Bar (Perplexity style) */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-border/50 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleCopyAnswer}
+                  className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/80 transition-colors cursor-pointer shadow-2xs"
+                  title="Скопировать ответ"
+                >
+                  {copiedAnswer ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+
+                <button
+                  onClick={handleSaveAsNote}
+                  className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/80 transition-colors cursor-pointer shadow-2xs"
+                  title="Сохранить в заметки"
+                >
+                  <Bookmark className={cn('w-3.5 h-3.5', savedAsNote ? 'text-primary' : '')} />
+                </button>
+
+                <button
+                  onClick={() => handleSearch(result.query)}
+                  className="p-2 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/80 transition-colors cursor-pointer shadow-2xs"
+                  title="Перегенерировать ответ"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+
+                {result.sources && result.sources.length > 0 && (
+                  <button
+                    onClick={() => setShowAllSources(!showAllSources)}
+                    className="px-2.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-foreground border border-border/80 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Показать все источники"
+                  >
+                    <div className="flex items-center -space-x-1">
+                      {result.sources.slice(0, 3).map((s) => {
+                        const clean = (s.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
+                        const hue = Array.from(clean).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                        return (
+                          <div
+                            key={s.id}
+                            className="w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center border border-background text-white shrink-0"
+                            style={{ backgroundColor: `hsl(${hue} 60% 45%)` }}
+                          >
+                            {clean.charAt(0).toUpperCase()}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <span>{result.sources.length} источников</span>
+                  </button>
+                )}
+              </div>
+
+              {result.takeaways && result.takeaways.length > 0 && (
+                <button
+                  onClick={handleCreateTasksFromTakeaways}
+                  className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold flex items-center gap-1.5 border border-primary/25 transition-colors cursor-pointer shadow-2xs"
+                  title="Создать задачи из выводов"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span>{savedAsTasks ? 'Задачи созданы!' : 'Создать задачи'}</span>
+                </button>
               )}
             </div>
 
@@ -1328,23 +1449,26 @@ export function EntropySearchView() {
             )}
           </div>
 
-          {/* 4. FOLLOW-UP QUESTIONS & ASK NEXT (Perplexity style) */}
+          {/* 4. FOLLOW-UP QUESTIONS & ASK NEXT (Perplexity style matching Screenshot 4) */}
           <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-4">
-            <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+            <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Compass className="w-4 h-4 text-sky-400" />
-              <span>Уточнить или продолжить исследование:</span>
+              <span>Последующие вопросы</span>
             </h4>
 
             {result.followUpQuestions && result.followUpQuestions.length > 0 && (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-wrap">
+              <div className="divide-y divide-border/40">
                 {result.followUpQuestions.map((q, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSearch(q)}
-                    className="px-3.5 py-2 rounded-2xl bg-muted/60 hover:bg-muted border border-border hover:border-primary/40 text-xs font-medium text-foreground flex items-center justify-between gap-2 transition-all cursor-pointer text-left group"
+                    className="w-full py-2.5 px-2 rounded-xl text-left hover:bg-muted/40 text-xs font-medium text-foreground/90 hover:text-foreground flex items-center justify-between gap-3 transition-all cursor-pointer group"
                   >
-                    <span>{q}</span>
-                    <ArrowUpRight className="w-3 h-3 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <CornerDownLeft className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary rotate-180 shrink-0 transition-colors" />
+                      <span className="leading-snug">{q}</span>
+                    </div>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors opacity-0 group-hover:opacity-100" />
                   </button>
                 ))}
               </div>
