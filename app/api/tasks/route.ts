@@ -20,6 +20,9 @@ import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 import { notifyDataChanged } from '@/lib/backend/sse'
 
+import { prisma } from '@/lib/backend/prisma'
+import { getUserInstalledExtensions, getUserEnabledExtensions } from '@/lib/backend/extensions'
+
 startReminderScheduler()
 
 function serialize(obj: unknown): unknown {
@@ -58,14 +61,39 @@ export async function GET(req: NextRequest) {
       syncFriendBirthdays(ownerChatId).catch(() => {})
       runAllCronTasks().catch(e => console.error('[Background Cron Error]:', e))
 
-      const [tasks, goals, notes, friends, habits] = await Promise.all([
+      const cid = String(ownerChatId)
+      const [tasks, goals, notes, friends, habits, groupsRow, chatRow, zerficRow, instExts, enExts] = await Promise.all([
         getAllTasks(ownerChatId),
         getAllGoals(ownerChatId),
         getAllNotes(ownerChatId),
         getFriends(ownerChatId),
         getAllHabits(ownerChatId),
+        prisma.config.findUnique({ where: { key: `user_schedule_groups_${cid}` } }),
+        prisma.config.findUnique({ where: { key: `user_chat_history_${cid}` } }),
+        prisma.config.findUnique({ where: { key: `user_zerfic_live_history_${cid}` } }),
+        getUserInstalledExtensions(cid),
+        getUserEnabledExtensions(cid),
       ])
-      return NextResponse.json(serialize({ tasks, goals, notes, friends, habits }), {
+
+      let scheduleGroups: any[] = []
+      let chat: any[] = []
+      let zerficHistory: any[] = []
+      try { if (groupsRow?.value) scheduleGroups = JSON.parse(groupsRow.value) } catch {}
+      try { if (chatRow?.value) chat = JSON.parse(chatRow.value) } catch {}
+      try { if (zerficRow?.value) zerficHistory = JSON.parse(zerficRow.value) } catch {}
+
+      return NextResponse.json(serialize({
+        tasks,
+        goals,
+        notes,
+        friends,
+        habits,
+        scheduleGroups,
+        chat,
+        zerficHistory,
+        installedExtensions: instExts,
+        enabledExtensions: enExts,
+      }), {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           'Pragma': 'no-cache',
@@ -91,6 +119,40 @@ export async function POST(req: NextRequest) {
     if (!ownerChatId) return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
 
     const body = await req.json()
+    const cid = String(ownerChatId)
+
+    // Sync Chat History
+    if (body.syncType === 'chat' && Array.isArray(body.chat)) {
+      await prisma.config.upsert({
+        where: { key: `user_chat_history_${cid}` },
+        update: { value: JSON.stringify(body.chat.slice(-50)) },
+        create: { key: `user_chat_history_${cid}`, value: JSON.stringify(body.chat.slice(-50)) },
+      })
+      notifyDataChanged(ownerChatId, 'all')
+      return NextResponse.json({ success: true })
+    }
+
+    // Sync Zerfic Live Chat History
+    if (body.syncType === 'zerfic_history' && Array.isArray(body.messages)) {
+      await prisma.config.upsert({
+        where: { key: `user_zerfic_live_history_${cid}` },
+        update: { value: JSON.stringify(body.messages.slice(-50)) },
+        create: { key: `user_zerfic_live_history_${cid}`, value: JSON.stringify(body.messages.slice(-50)) },
+      })
+      notifyDataChanged(ownerChatId, 'all')
+      return NextResponse.json({ success: true })
+    }
+
+    // Sync Schedule Groups
+    if (body.syncType === 'schedule_groups' && Array.isArray(body.scheduleGroups)) {
+      await prisma.config.upsert({
+        where: { key: `user_schedule_groups_${cid}` },
+        update: { value: JSON.stringify(body.scheduleGroups) },
+        create: { key: `user_schedule_groups_${cid}`, value: JSON.stringify(body.scheduleGroups) },
+      })
+      notifyDataChanged(ownerChatId, 'all')
+      return NextResponse.json({ success: true })
+    }
 
     if (body.itemType === 'goal' || body.type === 'goal') {
       // Free plan: max 5 goals per day

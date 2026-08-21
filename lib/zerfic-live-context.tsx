@@ -205,17 +205,40 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const lastSpokenTextRef = useRef('')
   // Stable voice per profile: prevents the voice "drifting" between sentences
   const chosenVoiceCacheRef = useRef<Map<string, SpeechSynthesisVoice>>(new Map())
+  // Dedicated HTML5 audio instance for iOS Safari / Mobile reliable MP3 voice playback
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null)
 
   isActiveRef.current = isActive
 
-  // Persist chat history
+  // Persist and sync chat history across devices
   useEffect(() => {
     if (messages.length > 0) {
       try {
         localStorage.setItem('zerf_live_chat_history', JSON.stringify(messages.slice(-30)))
       } catch {}
+      if (messages.length > 1 && typeof window !== 'undefined') {
+        const headers = getAuthHeaders()
+        if (headers['x-chat-id']) {
+          fetch('/api/tasks', {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ syncType: 'zerfic_history', messages }),
+          }).catch(() => {})
+        }
+      }
     }
   }, [messages])
+
+  // Listen for sync from other devices
+  useEffect(() => {
+    const handleSync = (e: any) => {
+      if (Array.isArray(e?.detail) && e.detail.length > 0) {
+        setMessages(e.detail)
+      }
+    }
+    window.addEventListener('zerf_live_chat_synced', handleSync)
+    return () => window.removeEventListener('zerf_live_chat_synced', handleSync)
+  }, [])
 
   // Broadcast state updates to widget and parent window
   useEffect(() => {
@@ -346,127 +369,82 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     const estMs = Math.max(500, ((endIdx - startIdx) / cps) * 1000)
     revealUpTo(endIdx, estMs)
 
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      isInterruptedRef.current = false
-
-      // Unfreeze / resume speech synthesis for iOS Safari / Mobile
-      try {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume()
-        }
-      } catch {}
-
-      let formattedSpeech = currentSentence
-      if (activeVoice.id === 'alex_baritone') {
-        formattedSpeech = formattedSpeech.replace(/([,;:])\s*/g, '$1... ')
-      } else if (activeVoice.id === 'viktor_brutal') {
-        formattedSpeech = formattedSpeech.replace(/,\s*/g, '. ').replace(/!+/g, '! ')
-      } else if (activeVoice.id === 'dmitry_business') {
-        formattedSpeech = formattedSpeech.replace(/\.\.+/g, '! ')
-      }
-
-      const utterance = new SpeechSynthesisUtterance(formattedSpeech)
-      utterance.rate = activeVoice.rate
-      utterance.pitch = Math.min(1.95, Math.max(0.15, activeVoice.pitch))
-      utterance.volume = isMuted ? 0 : Math.max(0.2, voiceVolume)
-      utterance.lang = 'ru-RU'
-
-      // Pick the system voice ONCE per profile and cache it
-      let stableVoice = chosenVoiceCacheRef.current.get(activeVoice.id)
-      if (!stableVoice) {
-        const voices = browserVoicesRef.current.length > 0
-          ? browserVoicesRef.current
-          : (window.speechSynthesis.getVoices() || [])
-        const ruVoices = voices.filter(v => v.lang.toLowerCase().startsWith('ru'))
-        if (ruVoices.length > 0) {
-          const wantFemale = activeVoice.gender === 'female'
-          if (wantFemale) {
-            stableVoice = activeVoice.id === 'alisa_soft'
-              ? (ruVoices.find(v => {
-                  const n = v.name.toLowerCase()
-                  return n.includes('milena') || n.includes('alisa') || n.includes('svetlana') || n.includes('google русский')
-                }) || ruVoices.find(v => {
-                  const n = v.name.toLowerCase()
-                  return n.includes('female') || n.includes('женск') || !n.includes('pavel')
-                }) || ruVoices[0])
-              : (ruVoices.find(v => {
-                  const n = v.name.toLowerCase()
-                  return n.includes('irina') || n.includes('dariya') || n.includes('ekaterina') || n.includes('tatiana')
-                }) || ruVoices.find(v => {
-                  const n = v.name.toLowerCase()
-                  return n.includes('female') || n.includes('женск') || !n.includes('pavel')
-                }) || ruVoices[0])
-          } else {
-            stableVoice = activeVoice.id === 'viktor_brutal'
-              ? (ruVoices.find(v => {
-                  const n = v.name.toLowerCase()
-                  return n.includes('yuri') || n.includes('dmitry') || n.includes('male') || n.includes('мужск')
-                }) || ruVoices.find(v => v.name.toLowerCase().includes('pavel')) || ruVoices[0])
-              : (ruVoices.find(v => {
-                  const n = v.name.toLowerCase()
-                  return n.includes('pavel') || n.includes('male') || n.includes('мужск')
-                }) || ruVoices[0])
-          }
-          if (stableVoice) chosenVoiceCacheRef.current.set(activeVoice.id, stableVoice)
-        }
-      }
-      if (stableVoice) utterance.voice = stableVoice
-
-      utterance.onend = () => {
-        if (!isInterruptedRef.current) {
-          const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
-          revealIdxRef.current = sentEnd
-          setRevealedText(sentEnd)
-          playSentenceFromQueue()
-        }
-      }
-
-      utterance.onerror = (err) => {
-        console.warn('[Zerfic TTS]', err)
-        if (!isInterruptedRef.current) {
-          playSentenceFromQueue()
-        }
-      }
-
-      currentUtteranceRef.current = utterance
-
-      try {
-        window.speechSynthesis.resume()
-      } catch {}
-      window.speechSynthesis.speak(utterance)
-    } else {
-      fetch('/api/extensions/zerfic-live/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: currentSentence, voiceId: activeVoice.id }),
+    // Primary Neural Voice Engine: HTML5 MP3 Audio via /api/extensions/zerfic-live/tts (works seamlessly on iOS Safari, Android, and Desktop)
+    fetch('/api/extensions/zerfic-live/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: currentSentence, voiceId: activeVoice.id }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('TTS server error')
+        return r.arrayBuffer()
       })
-        .then(r => r.arrayBuffer())
-        .then(buf => {
-          const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }))
-          const audio = new Audio(url)
-          audio.volume = isMuted ? 0 : voiceVolume
-          audio.onended = () => {
-            if (!isInterruptedRef.current) {
-              const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
-              revealIdxRef.current = sentEnd
-              setRevealedText(sentEnd)
-              playSentenceFromQueue()
-            }
-          }
-          audio.play().catch(() => {
+      .then(buf => {
+        if (isInterruptedRef.current) return
+        const blob = new Blob([buf], { type: 'audio/mpeg' })
+        const url = URL.createObjectURL(blob)
+        if (!activeAudioRef.current) {
+          activeAudioRef.current = new Audio()
+        }
+        const audio = activeAudioRef.current
+        audio.src = url
+        audio.playbackRate = activeVoice.rate || 1.0
+        audio.volume = isMuted ? 0 : Math.max(0.3, voiceVolume)
+        audio.onended = () => {
+          URL.revokeObjectURL(url)
+          if (!isInterruptedRef.current) {
+            const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
+            revealIdxRef.current = sentEnd
+            setRevealedText(sentEnd)
             playSentenceFromQueue()
-          })
+          }
+        }
+        audio.play().catch(err => {
+          console.warn('[Zerfic Audio Play]', err)
+          if (!isInterruptedRef.current) {
+            playSentenceFromQueue()
+          }
         })
-        .catch(() => {
-          playSentenceFromQueue()
-        })
-    }
+      })
+      .catch(() => {
+        // Offline / Network Fallback: Web Speech API
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          try {
+            const u = new SpeechSynthesisUtterance(currentSentence)
+            u.lang = 'ru-RU'
+            u.rate = activeVoice.rate
+            u.pitch = Math.min(1.95, Math.max(0.15, activeVoice.pitch))
+            u.volume = isMuted ? 0 : Math.max(0.3, voiceVolume)
+            u.onend = () => {
+              if (!isInterruptedRef.current) {
+                const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
+                revealIdxRef.current = sentEnd
+                setRevealedText(sentEnd)
+                playSentenceFromQueue()
+              }
+            }
+            u.onerror = () => {
+              if (!isInterruptedRef.current) playSentenceFromQueue()
+            }
+            window.speechSynthesis.resume()
+            window.speechSynthesis.speak(u)
+            return
+          } catch {}
+        }
+        playSentenceFromQueue()
+      })
   }, [selectedVoice, voiceVolume, isMuted, autoListen, revealUpTo, setRevealedText])
 
   // Stop active speech synthesis and clear sentence queue
   const stopSpeaking = useCallback(() => {
     speechQueueRef.current = []
     clearRevealTimer()
+    if (activeAudioRef.current) {
+      try {
+        activeAudioRef.current.pause()
+        activeAudioRef.current.currentTime = 0
+      } catch {}
+    }
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }

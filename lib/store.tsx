@@ -739,7 +739,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               projects: filteredProjects,
               friends: filteredFriends,
               habits: filteredHabits,
+              scheduleGroups: state.scheduleGroups,
+              chat: state.chat,
             }))
+            if (state.scheduleGroups.length > 0) {
+              localStorage.setItem('zerf_schedule_groups', JSON.stringify(state.scheduleGroups))
+            }
           } catch {}
         }
 
@@ -748,13 +753,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else {
           saveFn()
         }
+
+        // Background cloud sync for chat & schedule groups across devices
+        if (currentChatId) {
+          if (state.chat.length > 1) {
+            fetch('/api/tasks', {
+              method: 'POST',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ syncType: 'chat', chat: state.chat }),
+            }).catch(() => {})
+          }
+          if (state.scheduleGroups.length > 0) {
+            fetch('/api/tasks', {
+              method: 'POST',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ syncType: 'schedule_groups', scheduleGroups: state.scheduleGroups }),
+            }).catch(() => {})
+          }
+        }
       } catch {}
     }, 400)
 
     return () => {
       if (saveDebounceTimerRef.current) clearTimeout(saveDebounceTimerRef.current)
     }
-  }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits])
+  }, [state.tasks, state.goals, state.notes, state.projects, state.friends, state.habits, state.scheduleGroups, state.chat])
 
   // Core Sync Function with strict throttling to prevent function invocation burnout
   const syncBackendData = useCallback(async (force = false) => {
@@ -824,15 +847,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const filteredFriends = (data.friends || []).filter((f: Friend) => !recentlyDeletedIdsRef.current.has(f.id))
           const filteredHabits = keepFresh(data.habits || [], stateRef.current.habits).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
 
+          const loadStateUpdates: Partial<AppState> = {
+            tasks: filteredTasks,
+            goals: filteredGoals,
+            notes: filteredNotes,
+            friends: filteredFriends,
+            habits: filteredHabits,
+          }
+          if (Array.isArray(data.scheduleGroups) && data.scheduleGroups.length > 0) {
+            loadStateUpdates.scheduleGroups = data.scheduleGroups
+            try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(data.scheduleGroups)) } catch {}
+          }
+          if (Array.isArray(data.chat) && data.chat.length > 0) {
+            loadStateUpdates.chat = data.chat
+          }
+          if (Array.isArray(data.zerficHistory) && data.zerficHistory.length > 0 && typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('zerf_live_chat_history', JSON.stringify(data.zerficHistory))
+              window.dispatchEvent(new CustomEvent('zerf_live_chat_synced', { detail: data.zerficHistory }))
+            } catch {}
+          }
+          if (Array.isArray(data.installedExtensions) && typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('zerf_installed_extensions', JSON.stringify(data.installedExtensions))
+              if (Array.isArray(data.enabledExtensions)) {
+                localStorage.setItem('zerf_enabled_extensions', JSON.stringify(data.enabledExtensions))
+              }
+              window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+            } catch {}
+          }
+
           dispatch({
             type: 'LOAD_STATE',
-            state: {
-              tasks: filteredTasks,
-              goals: filteredGoals,
-              notes: filteredNotes,
-              friends: filteredFriends,
-              habits: filteredHabits,
-            },
+            state: loadStateUpdates,
           })
         }
 
