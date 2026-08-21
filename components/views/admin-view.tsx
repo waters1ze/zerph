@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield, Crown, Users, Sparkles, Check, Search, RefreshCw,
   Send, UserX, AlertCircle, Copy, Clock, MessageSquare, Mic,
-  CheckCircle2, XCircle, ChevronDown, RotateCcw, Megaphone, Trash2,
+  CheckCircle2, XCircle, ChevronDown, RotateCcw, Megaphone, Trash2, Eraser,
   Ticket, Percent, Tag, Plus, BarChart2, TrendingUp, TrendingDown,
   DollarSign, UserCheck, Activity, Calendar
 } from 'lucide-react'
@@ -445,6 +445,37 @@ export function AdminView() {
         fetchAdminData()
       } else {
         showNotice('error', data.error || 'Ошибка удаления пользователя')
+      }
+    } catch {
+      showNotice('error', 'Ошибка запроса к серверу')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Action: Clear All User Data (Tasks, Notes, Goals, Habits)
+  const handleClearUserData = async (targetUser: AdminUser) => {
+    const name = targetUser.firstName || targetUser.username || targetUser.chatId
+    const ok = await confirm({
+      title: `Очистить базу данных у ${name}?`,
+      description: `ID: ${targetUser.chatId}. Все задачи, заметки, цели и привычки этого пользователя будут полностью стёрты из базы данных. Профиль и подписка останутся.`,
+      confirmText: 'Очистить все данные',
+      variant: 'danger',
+    })
+    if (!ok) return
+
+    setActionLoading(`clear_${targetUser.chatId}`)
+    try {
+      const res = await fetch(`/api/admin/users?chatId=${targetUser.chatId}&mode=clear_data`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showNotice('success', data.message || `Все данные пользователя ${name} успешно очищены`)
+        fetchAdminData()
+      } else {
+        showNotice('error', data.error || 'Ошибка очистки данных')
       }
     } catch {
       showNotice('error', 'Ошибка запроса к серверу')
@@ -1035,13 +1066,25 @@ export function AdminView() {
                           <RotateCcw className="w-3.5 h-3.5" />
                         </button>
 
+                        {/* Clear All User Data in DB */}
+                        {isViewerRoot && (
+                          <button
+                            onClick={() => handleClearUserData(u)}
+                            disabled={isActionRunning}
+                            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all"
+                            title="Очистить все задачи, заметки и данные в базе"
+                          >
+                            <Eraser className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
                         {/* Delete User (Not Owner) */}
                         {isViewerRoot && !u.isRoot && (
                           <button
                             onClick={() => handleDeleteUser(u)}
                             disabled={isActionRunning}
                             className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition-all"
-                            title="Удалить пользователя из системы"
+                            title="Удалить аккаунт пользователя из системы"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

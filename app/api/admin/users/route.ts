@@ -287,19 +287,42 @@ export async function DELETE(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const targetChatId = searchParams.get('chatId')
+    const mode = searchParams.get('mode') || 'delete_account'
     if (!targetChatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 })
 
-    if (ROOT_ADMIN_IDS.includes(targetChatId)) {
-      return NextResponse.json({ error: 'Нельзя удалить владельца' }, { status: 400 })
+    const cid = BigInt(targetChatId)
+
+    if (mode === 'clear_data') {
+      // Clear all tasks, notes, goals, habits for the user without deleting their account
+      await Promise.all([
+        prisma.task.deleteMany({ where: { OR: [{ ownerChatId: cid }, { authorChatId: cid }] } }),
+        prisma.note.deleteMany({ where: { ownerChatId: cid } }),
+        prisma.goal.deleteMany({ where: { ownerChatId: cid } }),
+        prisma.habit.deleteMany({ where: { ownerChatId: cid } }),
+      ]).catch(() => {})
+
+      try {
+        const { notifyDataChanged } = await import('@/lib/backend/sse')
+        notifyDataChanged(targetChatId, 'all')
+      } catch {}
+
+      return NextResponse.json({ success: true, message: 'Все задачи, заметки, цели и привычки пользователя очищены' })
     }
 
-    const cid = BigInt(targetChatId)
-    await prisma.telegramChat.deleteMany({ where: { chatId: cid } })
-    await prisma.userSession.deleteMany({ where: { chatId: cid } }).catch(() => {})
-    await prisma.task.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
-    await prisma.friendship.deleteMany({ where: { OR: [{ userChatId: cid }, { friendChatId: cid }] } }).catch(() => {})
+    // Full Account Deletion
+    if (ROOT_ADMIN_IDS.includes(targetChatId)) {
+      return NextResponse.json({ error: 'Нельзя удалить аккаунт владельца' }, { status: 400 })
+    }
 
-    return NextResponse.json({ success: true })
+    const { deleteUserAccountPermanently } = await import('@/lib/backend/db')
+    await deleteUserAccountPermanently(targetChatId)
+
+    try {
+      const { notifyDataChanged } = await import('@/lib/backend/sse')
+      notifyDataChanged(targetChatId, 'all')
+    } catch {}
+
+    return NextResponse.json({ success: true, message: 'Аккаунт пользователя полностью удален из базы данных' })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

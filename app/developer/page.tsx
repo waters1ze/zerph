@@ -165,12 +165,6 @@ async function runAction(promptText) {
 
   // AI Prompts Section State
   const [activePromptTab, setActivePromptTab] = useState<'cursor_skill' | 'theme_styler' | 'action_protocol'>('cursor_skill')
-  const [selectedPromptCategory, setSelectedPromptCategory] = useState<string>('all')
-  const [searchPromptQuery, setSearchPromptQuery] = useState<string>('')
-  const [selectedPromptId, setSelectedPromptId] = useState<string>('cursor_skill')
-
-  // SDK Docs Section State
-  const [sdkDocTab, setSdkDocTab] = useState<'overview' | 'manifest' | 'context' | 'github_publish' | 'monetization' | 'cli'>('overview')
 
   // Copy helper
   const copyToClipboard = (text: string, id: string) => {
@@ -484,38 +478,8 @@ async function runAction(promptText) {
     URL.revokeObjectURL(url)
   }
 
-  interface AiPromptItem {
-    id: string
-    category: 'all' | 'system_ide' | 'ready_widgets' | 'automation' | 'design'
-    title: string
-    shortDesc: string
-    icon: string
-    badge: string
-    tags: string[]
-    prompt: string
-    suggestedManifest?: {
-      name: string
-      title: string
-      category: string
-      type: 'widget' | 'template' | 'theme' | 'integration' | 'prompt'
-      icon: string
-      description: string
-      triggers: string
-      aiInstructions: string
-    }
-    suggestedSandboxCode?: string
-  }
-
-  const AI_PROMPTS_COLLECTION: AiPromptItem[] = [
-    {
-      id: 'cursor_skill',
-      category: 'system_ide',
-      title: 'Cursor & Windsurf IDE System Prompt (.cursorrules)',
-      shortDesc: 'Системные правила для Cursor AI / Windsurf для генерации 100% совместимых плагинов Zerf Note.',
-      icon: '🔮',
-      badge: 'Cursor / Windsurf',
-      tags: ['IDE', 'CursorRules', 'ZerfContext', 'Glassmorphism'],
-      prompt: `---
+  // AI Prompt Skill strings
+  const CURSOR_AI_SKILL = `---
 name: zerf-extension-builder
 description: Expert AI rule for writing 100% compliant, modern Zerf Note extensions with Glassmorphism UI, ZerfContext SDK, and Action Protocol.
 ---
@@ -535,326 +499,16 @@ When creating extensions for Zerf Note:
      - \`ZerfContext.ai.prompt({ system, user })\`
      - \`ZerfContext.notifications.send({ title, body })\`
 4. **Inter-AI Protocol**: Return JSON with standardized format:
-   \`{ "message": "...", "actions": [{ "type": "create_task", "title": "..." }], "intent": "..." }\``,
-      suggestedManifest: {
-        name: 'zerf-plugin-cursor-base',
-        title: 'Базовый шаблон для Cursor IDE',
-        category: 'ИИ & Промпты',
-        type: 'template',
-        icon: '🔮',
-        description: 'Оптимизированный шаблон для разработки плагинов в среде Cursor / Windsurf.',
-        triggers: '/cursor, генератор плагина',
-        aiInstructions: 'Сгенерируй код виджета для Zerf Note с поддержкой ZerfContext API и адаптивного дизайна.'
-      }
-    },
-    {
-      id: 'claude_architect',
-      category: 'system_ide',
-      title: 'Claude 3.7 & GPT-4o Master Plugin Architect',
-      shortDesc: 'Генерация полного пакета расширения (манифест, React/JS логика, Tailwind стили).',
-      icon: '🤖',
-      badge: 'Claude / ChatGPT',
-      tags: ['LLM Architect', 'Full Package', 'Manifest V2'],
-      prompt: `Ты — ведущий системный архитектор платформы Zerf Note. Твоя задача — создать полное расширение для Zerf Note по запросу пользователя.
+   \`{ "message": "...", "actions": [{ "type": "create_task", "title": "..." }], "intent": "..." }\``
 
-Сгенерируй решение в двух файлах:
-
-### 1. \`zerf-extension.json\` (Манифест V2):
-\`\`\`json
-{
-  "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
-  "name": "zerf-plugin-example",
-  "title": "Название расширения",
-  "version": "1.0.0",
-  "description": "Краткое и емкое описание функционала",
-  "author": "github_username",
-  "category": "Продуктивность",
-  "type": "widget",
-  "icon": "⚡",
-  "minPlan": "free",
-  "price": 0,
-  "permissions": ["tasks:read", "tasks:write", "notes:write", "ui:notify"],
-  "triggers": ["/cmd", "триггерные фразы"],
-  "aiInstructions": "Инструкции для Zerfik AI..."
-}
-\`\`\`
-
-### 2. \`index.js\` (Код расширения):
-- Используй \`ZerfContext\` для доступа к задачам (\`ZerfContext.tasks\`), заметкам (\`ZerfContext.notes\`) и уведомлениям.
-- Создай чистый и отзывчивый интерфейс на базе Tailwind CSS (\`bg-card\`, \`border-border\`, \`rounded-2xl\`).
-- Обрабатывай ошибки через \`try/catch\` и уведомляй пользователя через \`ZerfContext.notifications.send\`.`,
-      suggestedManifest: {
-        name: 'zerf-plugin-ai-architect',
-        title: 'AI Master Architect',
-        category: 'ИИ & Промпты',
-        type: 'template',
-        icon: '🤖',
-        description: 'Универсальный генератор расширений от Claude 3.7 / GPT-4o.',
-        triggers: '/architect, создай плагин',
-        aiInstructions: 'Спроектируй структуру расширения и сгенерируй манифест и код.'
-      }
-    },
-    {
-      id: 'pomodoro_timer',
-      category: 'ready_widgets',
-      title: 'Виджет Pomodoro & Фокус-таймер с аудио и задачами',
-      shortDesc: 'Интерактивный таймер 25/5 с привязкой к активным задачам Zerf Note и звуковыми колокольчиками.',
-      icon: '⏱️',
-      badge: 'Виджет',
-      tags: ['Таймер', 'Pomodoro', 'Звуки', 'Задачи'],
-      prompt: `Сгенерируй интерактивный виджет "Pomodoro Фокус-Таймер" для боковой панели или дашборда Zerf Note.
-
-Требования к функционалу:
-1. Режимы: 25 минут (Фокус), 5 минут (Короткий перерыв), 15 минут (Длинный перерыв).
-2. Выбор активной задачи из \`ZerfContext.tasks.getAll({ done: false })\`.
-3. Круговой прогресс-бар SVG с таймером обратного отсчета.
-4. По завершению таймера:
-   - Проигрывание звукового колокольчика через Web Audio API.
-   - Предложение отметить задачу как выполненную (\`ZerfContext.tasks.complete(taskId)\`).
-   - Запись статистики сессии в заметку "Дневник продуктивности" (\`ZerfContext.notes.create\`).
-5. Дизайн: Glassmorphism (\`bg-card/80 backdrop-blur-md rounded-3xl border border-border/80\`).`,
-      suggestedManifest: {
-        name: 'zerf-widget-pomodoro-pro',
-        title: 'Pomodoro Pro Focus Timer',
-        category: 'Продуктивность',
-        type: 'widget',
-        icon: '⏱️',
-        description: 'Интерактивный таймер фокуса с авто-завершением задач и статистикой.',
-        triggers: '/pomodoro, запусти таймер, фокус 25',
-        aiInstructions: 'Запусти сессию Pomodoro для указанной пользователем задачи.'
-      },
-      suggestedSandboxCode: `// Pomodoro Focus Timer Simulation
-const { tasks, notes, user } = ZerfContext
-
-console.log("⏱️ Инициализация Pomodoro Timer для:", user.name)
-
-async function startPomodoro(taskName) {
-  const activeTask = await ZerfContext.tasks.create({
-    title: taskName || "Фокусная работа (25 мин)",
-    priority: "high"
-  })
-  
-  await ZerfContext.notifications.send({
-    title: "⏱️ Pomodoro Запущен",
-    body: "Фокусируйтесь на задаче: " + activeTask.title
-  })
-  
-  return { status: "running", taskId: activeTask.id, minutes: 25 }
-}`
-    },
-    {
-      id: 'habit_gamification',
-      category: 'ready_widgets',
-      title: 'Геймификация привычек, уровни и XP награды',
-      shortDesc: 'Виджет прокачки персонажа: за каждую выполненную привычку начисляется XP с фейерверками.',
-      icon: '🎮',
-      badge: 'Геймификация',
-      tags: ['Привычки', 'XP', 'Уровни', 'Анимации'],
-      prompt: `Сгенерируй расширение-виджет "RPG Habit Leveler" для Zerf Note:
-
-Функционал:
-1. Система опыта (XP):
-   - +10 XP за легкую привычку, +25 XP за важную, +50 XP за выполнение всех привычек дня.
-2. Прогресс-бар уровня персонажа (Уровень 1 -> 50) с красивым неоновым градиентом.
-3. Серии дней (Streaks): множитель XP х1.5 за 7 дней подряд.
-4. Интеграция с Zerf Note:
-   - Автоматический трекинг при отметке привычки в \`ZerfContext.events.on('habit:completed')\`.
-   - Запись еженедельных достижений в профиль пользователя.
-5. UI: Анимированный аватар Зерфика, шкала опыта, бейджи достижений.`,
-      suggestedManifest: {
-        name: 'zerf-widget-rpg-habits',
-        title: 'RPG Habits & XP Leveler',
-        category: 'Геймификация',
-        type: 'widget',
-        icon: '🎮',
-        description: 'Превратите выполнение привычек в увлекательную RPG с уровнями и наградами.',
-        triggers: '/rpg, мой уровень, привычки xp',
-        aiInstructions: 'Покажи текущий уровень игрока, начисленный опыт и оставшиеся привычки.'
-      }
-    },
-    {
-      id: 'github_sync',
-      category: 'automation',
-      title: 'Синхронизация GitHub Pull Requests & Issues в задачи',
-      shortDesc: 'Автоматический сбор назначенных вам задач, PR на ревью и багов из GitHub прямо в раздел Сегодня.',
-      icon: '🐙',
-      badge: 'GitHub Sync',
-      tags: ['GitHub', 'API', 'Pull Requests', 'Issues'],
-      prompt: `Создай интеграционный плагин "GitHub Issues & PR Sync" для Zerf Note:
-
-Архитектура плагина:
-1. Манифест с разрешением \`tasks:write\`, \`network:fetch\`.
-2. По команде \`/github sync\` или нажатию кнопки в виджете:
-   - Запрос к GitHub API (\`https://api.github.com/issues?filter=assigned\`).
-   - Получение списка назначенных Pull Requests и открытых Issues.
-   - Для каждого элемента: создание задачи в Zerf Note с тегом \`#github\`, дедлайном и ссылкой на PR.
-3. Предотвращение дубликатов: проверка существующих задач в \`ZerfContext.tasks.getAll()\`.
-4. Статусный бейдж: количество открытых PR, ожидающих вашего ревью.`,
-      suggestedManifest: {
-        name: 'zerf-integration-github-sync',
-        title: 'GitHub Issues & PRs Synchronizer',
-        category: 'Интеграции',
-        type: 'integration',
-        icon: '🐙',
-        description: 'Двусторонняя синхронизация задач и пул-реквестов из ваших GitHub репозиториев.',
-        triggers: '/github sync, синхронизируй git, мои pr',
-        aiInstructions: 'Сделай запрос к GitHub API и создай задачи по назначенным ревью и ишью.'
-      }
-    },
-    {
-      id: 'eisenhower_matrix',
-      category: 'automation',
-      title: 'Матрица Эйзенхауэра & AI Авто-приоритезация',
-      shortDesc: 'Интерактивная доска 2x2 (Срочно/Важно) с автоматической раскладкой задач встроенным ИИ.',
-      icon: '🧠',
-      badge: 'AI Smart Sort',
-      tags: ['Эйзенхауэр', 'Матрица', 'AI Сортировка'],
-      prompt: `Сгенерируй расширение "Матрица Эйзенхауэра AI" для Zerf Note:
-
-Функционал:
-1. 4 квадранта:
-   - 🔴 Важно и Срочно (Сделать немедленно)
-   - 🔵 Важно, но Не срочно (Запланировать в календарь)
-   - 🟡 Срочно, но Не важно (Делегировать)
-   - ⚪ Не важно и Не срочно (Удалить / Отложить)
-2. Кнопка "🧠 AI Авто-раскладка":
-   - Отправляет список всех невыполненных задач в \`ZerfContext.ai.prompt\`.
-   - ИИ анализирует дедлайны и контекст, распределяет задачи по квадрантам и обновляет приоритеты в базе данных.
-3. Drag-and-drop перетаскивание задач между квадрантами.`,
-      suggestedManifest: {
-        name: 'zerf-plugin-eisenhower-ai',
-        title: 'Матрица Эйзенхауэра AI',
-        category: 'Продуктивность',
-        type: 'widget',
-        icon: '🧠',
-        description: 'Умная матрица приоритетов с авто-сортировкой задач силами нейросети.',
-        triggers: '/matrix, матрица эйзенхауэра, расставь приоритеты',
-        aiInstructions: 'Проанализируй список задач и разложи их по 4 квадрантам матрицы Эйзенхауэра.'
-      }
-    },
-    {
-      id: 'obsidian_vault',
-      category: 'automation',
-      title: 'Двусторонний экспорт в Obsidian Vault & Markdown',
-      shortDesc: 'Синхронизация базы знаний Zerf Note с локальным хранилищем Obsidian с сохранением Wikilinks [[Заметка]].',
-      icon: '📝',
-      badge: 'Obsidian / Markdown',
-      tags: ['Obsidian', 'Markdown', 'Wikilinks', 'Экспорт'],
-      prompt: `Сгенерируй расширение "Obsidian Vault Bridge" для Zerf Note:
-
-Функционал:
-1. Получение всех заметок через \`ZerfContext.notes.getAll()\`.
-2. Конвертация заметок в чистый Markdown с Frontmatter YAML:
-   \`\`\`yaml
-   ---
-   title: "Название заметки"
-   created: "2026-08-20"
-   tags: [zerf, productivity]
-   ---
-   \`\`\`
-3. Корректное сохранение связей двунаправленных ссылок \`[[Другая заметка]]\`.
-4. Генерация ZIP-архива структуры папок для импорта в Obsidian Vault в 1 клик.`,
-      suggestedManifest: {
-        name: 'zerf-plugin-obsidian-bridge',
-        title: 'Obsidian Vault & Markdown Bridge',
-        category: 'Интеграции',
-        type: 'integration',
-        icon: '📝',
-        description: 'Экспорт и синхронизация заметок и базы знаний с Obsidian Vault.',
-        triggers: '/obsidian, экспорт в обсидиан, выгрузить vault',
-        aiInstructions: 'Сформируй структуру заметок в формате Obsidian Markdown.'
-      }
-    },
-    {
-      id: 'weather_commute',
-      category: 'ready_widgets',
-      title: 'Виджет Погоды и времени в пути перед утренними делами',
-      shortDesc: 'Компактный утренний дашборд: прогноз погоды в городе пользователя и расчет времени на дорогу.',
-      icon: '🌦️',
-      badge: 'Виджет',
-      tags: ['Погода', 'Маршруты', 'Утро', 'Дашборд'],
-      prompt: `Сгенерируй стильный утренний виджет "Weather & Commute Planner" для Zerf Note:
-
-Функционал:
-1. Авто-определение города из настроек профиля (\`ZerfContext.user.getCity()\`).
-2. Отображение текущей температуры, осадков и прогноза на день.
-3. Если в задачах на сегодня есть встречи вне дома — расчет времени на дорогу и рекомендация времени выхода.
-4. Glassmorphism карточка с адаптивным градиентом (солнечно, дождь, вечер).`,
-      suggestedManifest: {
-        name: 'zerf-widget-weather-commute',
-        title: 'Weather & Commute Briefing',
-        category: 'Продуктивность',
-        type: 'widget',
-        icon: '🌦️',
-        description: 'Утренний брифинг: погода в городе и напоминания о времени выхода на встречи.',
-        triggers: '/weather, погода, когда выходить',
-        aiInstructions: 'Покажи прогноз погоды и расписание выходов на встречи.'
-      }
-    },
-    {
-      id: 'voice_meeting_ai',
-      category: 'automation',
-      title: 'AI-суммаризация аудиовстреч и выжимка Action Items',
-      shortDesc: 'Транскрибация голосовых заметок и совещаний с автоматическим созданием задач и конспекта.',
-      icon: '🎙️',
-      badge: 'AI Voice Summary',
-      tags: ['Голос', 'Стенограмма', 'Action Items', 'AI'],
-      prompt: `Сгенерируй расширение "Meeting Transcriber & Action Items Extractor" для Zerf Note:
-
-Функционал:
-1. Запись или загрузка аудиофайла встречи.
-2. Транскрибация через Groq Whisper / Zerf Voice Engine.
-3. Передача стенограммы в ИИ для анализа:
-   - Краткое резюме (Executive Summary) в 3 тезисах.
-   - Список договоренностей (Action Items) с ответственными.
-4. Автоматическое создание:
-   - Заметки с полным конспектом встречи в папку "Совещания".
-   - Задач в Zerf Note со сроками исполнения.`,
-      suggestedManifest: {
-        name: 'zerf-plugin-meeting-ai',
-        title: 'Meeting AI Transcriber & Tasks',
-        category: 'ИИ & Промпты',
-        type: 'integration',
-        icon: '🎙️',
-        description: 'Превращайте записи совещаний в структурированный конспект и список задач.',
-        triggers: '/meeting, разбери встречу, стенограмма',
-        aiInstructions: 'Обработай текст встречи, выдели главные решения и создай задачи.'
-      }
-    },
-    {
-      id: 'theme_styler',
-      category: 'design',
-      title: 'Дизайн-система: Создание адаптивных тем с Zerf CSS токенами',
-      shortDesc: 'Руководство по верстке и созданию тем оформления (OLED, Cyberpunk, Forest, Light).',
-      icon: '🎨',
-      badge: 'UI & Themes',
-      tags: ['CSS', 'Tailwind', 'Цвета', 'Темы'],
-      prompt: `You are a Senior Frontend UI/UX Designer specialized in the Zerf Note Design System.
+  const THEME_STYLER_PROMPT = `You are a Senior Frontend UI/UX Designer specialized in the Zerf Note Design System.
 Generate extension widget UI conforming to the Zerf aesthetic:
 - **Color Tokens**: Use \`bg-background\`, \`bg-card\`, \`text-foreground\`, \`text-muted-foreground\`, \`border-border\`, \`text-primary\`.
 - **Theme Adaptability**: Do not hardcode dark colors like #000 or #fff directly; use Tailwind semantic tokens so widgets automatically adapt when users switch themes (OLED, Cyberpunk, Light, Emerald Forest).
 - **Glassmorphism**: Soft background opacity (\`bg-card/80\`), subtle 1px border (\`border border-border/80\`), smooth hover states (\`hover:border-primary/40\`).
-- **Typography**: Clean, readable sans-serif, font-bold for headers, text-xs / text-sm for dense productivity tools.`,
-      suggestedManifest: {
-        name: 'zerf-theme-custom-cyberpunk',
-        title: 'Cyberpunk Neon Theme Preset',
-        category: 'Темы & Оформление',
-        type: 'theme',
-        icon: '🎨',
-        description: 'Фирменная неоновая тема с глубокими контрастными цветами.',
-        triggers: '/theme cyberpunk, неоновая тема',
-        aiInstructions: 'Примени неоновую цветовую палитру к интерфейсу.'
-      }
-    },
-    {
-      id: 'action_protocol',
-      category: 'system_ide',
-      title: 'Двусторонний протокол Inter-AI Handshake',
-      shortDesc: 'Спецификация JSON-ответов сторонних моделей (BYOK) для бесшовного создания задач и заметок.',
-      icon: '🔄',
-      badge: 'Inter-AI Protocol',
-      tags: ['BYOK', 'JSON Schema', 'Action Protocol', 'API'],
-      prompt: `Instructions for External AI models connected to Zerf Note via BYOK:
+- **Typography**: Clean, readable sans-serif, font-bold for headers, text-xs / text-sm for dense productivity tools.`
+
+  const ACTION_PROTOCOL_PROMPT = `Instructions for External AI models connected to Zerf Note via BYOK:
 When processing user instructions and extension triggers, ALWAYS output your final response as a JSON object adhering to the Zerf Action Protocol:
 {
   "message": "Human readable response for the user",
@@ -873,35 +527,6 @@ When processing user instructions and extension triggers, ALWAYS output your fin
   ],
   "intent": "productivity_action"
 }`
-    }
-  ]
-
-  const CURSOR_AI_SKILL = AI_PROMPTS_COLLECTION[0].prompt
-  const THEME_STYLER_PROMPT = AI_PROMPTS_COLLECTION[9].prompt
-  const ACTION_PROTOCOL_PROMPT = AI_PROMPTS_COLLECTION[10].prompt
-
-  const handleLoadPromptToManifest = (item: AiPromptItem) => {
-    if (item.suggestedManifest) {
-      setMName(item.suggestedManifest.name)
-      setMTitle(item.suggestedManifest.title)
-      setMCategory(item.suggestedManifest.category)
-      setMType(item.suggestedManifest.type)
-      setMIcon(item.suggestedManifest.icon)
-      setMDescription(item.suggestedManifest.description)
-      setMTriggers(item.suggestedManifest.triggers)
-      setMAiInstructions(item.suggestedManifest.aiInstructions)
-      setNavSection('manifest_builder')
-    }
-  }
-
-  const handleLoadPromptToSandbox = (item: AiPromptItem) => {
-    if (item.suggestedSandboxCode) {
-      setSandboxCode(item.suggestedSandboxCode)
-      setNavSection('live_sandbox')
-    } else {
-      setNavSection('live_sandbox')
-    }
-  }
 
   interface NavItem {
     id: string
@@ -990,28 +615,22 @@ When processing user instructions and extension triggers, ALWAYS output your fin
             )}
           </div>
 
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden md:flex p-1.5 rounded-xl hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors shrink-0 cursor-pointer"
-            title={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-          >
-            <ChevronRight className={cn('w-4 h-4 transition-transform duration-200', !sidebarCollapsed && 'rotate-180')} />
-          </button>
-        </div>
-
-        {/* ── Prominent Long Return to Main Page Button ── */}
-        <div className="p-3 border-b border-border/70">
-          <a
-            href="/"
-            className={cn(
-              "w-full flex items-center justify-center gap-2.5 px-3.5 py-2.5 rounded-2xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 hover:border-primary/50 text-xs font-bold transition-all shadow-xs group cursor-pointer",
-              sidebarCollapsed ? "p-2.5" : "px-3.5"
-            )}
-            title="Вернуться на главную страницу Zerf Note"
-          >
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1 shrink-0" />
-            {!sidebarCollapsed && <span className="truncate">← На главную страницу Zerf</span>}
-          </a>
+          <div className="flex items-center gap-1">
+            <a
+              href="/"
+              className="p-1.5 rounded-xl hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors"
+              title="Вернуться на главную"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </a>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden md:flex p-1.5 rounded-xl hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs transition-colors"
+              title={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            >
+              <ChevronRight className={cn('w-4 h-4 transition-transform', !sidebarCollapsed && 'rotate-180')} />
+            </button>
+          </div>
         </div>
 
         {/* Quick Search */}
@@ -1120,19 +739,10 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         
         {/* Top Control Bar */}
         <header className="h-16 border-b border-border bg-card/40 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20">
-          <div className="flex items-center gap-3 min-w-0">
-            <a
-              href="/"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-foreground border border-border text-xs font-bold transition-all shadow-xs group cursor-pointer shrink-0"
-              title="Вернуться на главную страницу Zerf Note"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-primary transition-transform group-hover:-translate-x-1" />
-              <span className="hidden sm:inline">← На главную</span>
-            </a>
-
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground truncate">
-              <span className="text-muted-foreground capitalize hidden md:inline">Студия</span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground hidden md:inline" />
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+              <span className="text-muted-foreground capitalize">Студия</span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-primary truncate">
                 {navSection === 'manifest_builder' && 'Конструктор манифеста'}
                 {navSection === 'universal_template' && 'Универсальный шаблон'}
@@ -1659,174 +1269,71 @@ When processing user instructions and extension triggers, ALWAYS output your fin
               VIEW 4: AI PROMPTS, SKILLS & RULES LIBRARY
           ══════════════════════════════════════════════════════════════ */}
           {navSection === 'ai_prompts' && (
-            <div className="space-y-6 max-w-6xl">
-              <div className="p-6 md:p-8 rounded-3xl bg-card border border-border space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
-                  <div>
-                    <h2 className="text-base sm:text-lg font-bold flex items-center gap-2 text-foreground">
-                      <Bot className="w-5 h-5 text-purple-400" />
-                      <span>Библиотека AI-скиллов, системных промптов и шаблонов</span>
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Готовые инструкции для Cursor IDE, Windsurf, Claude 3.7, ChatGPT и DeepSeek для моментального создания плагинов и виджетов Zerf Note
-                    </p>
-                  </div>
-
-                  <div className="relative min-w-[220px]">
-                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={searchPromptQuery}
-                      onChange={e => setSearchPromptQuery(e.target.value)}
-                      placeholder="Поиск по промптам..."
-                      className="w-full h-9 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-all"
-                    />
-                  </div>
+            <div className="space-y-6 max-w-5xl">
+              <div className="p-6 rounded-3xl bg-card border border-border space-y-4">
+                <div className="border-b border-border pb-4">
+                  <h2 className="text-base font-bold flex items-center gap-2">
+                    <Bot className="w-5 h-5 text-purple-400" />
+                    <span>Библиотека AI-скиллов и системных промптов (Cursor / GPT / Claude)</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Скопируйте готовые инструкции в ваши AI-ассистенты для автоматической генерации плагинов в фирменном стиле Zerf Note
+                  </p>
                 </div>
 
-                {/* Category filters */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
+                {/* Tab selector */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-border/40 text-xs">
                   {[
-                    { id: 'all', label: 'Все промпты', count: AI_PROMPTS_COLLECTION.length },
-                    { id: 'system_ide', label: '🔮 IDE & Скиллы', count: AI_PROMPTS_COLLECTION.filter(p => p.category === 'system_ide').length },
-                    { id: 'ready_widgets', label: '⏱️ Готовые виджеты', count: AI_PROMPTS_COLLECTION.filter(p => p.category === 'ready_widgets').length },
-                    { id: 'automation', label: '⚡ Автоматизации & AI', count: AI_PROMPTS_COLLECTION.filter(p => p.category === 'automation').length },
-                    { id: 'design', label: '🎨 Дизайн & Темы', count: AI_PROMPTS_COLLECTION.filter(p => p.category === 'design').length },
-                  ].map(cat => (
+                    { id: 'cursor_skill', label: '🔮 Cursor / Windsurf Skill' },
+                    { id: 'theme_styler', label: '🎨 UI & Theme Styler Guide' },
+                    { id: 'action_protocol', label: '🔄 Inter-AI Action Protocol' },
+                  ].map(tab => (
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedPromptCategory(cat.id)}
+                      key={tab.id}
+                      onClick={() => setActivePromptTab(tab.id as any)}
                       className={cn(
-                        'px-3.5 py-1.5 rounded-xl font-semibold transition-all cursor-pointer shrink-0 flex items-center gap-1.5',
-                        selectedPromptCategory === cat.id
+                        'px-3.5 py-1.5 rounded-xl font-semibold transition-all cursor-pointer shrink-0',
+                        activePromptTab === tab.id
                           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-xs'
-                          : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
                       )}
                     >
-                      <span>{cat.label}</span>
-                      <span className="text-[10px] opacity-70">({cat.count})</span>
+                      {tab.label}
                     </button>
                   ))}
                 </div>
 
-                {/* Prompts Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {AI_PROMPTS_COLLECTION.filter(p => {
-                    const matchesCat = selectedPromptCategory === 'all' || p.category === selectedPromptCategory
-                    const matchesSearch = !searchPromptQuery || 
-                      p.title.toLowerCase().includes(searchPromptQuery.toLowerCase()) ||
-                      p.shortDesc.toLowerCase().includes(searchPromptQuery.toLowerCase()) ||
-                      p.tags.some(t => t.toLowerCase().includes(searchPromptQuery.toLowerCase()))
-                    return matchesCat && matchesSearch
-                  }).map(item => {
-                    const isSelected = selectedPromptId === item.id
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => setSelectedPromptId(item.id)}
-                        className={cn(
-                          'p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 text-xs',
-                          isSelected
-                            ? 'bg-purple-500/10 border-purple-500/50 shadow-sm'
-                            : 'bg-card hover:bg-muted/30 border-border'
-                        )}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
-                              <span className="text-xl p-1.5 rounded-xl bg-muted/60 border border-border/50 shrink-0">{item.icon}</span>
-                              <div>
-                                <h3 className="font-bold text-foreground line-clamp-1">{item.title}</h3>
-                                <span className="text-[10px] text-purple-300 font-mono">{item.badge}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{item.shortDesc}</p>
-                          
-                          <div className="flex flex-wrap gap-1 pt-1">
-                            {item.tags.map(t => (
-                              <span key={t} className="px-2 py-0.5 rounded-lg bg-muted/60 text-[10px] text-muted-foreground font-mono">
-                                #{t}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                {/* Prompt Viewer */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-foreground">
+                      {activePromptTab === 'cursor_skill' && 'Промпт для Cursor IDE / Windsurf (.cursorrules):'}
+                      {activePromptTab === 'theme_styler' && 'Инструкция по верстке с поддержкой тем Zerf Note:'}
+                      {activePromptTab === 'action_protocol' && 'Спецификация ответа внешней нейросети (Inter-AI Protocol):'}
+                    </p>
 
-                        <div className="flex items-center gap-2 pt-2 border-t border-border/40">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              copyToClipboard(item.prompt, `prompt_${item.id}`)
-                            }}
-                            className="flex-1 py-1.5 px-2.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            {copiedId === `prompt_${item.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                            <span>{copiedId === `prompt_${item.id}` ? 'Скопировано!' : 'Копировать'}</span>
-                          </button>
+                    <button
+                      onClick={() => {
+                        const content = activePromptTab === 'cursor_skill'
+                          ? CURSOR_AI_SKILL
+                          : activePromptTab === 'theme_styler'
+                          ? THEME_STYLER_PROMPT
+                          : ACTION_PROTOCOL_PROMPT
+                        copyToClipboard(content, 'prompt_copy')
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      {copiedId === 'prompt_copy' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedId === 'prompt_copy' ? 'Скопировано!' : 'Копировать промпт'}</span>
+                    </button>
+                  </div>
 
-                          {item.suggestedManifest && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleLoadPromptToManifest(item)
-                              }}
-                              className="py-1.5 px-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                              title="Загрузить параметры в Конструктор манифеста"
-                            >
-                              <Code2 className="w-3.5 h-3.5 text-primary" />
-                              <span>В Конструктор</span>
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleLoadPromptToSandbox(item)
-                            }}
-                            className="py-1.5 px-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                            title="Открыть в Live Sandbox"
-                          >
-                            <Play className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Sandbox</span>
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
+                  <pre className="p-4 rounded-2xl bg-zinc-950 text-purple-300 font-mono text-xs overflow-auto max-h-[400px] border border-border/60 leading-relaxed whitespace-pre-wrap">
+                    {activePromptTab === 'cursor_skill' && CURSOR_AI_SKILL}
+                    {activePromptTab === 'theme_styler' && THEME_STYLER_PROMPT}
+                    {activePromptTab === 'action_protocol' && ACTION_PROTOCOL_PROMPT}
+                  </pre>
                 </div>
-
-                {/* Selected Prompt Full View */}
-                {(() => {
-                  const current = AI_PROMPTS_COLLECTION.find(p => p.id === selectedPromptId) || AI_PROMPTS_COLLECTION[0]
-                  return (
-                    <div className="p-5 rounded-2xl bg-zinc-950 border border-purple-500/30 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{current.icon}</span>
-                          <div>
-                            <p className="font-bold text-xs text-purple-300">{current.title}</p>
-                            <p className="text-[10px] text-muted-foreground">{current.shortDesc}</p>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => copyToClipboard(current.prompt, 'active_full_prompt')}
-                          className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
-                        >
-                          {copiedId === 'active_full_prompt' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedId === 'active_full_prompt' ? 'Скопировано!' : 'Копировать полный промпт'}</span>
-                        </button>
-                      </div>
-
-                      <pre className="p-4 rounded-xl bg-black/60 text-purple-200 font-mono text-xs overflow-auto max-h-[350px] border border-border/40 leading-relaxed whitespace-pre-wrap">
-                        {current.prompt}
-                      </pre>
-                    </div>
-                  )
-                })()}
               </div>
             </div>
           )}
@@ -2140,246 +1647,52 @@ When processing user instructions and extension triggers, ALWAYS output your fin
           {(navSection === 'sdk_docs' || navSection === 'cli_tools') && (
             <div className="space-y-6 max-w-5xl">
               <div className="p-6 md:p-8 rounded-3xl bg-card border border-border shadow-xs space-y-6 text-xs">
-                <div className="border-b border-border pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="border-b border-border pb-4 flex items-center justify-between">
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold flex items-center gap-2 text-foreground">
+                    <h2 className="text-base font-bold flex items-center gap-2">
                       <BookOpen className="w-5 h-5 text-primary" />
-                      <span>Полный справочник разработчика Zerf Note SDK & API</span>
+                      <span>Полный справочник разработчика Zerf Note SDK</span>
                     </h2>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Официальная документация платформы: архитектура, манифест V2, API контекста ZerfContext, права доступа и интеграция с GitHub
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      API контекста, права доступа, Webhook обработчики и CLI-инструменты
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={handleDownloadStarterKit}
-                      className="px-3.5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Скачать Starter Kit</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleDownloadStarterKit}
+                    className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Скачать Starter Kit</span>
+                  </button>
                 </div>
 
-                {/* Subtabs for SDK Docs */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs border-b border-border/40 scrollbar-none">
-                  {[
-                    { id: 'overview', label: '📌 1. Быстрый старт & Архитектура' },
-                    { id: 'manifest', label: '📄 2. Спецификация Manifest V2' },
-                    { id: 'context', label: '⚡ 3. ZerfContext SDK API' },
-                    { id: 'github_publish', label: '🐙 4. Публикация из GitHub' },
-                    { id: 'monetization', label: '💰 5. Монетизация 80/20' },
-                    { id: 'cli', label: '💻 6. Zerf CLI' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setSdkDocTab(tab.id as any)}
-                      className={cn(
-                        'px-3.5 py-1.5 rounded-xl font-semibold transition-all cursor-pointer shrink-0',
-                        sdkDocTab === tab.id
-                          ? 'bg-primary/20 text-primary border border-primary/40 shadow-xs'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                      )}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* 1. Overview */}
-                {sdkDocTab === 'overview' && (
-                  <div className="space-y-4 leading-relaxed text-foreground/90 text-xs">
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
-                      <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                        <span>🏛️ Архитектура расширений Zerf Note</span>
-                      </h3>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Платформа Zerf Note позволяет создавать модульные расширения: виджеты дашборда, шаблоны, интеграции с внешними API, темы оформления и AI-скиллы.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                        <div className="p-3 rounded-xl bg-card border border-border space-y-1">
-                          <p className="font-bold text-foreground">1. Изолированная VM</p>
-                          <p className="text-[11px] text-muted-foreground">Каждое расширение работает в безопасной песочнице с гранулярными правами доступа.</p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-card border border-border space-y-1">
-                          <p className="font-bold text-foreground">2. ZerfContext API</p>
-                          <p className="text-[11px] text-muted-foreground">Прямой доступ к созданию задач, заметок, вызову ИИ и управлению окнами.</p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-card border border-border space-y-1">
-                          <p className="font-bold text-foreground">3. GitHub Репозитории</p>
-                          <p className="text-[11px] text-muted-foreground">Публикация и версионирование напрямую из вашего открытого или приватного GitHub.</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
-                      <p className="font-bold text-foreground">📦 Установка SDK через npm / bun / pnpm:</p>
-                      <pre className="p-3.5 rounded-xl bg-zinc-950 text-emerald-400 font-mono text-xs overflow-x-auto">
+                <div className="space-y-4 text-xs leading-relaxed text-foreground/90">
+                  <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
+                    <p className="font-bold text-foreground">📦 Установка SDK через npm:</p>
+                    <pre className="p-3 rounded-xl bg-zinc-950 text-emerald-400 font-mono text-xs overflow-x-auto">
 npm install @zerf/sdk
-# или через pnpm:
+# или через bun / pnpm:
 pnpm add @zerf/sdk</pre>
-                    </div>
                   </div>
-                )}
 
-                {/* 2. Manifest V2 */}
-                {sdkDocTab === 'manifest' && (
-                  <div className="space-y-4 leading-relaxed text-foreground/90 text-xs">
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-3">
-                      <h3 className="font-bold text-sm text-foreground">📄 Манифест расширения (zerf-extension.json)</h3>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Файл манифеста располагается в корне вашего репозитория и описывает метаданные, категорию, требуемые разрешения и инструкции для ИИ.
-                      </p>
-                      <pre className="p-4 rounded-xl bg-zinc-950 text-primary font-mono text-xs overflow-x-auto leading-relaxed whitespace-pre-wrap">
-{`{
-  "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
-  "name": "zerf-plugin-my-widget",
-  "title": "Умный виджет продуктивности",
-  "version": "1.0.0",
-  "description": "Автоматизирует рутинные задачи и выводит метрики дня",
-  "author": "waters1ze",
-  "category": "Продуктивность",
-  "type": "widget",
-  "icon": "⚡",
-  "minPlan": "free",
-  "price": 0,
-  "permissions": [
-    "tasks:read",
-    "tasks:write",
-    "notes:write",
-    "ui:notify",
-    "ai:prompt"
-  ],
-  "triggers": ["/widget", "покажи метрики", "статистика дня"],
-  "aiInstructions": "Когда пользователь запрашивает метрики дня, сформируй красивый отчет и создай задачи по несделанным делам."
-}`}
-                      </pre>
-                    </div>
+                  <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
+                    <p className="font-bold text-foreground">💻 Команды Zerf CLI:</p>
+                    <pre className="p-3 rounded-xl bg-zinc-950 text-primary font-mono text-xs overflow-x-auto">
+{`# Авторизация по токену:
+npx zerf-cli auth --token YOUR_SECRET_TOKEN
 
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
-                      <h4 className="font-bold text-foreground">Таблица разрешений (Permissions):</h4>
-                      <div className="space-y-1.5 text-[11px]">
-                        <div className="p-2 rounded-lg bg-card border border-border flex items-center justify-between">
-                          <code className="text-primary font-mono font-bold">tasks:read / tasks:write</code>
-                          <span className="text-muted-foreground">Чтение, создание и отметка задач в списке пользователя</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-card border border-border flex items-center justify-between">
-                          <code className="text-primary font-mono font-bold">notes:read / notes:write</code>
-                          <span className="text-muted-foreground">Работа с заметками, базой знаний и Wikilinks</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-card border border-border flex items-center justify-between">
-                          <code className="text-primary font-mono font-bold">ai:prompt</code>
-                          <span className="text-muted-foreground">Вызов встроенного ИИ Zerf Note или моделей BYOK пользователя</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-card border border-border flex items-center justify-between">
-                          <code className="text-primary font-mono font-bold">ui:notify / ui:modal</code>
-                          <span className="text-muted-foreground">Показ всплывающих тостов, звуковых алертов и модальных окон</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. ZerfContext API */}
-                {sdkDocTab === 'context' && (
-                  <div className="space-y-4 leading-relaxed text-foreground/90 text-xs">
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-3">
-                      <h3 className="font-bold text-sm text-foreground">⚡ Глобальный объект ZerfContext API</h3>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Внутри вашего виджета или скрипта доступен глобальный объект <code className="text-primary font-mono font-bold">ZerfContext</code>:
-                      </p>
-                      <pre className="p-4 rounded-xl bg-zinc-950 text-purple-200 font-mono text-xs overflow-x-auto leading-relaxed whitespace-pre-wrap">
-{`// 1. Работа с задачами:
-const activeTasks = await ZerfContext.tasks.getAll({ done: false })
-const newTask = await ZerfContext.tasks.create({
-  title: "Встреча с командой",
-  priority: "high",
-  dueDate: "2026-08-20T19:00:00Z"
-})
-await ZerfContext.tasks.complete(newTask.id)
-
-// 2. Работа с заметками:
-const note = await ZerfContext.notes.create({
-  title: "Конспект исследования",
-  body: "Синтез данных из расширения... [[Связанная заметка]]"
-})
-
-// 3. Вызов ИИ (Groq / OpenAI / Claude):
-const aiResult = await ZerfContext.ai.prompt({
-  system: "Ты ассистент продуктивности.",
-  user: "Проанализируй список дел на сегодня и выдели топ-3."
-})
-
-// 4. Системные уведомления и звук:
-await ZerfContext.notifications.send({
-  title: "Таймер завершен!",
-  body: "Время сделать 5-минутный перерыв."
-})
-
-// 5. Данные профиля:
-const user = ZerfContext.user.get() // { name: "Кирилл", plan: "pro", avatar: "zerfik" }`}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. GitHub Publish */}
-                {sdkDocTab === 'github_publish' && (
-                  <div className="space-y-4 leading-relaxed text-foreground/90 text-xs">
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-3">
-                      <h3 className="font-bold text-sm text-foreground">🐙 Публикация расширений из GitHub в Магазин Zerf Note</h3>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Публикация занимает меньше 1 минуты благодаря автоматической валидации через GitHub API:
-                      </p>
-                      <div className="space-y-2 text-xs">
-                        <p>1. Создайте публичный репозиторий на GitHub (например, <code className="text-primary font-mono">github.com/yourname/zerf-plugin-timer</code>).</p>
-                        <p>2. Поместите в корень репозитория файл <code className="text-primary font-mono font-bold">zerf-extension.json</code> и код виджета.</p>
-                        <p>3. В Zerf Dev Studio перейдите во вкладку <b>«Публикация из GitHub»</b>, вставьте ссылку на репозиторий и нажмите <b>«Проверить и опубликовать»</b>.</p>
-                        <p>4. Сервер автоматически проверит схему, создаст карточку плагина в каталоге и активирует прием платежей.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 5. Monetization 80/20 */}
-                {sdkDocTab === 'monetization' && (
-                  <div className="space-y-4 leading-relaxed text-foreground/90 text-xs">
-                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
-                      <h3 className="font-bold text-sm text-emerald-400">💰 Монетизация плагинов (80% доход автора)</h3>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Вы можете устанавливать любую цену за ваши расширения (например, 199 ₽, 490 ₽ или бесплатно).
-                      </p>
-                      <ul className="list-disc list-inside space-y-1 text-xs text-foreground/90">
-                        <li><b>80% с каждой продажи</b> автоматически поступает на ваш баланс автора.</li>
-                        <li>Выплаты производятся на привязанный кошелёк <b>ЮMoney</b> или банковские карты РФ.</li>
-                        <li>Статистика продаж и начислений обновляется в реальном времени во вкладке <b>«Баланс автора»</b>.</li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-
-                {/* 6. CLI */}
-                {sdkDocTab === 'cli' && (
-                  <div className="space-y-4 leading-relaxed text-foreground/90 text-xs">
-                    <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
-                      <p className="font-bold text-foreground">💻 Команды Zerf CLI в терминале:</p>
-                      <pre className="p-3.5 rounded-xl bg-zinc-950 text-primary font-mono text-xs overflow-x-auto leading-relaxed whitespace-pre-wrap">
-{`# 1. Авторизация в CLI по токену:
-npx zerf-cli auth --token YOUR_SESSION_TOKEN
-
-# 2. Создание нового расширения по шаблону:
+# Создание нового расширения по шаблону:
 npx zerf-cli extension init my-cool-widget
 
-# 3. Локальный запуск и симуляция в песочнице:
+# Локальный запуск и тестирование в песочнице:
 npx zerf-cli extension test ./my-cool-widget
 
-# 4. Публикация и релиз новой версии в Магазин:
-npx zerf-cli extension publish ./my-cool-widget --version 1.0.1`}
-                      </pre>
-                    </div>
+# Публикация в Магазин Zerf Note:
+npx zerf-cli extension publish ./my-cool-widget`}
+                    </pre>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
