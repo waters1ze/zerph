@@ -1008,7 +1008,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               body: data.dueTime ? `Срок: ${data.dueTime}` : 'Время выполнить задачу!',
               tag: `rem-${data.taskId}`,
             })
-            playAlarmChime('alarm')
           } catch {}
         })
 

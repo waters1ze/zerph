@@ -158,43 +158,47 @@ export async function runReminderCheck() {
       if (repeatCount <= 0) repeatCount = 3
 
       const sentCount = (task as any).remindersSentCount || 0
-      if (sentCount >= repeatCount + 2) continue
+      if (sentCount >= repeatCount) continue
 
       let shouldFire = false
       let stageKey = 'due'
       let stageHeader = '⏰ ВРЕМЯ НАСТУПИЛО!'
       let stageText = 'прямо сейчас'
+      let targetSentCount = sentCount
 
       // STAGE 1: Advance reminder (e.g. 1 to intervalMin minutes before due time)
       if (actualDiffMin > 0 && actualDiffMin <= intervalMin) {
-        stageKey = 'advance'
-        stageHeader = `⏰ НАПОМИНАНИЕ (ЧЕРЕЗ ${actualDiffMin} МИН)!`
-        stageText = `через ${actualDiffMin} мин`
-        if (!isReminderInCooldown(task.id, 'advance', 8 * 60 * 1000)) {
+        if (sentCount === 0 && !isReminderInCooldown(task.id, 'advance', 10 * 60 * 1000)) {
+          stageKey = 'advance'
+          stageHeader = `⏰ НАПОМИНАНИЕ (ЧЕРЕЗ ${actualDiffMin} МИН)!`
+          stageText = `через ${actualDiffMin} мин`
           shouldFire = true
+          targetSentCount = 0 // Does not count towards repeat quota
         }
       }
       // STAGE 2: Exact due time reminder (at 00:00 / 0 min remaining or within -1 min)
       else if (actualDiffMin <= 0 && actualDiffMin >= -2) {
-        stageKey = 'due'
-        stageHeader = '⏰ ВРЕМЯ НАСТУПИЛО (ПРЯМО СЕЙЧАС)!'
-        stageText = 'прямо сейчас'
-        if (!isReminderInCooldown(task.id, 'due', 8 * 60 * 1000)) {
+        if (sentCount === 0 && !isReminderInCooldown(task.id, 'due', 10 * 60 * 1000)) {
+          stageKey = 'due'
+          stageHeader = '⏰ ВРЕМЯ НАСТУПИЛО (ПРЯМО СЕЙЧАС)!'
+          stageText = 'прямо сейчас'
           shouldFire = true
+          targetSentCount = 1
         }
       }
-      // STAGE 3: Overdue repeat reminders (after due time, repeated every intervalMin)
+      // STAGE 3: Overdue repeat reminders (after due time, only next unfulfilled repeat r)
       else if (actualDiffMin < -2) {
-        for (let r = 1; r <= repeatCount; r++) {
-          const expectedPastMin = r * intervalMin
-          if (actualDiffMin <= -expectedPastMin && actualDiffMin >= -(expectedPastMin + 3)) {
-            stageKey = `repeat_${r}`
+        const nextRepeatIndex = Math.max(1, sentCount) + 1
+        if (nextRepeatIndex <= repeatCount) {
+          const expectedPastMin = (nextRepeatIndex - 1) * intervalMin
+          if (actualDiffMin <= -expectedPastMin && actualDiffMin >= -(expectedPastMin + intervalMin)) {
+            stageKey = `repeat_${nextRepeatIndex - 1}`
             stageHeader = `⏰ НАПОМИНАНИЕ (ПРОСРОЧЕНО НА ${Math.abs(actualDiffMin)} МИН)!`
-            stageText = `повтор #${r}`
+            stageText = `повтор #${nextRepeatIndex - 1} из ${repeatCount}`
             if (!isReminderInCooldown(task.id, stageKey, (intervalMin - 1) * 60 * 1000)) {
               shouldFire = true
+              targetSentCount = nextRepeatIndex
             }
-            break
           }
         }
       }
@@ -278,14 +282,13 @@ export async function runReminderCheck() {
           }
         }
 
-        const nextSentCount = sentCount + 1
-        const isFinal = stageKey.startsWith('repeat_') && parseInt(stageKey.replace('repeat_', ''), 10) >= repeatCount
+        const isFinal = targetSentCount >= repeatCount
 
         try {
           await prisma.task.update({
             where: { id: task.id },
             data: {
-              remindersSentCount: nextSentCount,
+              remindersSentCount: targetSentCount,
               reminderSent: isFinal,
             }
           })

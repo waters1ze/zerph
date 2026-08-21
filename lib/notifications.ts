@@ -67,10 +67,19 @@ export async function requestNotificationPermission(): Promise<boolean> {
         const data = await res?.json().catch(() => null)
         if (data?.publicKey) {
           const convertedKey = urlBase64ToUint8Array(data.publicKey)
-          sub = await swReg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: convertedKey,
-          })
+          try {
+            sub = await swReg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: convertedKey,
+            })
+          } catch {
+            const oldSub = await swReg.pushManager.getSubscription().catch(() => null)
+            if (oldSub) await oldSub.unsubscribe().catch(() => {})
+            sub = await swReg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: convertedKey,
+            }).catch(() => null)
+          }
         }
       }
 
@@ -80,13 +89,14 @@ export async function requestNotificationPermission(): Promise<boolean> {
         getStoredCookie('zerf_chat_id') ||
         null
 
-      if (sub) {
+      if (sub && chatId) {
         const headers = getClientAuthHeaders()
         await fetch('/api/push/subscribe', {
           method: 'POST',
           headers,
           body: JSON.stringify({ subscription: sub.toJSON(), chatId }),
         }).catch(() => {})
+        console.log('[WebPush] Device push subscription registered for chatId:', chatId)
       }
     } catch (err) {
       console.warn('Web push subscription failed:', err)
@@ -115,10 +125,19 @@ export async function ensurePushSubscribedOnBoot(): Promise<void> {
           const data = await res?.json().catch(() => null)
           if (data?.publicKey) {
             const convertedKey = urlBase64ToUint8Array(data.publicKey)
-            sub = await swReg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: convertedKey,
-            })
+            try {
+              sub = await swReg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedKey,
+              })
+            } catch {
+              const oldSub = await swReg.pushManager.getSubscription().catch(() => null)
+              if (oldSub) await oldSub.unsubscribe().catch(() => {})
+              sub = await swReg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedKey,
+              }).catch(() => null)
+            }
           }
         }
 
@@ -128,13 +147,14 @@ export async function ensurePushSubscribedOnBoot(): Promise<void> {
           getStoredCookie('zerf_chat_id') ||
           null
 
-        if (sub) {
+        if (sub && chatId) {
           const headers = getClientAuthHeaders()
           await fetch('/api/push/subscribe', {
             method: 'POST',
             headers,
             body: JSON.stringify({ subscription: sub.toJSON(), chatId }),
           }).catch(() => {})
+          console.log('[WebPush] Device push subscription verified for chatId:', chatId)
         }
       }
     }
@@ -207,13 +227,10 @@ export function showWebNotification(
   const defaultIcon = options?.icon || '/icon-192.png'
   const tag = options?.tag || `zerf-${Date.now()}`
 
-  // If permission was never explicitly granted, try to request it right now —
-  // this fixes the "sound plays but no notification appears" case.
-  if ('Notification' in window && Notification.permission === 'default') {
-    try { Notification.requestPermission().catch(() => {}) } catch {}
-  }
+  let shown = false
 
   if ('Notification' in window && Notification.permission === 'granted') {
+    shown = true
     // Show via service worker when available; fall back to the Notification
     // constructor ONLY if the SW path fails — otherwise the user gets duplicates.
     if ('serviceWorker' in navigator) {
@@ -265,9 +282,11 @@ export function showWebNotification(
     }
   }
 
-  // Trigger synthesized audio alarm & vibration
-  playAlarmChime('alarm')
-  vibrateDevice([200, 100, 200, 100, 300])
+  // Trigger audio alarm & vibration only when notification is active
+  if (shown) {
+    playAlarmChime('alarm')
+    vibrateDevice([200, 100, 200, 100, 300])
+  }
 }
 
 export function vibrateDevice(pattern: number[] = [200, 100, 200]) {

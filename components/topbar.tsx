@@ -168,7 +168,6 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
           const key = `${t.id}-${todayStr}-${currentHHMM}`
           if (!notifiedTasksRef.current.has(key)) {
             notifiedTasksRef.current.add(key)
-            playAlarmChime('alarm')
             showWebNotification(`⏰ Напоминание: ${t.title}`, {
               body: `Время: ${t.dueTime}. Нажмите, чтобы открыть задачу.`,
               onClick: () => {
