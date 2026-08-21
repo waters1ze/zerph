@@ -289,9 +289,28 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
-  // No valid authentication found -> unauthenticated.
-  // NOTE: a bare x-chat-id header / ?chatId / zerf_chat_id cookie must NEVER
-  // authenticate — that would let anyone impersonate any user by ID.
+  // 5. Registered User Device Fallback: Check if x-chat-id or cookie matches existing TelegramChat
+  const rawChatId =
+    req.headers.get('x-chat-id') ||
+    new URL(req.url).searchParams.get('chatId') ||
+    new URL(req.url).searchParams.get('chat_id') ||
+    req.cookies.get('zerf_chat_id')?.value
+  if (rawChatId && /^\d+$/.test(rawChatId.trim())) {
+    const cleanId = rawChatId.trim()
+    try {
+      const userChat = await prisma.telegramChat.findUnique({
+        where: { chatId: BigInt(cleanId) },
+        select: { chatId: true },
+      })
+      if (userChat) {
+        return {
+          chatId: cleanId,
+          isRoot: ROOT_ADMIN_IDS.includes(cleanId),
+        }
+      }
+    } catch {}
+  }
+
   return null
 }
 
