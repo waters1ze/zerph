@@ -71,6 +71,201 @@ function getFriendlyModelName(modelId?: string): string {
   return modelId
 }
 
+function PerplexityCitationBadge({
+  sourceId,
+  sources,
+  onOpenNote,
+  onOpenTask,
+}: {
+  sourceId: number
+  sources?: EntropySource[]
+  onOpenNote?: (id: string) => void
+  onOpenTask?: (id: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const sourceList = sources && sources.length > 0 ? sources : []
+  
+  const initialIdx = Math.max(0, sourceList.findIndex(s => s.id === sourceId))
+  const [currentIndex, setCurrentIndex] = useState(initialIdx !== -1 ? initialIdx : 0)
+
+  const currentSource = sourceList[currentIndex] || sourceList.find(s => s.id === sourceId)
+
+  const isNote = currentSource?.type === 'note' || Boolean(currentSource?.noteId)
+  const isTask = currentSource?.type === 'task' || Boolean(currentSource?.taskId)
+
+  const cleanDomain = currentSource?.domain
+    ? currentSource.domain.replace(/^www\./, '').replace(/^m\./, '')
+    : 'источник'
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (isNote && currentSource?.noteId && onOpenNote) {
+      onOpenNote(currentSource.noteId)
+    } else if (isTask && currentSource?.taskId && onOpenTask) {
+      onOpenTask(currentSource.taskId)
+    } else if (currentSource?.url) {
+      window.open(currentSource.url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCurrentIndex(prev => (prev > 0 ? prev - 1 : sourceList.length - 1))
+  }
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCurrentIndex(prev => (prev < sourceList.length - 1 ? prev + 1 : 0))
+  }
+
+  return (
+    <span
+      className="relative inline-block align-baseline mx-0.5"
+      onMouseEnter={() => setIsOpen(true)}
+      onMouseLeave={() => setIsOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={handleClick}
+        className={cn(
+          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg border text-[11px] font-sans font-medium transition-all cursor-pointer shadow-2xs select-none hover:scale-105 active:scale-95 no-underline align-baseline',
+          isNote
+            ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
+            : isTask
+            ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+            : 'bg-muted/70 hover:bg-muted text-foreground/80 hover:text-foreground border-border/80 hover:border-primary/40'
+        )}
+      >
+        <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+        <span className="truncate max-w-[110px]">
+          {isNote ? 'Заметка' : isTask ? 'Задача' : cleanDomain}
+        </span>
+        {sourceList.length > 1 && (
+          <span className="text-[9px] text-muted-foreground font-mono">+{sourceList.length - 1}</span>
+        )}
+      </button>
+
+      {/* Perplexity Hover Popover Card */}
+      <AnimatePresence>
+        {isOpen && currentSource && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.95 }}
+            transition={{ duration: 0.12 }}
+            className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 sm:w-84 p-3.5 rounded-2xl bg-zinc-950/95 border border-zinc-700/80 shadow-2xl backdrop-blur-xl text-left select-text font-sans pointer-events-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header with Navigation and Total Sources count */}
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800 text-[11px] text-zinc-400">
+              <div className="flex items-center gap-1">
+                {sourceList.length > 1 && (
+                  <div className="flex items-center gap-0.5 mr-1.5">
+                    <button
+                      type="button"
+                      onClick={handlePrev}
+                      className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                      title="Предыдущий источник"
+                    >
+                      <ChevronRight className="w-3 h-3 rotate-180" />
+                    </button>
+                    <span className="font-mono text-[10px] text-zinc-300">
+                      {currentIndex + 1}/{sourceList.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                      title="Следующий источник"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center gap-1 font-mono text-[10px] text-zinc-300">
+                  <Globe className="w-3 h-3 text-primary shrink-0" />
+                  <span className="truncate max-w-[130px]">{cleanDomain}</span>
+                </div>
+              </div>
+
+              <span className="text-[10px] text-zinc-400 font-mono">
+                {sourceList.length} {sourceList.length === 1 ? 'источник' : 'источника'}
+              </span>
+            </div>
+
+            {/* Source Title */}
+            <h5 className="font-bold text-xs text-zinc-100 line-clamp-2 mb-1.5 leading-snug">
+              {currentSource.title || `Источник #${currentSource.id}`}
+            </h5>
+
+            {/* Snippet / Excerpt */}
+            {currentSource.snippet && (
+              <p className="text-[11px] text-zinc-300 line-clamp-3 mb-2.5 leading-relaxed bg-zinc-900/90 p-2 rounded-xl border border-zinc-800/80 font-serif italic">
+                «{currentSource.snippet}»
+              </p>
+            )}
+
+            {/* Reliability / Trust Section */}
+            <div className="pt-1 space-y-2 border-t border-zinc-800/70">
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-semibold">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>
+                  {isNote
+                    ? 'Личная проверенная заметка'
+                    : isTask
+                    ? 'Активная задача в расписании'
+                    : 'Надёжный источник фактов'}
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-tight">
+                {isNote
+                  ? 'Синтезировано из вашей персональной базы знаний Zerf Note.'
+                  : isTask
+                  ? 'Синтезировано из вашего активного трекера задач Zerf.'
+                  : `${cleanDomain} верифицирован поисковым ядром Entropy для точного факт-чекинга.`}
+              </p>
+
+              {/* Action Button */}
+              {currentSource.url && !isNote && !isTask ? (
+                <a
+                  href={currentSource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-1.5 px-3 rounded-xl bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>Узнать больше на {cleanDomain}</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              ) : isNote && currentSource.noteId ? (
+                <button
+                  type="button"
+                  onClick={handleClick}
+                  className="w-full py-1.5 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  <span>Открыть заметку</span>
+                </button>
+              ) : isTask && currentSource.taskId ? (
+                <button
+                  type="button"
+                  onClick={handleClick}
+                  className="w-full py-1.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <CheckSquare className="w-3 h-3" />
+                  <span>Открыть задачу</span>
+                </button>
+              ) : null}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </span>
+  )
+}
+
 export function EntropySearchView() {
   const { state, dispatch } = useApp()
   const [query, setQuery] = useState('')
@@ -80,6 +275,9 @@ export function EntropySearchView() {
   const [isLoading, setIsLoading] = useState(false)
   const [searchStep, setSearchStep] = useState<number>(0)
   const [result, setResult] = useState<EntropySearchResult | null>(null)
+  const [streamedAnswer, setStreamedAnswer] = useState<string>('')
+  const [isStreaming, setIsStreaming] = useState<boolean>(false)
+  const typingTimerRef = useRef<any>(null)
   
   const userSelectedExtensionModel = state.settings.integrations?.aiTaskModels?.extensions || state.settings.integrations?.aiModel
 
@@ -383,6 +581,26 @@ export function EntropySearchView() {
           } catch {}
           return nextHistory
         })
+        if (typingTimerRef.current) clearInterval(typingTimerRef.current)
+
+        const fullAnswer = sanitizedResult.answer || ''
+        setStreamedAnswer('')
+        setIsStreaming(true)
+
+        let charIndex = 0
+        const totalChars = fullAnswer.length
+        const typingSpeed = Math.max(10, Math.min(22, Math.floor(2200 / Math.max(1, totalChars))))
+        const stepSize = Math.max(1, Math.floor(totalChars / 80))
+
+        typingTimerRef.current = setInterval(() => {
+          charIndex = Math.min(totalChars, charIndex + Math.max(1, Math.floor(Math.random() * 2) + stepSize))
+          setStreamedAnswer(fullAnswer.slice(0, charIndex))
+          if (charIndex >= totalChars) {
+            clearInterval(typingTimerRef.current)
+            typingTimerRef.current = null
+            setIsStreaming(false)
+          }
+        }, typingSpeed)
       } else {
         setZerfikMood('normal')
         setZerfikStatus(data.error || 'Не удалось выполнить поиск. Попробуйте еще раз.')
@@ -391,6 +609,7 @@ export function EntropySearchView() {
     } catch (e: any) {
       clearTimeout(stepTimer1)
       clearTimeout(stepTimer2)
+      if (typingTimerRef.current) clearInterval(typingTimerRef.current)
       setZerfikMood('normal')
       setZerfikStatus('Ошибка сети при поиске. Проверьте соединение.')
       alert('Ошибка при выполнении запроса к поисковому движку')
@@ -476,12 +695,15 @@ export function EntropySearchView() {
   }
 
   const handleSelectHistoryItem = (item: EntropySearchResult) => {
+    if (typingTimerRef.current) clearInterval(typingTimerRef.current)
     const cleanComment = (item.tikhonyaComment || 'Открыто сохраненное исследование')
       .replace(/тихоня/gi, 'Зерфик')
       .replace(/\[\s*[˘ˇ^]\s*[ᴗ◡‿_]\s*[˘ˇ^]\s*\]/g, '')
       .trim()
     setQuery(item.query)
     setResult({ ...item, tikhonyaComment: cleanComment })
+    setStreamedAnswer(item.answer || '')
+    setIsStreaming(false)
     setZerfikMood('happy')
     setZerfikStatus(cleanComment)
   }
@@ -497,8 +719,11 @@ export function EntropySearchView() {
   }
 
   const handleResetSearch = () => {
+    if (typingTimerRef.current) clearInterval(typingTimerRef.current)
     setQuery('')
     setResult(null)
+    setStreamedAnswer('')
+    setIsStreaming(false)
     setZerfikMood('normal')
     setZerfikStatus('Зерфик готов исследовать новые темы')
     inputRef.current?.focus()
@@ -979,41 +1204,20 @@ export function EntropySearchView() {
                   a: ({ href, children, title }) => {
                     if (href?.startsWith('cite:') || href?.startsWith('#cite-')) {
                       const sId = parseInt(href.replace(/^(cite:|#cite-)/, ''), 10)
-                      const source = result.sources?.find(s => s.id === sId)
-                      const isNote = source?.type === 'note' || Boolean(source?.noteId)
-                      const isTask = source?.type === 'task' || Boolean(source?.taskId)
-
                       return (
-                        <button
+                        <PerplexityCitationBadge
                           key={`cite-${sId}`}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            if (isNote && source?.noteId) {
-                              dispatch({ type: 'SET_VIEW', view: 'notes' })
-                              dispatch({ type: 'SELECT_NOTE', id: source.noteId })
-                            } else if (isTask && source?.taskId) {
-                              dispatch({ type: 'SET_VIEW', view: 'tasks' })
-                              dispatch({ type: 'SELECT_TASK', id: source.taskId })
-                            } else if (source?.url) {
-                              window.open(source.url, '_blank', 'noopener,noreferrer')
-                            }
+                          sourceId={sId}
+                          sources={result.sources}
+                          onOpenNote={(noteId) => {
+                            dispatch({ type: 'SET_VIEW', view: 'notes' })
+                            dispatch({ type: 'SELECT_NOTE', id: noteId })
                           }}
-                          onMouseEnter={() => source && setActiveSourceHover(source)}
-                          onMouseLeave={() => setActiveSourceHover(null)}
-                          title={source ? `[${sId}] ${source.title}\n(${source.domain})\n${source.snippet || ''}` : `Источник #${sId}`}
-                          className={cn(
-                            'inline-flex items-center justify-center px-1.5 py-0.5 mx-0.5 rounded-md font-mono text-[10px] font-bold border shadow-2xs transition-all cursor-pointer select-none align-baseline no-underline transform hover:scale-110 active:scale-95',
-                            isNote
-                              ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border-amber-500/40'
-                              : isTask
-                              ? 'bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border-emerald-500/40'
-                              : 'bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground border-primary/30'
-                          )}
-                        >
-                          [{sId}]
-                        </button>
+                          onOpenTask={(taskId) => {
+                            dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                            dispatch({ type: 'SELECT_TASK', id: taskId })
+                          }}
+                        />
                       )
                     }
                     return (
@@ -1030,13 +1234,18 @@ export function EntropySearchView() {
                   },
                 }}
               >
-                {result.answer
+                {(isStreaming ? streamedAnswer : (result.answer || ''))
                   .replace(/\\n/g, '\n')
                   .replace(/\\r/g, '')
                   .replace(/\\t/g, '  ')
                   .replace(/\\"/g, '"')
                   .replace(/\[(\d+)\]/g, '[[#$1]](cite:$1)')}
               </ReactMarkdown>
+
+              {/* Blinking typewriter streaming indicator */}
+              {isStreaming && (
+                <span className="inline-block w-2 h-4.5 ml-1 bg-primary animate-pulse rounded-xs align-middle" />
+              )}
             </div>
 
             {/* 3. KEY TAKEAWAYS (Инсайты) */}

@@ -181,6 +181,8 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const currentSpokenTextRef = useRef<string>('')
   const isInterruptedRef = useRef(false)
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const speechQueueRef = useRef<string[]>([])
+  const activeVoiceRef = useRef<ZerfikVoiceProfile | null>(null)
 
   isActiveRef.current = isActive
 
@@ -234,34 +236,38 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     return ZERFIK_VOICE_PROFILES.find(v => v.id === selectedVoiceId) || ZERFIK_VOICE_PROFILES[0]
   }, [selectedVoiceId])
 
-  // Stop active speech synthesis
-  const stopSpeaking = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
+  // Play next sentence in queue for ultra-fast early response start
+  const playSentenceFromQueue = useCallback(() => {
+    if (speechQueueRef.current.length === 0) {
+      isSpeakingRef.current = false
+      currentSpokenTextRef.current = ''
+      setIsSpeaking(false)
+      if (autoListen && isActiveRef.current && !isInterruptedRef.current) {
+        setStatusText('Слушаю вас...')
+        setMood('normal')
+      } else {
+        setStatusText('Готов к разговору')
+      }
+      return
     }
-    isSpeakingRef.current = false
-    currentSpokenTextRef.current = ''
-    setIsSpeaking(false)
-    isInterruptedRef.current = true
-  }, [])
 
-  // Speech synthesis with distinct timbres, real-world cadence and pitch modulation
-  const speakText = useCallback((textToSpeak: string, voiceOverride?: string | ZerfikVoiceProfile) => {
-    if (typeof window === 'undefined') return
-    stopSpeaking()
+    const currentSentence = speechQueueRef.current.shift()
+    if (!currentSentence || !currentSentence.trim()) {
+      playSentenceFromQueue()
+      return
+    }
 
-    const activeVoice = typeof voiceOverride === 'string'
-      ? ZERFIK_VOICE_PROFILES.find(v => v.id === voiceOverride) || selectedVoice
-      : voiceOverride || selectedVoice
+    const activeVoice = activeVoiceRef.current || selectedVoice
 
-    currentSpokenTextRef.current = textToSpeak.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
+    currentSpokenTextRef.current = currentSentence.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
     isSpeakingRef.current = true
+    setIsSpeaking(true)
+    setStatusText(`${activeVoice.name} говорит...`)
 
-    if ('speechSynthesis' in window) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       isInterruptedRef.current = false
 
-      // Character-based speech cadence formatting
-      let formattedSpeech = textToSpeak
+      let formattedSpeech = currentSentence
       if (activeVoice.id === 'alex_baritone') {
         formattedSpeech = formattedSpeech.replace(/([,;:])\s*/g, '$1... ')
       } else if (activeVoice.id === 'viktor_brutal') {
@@ -325,29 +331,16 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      utterance.onstart = () => {
-        isSpeakingRef.current = true
-        setIsSpeaking(true)
-        setStatusText(`${activeVoice.name} говорит...`)
-      }
-
       utterance.onend = () => {
-        isSpeakingRef.current = false
-        currentSpokenTextRef.current = ''
-        setIsSpeaking(false)
-        if (autoListen && isActiveRef.current && !isInterruptedRef.current) {
-          setStatusText('Слушаю вас...')
-          setMood('normal')
-        } else {
-          setStatusText('Готов к разговору')
+        if (!isInterruptedRef.current) {
+          playSentenceFromQueue()
         }
       }
 
       utterance.onerror = () => {
-        isSpeakingRef.current = false
-        currentSpokenTextRef.current = ''
-        setIsSpeaking(false)
-        setStatusText('Готов к разговору')
+        if (!isInterruptedRef.current) {
+          playSentenceFromQueue()
+        }
       }
 
       currentUtteranceRef.current = utterance
@@ -356,33 +349,62 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       fetch('/api/extensions/zerfic-live/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSpeak, voiceId: activeVoice.id }),
+        body: JSON.stringify({ text: currentSentence, voiceId: activeVoice.id }),
       })
         .then(r => r.arrayBuffer())
         .then(buf => {
           const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }))
           const audio = new Audio(url)
           audio.volume = isMuted ? 0 : voiceVolume
-          isSpeakingRef.current = true
-          setIsSpeaking(true)
-          setStatusText('Зерфик говорит...')
           audio.onended = () => {
-            isSpeakingRef.current = false
-            currentSpokenTextRef.current = ''
-            setIsSpeaking(false)
-            setStatusText(autoListen ? 'Слушаю вас...' : 'Готов к разговору')
+            if (!isInterruptedRef.current) {
+              playSentenceFromQueue()
+            }
           }
           audio.play().catch(() => {
-            isSpeakingRef.current = false
-            setIsSpeaking(false)
+            playSentenceFromQueue()
           })
         })
         .catch(() => {
-          isSpeakingRef.current = false
-          setIsSpeaking(false)
+          playSentenceFromQueue()
         })
     }
-  }, [selectedVoice, voiceVolume, isMuted, autoListen, stopSpeaking])
+  }, [selectedVoice, voiceVolume, isMuted, autoListen])
+
+  // Stop active speech synthesis and clear sentence queue
+  const stopSpeaking = useCallback(() => {
+    speechQueueRef.current = []
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+    isSpeakingRef.current = false
+    currentSpokenTextRef.current = ''
+    setIsSpeaking(false)
+    isInterruptedRef.current = true
+  }, [])
+
+  // Speech synthesis with distinct timbres, real-world cadence and sentence-by-sentence streaming
+  const speakText = useCallback((textToSpeak: string, voiceOverride?: string | ZerfikVoiceProfile) => {
+    if (typeof window === 'undefined') return
+    stopSpeaking()
+
+    const activeVoice = typeof voiceOverride === 'string'
+      ? ZERFIK_VOICE_PROFILES.find(v => v.id === voiceOverride) || selectedVoice
+      : voiceOverride || selectedVoice
+
+    activeVoiceRef.current = activeVoice
+    isInterruptedRef.current = false
+
+    // Split text into natural sentence chunks for rapid early-start playback
+    const rawSentences = textToSpeak
+      .replace(/([.!?])\s+/g, '$1|__SPLIT__|')
+      .split('|__SPLIT__|')
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    speechQueueRef.current = rawSentences.length > 0 ? rawSentences : [textToSpeak]
+    playSentenceFromQueue()
+  }, [stopSpeaking, selectedVoice, playSentenceFromQueue])
 
   // Send message to backend AI
   const sendToZerfik = useCallback(async (userText: string) => {
@@ -459,29 +481,50 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       const botReply = data.reply || 'Я тебя услышал!'
       const botMood: ZerfikMood = data.mood || 'happy'
       const botGesture: ZerfikGesture = data.gesture || 'waving_arms'
+      const botMsgId = `b_${Date.now()}`
 
-      const botMsg: LiveChatMessage = {
-        id: `b_${Date.now()}`,
+      const initialBotMsg: LiveChatMessage = {
+        id: botMsgId,
         role: 'assistant',
-        text: botReply,
+        text: '',
         mood: botMood,
         gesture: botGesture,
         timestamp: Date.now(),
       }
 
-      setMessages(prev => [...prev, botMsg])
+      setMessages(prev => [...prev, initialBotMsg])
       setMood(botMood)
       setGesture(botGesture)
       setIsThinking(false)
-      setStatusText('Зерфик говорит...')
+      setStatusText(`${selectedVoice.name} говорит...`)
 
-      speakText(botReply)
+      // Immediately start speaking early sentence by sentence!
+      speakText(botReply, selectedVoiceId)
+
+      // Smooth typewriter text streaming in parallel
+      let charIdx = 0
+      const totalChars = botReply.length
+      const step = Math.max(1, Math.floor(totalChars / 40))
+      const typeInterval = setInterval(() => {
+        charIdx = Math.min(totalChars, charIdx + step)
+        const partial = botReply.slice(0, charIdx)
+        setMessages(prev => {
+          const last = prev[prev.length - 1]
+          if (last && last.id === botMsgId) {
+            return [...prev.slice(0, -1), { ...last, text: partial }]
+          }
+          return prev
+        })
+        if (charIdx >= totalChars) {
+          clearInterval(typeInterval)
+        }
+      }, 25)
     } catch (err) {
       console.error('Zerfic Live Chat Error:', err)
       setIsThinking(false)
       setStatusText('Ошибка сети')
     }
-  }, [messages, selectedModelId, selectedVoiceId, stopSpeaking, speakText])
+  }, [messages, selectedModelId, selectedVoiceId, selectedVoice.name, stopSpeaking, speakText])
 
   // Setup Continuous Speech Recognition & VAD
   const startListeningSession = useCallback(async () => {
