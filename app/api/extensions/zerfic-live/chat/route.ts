@@ -213,6 +213,7 @@ interface ZerficStreamCtx {
   chatId: string
   userPlan: string
   audioDurationSeconds: number
+  extraContext?: string
 }
 
 async function buildZerficLiveStreamResponse(ctx: ZerficStreamCtx): Promise<Response> {
@@ -234,10 +235,13 @@ async function buildZerficLiveStreamResponse(ctx: ZerficStreamCtx): Promise<Resp
 
         // Plain-text variant of the persona prompt: no JSON wrapper, so tokens
         // can be streamed directly to speech the moment they are generated.
-        const plainSystem = ctx.personaPrompt +
+        let plainSystem = ctx.personaPrompt +
           NL + NL + 'ФОРМАТ ОТВЕТА (СТРОГО): отвечай ТОЛЬКО чистым живым разговорным текстом 1–3 предложения. ' +
           'КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ: JSON, фигурные скобки, markdown-символы (* # _ `), списки и эмодзи в тексте. ' +
           'Текст идёт напрямую в речевой синтезатор.'
+        if (ctx.extraContext) {
+          plainSystem += NL + NL + ctx.extraContext
+        }
 
         const messages = [
           { role: 'system', content: plainSystem },
@@ -343,6 +347,27 @@ export async function POST(req: NextRequest) {
       const streamModel = getModelForUserPlan(userPlan, requestedModel, 'chat') || 'allam-2-7b'
       const personaPrompt = getSystemPromptForVoice(voiceId)
 
+      // Workspace context (notes/tasks/goals/extensions) so Zerfic can talk
+      // about the user's real data — same context as the non-streaming path.
+      const contextTimeout = (ms: number, fallback: string) =>
+        new Promise<string>(resolve => setTimeout(() => resolve(fallback), ms))
+      const [liveWeather, contextStr, extensionsContext] = await Promise.all([
+        getLiveWeatherSummary(userMessage),
+        Promise.race([getExistingItemsContext(chatId), contextTimeout(2200, '')]),
+        Promise.race([getUserExtensionsAIContext(chatId), contextTimeout(1200, '')]),
+      ])
+
+      const nowMsk = new Intl.DateTimeFormat('ru-RU', {
+        timeZone: 'Europe/Moscow',
+        dateStyle: 'full',
+        timeStyle: 'short',
+      }).format(new Date())
+
+      let extraContext = `[ТЕКУЩЕЕ ВРЕМЯ И ДАТА: ${nowMsk} (МСК)]`
+      if (liveWeather) extraContext += `\n\n${liveWeather}`
+      if (contextStr && contextStr.trim()) extraContext += `\n\n[РАБОЧИЙ КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ (ЗАМЕТКИ, ДЕЛА, ЦЕЛИ)]:\n${contextStr}`
+      if (extensionsContext && extensionsContext.trim()) extraContext += `\n\n[АКТИВНЫЕ РАСШИРЕНИЯ И ИХ ВОЗМОЖНОСТИ]:\n${extensionsContext}`
+
       return buildZerficLiveStreamResponse({
         personaPrompt,
         model: streamModel,
@@ -351,6 +376,7 @@ export async function POST(req: NextRequest) {
         chatId,
         userPlan,
         audioDurationSeconds,
+        extraContext,
       })
     }
 

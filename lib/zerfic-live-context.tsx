@@ -192,6 +192,8 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const revealTimerRef = useRef<any>(null)
   // Guard window after speech ends: mic echo of TTS must not trigger a new turn
   const lastSpeechEndRef = useRef(0)
+  // Full text of the last spoken reply — used to filter TTS echo picked up by mic
+  const lastSpokenTextRef = useRef('')
 
   isActiveRef.current = isActive
 
@@ -299,6 +301,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       revealIdxRef.current = fullReplyRef.current.length
       setRevealedText(fullReplyRef.current.length)
       lastSpeechEndRef.current = Date.now()
+      lastSpokenTextRef.current = fullReplyRef.current
       setIsSpeaking(false)
       if (autoListen && isActiveRef.current && !isInterruptedRef.current) {
         setStatusText('Слушаю вас...')
@@ -776,13 +779,22 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
           const rawText = (finalTranscript || currentInterim).trim()
 
-          // ANTI SELF-INTERRUPTION: while Zerfic is speaking (and for a short
-          // guard window after), ALL microphone input is ignored. Browser TTS
-          // played through speakers gets picked up by the mic and previously
-          // caused Zerfic to interrupt himself mid-sentence. The user can
-          // always interrupt manually via the Stop button or mascot tap.
-          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 900) {
+          // ANTI SELF-INTERRUPTION & ANTI ECHO-TURNS:
+          // 1) While Zerfic speaks (and for a guard window after), ALL mic
+          //    input is ignored — browser TTS played through speakers gets
+          //    picked up by the mic and previously caused self-interruptions
+          //    AND phantom follow-up turns (the "multiple answers" bug).
+          // 2) Even after the window, input that matches the text Zerfic just
+          //    spoke is treated as echo and dropped.
+          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 1800) {
             return
+          }
+          const normIncoming = rawText.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '').trim()
+          const spokenNorm = (lastSpokenTextRef.current || '').toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '').trim()
+          if (normIncoming.length > 6 && spokenNorm.length > 12) {
+            if (spokenNorm.includes(normIncoming) || normIncoming.includes(spokenNorm.slice(0, 40))) {
+              return
+            }
           }
 
           if (currentInterim) {

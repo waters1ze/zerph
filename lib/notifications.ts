@@ -150,10 +150,15 @@ export async function sendTestNotification(): Promise<{ success: boolean; messag
   }
 
   const granted = await requestNotificationPermission()
-  if (!granted) {
+  // Double-check the actual browser permission state — some browsers report
+  // 'default' even after the request resolves
+  const effectiveGranted = granted && typeof Notification !== 'undefined' && Notification.permission === 'granted'
+  if (!effectiveGranted) {
     return {
       success: false,
-      message: 'Уведомления заблокированы. Разрешите их в настройках браузера или сайта (значок замка в адресной строке).'
+      message: Notification.permission === 'denied'
+        ? 'Уведомления ЗАБЛОКИРОВАНЫ браузером. Нажмите на значок замка в адресной строке → Уведомления → Разрешить, затем перезагрузите страницу.'
+        : 'Разрешение на уведомления не выдано. Разрешите уведомления во всплывающем окне браузера и попробуйте снова.'
     }
   }
 
@@ -201,6 +206,12 @@ export function showWebNotification(
   const defaultBody = 'Zerf Note — Умное напоминание'
   const defaultIcon = options?.icon || '/icon-192.png'
   const tag = options?.tag || `zerf-${Date.now()}`
+
+  // If permission was never explicitly granted, try to request it right now —
+  // this fixes the "sound plays but no notification appears" case.
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { Notification.requestPermission().catch(() => {}) } catch {}
+  }
 
   if ('Notification' in window && Notification.permission === 'granted') {
     // Show via service worker when available; fall back to the Notification

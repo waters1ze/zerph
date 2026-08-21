@@ -1090,43 +1090,8 @@ export function EntropySearchView() {
         </div>
       </div>
 
-      {/* ── LOADING PROGRESS ANIMATION ── */}
-      {isLoading && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-5 rounded-2xl bg-card border border-primary/30 shadow-md space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-              <Sparkles className="w-4 h-4 text-primary animate-pulse" />
-              <span>
-                {searchStep === 1 && '🔍 Поиск и краулинг первоисточников...'}
-                {searchStep === 2 && '🧠 Фактологический анализ и синтез цитат...'}
-                {searchStep === 3 && '✨ Финализация ответа и проверка связей...'}
-                {searchStep === 0 && 'Подготовка поискового конвейера...'}
-              </span>
-            </div>
-            <span className="text-[11px] font-mono text-primary font-bold">
-              {searchStep === 1 ? '35%' : searchStep === 2 ? '75%' : '95%'}
-            </span>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-primary to-sky-400 rounded-full"
-              initial={{ width: '10%' }}
-              animate={{ width: searchStep === 1 ? '35%' : searchStep === 2 ? '75%' : '95%' }}
-              transition={{ duration: 0.4 }}
-            />
-          </div>
-
-          <p className="text-[11px] text-muted-foreground font-mono">
-            Зерфик анализирует научные публикации на arXiv, GitHub, академические базы данных и Wikipedia...
-          </p>
-        </motion.div>
-      )}
+      {/* Loading state is shown via the mascot status line — no bulky progress slider.
+          The answer itself streams live token-by-token once generation starts. */}
 
       {/* ── ACTIVE RESEARCH RESULTS VIEW (PERPLEXITY STYLE) ── */}
       {result && !isLoading && (
@@ -1135,25 +1100,18 @@ export function EntropySearchView() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
         >
-          {/* 1. SOURCES SECTION (Carousel / Grid) */}
+          {/* 1. SOURCES — compact Perplexity-style bar with favicon circles */}
           {result.sources && result.sources.length > 0 && (
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-bold text-foreground">
-                <div className="flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-primary" />
-                  <span>Использованные первоисточники ({result.sources.length})</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  Верифицировано движком Entropy
-                </span>
-              </div>
+            <div className="flex items-center gap-2.5 p-2.5 pl-3.5 rounded-2xl bg-card border border-border shadow-2xs">
+              <span className="text-xs font-bold text-foreground shrink-0">Источники</span>
 
-              {/* Compact Perplexity-style numbered source chips (match inline citation badges) */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar py-0.5">
                 {result.sources.map(source => {
                   const isInternalNote = source.type === 'note' || Boolean(source.noteId)
                   const isInternalTask = source.type === 'task' || Boolean(source.taskId)
                   const cleanDomain = (source.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
+                  // Deterministic brand-like color per domain
+                  const hue = Array.from(cleanDomain).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
 
                   const handleClick = (e: React.MouseEvent) => {
                     if (isInternalNote && source.noteId) {
@@ -1174,33 +1132,27 @@ export function EntropySearchView() {
                       target={isInternalNote || isInternalTask ? '_self' : '_blank'}
                       rel="noopener noreferrer"
                       onClick={handleClick}
-                      title={source.title}
+                      title={`${source.id}. ${source.title || cleanDomain}`}
                       className={cn(
-                        'group flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border shadow-2xs hover:shadow-sm transition-all max-w-[240px]',
+                        'w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 border transition-all hover:scale-110 cursor-pointer',
                         isInternalNote
-                          ? 'bg-amber-500/5 border-amber-500/30 hover:border-amber-500/60'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                           : isInternalTask
-                          ? 'bg-emerald-500/5 border-emerald-500/30 hover:border-emerald-500/60'
-                          : 'bg-card border-border hover:border-primary/50'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'border-transparent text-white'
                       )}
+                      style={!isInternalNote && !isInternalTask ? { backgroundColor: `hsl(${hue} 55% 42%)` } : undefined}
                     >
-                      <span className={cn(
-                        'w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 transition-colors',
-                        isInternalNote
-                          ? 'bg-amber-500/20 text-amber-400'
-                          : isInternalTask
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-primary/15 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
-                      )}>
-                        {source.id}
-                      </span>
-                      <span className="text-[11px] font-medium text-foreground/85 group-hover:text-foreground truncate">
-                        {isInternalNote ? '📝 Заметка' : isInternalTask ? '✓ Задача' : cleanDomain}
-                      </span>
+                      {isInternalNote ? 'З' : isInternalTask ? '✓' : cleanDomain.charAt(0).toUpperCase()}
                     </a>
                   )
                 })}
               </div>
+
+              <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                {result.sources.length}
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </div>
           )}
 
