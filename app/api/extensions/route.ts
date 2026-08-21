@@ -1111,16 +1111,52 @@ export async function POST(req: NextRequest) {
     // ── ACTION: DELETE EXTENSION ──
     if (action === 'delete') {
       const { extensionId } = body
-      const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
-      if (!extRec) return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+      if (!extensionId) return NextResponse.json({ error: 'extensionId required' }, { status: 400 })
 
-      const parsed = JSON.parse(extRec.value)
-      if (parsed.authorChatId !== chatId && !(await isUserAdmin(chatId))) {
-        return NextResponse.json({ error: 'У вас нет прав на удаление этого расширения' }, { status: 403 })
+      const extRec = await prisma.config.findUnique({ where: { key: `zerf_ext_${extensionId}` } })
+      const isCreator = await isUserAdmin(chatId)
+
+      if (extRec) {
+        const parsed = JSON.parse(extRec.value)
+        if (parsed.authorChatId !== chatId && !isCreator) {
+          return NextResponse.json({ error: 'У вас нет прав на удаление этого расширения' }, { status: 403 })
+        }
+        await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } }).catch(() => {})
+      } else if (!isCreator) {
+        return NextResponse.json({ error: 'Расширение не найдено или нет прав' }, { status: 404 })
       }
 
-      await prisma.config.delete({ where: { key: `zerf_ext_${extensionId}` } })
-      return NextResponse.json({ success: true })
+      // Add to deleted_extensions_list so it never reappears in catalog
+      const deleted = await getDeletedExtensionIds()
+      if (!deleted.includes(extensionId)) {
+        deleted.push(extensionId)
+        await prisma.config.upsert({
+          where: { key: 'deleted_extensions_list' },
+          update: { value: JSON.stringify(deleted) },
+          create: { key: 'deleted_extensions_list', value: JSON.stringify(deleted) },
+        }).catch(() => {})
+      }
+
+      // Clean up from user installed/enabled lists
+      try {
+        const userExtRows = await prisma.config.findMany({
+          where: { key: { startsWith: 'user_extensions_' } },
+        })
+        for (const row of userExtRows) {
+          try {
+            const ids = JSON.parse(row.value)
+            if (Array.isArray(ids) && ids.includes(extensionId)) {
+              const updated = ids.filter((id: string) => id !== extensionId)
+              await prisma.config.update({
+                where: { key: row.key },
+                data: { value: JSON.stringify(updated) },
+              })
+            }
+          } catch {}
+        }
+      } catch {}
+
+      return NextResponse.json({ success: true, deletedId: extensionId })
     }
 
     // ── ACTION: BIND PAYOUT CARD / YOOMONEY DETAILS & AUTO-RENEW TOGGLE ──
