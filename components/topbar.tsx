@@ -106,7 +106,23 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
   }, [])
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [nextTaskCountdown, setNextTaskCountdown] = useState<{ title: string; timeStr: string } | null>(null)
+  const [inAppToast, setInAppToast] = useState<{ title: string; body: string; id: number } | null>(null)
   const notifiedTasksRef = useRef<Set<string>>(new Set())
+
+  // In-app visual floating push banner listener
+  useEffect(() => {
+    const handleInApp = (e: any) => {
+      const data = e.detail
+      if (!data?.title) return
+      const id = Date.now()
+      setInAppToast({ title: data.title, body: data.body || '', id })
+      setTimeout(() => {
+        setInAppToast(prev => (prev && prev.id === id ? null : prev))
+      }, 5000)
+    }
+    window.addEventListener('zerf:in_app_notification', handleInApp)
+    return () => window.removeEventListener('zerf:in_app_notification', handleInApp)
+  }, [])
 
   // Background ticker for live countdown & in-browser audio alarms
   useEffect(() => {
@@ -364,6 +380,37 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
       </div>
 
       <VoiceRecorder open={voiceOpen} onClose={() => setVoiceOpen(false)} />
+
+      {/* Floating In-App Push Banner */}
+      <AnimatePresence>
+        {inAppToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            onClick={() => setInAppToast(null)}
+            className="fixed top-4 right-4 sm:right-6 z-50 max-w-sm w-full p-4 rounded-2xl bg-card/95 backdrop-blur-md border border-primary/40 shadow-2xl shadow-primary/10 flex items-start gap-3 cursor-pointer select-none"
+          >
+            <div className="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 animate-bounce" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-foreground truncate">{inAppToast.title}</h4>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{inAppToast.body}</p>
+            </div>
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation()
+                setInAppToast(null)
+              }}
+              className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   )
 }

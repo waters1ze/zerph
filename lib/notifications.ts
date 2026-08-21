@@ -165,50 +165,76 @@ export async function ensurePushSubscribedOnBoot(): Promise<void> {
 
 export async function sendTestNotification(): Promise<{ success: boolean; message: string }> {
   if (typeof window === 'undefined') return { success: false, message: 'Окно недоступно' }
-  if (!('Notification' in window)) {
-    return { success: false, message: 'Ваш браузер не поддерживает Push-уведомления' }
-  }
 
-  const granted = await requestNotificationPermission()
-  // Double-check the actual browser permission state — some browsers report
-  // 'default' even after the request resolves
-  const effectiveGranted = granted && typeof Notification !== 'undefined' && Notification.permission === 'granted'
-  if (!effectiveGranted) {
-    return {
-      success: false,
-      message: Notification.permission === 'denied'
-        ? 'Уведомления ЗАБЛОКИРОВАНЫ браузером. Нажмите на значок замка в адресной строке → Уведомления → Разрешить, затем перезагрузите страницу.'
-        : 'Разрешение на уведомления не выдано. Разрешите уведомления во всплывающем окне браузера и попробуйте снова.'
-    }
-  }
-
-  showWebNotification('🔔 Тестовый Пуш от Zerf Note', {
+  // 1. Instant visual & audio feedback immediately
+  showWebNotification('🔔 Тестовый Пуш Zerf Note', {
     body: 'Ура! Пуш-уведомления успешно работают на вашем устройстве (ПК и телефон)! 🎉',
     tag: 'zerf-test-push',
     requireInteraction: true,
   })
 
-  // Hit the backend push test endpoint with full credentials
-  const chatId =
-    localStorage.getItem('zerf_chat_id') ||
-    sessionStorage.getItem('zerf_chat_id') ||
-    getStoredCookie('zerf_chat_id') ||
-    null
+  // 2. If permission not granted yet, ask for permission
+  if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+    try {
+      await Notification.requestPermission()
+    } catch {}
+  }
 
-  try {
-    const headers = getClientAuthHeaders()
-    await fetch('/api/push/test', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        title: '🔔 Тестовый пуш Zerf Note',
-        message: 'Пуш-уведомление успешно доставлено на ваше устройство! 🚀',
-        chatId,
-      }),
-    })
-  } catch {}
+  // 3. In the background (non-blocking), register service worker & dispatch to server
+  ;(async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const swReg = await navigator.serviceWorker.register('/sw.js').catch(() => null)
+        if (swReg) {
+          await navigator.serviceWorker.ready.catch(() => null)
+          if ('pushManager' in swReg) {
+            let sub = await swReg.pushManager.getSubscription().catch(() => null)
+            if (!sub) {
+              const res = await fetch('/api/push/subscribe').catch(() => null)
+              const data = await res?.json().catch(() => null)
+              if (data?.publicKey) {
+                const convertedKey = urlBase64ToUint8Array(data.publicKey)
+                try {
+                  sub = await swReg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: convertedKey,
+                  })
+                } catch {
+                  const oldSub = await swReg.pushManager.getSubscription().catch(() => null)
+                  if (oldSub) await oldSub.unsubscribe().catch(() => {})
+                  sub = await swReg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: convertedKey,
+                  }).catch(() => null)
+                }
+              }
+            }
+            const chatId = localStorage.getItem('zerf_chat_id') || sessionStorage.getItem('zerf_chat_id') || getStoredCookie('zerf_chat_id') || null
+            if (sub && chatId) {
+              await fetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: getClientAuthHeaders(),
+                body: JSON.stringify({ subscription: sub.toJSON(), chatId }),
+              }).catch(() => {})
+            }
+          }
+        }
+      }
 
-  return { success: true, message: 'Тестовый пуш успешно отправлен на ваши устройства!' }
+      const chatId = localStorage.getItem('zerf_chat_id') || sessionStorage.getItem('zerf_chat_id') || getStoredCookie('zerf_chat_id') || null
+      await fetch('/api/push/test', {
+        method: 'POST',
+        headers: getClientAuthHeaders(),
+        body: JSON.stringify({
+          title: '🔔 Тестовый пуш Zerf Note',
+          message: 'Пуш-уведомление успешно доставлено на ваше устройство! 🚀',
+          chatId,
+        }),
+      }).catch(() => {})
+    } catch {}
+  })()
+
+  return { success: true, message: 'Тестовое уведомление отправлено!' }
 }
 
 export function showWebNotification(
@@ -227,10 +253,19 @@ export function showWebNotification(
   const defaultIcon = options?.icon || '/icon-192.png'
   const tag = options?.tag || `zerf-${Date.now()}`
 
-  let shown = false
+  // 1. Dispatch custom event for animated in-app floating banner
+  try {
+    window.dispatchEvent(new CustomEvent('zerf:in_app_notification', {
+      detail: {
+        title,
+        body: options?.body || defaultBody,
+        timestamp: Date.now(),
+      }
+    }))
+  } catch {}
 
+  // 2. Native OS Notification
   if ('Notification' in window && Notification.permission === 'granted') {
-    shown = true
     try {
       const notif = new Notification(title, {
         body: options?.body || defaultBody,
@@ -264,11 +299,9 @@ export function showWebNotification(
     }
   }
 
-  // Trigger audio alarm & vibration only when notification is active
-  if (shown) {
-    playAlarmChime('alarm')
-    vibrateDevice([200, 100, 200, 100, 300])
-  }
+  // 3. Audio chime
+  playAlarmChime('alarm')
+  vibrateDevice([200, 100, 200, 100, 300])
 }
 
 export function vibrateDevice(pattern: number[] = [200, 100, 200]) {
