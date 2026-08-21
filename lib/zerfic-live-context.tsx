@@ -775,33 +775,28 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
         }
 
         recognition.onresult = (event: any) => {
-          let finalTranscript = ''
+          // ANTI SELF-INTERRUPTION & ANTI ECHO-TURNS:
+          // While Zerfic speaks (and for a guard window after), ALL mic input is ignored
+          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 2500) {
+            return
+          }
+
+          let fullTranscript = ''
           let currentInterim = ''
 
-          for (let i = event.resultIndex; i < event.results.length; i++) {
+          for (let i = 0; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript
             if (event.results[i].isFinal) {
-              finalTranscript += transcript
+              fullTranscript += transcript + ' '
             } else {
               currentInterim += transcript
             }
           }
 
-          const rawText = (finalTranscript || currentInterim).trim()
+          const rawText = (fullTranscript + ' ' + currentInterim).replace(/\s+/g, ' ').trim()
+          if (!rawText) return
 
-          // ANTI SELF-INTERRUPTION & ANTI ECHO-TURNS:
-          // 1) While Zerfic speaks (and for a guard window after), ALL mic
-          //    input is ignored — browser TTS played through speakers gets
-          //    picked up by the mic and previously caused self-interruptions
-          //    AND phantom follow-up turns (the "multiple answers" bug).
-          // 2) Even after the window, input that matches the text Zerfic just
-          //    spoke is treated as echo and dropped.
-          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 2500) {
-            return
-          }
-          // Word-overlap echo filter: ASR mishears its own TTS slightly, so an
-          // exact substring match is not enough — require <55% word overlap
-          // with what was just spoken to accept the turn.
+          // Word-overlap echo filter: ASR mishears its own TTS slightly, so require <55% overlap
           const normIncoming = rawText.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '').trim()
           const spokenNorm = (lastSpokenTextRef.current || '').toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '').trim()
           if (normIncoming.length > 6 && spokenNorm.length > 12) {
@@ -813,27 +808,28 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
             }
           }
 
-          if (currentInterim) {
-            setInterimText(currentInterim)
-            setMood('thinking')
-          }
+          // Show real-time speech text in the UI
+          setInterimText(rawText)
+          setMood('thinking')
+          setStatusText('Слушаю вас...')
 
+          // Reset silence timer on every speech event
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current)
             silenceTimerRef.current = null
           }
 
-          if (finalTranscript.trim()) {
-            setInterimText('')
-            sendToZerfik(finalTranscript.trim())
-          } else if (currentInterim.trim()) {
-            silenceTimerRef.current = setTimeout(() => {
-              if (currentInterim.trim().length > 1) {
-                setInterimText('')
-                sendToZerfik(currentInterim.trim())
-              }
-            }, 650)
-          }
+          // 2.0-second silence debounce: wait full 2000ms of silence after speaking before sending
+          silenceTimerRef.current = setTimeout(() => {
+            if (rawText.length >= 2 && !isSpeakingRef.current) {
+              setInterimText('')
+              try {
+                // Abort and restart recognition so that the next user turn begins with a clean buffer
+                recognition.abort()
+              } catch {}
+              sendToZerfik(rawText)
+            }
+          }, 2000)
         }
 
         recognition.onerror = (e: any) => {
