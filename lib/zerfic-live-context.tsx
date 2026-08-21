@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { type ZerfikMood } from '@/components/views/tikhonya-mascot'
-import { getAuthHeaders } from '@/lib/store'
+import { getAuthHeaders, useSettings } from '@/lib/store'
 
 export type ZerfikGesture = 'none' | 'chair_sit' | 'waving_arms' | 'jump_and_float' | 'spread' | 'head_tilt' | 'nod'
 
@@ -145,10 +145,18 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const [mood, setMood] = useState<ZerfikMood>('happy')
   const [gesture, setGesture] = useState<ZerfikGesture>('chair_sit')
 
+  const { settings } = useSettings()
+  const configuredModel = settings?.integrations?.aiTaskModels?.extensions || settings?.integrations?.aiModel
+
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_original')
   const [voiceVolume, setVoiceVolume] = useState<number>(0.85)
-  // gpt-oss-20b: ultra-fast with clean Russian — allam-2-7b produces garbled Russian
-  const [selectedModelId, setSelectedModelId] = useState<string>('openai/gpt-oss-20b')
+  const [selectedModelId, setSelectedModelId] = useState<string>(() => configuredModel || 'openai/gpt-oss-20b')
+
+  useEffect(() => {
+    if (configuredModel) {
+      setSelectedModelId(configuredModel)
+    }
+  }, [configuredModel])
   const [messages, setMessages] = useState<LiveChatMessage[]>(() => {
     if (typeof window !== 'undefined') {
       try {

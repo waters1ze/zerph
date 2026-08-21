@@ -306,8 +306,7 @@ export async function syncLiveGroqModelsFromGroq(force = false): Promise<GroqMod
         const id = item.id
         if (id.startsWith('whisper') || id.includes('audio') || id.includes('tts')) continue
         if (id.includes('guard') || id.includes('safeguard')) continue // Skip moderation classifiers
-        if (id.includes('orpheus') || id.includes('arabic') || id.includes('allam')) continue // Skip preview regional
-        if (id.includes('llama') || id.includes('mixtral') || id.includes('gemma')) continue // Skip legacy deprecated
+        if (id.includes('orpheus') || id.includes('arabic') || id.includes('allam')) continue // Skip non-Russian preview regional
 
         const existing = knownMap.get(id)
         if (existing && !existing.isExcluded) {
@@ -318,11 +317,11 @@ export async function syncLiveGroqModelsFromGroq(force = false): Promise<GroqMod
           const minTier = classifyTierByParams(billions)
           discovered.push({
             id,
-            name: id.split('/').pop()?.replace(/[-_]/g, ' ').toUpperCase() || id,
+            name: formatDynamicModelName(id) || id,
             paramsBillions: billions,
             category: 'production',
             minTier,
-            desc: `Автоматически подключенная модель Groq (${billions}B параметров, доступ с тарифа ${minTier.toUpperCase()})`,
+            desc: `Модель Groq (${billions}B параметров, доступ с тарифа ${minTier.toUpperCase()})`,
             contextTokens: item.context_window || 131072,
           })
         }
@@ -493,22 +492,18 @@ export function getFallbacksForPlan(userPlan?: string | null, requestedModel?: s
   return filtered.length > 0 ? filtered : ['groq/compound-mini', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b', 'openai/gpt-oss-120b']
 }
 
-export const KNOWN_GROQ_CHAT_MODELS = new Set([
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'groq/compound',
-  'groq/compound-mini',
-  'qwen/qwen3.6-27b',
-  'allam-2-7b',
-])
-
 export function normalizeGroqChatModel(model?: string, userPlan?: string | null): string {
   if (!model) return getModelForUserPlan(userPlan)
   const trimmed = model.trim()
-  if (KNOWN_GROQ_CHAT_MODELS.has(trimmed)) {
-    return isModelAllowedForPlan(trimmed, userPlan) ? trimmed : getModelForUserPlan(userPlan)
+  if (!trimmed || trimmed === 'allam-2-7b') {
+    return getModelForUserPlan(userPlan)
   }
-  
+
+  // Dynamic model check: if it's allowed for the user's plan, keep it exactly as requested!
+  if (isModelAllowedForPlan(trimmed, userPlan)) {
+    return trimmed
+  }
+
   const lower = trimmed.toLowerCase()
   if (lower.includes('120b') || lower.includes('flagship') || lower.includes('minimax') || lower.includes('m2.7') || lower.includes('gpt-oss-120b')) {
     return isModelAllowedForPlan('openai/gpt-oss-120b', userPlan) ? 'openai/gpt-oss-120b' : getModelForUserPlan(userPlan)

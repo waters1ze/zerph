@@ -342,11 +342,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Сообщение не распознано или пусто.' }, { status: 400 })
     }
 
+    if (!requestedModel && chatId) {
+      try {
+        const { prisma } = await import('@/lib/backend/prisma')
+        const taskModelsRow = await prisma.config.findUnique({ where: { key: `user_ai_task_models_${chatId}` } })
+        if (taskModelsRow?.value) {
+          const taskMap = JSON.parse(taskModelsRow.value)
+          if (taskMap.extensions) requestedModel = taskMap.extensions
+          else if (taskMap.chat) requestedModel = taskMap.chat
+        }
+        if (!requestedModel) {
+          const modelRow = await prisma.config.findUnique({ where: { key: `user_ai_model_${chatId}` } })
+          if (modelRow?.value) requestedModel = modelRow.value
+        }
+      } catch {}
+    }
+
     // ── TRUE LIVE STREAMING (SSE): first words are spoken while the LLM still generates ──
     if (wantsStream) {
-      // Guard: 'allam-2-7b' produces garbled Russian — force a clean model
-      const safeRequested = requestedModel === 'allam-2-7b' ? undefined : requestedModel
-      const streamModel = getModelForUserPlan(userPlan, safeRequested, 'chat') || 'openai/gpt-oss-20b'
+      const streamModel = getModelForUserPlan(userPlan, requestedModel, 'chat')
       const personaPrompt = getSystemPromptForVoice(voiceId)
 
       // Workspace context (notes/tasks/goals/extensions) so Zerfic can talk
@@ -392,7 +406,7 @@ export async function POST(req: NextRequest) {
       Promise.race([getUserExtensionsAIContext(chatId), contextTimeout(1200, '')]),
     ])
 
-    const effectiveModel = getModelForUserPlan(userPlan, requestedModel, 'chat') || 'allam-2-7b'
+    const effectiveModel = getModelForUserPlan(userPlan, requestedModel, 'chat')
 
     const nowMsk = new Intl.DateTimeFormat('ru-RU', {
       timeZone: 'Europe/Moscow',
