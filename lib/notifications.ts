@@ -253,7 +253,7 @@ export function showWebNotification(
   const defaultIcon = options?.icon || '/icon-192.png'
   const tag = options?.tag || `zerf-${Date.now()}`
 
-  // 1. Dispatch custom event for animated in-app floating banner
+  // 1. Dispatch custom event for animated in-app floating banner (always visible!)
   try {
     window.dispatchEvent(new CustomEvent('zerf:in_app_notification', {
       detail: {
@@ -264,44 +264,48 @@ export function showWebNotification(
     }))
   } catch {}
 
-  // 2. Native OS Notification
-  if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      const notif = new Notification(title, {
-        body: options?.body || defaultBody,
-        icon: defaultIcon,
-        tag,
-        requireInteraction: options?.requireInteraction ?? true,
-      })
-      if (options?.onClick) {
-        notif.onclick = () => {
-          window.focus()
-          options.onClick!()
-          notif.close()
-        }
-      }
-    } catch {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready
-          .then(reg => {
-            reg.showNotification(title, {
-              body: options?.body || defaultBody,
-              icon: defaultIcon,
-              badge: defaultIcon,
-              tag,
-              renotify: true,
-              vibrate: [200, 100, 200, 100, 300],
-              requireInteraction: options?.requireInteraction ?? true,
-            } as any)
-          })
-          .catch(() => {})
-      }
-    }
-  }
-
-  // 3. Audio chime
+  // 2. Play Audio chime immediately
   playAlarmChime('alarm')
   vibrateDevice([200, 100, 200, 100, 300])
+
+  // 3. Native OS Notification
+  if ('Notification' in window && Notification.permission === 'granted') {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then(reg => {
+          reg.showNotification(title, {
+            body: options?.body || defaultBody,
+            icon: defaultIcon,
+            badge: defaultIcon,
+            tag,
+            renotify: true,
+            vibrate: [200, 100, 200, 100, 300],
+            requireInteraction: options?.requireInteraction ?? true,
+          } as any).catch(() => {
+            try { new Notification(title, { body: options?.body || defaultBody, icon: defaultIcon, tag }) } catch {}
+          })
+        })
+        .catch(() => {
+          try { new Notification(title, { body: options?.body || defaultBody, icon: defaultIcon, tag }) } catch {}
+        })
+    } else {
+      try {
+        const notif = new Notification(title, {
+          body: options?.body || defaultBody,
+          icon: defaultIcon,
+          tag,
+          requireInteraction: options?.requireInteraction ?? true,
+        })
+        if (options?.onClick) {
+          notif.onclick = () => {
+            window.focus()
+            options.onClick!()
+            notif.close()
+          }
+        }
+      } catch {}
+    }
+  }
 }
 
 export function vibrateDevice(pattern: number[] = [200, 100, 200]) {
