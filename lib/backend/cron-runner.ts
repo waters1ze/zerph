@@ -367,26 +367,13 @@ export async function runMorningGreeting() {
         const isBdayTask = (t: any) =>
           Boolean(t.tags?.includes('день рождения') || t.tags?.includes('мой день рождения') || t.title.startsWith('🎂'))
 
-        // User's regular pending tasks for today (excluding future birthday tasks)
+        // User's regular pending tasks for today (strictly active and scheduled for today)
         const userPending = userTasks
           .filter(t => t.status !== 'done' && t.status !== 'draft' && t.dueDate === todayStr && !isBdayTask(t))
-          .map(t => t.title)
-
-        const userRecent = userTasks
-          .filter(t => !isBdayTask(t))
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 5)
-          .map(t => t.title)
-
-        const userRecentNotes = userNotes
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 3)
-          .map(n => n.title)
+          .map(t => `${t.title}${t.dueTime ? ` (в ${t.dueTime})` : ''}`)
 
         const greeting = await generateMorningGreeting(
           firstName,
-          userRecent,
-          userRecentNotes,
           userPending,
           todayBirthdays
         ).catch(() => null)
@@ -860,23 +847,10 @@ export async function runForceMorningGreeting() {
 
         const userPending = userTasks
           .filter(t => t.status !== 'done' && t.status !== 'draft' && t.dueDate === todayStr && !isBdayTask(t))
-          .map(t => t.title)
-
-        const userRecent = userTasks
-          .filter(t => !isBdayTask(t))
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 5)
-          .map(t => t.title)
-
-        const userRecentNotes = userNotes
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 3)
-          .map(n => n.title)
+          .map(t => `${t.title}${t.dueTime ? ` (в ${t.dueTime})` : ''}`)
 
         const greeting = await generateMorningGreeting(
           firstName,
-          userRecent,
-          userRecentNotes,
           userPending,
           todayBirthdays
         ).catch(() => null)

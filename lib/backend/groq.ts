@@ -497,13 +497,11 @@ export async function generateReminderContext(
 }
 
 /**
- * Generate a personalized morning greeting based strictly on user's own recent tasks, notes, and today's birthdays.
+ * Generate a personalized morning greeting based strictly on user's active tasks for today and today's birthdays.
  * Returns a ready-to-send Russian Telegram message (with Markdown).
  */
 export async function generateMorningGreeting(
   firstName: string,
-  recentTaskTitles: string[],
-  recentNoteTitles: string[],
   pendingTasks: string[],
   todayBirthdays: string[] = [],
   apiKey?: string
@@ -517,40 +515,41 @@ export async function generateMorningGreeting(
   try {
     const contextLines: string[] = []
     if (todayBirthdays.length) contextLines.push(`Праздники и Дни рождения СЕГОДНЯ: ${todayBirthdays.join(', ')}`)
-    if (pendingTasks.length) contextLines.push(`Планы и задачи на сегодня: ${pendingTasks.slice(0, 5).join(', ')}`)
-    if (recentTaskTitles.length) contextLines.push(`Контекст недавних задач: ${recentTaskTitles.slice(0, 4).join(', ')}`)
-    if (recentNoteTitles.length) contextLines.push(`Контекст заметок пользователя: ${recentNoteTitles.slice(0, 3).join(', ')}`)
+    if (pendingTasks.length) {
+      contextLines.push(`Планы и задачи на сегодня (${pendingTasks.length}): ${pendingTasks.slice(0, 6).join(', ')}`)
+    } else {
+      contextLines.push(`Задач на сегодня нет (день полностью свободен)`)
+    }
 
     const result = await callGroqChatCompletion({
       messages: [
         {
           role: 'system',
-          content: `Ты — персональный AI-ассистент пользователя в Telegram (Zerf AI). Каждое утро ты пишешь ему тёплое, вдохновляющее и строго персонализированное утреннее сообщение.
+          content: `Ты — персональный AI-ассистент пользователя в Telegram (Zerf AI). Каждое утро ты пишешь ему тёплое, вдохновляющее и строго актуальное утреннее сообщение.
 Формат ответа — Markdown для Telegram (жирный *текст*, курсив _текст_). Пиши ТОЛЬКО на русском языке.
 
-Правила контекста (КРИТИЧЕСКИ ВАЖНО):
-- Опирайся ИСКЛЮЧИТЕЛЬНО на предоставленные задачи, заметки и дни рождения ЭТОГО пользователя. НЕ выдумывай чужие задачи, людей или события, которых нет в контексте.
-- Если список задач пуст: пожелай отличного свободного дня, предложи наметить главные цели или провести день с пользой.
-- Дни рождения: упоминай день рождения ТОЛЬКО если он явно указан в строке «Праздники и Дни рождения СЕГОДНЯ». Если эта строка отсутствует или пуста, КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать о днях рождения, поздравлениях или праздниках!
-- Задачи на сегодня — это планы, которые предстоит выполнить сегодня (НЕ пиши, что они уже сделаны).
+КРИТИЧЕСКИЕ ПРАВИЛА:
+1. Опирайся ИСКЛЮЧИТЕЛЬНО на список «Планы и задачи на сегодня». КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выдумывать дела, людей, прошлые выполненные задачи или несуществующие события!
+2. Если в строке «Планы и задачи на сегодня» написано «Задач на сегодня нет» — напиши, что день свободен от запланированных дел, пожелай продуктивного дня/отдыха и дай полезные советы по фокусу или планированию.
+3. Дни рождения упоминай ТОЛЬКО если есть строка «Праздники и Дни рождения СЕГОДНЯ».
 
 Структура сообщения:
-1. Приветствие с именем (1 строка, например: «Доброе утро, [Имя]!»)
-2. Упоминание дня недели и даты (например: «Сегодня — [день], [дата].»)
-3. Короткий персонализированный комментарий по его планам на сегодня (2-3 предложения, тепло, по-дружески).
-4. 2 полезных практических совета для продуктивности или комфортного выполнения дел.
-5. Короткая мотивирующая фраза на день.
+1. Приветствие с именем (1 строка: «Доброе утро, [Имя]!»).
+2. День недели и дата («Сегодня — [день], [дата].»).
+3. Если есть задачи на сегодня — краткий дружеский комментарий по ним (1-2 предложения). Если задач нет — пожелай продуктивного дня и хорошего настроения.
+4. 2 полезных практических совета на день.
+5. Короткая мотивирующая фраза.
 
-Максимум 160 слов. Без шаблонности, конкретно и заботливо.`,
+Максимум 130 слов. Без лишней воды.`,
         },
         {
           role: 'user',
-          content: `Имя пользователя: ${firstName}\nДата: ${dayName}\n${contextLines.length ? contextLines.join('\n') : 'Задач на сегодня нет, день полностью свободен.'}`,
+          content: `Имя пользователя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
         },
       ],
       model: GROQ_CHAT_MODEL,
-      temperature: 0.7,
-      max_tokens: 350,
+      temperature: 0.5,
+      max_tokens: 300,
       apiKey,
     })
 
