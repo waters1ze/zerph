@@ -10,7 +10,7 @@ import {
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
   Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus,
   Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown,
-  CreditCard, Wallet, Banknote, CheckCircle2, X
+  CreditCard, Wallet, Banknote, CheckCircle2, X, Loader2
 } from 'lucide-react'
 import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -1143,6 +1143,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   }
 
   const handleInstall = async (extensionId: string) => {
+    if (actionLoading) return
+
     if (maxExtensionsAllowed !== -1 && installedIds.length >= maxExtensionsAllowed && !installedIds.includes(extensionId)) {
       const ok = await confirmDialog({
         title: '🔒 Достигнут лимит расширений',
@@ -1157,33 +1159,22 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       return
     }
 
-    // Instant optimistic update
-    const nextInstalled = Array.from(new Set([...installedIds, extensionId]))
-    const nextEnabled = Array.from(new Set([...enabledIds, extensionId]))
-    setInstalledIds(nextInstalled)
-    setEnabledIds(nextEnabled)
-    try {
-      localStorage.setItem('zerf_installed_extensions', JSON.stringify(nextInstalled))
-      localStorage.setItem('zerf_enabled_extensions', JSON.stringify(nextEnabled))
-    } catch {}
-    setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
-    window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
-    window.dispatchEvent(new CustomEvent('zerf_extension_installed', { detail: { extensionId } }))
-    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+    setActionLoading(extensionId)
 
     try {
-      setActionLoading(extensionId)
       const res = await fetch('/api/extensions', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'install', extensionId }),
       })
       const data = await res.json()
+
       if (data.success) {
-        const finalInstalled = data.installedIds || nextInstalled
-        const finalEnabled = data.enabledIds || nextEnabled
+        const finalInstalled = Array.from(new Set([...(data.installedIds || installedIds), extensionId]))
+        const finalEnabled = Array.from(new Set([...(data.enabledIds || enabledIds), extensionId]))
         setInstalledIds(finalInstalled)
         setEnabledIds(finalEnabled)
+        setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
         try {
           localStorage.setItem('zerf_installed_extensions', JSON.stringify(finalInstalled))
           localStorage.setItem('zerf_enabled_extensions', JSON.stringify(finalEnabled))
@@ -1191,16 +1182,12 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
         window.dispatchEvent(new CustomEvent('zerf_extension_installed', { detail: { extensionId } }))
         window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
-        showToast('✓ Расширение успешно установлено!', 'success')
+        showToast('✓ Расширение успешно установлено в панель!', 'success')
       } else {
-        // Rollback
-        setInstalledIds(prev => prev.filter(id => id !== extensionId))
-        setEnabledIds(prev => prev.filter(id => id !== extensionId))
-        setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
-        if (data.requiresUpgrade) {
+        if (data.requiresPlan || data.requiresUpgrade) {
           const ok = await confirmDialog({
-            title: '🔒 Лимит тарифа',
-            description: data.error || 'Для установки дополнительных расширений перейдите на более высокий тариф.',
+            title: '⭐ Требуется тариф Plus / Pro',
+            description: data.error || 'Для установки этого расширения требуется тариф Zerf Plus или выше.',
             confirmText: 'Перейти к тарифам',
             cancelText: 'Закрыть',
             variant: 'primary',
@@ -1211,11 +1198,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         }
       }
     } catch {
-      // Rollback
-      setInstalledIds(prev => prev.filter(id => id !== extensionId))
-      setEnabledIds(prev => prev.filter(id => id !== extensionId))
-      setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
-      showToast('Ошибка при установке', 'error')
+      showToast('Ошибка сети при установке расширения', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -1951,10 +1934,19 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                               <button
                                 onClick={() => handleInstall(ext.id)}
                                 disabled={actionLoading === ext.id}
-                                className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                className="flex-1 min-w-0 h-8 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-80 active:scale-95"
                               >
-                                <Download className="w-3.5 h-3.5 shrink-0" />
-                                <span className="truncate">Установить</span>
+                                {actionLoading === ext.id ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                    <span className="truncate">Установка...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">Установить</span>
+                                  </>
+                                )}
                               </button>
                             ) : (
                               <button

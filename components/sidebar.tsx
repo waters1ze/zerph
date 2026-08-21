@@ -53,6 +53,21 @@ let cachedUserProfile: { data: any; timestamp: number } | null = null
 let cachedPendingCount: { count: number; timestamp: number } | null = null
 let cachedInstalledExts: { exts: ExtensionItem[]; timestamp: number } | null = null
 
+const getInitialInstalledExts = (): ExtensionItem[] => {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('zerf_installed_extensions')
+      const ids: string[] = raw ? JSON.parse(raw) : []
+      const catRaw = localStorage.getItem('zerf_ext_catalog_cache')
+      const cat = catRaw ? JSON.parse(catRaw)?.catalog || [] : []
+      if (Array.isArray(cat) && cat.length > 0) {
+        return cat.filter((e: any) => ids.includes(e.id))
+      }
+    } catch {}
+  }
+  return []
+}
+
 export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: externalToggle }: SidebarProps) {
   const { state, dispatch } = useApp()
   const { currentView, tasks, notes, settings } = state
@@ -60,7 +75,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
-  const [installedExts, setInstalledExts] = useState<ExtensionItem[]>([])
+  const [installedExts, setInstalledExts] = useState<ExtensionItem[]>(getInitialInstalledExts)
   const [enabledExtIds, setEnabledExtIds] = useState<string[]>([])
   const [disabledNotice, setDisabledNotice] = useState<string | null>(null)
   const [showZerficLiveModal, setShowZerficLiveModal] = useState<boolean>(false)
