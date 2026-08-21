@@ -5,9 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { ScheduleGroup, ScheduleLesson, DaySchedule } from '@/lib/types'
 import { 
   X, Plus, Trash2, Copy, Check, Clock, GraduationCap, BookOpen, 
-  Activity, Dumbbell, Palette, Music, Sparkles, Trophy, Calendar, MapPin, User, FileText, ChevronRight
+  Activity, Dumbbell, Palette, Music, Sparkles, Trophy, Calendar, MapPin, User, FileText, ChevronRight,
+  Mic, MicOff, Loader2, Wand2, AlertTriangle, CheckCircle2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getAuthHeaders } from '@/lib/store'
 
 interface ScheduleGroupModalProps {
   isOpen: boolean
@@ -62,23 +64,17 @@ const DEFAULT_SCHOOL_BELLS = [
 function createEmptyGroup(): ScheduleGroup {
   return {
     id: 'grp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-    title: 'Школа',
+    title: '',
     icon: 'GraduationCap',
     color: '#f59e0b',
-    description: 'Расписание уроков по дням недели',
+    description: '',
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     days: DAYS_OF_WEEK.map(d => ({
       dayOfWeek: d.id,
-      enabled: d.id <= 5, // Mon-Fri enabled by default
-      lessons: d.id <= 5 ? [
-        { id: 'les_1', name: 'Математика', startTime: '08:30', endTime: '09:15', room: 'каб. 201' },
-        { id: 'les_2', name: 'Русский язык', startTime: '09:25', endTime: '10:10', room: 'каб. 104' },
-        { id: 'les_3', name: 'Литература', startTime: '10:20', endTime: '11:05', room: 'каб. 104' },
-        { id: 'les_4', name: 'Физика', startTime: '11:20', endTime: '12:05', room: 'каб. 302' },
-        { id: 'les_5', name: 'История', startTime: '12:20', endTime: '13:05', room: 'каб. 210' },
-      ] : [],
+      enabled: d.id <= 5,
+      lessons: [],
     })),
   }
 }
@@ -98,6 +94,89 @@ export function ScheduleGroupModal({
   })
   const [activeDay, setActiveDay] = useState<number>(1)
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null)
+
+  // AI Generator state
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isAiGenerating, setIsAiGenerating] = useState(false)
+  const [aiStatusMessage, setAiStatusMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
+  const [isAiListening, setIsAiListening] = useState(false)
+
+  if (!isOpen) return null
+
+  const handleGenerateWithAi = async (promptToUse?: string) => {
+    const query = (promptToUse || aiPrompt).trim()
+    if (!query) return
+
+    setIsAiGenerating(true)
+    setAiStatusMessage(null)
+
+    try {
+      const res = await fetch('/api/schedule/ai-generate', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: query }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Ошибка при генерации расписания')
+      }
+
+      if (data.understood && data.group) {
+        setEditingGroup(data.group)
+        setSelectedGroupId(data.group.id)
+        setAiStatusMessage({ type: 'success', text: data.replyMessage })
+        const firstEnabled = data.group.days.find((d: any) => d.enabled && d.lessons?.length > 0)
+        if (firstEnabled) setActiveDay(firstEnabled.dayOfWeek)
+      } else {
+        setAiStatusMessage({
+          type: 'warning',
+          text: data.replyMessage || 'Не совсем понял, какое расписание требуется составить. Укажите день недели, список предметов или время занятий.',
+        })
+      }
+    } catch (err: any) {
+      setAiStatusMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Не удалось связаться с ИИ. Попробуйте еще раз.',
+      })
+    } finally {
+      setIsAiGenerating(false)
+    }
+  }
+
+  const handleToggleAiVoice = () => {
+    if (isAiListening) {
+      setIsAiListening(false)
+      return
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Голосовой ввод не поддерживается в этом браузере.')
+      return
+    }
+    try {
+      const rec = new SpeechRecognition()
+      rec.lang = 'ru-RU'
+      rec.continuous = false
+      rec.interimResults = false
+      setIsAiListening(true)
+      rec.onresult = (e: any) => {
+        const text = e.results[0][0].transcript
+        setAiPrompt(text)
+        setIsAiListening(false)
+        handleGenerateWithAi(text)
+      }
+      rec.onerror = () => setIsAiListening(false)
+      rec.onend = () => setIsAiListening(false)
+      rec.start()
+    } catch {
+      setIsAiListening(false)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -252,6 +331,113 @@ export function ScheduleGroupModal({
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 no-scrollbar">
           
+          {/* AI Schedule Generator Card */}
+          <div className="p-3.5 sm:p-4 rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent space-y-2.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <span>ИИ-генератор расписания</span>
+                    <span className="text-[10px] font-normal px-1.5 py-0.2 rounded-full bg-primary/20 text-primary">Любые фразы</span>
+                  </h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={e => setAiPrompt(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleGenerateWithAi()
+                  }}
+                  placeholder="Например: сделай группу расписание для понедельника, или 4 урока во вторник..."
+                  className="w-full pl-3 pr-9 py-2 rounded-xl text-xs sm:text-sm bg-background/90 border border-border/80 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleToggleAiVoice}
+                  className={cn(
+                    'absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-lg flex items-center justify-center transition-colors',
+                    isAiListening
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                  )}
+                  title={isAiListening ? 'Слушаю... нажмите для остановки' : 'Голосовой ввод'}
+                >
+                  {isAiListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleGenerateWithAi()}
+                disabled={isAiGenerating || !aiPrompt.trim()}
+                className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-1.5 hover:brightness-110 disabled:opacity-50 transition-all shrink-0 cursor-pointer shadow-xs"
+              >
+                {isAiGenerating ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Думаю...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>Создать</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Quick Suggestion Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+              <span className="text-[10px] text-muted-foreground shrink-0 font-medium">Примеры:</span>
+              {[
+                'Расписание на понедельник',
+                '5 уроков на каждый будний день',
+                'Тренировки: Пн, Ср, Пт в 19:00',
+                'Университет: пары Вт и Чт',
+                'Обобщи расписание',
+              ].map(chip => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => {
+                    setAiPrompt(chip)
+                    handleGenerateWithAi(chip)
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[11px] bg-background/80 hover:bg-primary/15 hover:text-primary border border-border/60 text-muted-foreground transition-colors shrink-0 cursor-pointer"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* AI Status Banner */}
+            {aiStatusMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  'p-2.5 rounded-xl text-xs flex items-start gap-2 border',
+                  aiStatusMessage.type === 'success' && 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
+                  aiStatusMessage.type === 'warning' && 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+                  aiStatusMessage.type === 'error' && 'bg-red-500/10 border-red-500/30 text-red-300'
+                )}
+              >
+                {aiStatusMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
+                {aiStatusMessage.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+                {aiStatusMessage.type === 'error' && <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
+                <span className="leading-snug">{aiStatusMessage.text}</span>
+              </motion.div>
+            )}
+          </div>
+
           {/* Groups Switcher Bar */}
           <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
             <div className="flex items-center gap-1.5">

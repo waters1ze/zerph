@@ -187,6 +187,8 @@ export function ChatView() {
           dispatch({ type: 'ADD_GOAL', goal: act.item, skipSync: true })
         } else if (act.type === 'note_created' && act.item) {
           dispatch({ type: 'ADD_NOTE', note: act.item, skipSync: true })
+        } else if (act.type === 'schedule_group_created' && act.item) {
+          dispatch({ type: 'ADD_SCHEDULE_GROUP', group: act.item })
         } else if (act.type === 'note_deleted') {
           if (act.targetId) {
             dispatch({ type: 'DELETE_NOTE', id: act.targetId })
