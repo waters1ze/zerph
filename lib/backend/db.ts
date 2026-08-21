@@ -491,22 +491,25 @@ export async function notifyAuthorTaskCompleted(task: any) {
  * treated as trusted server-side (cron) access.
  */
 function taskActorScope(actorChatId?: number | bigint | string | null) {
-  if (actorChatId === undefined || actorChatId === null || String(actorChatId).startsWith('guest_') || !/^\d+$/.test(String(actorChatId))) return undefined
+  if (actorChatId === undefined || actorChatId === null) return undefined
+  const str = String(actorChatId).trim()
+  if (!/^\d+$/.test(str)) return { ownerChatId: BigInt(-1) }
   try {
-    const cid = BigInt(actorChatId)
-    const strId = String(actorChatId)
-    return { OR: [{ ownerChatId: cid }, { authorChatId: cid }, { assignees: { has: strId } }] }
+    const cid = BigInt(str)
+    return { OR: [{ ownerChatId: cid }, { authorChatId: cid }, { assignees: { has: str } }] }
   } catch {
-    return undefined
+    return { ownerChatId: BigInt(-1) }
   }
 }
 
 function ownerActorScope(actorChatId?: number | bigint | string | null) {
-  if (actorChatId === undefined || actorChatId === null || String(actorChatId).startsWith('guest_') || !/^\d+$/.test(String(actorChatId))) return undefined
+  if (actorChatId === undefined || actorChatId === null) return undefined
+  const str = String(actorChatId).trim()
+  if (!/^\d+$/.test(str)) return { ownerChatId: BigInt(-1) }
   try {
-    return { ownerChatId: BigInt(actorChatId) }
+    return { ownerChatId: BigInt(str) }
   } catch {
-    return undefined
+    return { ownerChatId: BigInt(-1) }
   }
 }
 
@@ -3703,4 +3706,155 @@ export async function processParsedItemWithDelegation(
   const res = await saveParsedItemToDb(item, authorChatId)
   return { item: res.item, completedTask: res.completedTask }
 }
+
+/**
+ * Completely and irreversibly deletes a user account and all associated data from the database.
+ * Cascades removal across Tasks, Notes, Goals, Habits, Friendships, Sessions, Group Memberships,
+ * Project/Team assignments, and User Configurations.
+ */
+export async function deleteUserAccountPermanently(chatId: bigint | string | number): Promise<boolean> {
+  try {
+    const cid = BigInt(chatId)
+    const strCid = String(chatId)
+
+    // 1. Delete all tasks where user is owner or author
+    await prisma.task.deleteMany({
+      where: { OR: [{ ownerChatId: cid }, { authorChatId: cid }] }
+    }).catch(() => {})
+
+    // 2. Delete notes, goals, habits
+    await prisma.note.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
+    await prisma.goal.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
+    await prisma.habit.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
+
+    // 3. Delete friendships in both directions
+    await prisma.friendship.deleteMany({
+      where: { OR: [{ userChatId: cid }, { friendChatId: cid }] }
+    }).catch(() => {})
+
+    // 4. Delete user sessions, group memberships, channel comments
+    await prisma.userSession.deleteMany({ where: { chatId: cid } }).catch(() => {})
+    await prisma.groupMembership.deleteMany({ where: { memberChatId: cid } }).catch(() => {})
+    await prisma.channelComment.deleteMany({ where: { chatId: cid } }).catch(() => {})
+
+    // 5. Delete projects owned by user; remove user from memberIds in other projects
+    try {
+      const ownedProjects = await (prisma as any).projectDB.findMany({ where: { ownerChatId: cid }, select: { id: true } })
+      if (ownedProjects.length > 0) {
+        const pIds = ownedProjects.map((p: any) => p.id)
+        await prisma.task.deleteMany({ where: { projectDbId: { in: pIds } } }).catch(() => {})
+        await (prisma as any).projectDB.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
+      }
+      const memberProjects = await (prisma as any).projectDB.findMany({
+        where: { memberIds: { has: cid } }
+      }).catch(() => [])
+      for (const p of memberProjects) {
+        const filteredMembers = (p.memberIds || []).filter((m: bigint) => m !== cid)
+        await (prisma as any).projectDB.update({
+          where: { id: p.id },
+          data: { memberIds: filteredMembers }
+        }).catch(() => {})
+      }
+    } catch {}
+
+    // 6. Delete teams owned by user; remove from teams where user is member/admin
+    try {
+      await prisma.team.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
+      const memberTeams = await prisma.team.findMany({
+        where: { memberIds: { has: cid } }
+      }).catch(() => [])
+      for (const t of memberTeams) {
+        const filteredMembers = t.memberIds.filter(m => m !== cid)
+        const filteredAdmins = t.adminIds.filter(a => a !== cid)
+        await prisma.team.update({
+          where: { id: t.id },
+          data: { memberIds: filteredMembers, adminIds: filteredAdmins }
+        }).catch(() => {})
+      }
+    } catch {}
+
+    // 7. Delete user configurations
+    await prisma.config.deleteMany({
+      where: {
+        OR: [
+          { key: { startsWith: `user_`, endsWith: `_${strCid}` } },
+          { key: { contains: `_${strCid}` } },
+        ]
+      }
+    }).catch(() => {})
+
+    // 8. Delete TelegramChat record
+    await prisma.telegramChat.deleteMany({ where: { chatId: cid } }).catch(() => {})
+
+    return true
+  } catch (err) {
+    console.error(`[DeleteUserAccount] Error deleting account ${chatId}:`, err)
+    return false
+  }
+}
+
+/**
+ * Periodically cleans up inactive accounts based on user-configured or default retention periods.
+ * Default retention: 6 months (180 days). Users can select 1 month (30d), 3 months (90d), 6 months (180d), or 12 months (365d).
+ * Accounts inactive longer than their configured threshold are permanently purged with all their notes, tasks and history.
+ */
+export async function cleanupInactiveAccounts(): Promise<{ deletedCount: number; checkedCount: number }> {
+  try {
+    const { ROOT_ADMIN_IDS } = await import('./admin')
+    const now = new Date()
+
+    const users = await prisma.telegramChat.findMany({
+      where: {
+        chatId: { notIn: [BigInt(777000), BigInt(1087968824)] },
+      },
+      select: {
+        chatId: true,
+        lastActiveAt: true,
+        addedAt: true,
+        plan: true,
+      }
+    })
+
+    let deletedCount = 0
+    let checkedCount = 0
+
+    for (const user of users) {
+      checkedCount++
+      const cidStr = user.chatId.toString()
+      // Never delete Root Admins or system accounts
+      if (ROOT_ADMIN_IDS.includes(cidStr)) continue
+
+      // Look up user's configured auto-delete retention period (in months: 1, 3, 6, 12 or 0 for never)
+      let retentionMonths = 6 // Default: 6 months
+      try {
+        const conf = await prisma.config.findUnique({ where: { key: `user_auto_delete_${cidStr}` } })
+        if (conf?.value !== undefined && conf.value !== null) {
+          const parsed = Number(conf.value)
+          if (!isNaN(parsed)) retentionMonths = parsed
+        }
+      } catch {}
+
+      // 0 means disabled / never delete
+      if (retentionMonths <= 0) continue
+
+      const retentionDays = retentionMonths === 1 ? 30 : retentionMonths === 3 ? 90 : retentionMonths === 6 ? 180 : retentionMonths * 30
+      const cutoffTime = now.getTime() - retentionDays * 24 * 60 * 60 * 1000
+
+      const lastActivity = user.lastActiveAt ? new Date(user.lastActiveAt).getTime() : user.addedAt ? new Date(user.addedAt).getTime() : 0
+
+      // If user has not been active since before the cutoff date -> delete account completely
+      if (lastActivity > 0 && lastActivity < cutoffTime) {
+        console.log(`[AutoDelete] Account ${cidStr} inactive for > ${retentionMonths} month(s) (last active: ${new Date(lastActivity).toISOString()}). Deleting permanently...`)
+        const deleted = await deleteUserAccountPermanently(user.chatId)
+        if (deleted) deletedCount++
+      }
+    }
+
+    return { deletedCount, checkedCount }
+  } catch (err) {
+    console.error('[CleanupInactiveAccounts] Error:', err)
+    return { deletedCount: 0, checkedCount: 0 }
+  }
+}
+
 

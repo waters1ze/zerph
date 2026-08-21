@@ -40,6 +40,13 @@ export async function POST(req: NextRequest) {
       results.push(res)
     }
 
+    if (ownerChatId) {
+      try {
+        const { notifyDataChanged } = await import('@/lib/backend/sse')
+        notifyDataChanged(ownerChatId, 'all')
+      } catch {}
+    }
+
     return NextResponse.json({
       success: true,
       items: results.map(r => r.item),

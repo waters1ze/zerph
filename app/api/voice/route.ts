@@ -76,9 +76,18 @@ export async function POST(req: NextRequest) {
       await incrementUserUsage(ownerChatId, 'voice', actualDuration)
     }
 
+    if (ownerChatId) {
+      try {
+        const { notifyDataChanged } = await import('@/lib/backend/sse')
+        notifyDataChanged(ownerChatId, 'all')
+      } catch {}
+    }
+
+    const primaryResult = results[0] || null
     return NextResponse.json({
       success: true,
       transcript,
+      item: primaryResult?.item || null,
       items: results.map(r => r.item),
       completedTask: results.find(r => r.completedTask)?.completedTask || null,
       isCompletion: results.some(r => r.item.type === 'completion'),

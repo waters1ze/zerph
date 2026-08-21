@@ -12,7 +12,7 @@ import {
   Lock, ExternalLink, Download, Upload, Layers, CheckCircle2, ArrowRight,
   Send, Plus, CheckCircle, Search, X, Volume2, Timer, RotateCcw, AlertCircle, Brain, LayoutGrid, Puzzle,
   Mic, Crown, RefreshCw, FileText, Clock, Target, Terminal, Copy, BookOpen,
-  Share2, Heart, Calendar, CreditCard, Loader2
+  Share2, Heart, Calendar, CreditCard, Loader2, Trash2
 } from 'lucide-react'
 import { SessionsPanel } from '@/components/sessions-panel'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -150,7 +150,24 @@ export function SettingsView() {
     reminderRepeatCount?: number
     subscriptionExpiry?: string | null
     googleCalendarSync?: boolean
+    autoDeleteMonths?: number
   }>({})
+  const [autoDeleteSaving, setAutoDeleteSaving] = useState(false)
+  const handleAutoDeleteChange = async (months: number) => {
+    setProfileData(prev => ({ ...prev, autoDeleteMonths: months }))
+    update({ autoDeleteMonths: months })
+    setAutoDeleteSaving(true)
+    try {
+      await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoDeleteMonths: months }),
+      })
+    } catch {}
+    finally {
+      setTimeout(() => setAutoDeleteSaving(false), 500)
+    }
+  }
   const [gcalLoading, setGcalLoading] = useState(false)
   const [gcalSyncing, setGcalSyncing] = useState(false)
   const [gcalStatusMsg, setGcalStatusMsg] = useState<string | null>(null)
@@ -518,6 +535,7 @@ export function SettingsView() {
             reminderRepeatCount: d.reminderRepeatCount,
             subscriptionExpiry: d.subscriptionExpiry,
             googleCalendarSync: Boolean(d.googleCalendarSync),
+            autoDeleteMonths: d.autoDeleteMonths !== undefined ? Number(d.autoDeleteMonths) : 6,
           })
           if (d.avatarEmoji) {
             setUserAvatarEmoji(d.avatarEmoji)
@@ -2448,6 +2466,69 @@ export function SettingsView() {
               <SessionsPanel />
             </Section>
           )}
+
+          <Section title="Приватность и автоудаление аккаунта">
+            <div className="p-4 sm:p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-foreground">Удаление аккаунта при неактивности</h4>
+                    {autoDeleteSaving ? (
+                      <span className="text-[11px] text-primary flex items-center gap-1 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Сохранение...
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        Синхронизировано
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Если вы не заходите в Zerf Note в течение выбранного срока, ваш аккаунт и все связанные с ним данные (задачи, заметки, цели, привычки, файлы) будут автоматически и полностью удалены из облачной базы данных.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                {[
+                  { value: 1, label: '1 месяц', desc: '30 дней' },
+                  { value: 3, label: '3 месяца', desc: '90 дней' },
+                  { value: 6, label: '6 месяцев', desc: 'Полгода (Стандарт)' },
+                  { value: 12, label: '12 месяцев', desc: '1 год' },
+                  { value: 0, label: 'Никогда', desc: 'Бессрочно' },
+                ].map(opt => {
+                  const isSelected = (profileData.autoDeleteMonths ?? settings.autoDeleteMonths ?? 6) === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleAutoDeleteChange(opt.value)}
+                      className={cn(
+                        'p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1',
+                        isSelected
+                          ? 'bg-primary/10 border-primary text-foreground shadow-sm shadow-primary/10'
+                          : 'bg-muted/40 hover:bg-muted/70 border-border text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className={cn('text-xs font-bold', isSelected ? 'text-primary' : 'text-foreground')}>
+                          {opt.label}
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {opt.desc}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </Section>
         </div>
       )}
 
@@ -4726,6 +4807,68 @@ GOOGLE_REDIRECT_URI=https://zerph.vercel.app/api/calendar/token
                   <span>Terms</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
+              </div>
+            </div>
+          </Section>
+          <Section title="Приватность и автоудаление данных">
+            <div className="p-4 sm:p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-foreground">Автоматическое удаление аккаунта при неактивности</h4>
+                    {autoDeleteSaving ? (
+                      <span className="text-[11px] text-primary flex items-center gap-1 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Сохранение...
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        Синхронизировано
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Если аккаунт не используется в течение выбранного времени, он полностью удаляется из облачной базы данных вместе со всеми заметками, задачами и целями.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                {[
+                  { value: 1, label: '1 месяц', desc: '30 дней' },
+                  { value: 3, label: '3 месяца', desc: '90 дней' },
+                  { value: 6, label: '6 месяцев', desc: 'Полгода (Стандарт)' },
+                  { value: 12, label: '12 месяцев', desc: '1 год' },
+                  { value: 0, label: 'Никогда', desc: 'Бессрочно' },
+                ].map(opt => {
+                  const isSelected = (profileData.autoDeleteMonths ?? settings.autoDeleteMonths ?? 6) === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleAutoDeleteChange(opt.value)}
+                      className={cn(
+                        'p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1',
+                        isSelected
+                          ? 'bg-primary/10 border-primary text-foreground shadow-sm shadow-primary/10'
+                          : 'bg-muted/40 hover:bg-muted/70 border-border text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className={cn('text-xs font-bold', isSelected ? 'text-primary' : 'text-foreground')}>
+                          {opt.label}
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {opt.desc}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </Section>

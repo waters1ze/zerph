@@ -21,7 +21,7 @@ import {
   getUserProductivityStats, completeTask, updateTask, findFriendMatches, FriendMatch,
   isHolidayTitle, isBirthdayTitle, cancelScheduleForDate,
 } from '@/lib/backend/db'
-import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret, getFeedSignature, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
+import { createServerSession, getTelegramWebhookSecret, secretsMatch, getAdminSecret, getFeedSignature, ROOT_ADMIN_IDS, getUserAuthToken } from '@/lib/backend/auth'
 import { runAllCronTasks, startFocusSession, stopFocusSession, getFocusSession } from '@/lib/backend/cron-runner'
 import { prisma } from '@/lib/backend/prisma'
 import { GROQ_API_KEY } from '@/lib/config'
@@ -661,20 +661,31 @@ async function handleSettings(chatId: number) {
   let interval = 5
   let repeat = 3
   let ttsEnabled = true
+  let autoDeleteMonths = 6
   try {
-    const userChat = await prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } })
+    const [userChat, adConf] = await Promise.all([
+      prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } }),
+      prisma.config.findUnique({ where: { key: `user_auto_delete_${chatId}` } }),
+    ])
     if (userChat) {
       interval = userChat.reminderIntervalMinutes
       repeat = userChat.reminderRepeatCount
       ttsEnabled = userChat.ttsEnabled ?? true
     }
+    if (adConf?.value !== undefined && adConf.value !== null) {
+      const parsed = Number(adConf.value)
+      if (!isNaN(parsed)) autoDeleteMonths = parsed
+    }
   } catch {}
 
+  const autoDelLabel = autoDeleteMonths === 0 ? 'Выключено' : `${autoDeleteMonths} мес.`
+
   await send(chatId,
-    `⚙️ *Настройки напоминаний и интеграций*\n\n` +
+    `⚙️ *Настройки напоминаний, интеграций и приватности*\n\n` +
     `⏱️ *Интервал между напоминаниями:* ${interval} мин\n` +
     `🔁 *Количество повторов:* ${repeat} раза\n` +
-    `🎙️ *Голосовые ответы ИИ:* ${ttsEnabled ? 'Включены' : 'Выключены'}\n\n` +
+    `🎙️ *Голосовые ответы ИИ:* ${ttsEnabled ? 'Включены' : 'Выключены'}\n` +
+    `🗑️ *Автоудаление при неактивности:* ${autoDelLabel}\n\n` +
     `_Выберите параметр для изменения или подключите внешний календарь:_`,
     {
       reply_markup: {
@@ -685,6 +696,7 @@ async function handleSettings(chatId: number) {
           ],
           [
             { text: `🎙️ Голосовые ответы: ${ttsEnabled ? 'ВКЛ ✅' : 'ВЫКЛ 🔇'}`, callback_data: 'toggle_tts' },
+            { text: `🗑️ Автоудаление: ${autoDelLabel}`, callback_data: 'cfg_autodel_menu' },
           ],
           [
             { text: '📅 Apple / Google Календарь', callback_data: 'open_calendar_sync' },
@@ -1627,10 +1639,19 @@ async function getGroupMembers(groupChatId: number): Promise<number[]> {
 }
 
 function miniAppKeyboard(chatId?: number) {
+  let authToken = ''
+  if (chatId) {
+    try {
+      authToken = getUserAuthToken(chatId)
+    } catch {}
+  }
+  const appWebUrl = chatId && authToken ? `${APP_URL}/?chatId=${chatId}&auth_token=${authToken}` : APP_URL
+  const tgMiniUrl = chatId ? `${MINIAPP_URL}?chatId=${chatId}` : MINIAPP_URL
+
   return {
     inline_keyboard: [
-      [{ text: '📱 Open Zerf App', web_app: { url: MINIAPP_URL } }],
-      [{ text: '🌐 Open Full Web Site', url: APP_URL }],
+      [{ text: '📱 Open Zerf App', web_app: { url: tgMiniUrl } }],
+      [{ text: '🌐 Open Full Web Site', url: appWebUrl }],
     ],
   }
 }
@@ -3193,6 +3214,48 @@ export async function POST(req: NextRequest) {
           text: nextTts ? '🎙️ Голосовые ответы включены' : '🔇 Голосовые ответы отключены'
         })
         await handleSettings(chatId)
+      } else if (data === 'cfg_autodel_menu') {
+        await send(chatId,
+          `🗑️ *Автоматическое удаление аккаунта при неактивности*\n\n` +
+          `Если вы не заходите в Zerf Note в течение выбранного срока, ваш аккаунт и все связанные с ним данные (заметки, задачи, цели, привычки) будут полностью и безвозвратно удалены из базы данных.\n\n` +
+          `_Выберите срок автоудаления:_`,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '1 месяц (30 дней)', callback_data: 'set_autodel_1' },
+                  { text: '3 месяца (90 дней)', callback_data: 'set_autodel_3' },
+                ],
+                [
+                  { text: '6 месяцев (Полгода ⭐)', callback_data: 'set_autodel_6' },
+                  { text: '12 месяцев (1 год)', callback_data: 'set_autodel_12' },
+                ],
+                [
+                  { text: '🚫 Никогда (Отключить)', callback_data: 'set_autodel_0' },
+                ],
+                [
+                  { text: '⬅️ Назад в настройки', callback_data: 'back_to_settings' },
+                ]
+              ]
+            }
+          }
+        )
+      } else if (data?.startsWith('set_autodel_')) {
+        const months = Number(data.replace('set_autodel_', '')) || 0
+        await prisma.config.upsert({
+          where: { key: `user_auto_delete_${chatId}` },
+          update: { value: String(months) },
+          create: { key: `user_auto_delete_${chatId}`, value: String(months) },
+        })
+        const label = months === 0 ? 'отключено (аккаунт хранится бессрочно)' : `установлено на ${months} мес.`
+        await tgApi('answerCallbackQuery', {
+          callback_query_id: cb.id,
+          text: `🗑️ Автоудаление: ${label}`
+        })
+        await send(chatId, `✅ *Автоудаление при неактивности:* ${label}`)
+        await handleSettings(chatId)
+      } else if (data === 'back_to_settings') {
+        await handleSettings(chatId)
       } else if (data === 'open_calendar_sync') {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
         const calSig = getFeedSignature(chatId)
@@ -3679,8 +3742,6 @@ export async function POST(req: NextRequest) {
         await handleMatrixCommand(chatId)
       } else if (cmd === '/cleanup') {
         await handleCleanupCommand(chatId)
-      } else if (cmd === '/report') {
-        await handleWeeklyReport(senderId, chatId)
       } else if (cmd === '/birthday' || cmd === '/bday') {
         const dateArg = parts.slice(1).join(' ').trim()
         if (!dateArg) {
@@ -3787,8 +3848,46 @@ export async function POST(req: NextRequest) {
             await send(chatId, `▫ Не удалось определить часовой пояс. Примеры:\n\`/timezone +3\` (МСК)\n\`/timezone +5\` (Екатеринбург)\n\`/timezone Europe/Moscow\``)
           }
         }
+      } else if (cmd === '/autodelete' || cmd === '/retention' || cmd === '/privacy') {
+        const arg = parts[1]?.toLowerCase()?.trim()
+        if (!arg) {
+          let currentMonths = 6
+          try {
+            const c = await prisma.config.findUnique({ where: { key: `user_auto_delete_${chatId}` } })
+            if (c?.value !== undefined && c.value !== null) currentMonths = Number(c.value)
+          } catch {}
+          const label = currentMonths === 0 ? 'Выключено (бессрочно)' : `${currentMonths} мес.`
+          await send(chatId,
+            `🗑️ *Автоудаление аккаунта при неактивности*\n\n` +
+            `• *Текущий срок:* \`${label}\`\n\n` +
+            `Если вы не заходите в бота или приложение указанное время, аккаунт и все данные (задачи, заметки, цели, привычки) полностью удаляются.\n\n` +
+            `Для изменения отправьте:\n` +
+            `\`/autodelete 1\` (1 месяц / 30 дней)\n` +
+            `\`/autodelete 3\` (3 месяца / 90 дней)\n` +
+            `\`/autodelete 6\` (6 месяцев / полгода)\n` +
+            `\`/autodelete 12\` (1 год)\n` +
+            `\`/autodelete off\` (Отключить автоудаление)`
+          )
+        } else {
+          let months = 6
+          if (arg === 'off' || arg === '0' || arg === 'never' || arg === 'выкл' || arg === 'откл') {
+            months = 0
+          } else {
+            const parsed = parseInt(arg, 10)
+            if (!isNaN(parsed) && parsed >= 0) {
+              months = parsed
+            }
+          }
+          await prisma.config.upsert({
+            where: { key: `user_auto_delete_${chatId}` },
+            update: { value: String(months) },
+            create: { key: `user_auto_delete_${chatId}`, value: String(months) },
+          })
+          const label = months === 0 ? 'отключено (аккаунт хранится бессрочно)' : `установлено на ${months} мес.`
+          await send(chatId, `✅ *Автоудаление при неактивности:* ${label}`)
+        }
       } else if (!isGroup) {
-        await send(chatId, 'Попробуй /settings, /today, /timezone, /invite, /report, /buy или /help')
+        await send(chatId, 'Попробуй /settings, /today, /timezone, /autodelete, /invite, /report, /buy или /help')
       }
 
     } else if (!isGroup) {

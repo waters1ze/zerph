@@ -57,8 +57,9 @@ export async function GET(req: NextRequest) {
           let sidebarConfig: any = null
           let groqApiKey: string | null = null
           let aiKeys: { openaiKey?: string; anthropicKey?: string; geminiKey?: string } = {}
+          let autoDeleteMonths = 6
           try {
-            const [modelConf, taskModelsConf, siriModeConf, githubConf, sidebarConf, groqKeyConf, aiKeysConf] = await Promise.all([
+            const [modelConf, taskModelsConf, siriModeConf, githubConf, sidebarConf, groqKeyConf, aiKeysConf, autoDelConf] = await Promise.all([
               prisma.config.findUnique({ where: { key: `user_ai_model_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_ai_task_models_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_siri_mode_${cid}` } }),
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
               prisma.config.findUnique({ where: { key: `user_sidebar_config_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_groq_api_key_${cid}` } }),
               prisma.config.findUnique({ where: { key: `user_ai_keys_${cid}` } }),
+              prisma.config.findUnique({ where: { key: `user_auto_delete_${cid}` } }),
             ])
             if (modelConf?.value) aiModel = modelConf.value
             if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value)
@@ -77,6 +79,10 @@ export async function GET(req: NextRequest) {
             if (groqKeyConf?.value) groqApiKey = groqKeyConf.value
             if (aiKeysConf?.value) {
               try { aiKeys = JSON.parse(aiKeysConf.value) } catch {}
+            }
+            if (autoDelConf?.value !== undefined && autoDelConf.value !== null) {
+              const parsed = Number(autoDelConf.value)
+              if (!isNaN(parsed)) autoDeleteMonths = parsed
             }
           } catch {}
 
@@ -112,6 +118,7 @@ export async function GET(req: NextRequest) {
             anthropicKey: aiKeys.anthropicKey || null,
             geminiKey: aiKeys.geminiKey || null,
             googleCalendarSync: Boolean(chat.googleCalendarSync),
+            autoDeleteMonths,
             plan: activePlan,
             isPremium,
             subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
@@ -148,10 +155,19 @@ export async function POST(req: NextRequest) {
       githubUsername, githubToken, newsDisabled, timezone, city,
       reminderIntervalMinutes, reminderRepeatCount, ttsEnabled,
       avatarEmoji, aiModel, aiTaskModels, siriMode, sidebarConfig,
-      groqApiKey, apiKey, openaiKey, anthropicKey, geminiKey
+      groqApiKey, apiKey, openaiKey, anthropicKey, geminiKey, autoDeleteMonths
     } = await req.json()
     const { parseBirthday, broadcastMyBirthdayToFriends, updateUserNameCascade } = await import('@/lib/backend/db')
     const { setNewsDisabled, planAtLeast, PLANS } = await import('@/lib/backend/plans')
+
+    if (autoDeleteMonths !== undefined) {
+      const monthsVal = String(Number(autoDeleteMonths) || 0)
+      await prisma.config.upsert({
+        where: { key: `user_auto_delete_${cid}` },
+        update: { value: monthsVal },
+        create: { key: `user_auto_delete_${cid}`, value: monthsVal },
+      }).catch(() => {})
+    }
 
     if (sidebarConfig !== undefined) {
       await prisma.config.upsert({

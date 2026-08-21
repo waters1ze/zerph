@@ -211,43 +211,61 @@ async function processWithAI(chatId: number, text?: string, voiceFileId?: string
 }
 
 async function sendAIResult(chatId: number, data: {
-  item: { type: string; title: string; summary?: string; priority?: string; dueDate?: string; dueTime?: string; targetTitle?: string }
+  item?: { type: string; title: string; summary?: string; priority?: string; dueDate?: string; dueTime?: string; targetTitle?: string } | null
+  items?: Array<{ type: string; title: string; summary?: string; priority?: string; dueDate?: string; dueTime?: string; targetTitle?: string }>
   completedTask?: { title: string } | null
   transcript?: string
 }) {
-  const { item, completedTask, transcript } = data
-  const TYPE_RU: Record<string, string> = {
-    task: 'Задача', goal: 'Цель', note: 'Заметка',
-    project: 'Проект', reminder: 'Напоминание', completion: 'Выполнено',
-  }
+  const itemsToRender = Array.isArray(data.items) && data.items.length > 0
+    ? data.items
+    : data.item
+      ? [data.item]
+      : []
 
-  if (item.type === 'completion') {
-    if (completedTask) {
-      await send(chatId,
-        `✅ *Задача отмечена как выполненная!*\n\n~~${completedTask.title}~~\n\n_Синхронизировано с Zerf_`,
-        { reply_markup: MINIAPP_KB }
-      )
-    } else {
-      await send(chatId,
-        `🔍 Задача *«${item.targetTitle || item.title}»* не найдена.\n\nПроверь список задач в приложении.`,
-        { reply_markup: MINIAPP_KB }
-      )
+  if (itemsToRender.length === 0) {
+    if (data.transcript) {
+      await send(chatId, `📝 Записано: «${data.transcript}»\n\n_Сохранено в Zerf_`, { reply_markup: MINIAPP_KB })
     }
     return
   }
 
-  const typeLabel = TYPE_RU[item.type] || item.type
-  const pEmoji = P_EMOJI[item.priority || 'medium'] || '⚪'
-  let msg = `${typeLabel} создана ✨\n\n`
-  msg += `*${item.title}*\n`
-  if (item.summary && item.type !== 'note') msg += `\n${item.summary.slice(0, 200)}\n`
-  if (item.priority) msg += `\n${pEmoji} Приоритет: ${item.priority}`
-  if (item.dueDate) msg += `\n📅 Срок: ${item.dueDate}`
-  if (item.dueTime) msg += `\n⏰ Время: *${item.dueTime}* — пришлю напоминание!`
-  if (transcript && item.type === 'note') msg += `\n\n_🎙 Оригинал записан_`
-  msg += `\n\n_Сохранено в Zerf_`
+  const TYPE_RU: Record<string, string> = {
+    task: 'Задача', goal: 'Цель', note: 'Заметка',
+    project: 'Проект', reminder: 'Напоминание', completion: 'Выполнено',
+    habit: 'Привычка', delegate: 'Поручение',
+  }
 
-  await send(chatId, msg, { reply_markup: MINIAPP_KB })
+  for (const item of itemsToRender) {
+    if (!item) continue
+
+    if (item.type === 'completion') {
+      if (data.completedTask) {
+        await send(chatId,
+          `✅ *Задача отмечена как выполненная!*\n\n~~${data.completedTask.title}~~\n\n_Синхронизировано с Zerf_`,
+          { reply_markup: MINIAPP_KB }
+        )
+      } else {
+        await send(chatId,
+          `🔍 Задача *«${item.targetTitle || item.title}»* не найдена.\n\nПроверь список задач в приложении.`,
+          { reply_markup: MINIAPP_KB }
+        )
+      }
+      continue
+    }
+
+    const typeLabel = TYPE_RU[item.type] || item.type || 'Запись'
+    const pEmoji = P_EMOJI[item.priority || 'medium'] || '⚪'
+    let msg = `${typeLabel} создана ✨\n\n`
+    msg += `*${item.title}*\n`
+    if (item.summary && item.type !== 'note' && item.summary !== item.title) msg += `\n${item.summary.slice(0, 200)}\n`
+    if (item.priority) msg += `\n${pEmoji} Приоритет: ${item.priority}`
+    if (item.dueDate) msg += `\n📅 Срок: ${item.dueDate}`
+    if (item.dueTime) msg += `\n⏰ Время: *${item.dueTime}* — пришлю напоминание!`
+    if (data.transcript && item.type === 'note') msg += `\n\n_🎙 Оригинал записан_`
+    msg += `\n\n_Сохранено в Zerf_`
+
+    await send(chatId, msg, { reply_markup: MINIAPP_KB })
+  }
 }
 
 // ── Reminder scheduler — runs every 60 seconds ────────────────────────────────

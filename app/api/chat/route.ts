@@ -378,6 +378,14 @@ export async function POST(req: NextRequest) {
 
       if (ownerChatId) await incrementUserUsage(ownerChatId, 'chat')
 
+      const serializedRecord = createdOrUpdatedRecord ? {
+        ...createdOrUpdatedRecord,
+        ownerChatId: createdOrUpdatedRecord.ownerChatId ? String(createdOrUpdatedRecord.ownerChatId) : null,
+        authorChatId: createdOrUpdatedRecord.authorChatId ? String(createdOrUpdatedRecord.authorChatId) : null,
+        createdAt: createdOrUpdatedRecord.createdAt instanceof Date ? createdOrUpdatedRecord.createdAt.toISOString() : createdOrUpdatedRecord.createdAt,
+        updatedAt: createdOrUpdatedRecord.updatedAt instanceof Date ? createdOrUpdatedRecord.updatedAt.toISOString() : createdOrUpdatedRecord.updatedAt,
+      } : null
+
       return NextResponse.json({
         content: reply,
         action: {
@@ -389,7 +397,7 @@ export async function POST(req: NextRequest) {
           dueTime: saved.dueTime,
           dueDate: saved.dueDate,
           tags: saved.tags,
-          item: createdOrUpdatedRecord,
+          item: serializedRecord,
         },
       })
     }

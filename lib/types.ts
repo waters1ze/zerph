@@ -270,6 +270,8 @@ export interface UserSettings {
   voiceSettings?: {
     ttsResponseEnabled: boolean
   }
+  /** Период неактивности для полного удаления аккаунта и данных из БД (в месяцах: 1, 3, 6, 12 или 0 для отключения). По умолчанию: 6 */
+  autoDeleteMonths?: number
 }
 
 export type StatPeriod = '7d' | '30d' | '90d' | '1y'

@@ -895,6 +895,30 @@ export async function runGoogleCalendarPeriodicSync() {
 }
 
 /**
+ * Daily Inactive Accounts Auto-Deletion Check
+ * Runs once every 24 hours to delete accounts inactive for > 6 months (or user's selected 1/3/6/12 months).
+ */
+export async function runInactiveAccountsCleanup() {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  if (await isCronAlreadyDoneToday('inactive_accounts_cleanup', todayStr)) {
+    return
+  }
+  const lockAcquired = await tryAcquireCronLock('inactive_accounts_cleanup', todayStr)
+  if (!lockAcquired) return
+
+  try {
+    const { cleanupInactiveAccounts } = await import('./db')
+    const result = await cleanupInactiveAccounts()
+    if (result.deletedCount > 0) {
+      console.log(`[AutoDelete Cron] Cleaned up ${result.deletedCount} inactive account(s) out of ${result.checkedCount} checked.`)
+    }
+    await markCronDoneToday('inactive_accounts_cleanup', todayStr)
+  } catch (err) {
+    console.error('[AutoDelete Cron] Error:', err)
+  }
+}
+
+/**
  * Main Cron Entrypoint — Called by /api/cron/reminders
  */
 export async function runAllCronTasks() {
@@ -906,6 +930,7 @@ export async function runAllCronTasks() {
     runWeeklySundayReport(),
     runChannelAndAiCron(),
     runGoogleCalendarPeriodicSync(),
+    runInactiveAccountsCleanup(),
     (async () => {
       const { getLiveGroqModels } = await import('./groq-pool')
       await getLiveGroqModels().catch(() => {})

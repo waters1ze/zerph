@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 
+import { createServerSession } from '@/lib/backend/auth'
+import { generateEmailChatId } from '@/lib/backend/passwords'
+
 export const dynamic = 'force-dynamic'
+
+const COOKIE_OPTS = {
+  path: '/',
+  maxAge: 60 * 60 * 24 * 365,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+}
 
 const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824701'
 const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || 'aaQ13axAPQEcczQa'
@@ -43,16 +53,53 @@ export async function GET(req: NextRequest) {
     }
 
     const targetChatId = decodedState.chatId || req.cookies.get('zerf_chat_id')?.value
+    let finalChatId: bigint | null = null
 
-    if (targetChatId && /^\d+$/.test(targetChatId)) {
-      const cid = BigInt(targetChatId)
+    if (targetChatId && /^\d+$/.test(targetChatId) && !targetChatId.startsWith('guest_')) {
+      finalChatId = BigInt(targetChatId)
       await prisma.telegramChat.update({
-        where: { chatId: cid },
+        where: { chatId: finalChatId },
         data: { vkId: vkUserId },
       }).catch(() => {})
+    } else {
+      // Find user with this vkId or create new
+      let user = await prisma.telegramChat.findFirst({
+        where: { vkId: vkUserId }
+      })
+
+      if (!user) {
+        let newChatId = generateEmailChatId()
+        for (let i = 0; i < 5; i++) {
+          const clash = await prisma.telegramChat.findUnique({ where: { chatId: newChatId } })
+          if (!clash) break
+          newChatId = generateEmailChatId()
+        }
+
+        user = await prisma.telegramChat.create({
+          data: {
+            chatId: newChatId,
+            vkId: vkUserId,
+            authProvider: 'vk',
+            firstName: `VK ID ${vkUserId}`,
+            lastActiveAt: new Date(),
+          }
+        })
+      }
+      finalChatId = user.chatId
     }
 
-    return NextResponse.redirect(`${origin}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}#settings`)
+    const sessionToken = await createServerSession(
+      finalChatId,
+      'VK OAuth Session',
+      'web',
+      req.headers.get('x-forwarded-for') || undefined,
+      req.headers.get('user-agent') || undefined
+    )
+
+    const res = NextResponse.redirect(`${origin}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}#settings`)
+    res.cookies.set('zerf_chat_id', String(finalChatId), COOKIE_OPTS)
+    res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
+    return res
   } catch (err: any) {
     console.error('VK OAuth callback error:', err)
     return NextResponse.redirect(`${origin}/?vk_auth_error=${encodeURIComponent(err.message || 'unknown')}#settings`)

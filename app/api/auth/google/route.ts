@@ -46,92 +46,41 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. If currently logged in, link Google Email to this active account
-    if (authUser?.chatId) {
-      const cid = BigInt(authUser.chatId)
-
-      // If a separate dummy account was previously created with this email, merge it
-      const clash = await prisma.telegramChat.findFirst({
-        where: {
-          chatId: { not: cid },
-          OR: [{ googleEmail: cleanEmail }, { email: cleanEmail }],
-        }
-      })
-      if (clash) {
-        try {
-          await prisma.task.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-          await prisma.note.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-          await prisma.goal.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-          await prisma.habit.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-          await prisma.telegramChat.delete({ where: { chatId: clash.chatId } })
-        } catch {}
-      }
-
-      await prisma.telegramChat.update({
-        where: { chatId: cid },
-        data: { googleEmail: cleanEmail },
-      })
+    if (!authUser?.chatId) {
       return NextResponse.json({
-        success: true,
-        message: 'Google аккаунт успешно привязан!',
-        googleEmail: cleanEmail,
-      })
+        error: 'Для входа через Google используйте защищенный OAuth вход.',
+        requiresOAuth: true,
+      }, { status: 401 })
     }
 
-    // 2. If guest mode (unauthenticated), find or register a new Google account
-    let user = await prisma.telegramChat.findFirst({
+    const cid = BigInt(authUser.chatId)
+
+    // If a separate dummy account was previously created with this email, merge it
+    const clash = await prisma.telegramChat.findFirst({
       where: {
-        OR: [
-          { googleEmail: cleanEmail },
-          { email: cleanEmail },
-        ]
+        chatId: { not: cid },
+        OR: [{ googleEmail: cleanEmail }, { email: cleanEmail }],
       }
     })
-
-    if (!user) {
-      let targetChatId = generateEmailChatId()
-      for (let i = 0; i < 5; i++) {
-        const clash = await prisma.telegramChat.findUnique({ where: { chatId: targetChatId } })
-        if (!clash) break
-        targetChatId = generateEmailChatId()
-      }
-
-      user = await prisma.telegramChat.create({
-        data: {
-          chatId: targetChatId,
-          email: cleanEmail,
-          googleEmail: cleanEmail,
-          authProvider: 'google',
-          firstName: firstName || cleanEmail.split('@')[0],
-          lastActiveAt: new Date(),
-        }
-      })
-    } else if (!user.googleEmail) {
-      await prisma.telegramChat.update({
-        where: { chatId: user.chatId },
-        data: { googleEmail: cleanEmail },
-      })
+    if (clash) {
+      try {
+        await prisma.task.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+        await prisma.note.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+        await prisma.goal.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+        await prisma.habit.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
+        await prisma.telegramChat.delete({ where: { chatId: clash.chatId } })
+      } catch {}
     }
 
-    const sessionToken = await createServerSession(
-      user.chatId,
-      'Google Web Session',
-      'web',
-      req.headers.get('x-forwarded-for') || undefined,
-      req.headers.get('user-agent') || undefined
-    )
-
-    const res = NextResponse.json({
-      success: true,
-      chatId: String(user.chatId),
-      firstName: user.firstName,
-      token: sessionToken,
-      googleEmail: cleanEmail,
-      message: 'Успешный вход через Google!',
+    await prisma.telegramChat.update({
+      where: { chatId: cid },
+      data: { googleEmail: cleanEmail },
     })
-
-    res.cookies.set('zerf_chat_id', String(user.chatId), COOKIE_OPTS)
-    res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
-    return res
+    return NextResponse.json({
+      success: true,
+      message: 'Google аккаунт успешно привязан!',
+      googleEmail: cleanEmail,
+    })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

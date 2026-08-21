@@ -47,6 +47,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   focusSettings: { defaultDurationMinutes: 25, breakDurationMinutes: 5 },
   eveningReview: { enabled: true, time: '21:00' },
   voiceSettings: { ttsResponseEnabled: false },
+  autoDeleteMonths: 6,
 }
 
 // ─── State & Actions ──────────────────────────────────────────────────────────
@@ -826,6 +827,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     ...curSettings.voiceSettings,
                     ttsResponseEnabled: Boolean(user.ttsEnabled)
                   }
+                }
+                if (user.autoDeleteMonths !== undefined) {
+                  updates.autoDeleteMonths = Number(user.autoDeleteMonths)
                 }
                 if (user.sidebarConfig && typeof window !== 'undefined') {
                   try {

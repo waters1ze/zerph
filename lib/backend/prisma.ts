@@ -27,6 +27,14 @@ function tunedDatabaseUrl(url: string | undefined): string | undefined {
 // Prevent multiple Prisma instances across all environments (dev & serverless production)
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
+// Global BigInt JSON serialization support for Next.js API Routes & JSON.stringify
+if (typeof BigInt !== 'undefined' && !(BigInt.prototype as any).toJSON) {
+  ;(BigInt.prototype as any).toJSON = function () {
+    const num = Number(this)
+    return Number.isSafeInteger(num) ? num : this.toString()
+  }
+}
+
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
@@ -35,3 +43,4 @@ export const prisma =
   })
 
 globalForPrisma.prisma = prisma
+
