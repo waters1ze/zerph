@@ -42,7 +42,13 @@ function md(text: string) {
 }
 
 async function send(chatId: number, text: string, extra?: object) {
-  return tg('sendMessage', { chat_id: chatId, text, parse_mode: 'Markdown', ...extra })
+  const res = await tg('sendMessage', { chat_id: chatId, text, parse_mode: 'Markdown', ...extra })
+  if (!res.ok) {
+    // Retry without Markdown — user content (task titles etc.) often contains
+    // _ * [ chars that break Telegram entity parsing
+    return tg('sendMessage', { chat_id: chatId, text, ...extra })
+  }
+  return res
 }
 
 async function sendAction(chatId: number, action = 'typing') {
@@ -291,7 +297,7 @@ async function poll() {
   while (true) {
     try {
       const res = await fetch(
-        `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${offset}&timeout=30&allowed_updates=["message"]`
+        `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${offset}&timeout=30&allowed_updates=["message","callback_query"]`
       )
       if (!res.ok) { await sleep(3000); continue }
 
@@ -299,6 +305,64 @@ async function poll() {
 
       for (const upd of updates) {
         offset = upd.update_id + 1
+
+        // Inline keyboard callbacks (reminder done/snooze, delegation accept/decline)
+        const cb = (upd as any).callback_query
+        if (cb) {
+          const cbChatId: number = cb.message?.chat?.id
+          const data: string = cb.data || ''
+          if (cbChatId && data) {
+            try {
+              if (data.startsWith('rem_done_')) {
+                const taskId = data.replace('rem_done_', '')
+                await fetch(`${APP_URL}/api/tasks`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-admin-secret': getAdminSecret() || '',
+                    'x-chat-id': String(cbChatId),
+                  },
+                  body: JSON.stringify({ id: taskId, status: 'done' }),
+                }).catch(() => {})
+                await send(cbChatId, '✅ Задача выполнена!')
+              } else if (data.startsWith('rem_snooze_')) {
+                const parts = data.replace('rem_snooze_', '').split('_')
+                const taskId = parts[0]
+                const minutes = parseInt(parts[1] || '15', 10) || 15
+                const newTime = new Date(Date.now() + minutes * 60 * 1000)
+                const hh = String(newTime.getHours()).padStart(2, '0')
+                const mm = String(newTime.getMinutes()).padStart(2, '0')
+                await fetch(`${APP_URL}/api/tasks`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-admin-secret': getAdminSecret() || '',
+                    'x-chat-id': String(cbChatId),
+                  },
+                  body: JSON.stringify({ id: taskId, reminderSent: false, remindersSentCount: 0, dueTime: `${hh}:${mm}` }),
+                }).catch(() => {})
+                await send(cbChatId, `⏳ Отложено на ${minutes} мин — напомню в ${hh}:${mm}`)
+              } else if (data.startsWith('delegate_accept_')) {
+                await send(cbChatId, '👍 Задача принята! Она уже в твоём списке в Zerf App.')
+              } else if (data.startsWith('delegate_decline_')) {
+                const taskId = data.replace('delegate_decline_', '')
+                await fetch(`${APP_URL}/api/tasks?id=${taskId}&type=task`, {
+                  method: 'DELETE',
+                  headers: {
+                    'x-admin-secret': getAdminSecret() || '',
+                    'x-chat-id': String(cbChatId),
+                  },
+                }).catch(() => {})
+                await send(cbChatId, '👎 Задача отклонена и удалена.')
+              }
+              await tg('answerCallbackQuery', { callback_query_id: cb.id }).catch(() => {})
+            } catch (cbErr) {
+              console.error('Callback error:', cbErr)
+            }
+          }
+          continue
+        }
+
         const msg = upd.message
         if (!msg) continue
 

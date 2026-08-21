@@ -203,9 +203,8 @@ export function showWebNotification(
   const tag = options?.tag || `zerf-${Date.now()}`
 
   if ('Notification' in window && Notification.permission === 'granted') {
-    let shown = false
-
-    // 1. Try service worker notification first (best background support on mobile & desktop)
+    // Show via service worker when available; fall back to the Notification
+    // constructor ONLY if the SW path fails — otherwise the user gets duplicates.
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready
         .then(reg => {
@@ -218,12 +217,25 @@ export function showWebNotification(
             vibrate: [200, 100, 200, 100, 300],
             requireInteraction: options?.requireInteraction ?? true,
           } as any)
-          shown = true
         })
-        .catch(() => {})
-    }
-
-    if (!shown) {
+        .catch(() => {
+          try {
+            const notif = new Notification(title, {
+              body: options?.body || defaultBody,
+              icon: defaultIcon,
+              tag,
+              requireInteraction: options?.requireInteraction ?? true,
+            })
+            if (options?.onClick) {
+              notif.onclick = () => {
+                window.focus()
+                options.onClick!()
+                notif.close()
+              }
+            }
+          } catch {}
+        })
+    } else {
       try {
         const notif = new Notification(title, {
           body: options?.body || defaultBody,
@@ -231,7 +243,6 @@ export function showWebNotification(
           tag,
           requireInteraction: options?.requireInteraction ?? true,
         })
-
         if (options?.onClick) {
           notif.onclick = () => {
             window.focus()
@@ -256,13 +267,20 @@ export function vibrateDevice(pattern: number[] = [200, 100, 200]) {
   }
 }
 
+// Reuse a single AudioContext — browsers cap the number of live contexts (~6),
+// and creating one per chime eventually silences all alarms.
+let sharedAudioCtx: AudioContext | null = null
+
 /** Synthesize a pleasant high-quality chime using Web Audio API (no external file needed) */
 export function playAlarmChime(type: 'chime' | 'alarm' | 'complete' | 'tick' = 'alarm') {
   if (typeof window === 'undefined') return
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     if (!AudioCtx) return
-    const ctx = new AudioCtx()
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new AudioCtx()
+    }
+    const ctx = sharedAudioCtx
 
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {})

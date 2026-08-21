@@ -138,10 +138,8 @@ export async function POST(req: NextRequest) {
         ownerChatId: ownerChatId,
       })
 
-      if (ownerChatId) {
-        await incrementUserUsage(ownerChatId, 'note')
-      }
-
+      // NOTE: usage counter is incremented inside createNote() itself —
+      // incrementing here as well would double-count against the daily limit.
       return NextResponse.json(serialize({ success: true, note }))
     }
 

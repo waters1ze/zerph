@@ -614,7 +614,13 @@ export async function recordTaskCompletionStreak(
   try {
     const cid = BigInt(ownerChatId)
     const { mskDate } = getMskDateTime()
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    // "Yesterday" must be computed in MSK too, otherwise the streak breaks
+    // between 00:00–03:00 MSK when UTC is still on the previous day
+    const mskFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    })
+    const yesterday = mskFormatter.format(new Date(Date.now() - 24 * 60 * 60 * 1000))
 
     const chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
     if (!chat) return { streakDays: 1, earnedReward: false }
@@ -795,7 +801,14 @@ export async function updateHabit(id: string, data: Partial<{
     ? await prisma.habit.findFirst({ where: { id, ...scope } })
     : await prisma.habit.findUnique({ where: { id } })
   if (!existing) throw new Error('Habit not found or access denied')
-  const updated = await prisma.habit.update({ where: { id }, data })
+  // Whitelist fields to prevent mass assignment (e.g. ownerChatId from client body)
+  const clean: Record<string, unknown> = {}
+  if (data.title !== undefined) clean.title = String(data.title)
+  if (data.icon !== undefined) clean.icon = data.icon || null
+  if (data.streak !== undefined) clean.streak = Math.max(0, Number(data.streak) || 0)
+  if (data.lastCompletedAt !== undefined) clean.lastCompletedAt = data.lastCompletedAt || null
+  if (data.frequency !== undefined) clean.frequency = String(data.frequency)
+  const updated = await prisma.habit.update({ where: { id }, data: clean })
   if (updated.ownerChatId) {
     try { notifyDataChanged(updated.ownerChatId, 'habits') } catch {}
   }
@@ -842,13 +855,9 @@ export async function completeTaskByTitle(targetTitle: string, ownerChatId?: num
 
   if (!best) return null
 
-  const updated = await prisma.task.update({
-    where: { id: best.task.id },
-    data: { status: 'done', completedAt: new Date() },
-  })
-  if (updated.ownerChatId) {
-    try { notifyDataChanged(updated.ownerChatId, 'tasks') } catch {}
-  }
+  // Delegate to updateTask so recurring instances are recreated, streaks are
+  // recorded and delegators get notified — same behavior as manual completion
+  const updated = await updateTask(best.task.id, { status: 'done' }, ownerChatId)
   return updated as DbTask
 }
 
@@ -903,7 +912,18 @@ export async function updateGoal(
     ? await prisma.goal.findFirst({ where: { id, ...scope } })
     : await prisma.goal.findUnique({ where: { id } })
   if (!existing) throw new Error('Goal not found or access denied')
-  const updated = await prisma.goal.update({ where: { id }, data: data as never })
+  // Whitelist fields to prevent mass assignment (e.g. ownerChatId from client body)
+  const clean: Record<string, unknown> = {}
+  if (data.title !== undefined) clean.title = String(data.title)
+  if (data.description !== undefined) clean.description = data.description || null
+  if (data.motivation !== undefined) clean.motivation = data.motivation || null
+  if (data.status !== undefined) clean.status = String(data.status)
+  if (data.deadline !== undefined) clean.deadline = data.deadline || null
+  if (data.progress !== undefined) clean.progress = Math.max(0, Math.min(100, Number(data.progress) || 0))
+  if (data.color !== undefined) clean.color = String(data.color)
+  if (Array.isArray(data.milestones)) clean.milestones = data.milestones
+  if (data.visibility !== undefined) clean.visibility = String(data.visibility)
+  const updated = await prisma.goal.update({ where: { id }, data: clean })
   if (updated.ownerChatId) {
     try { notifyDataChanged(updated.ownerChatId, 'goals') } catch {}
   }
@@ -976,7 +996,17 @@ export async function updateNote(id: string, data: Partial<{
     ? await prisma.note.findFirst({ where: { id, ...scope } })
     : await prisma.note.findUnique({ where: { id } })
   if (!existing) throw new Error('Note not found or access denied')
-  const updated = await prisma.note.update({ where: { id }, data })
+  // Whitelist fields to prevent mass assignment (e.g. ownerChatId from client body)
+  const clean: Record<string, unknown> = {}
+  if (data.title !== undefined) clean.title = String(data.title)
+  if (data.content !== undefined) clean.content = String(data.content)
+  if (data.type !== undefined) clean.type = String(data.type)
+  if (Array.isArray(data.tags)) clean.tags = data.tags
+  if (data.dueDate !== undefined) clean.dueDate = data.dueDate || null
+  if (data.dueTime !== undefined) clean.dueTime = data.dueTime || null
+  if (data.pinned !== undefined) clean.pinned = Boolean(data.pinned)
+  if (data.folder !== undefined) clean.folder = data.folder || null
+  const updated = await prisma.note.update({ where: { id }, data: clean })
   if (updated.ownerChatId) {
     try { notifyDataChanged(updated.ownerChatId, 'notes') } catch {}
   }
@@ -1847,7 +1877,7 @@ export async function saveParsedItemToDb(
             title: newTitle,
             content: newContent,
             tags: newTags,
-            updatedAt: new Date().toISOString(),
+            updatedAt: new Date(),
           } as never
         })
         item.targetId = matchedNote.id
@@ -1874,7 +1904,7 @@ export async function saveParsedItemToDb(
       }
 
       if (matchedGoal) {
-        const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+        const updateData: Record<string, unknown> = { updatedAt: new Date() }
         if (item.title && item.title !== item.targetTitle) updateData.title = item.title
         if (item.summary) updateData.description = item.summary
         if (item.dueDate !== undefined) updateData.deadline = item.dueDate
@@ -1905,7 +1935,7 @@ export async function saveParsedItemToDb(
     }
 
     if (matchedTask) {
-      const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+      const updateData: Record<string, unknown> = { updatedAt: new Date() }
       if (item.title && item.title !== item.targetTitle) updateData.title = item.title
       if (item.summary) updateData.description = item.summary
       if (item.dueDate !== undefined) updateData.dueDate = item.dueDate
@@ -2033,9 +2063,10 @@ export async function saveParsedItemToDb(
       }
     }
 
-    const mdContent = item.summary.includes('#')
-      ? item.summary
-      : `# ${item.title}\n\n${item.summary}`
+    const summaryText = item.summary || ''
+    const mdContent = summaryText.includes('#')
+      ? summaryText
+      : `# ${item.title}\n\n${summaryText}`
 
     const createdNote = await createNote({
       title: item.title,
@@ -2094,7 +2125,7 @@ export async function saveParsedItemToDb(
       if (extractedTime) {
         const context = await generateReminderContext(
           item.title,
-          item.summary.slice(0, 500),
+          (item.summary || '').slice(0, 500),
           extractedTime
         ).catch(() => `Напоминание: «${item.title}» в ${extractedTime}. Готовься! 🎯`)
 
@@ -3773,15 +3804,29 @@ export async function deleteUserAccountPermanently(chatId: bigint | string | num
       }
     } catch {}
 
-    // 7. Delete user configurations
-    await prisma.config.deleteMany({
-      where: {
-        OR: [
-          { key: { startsWith: `user_`, endsWith: `_${strCid}` } },
-          { key: { contains: `_${strCid}` } },
-        ]
+    // 7. Delete user configurations.
+    // DATA SAFETY: must be an EXACT segment match — a naive `contains: _${cid}`
+    // would also delete configs of other users whose IDs contain this ID
+    // (e.g. deleting account 123 would wipe configs of user 1234).
+    try {
+      const candidateKeys = await prisma.config.findMany({
+        where: {
+          OR: [
+            { key: { startsWith: 'cnt_' } },
+            { key: { startsWith: 'cron_' } },
+            { key: { startsWith: 'news_disabled_' } },
+            { key: { startsWith: 'user_' } },
+          ],
+        },
+        select: { key: true },
+      })
+      const ownedKeys = candidateKeys
+        .map(r => r.key)
+        .filter(key => key.split('_').includes(strCid))
+      if (ownedKeys.length > 0) {
+        await prisma.config.deleteMany({ where: { key: { in: ownedKeys } } })
       }
-    }).catch(() => {})
+    } catch {}
 
     // 8. Delete TelegramChat record
     await prisma.telegramChat.deleteMany({ where: { chatId: cid } }).catch(() => {})

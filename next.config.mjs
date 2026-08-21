@@ -8,7 +8,9 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors * 'self' https://*.telegram.org https://telegram.org https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.t.me https://t.me https://vk.com https://*.vk.com https://m.vk.com https://vk.ru https://*.vk.ru https://*.vk-apps.com https://*.vk-apps.ru https://*.vk-portal.net https://vk.me https://*.vk.me",
+            // NOTE: no wildcard `*` — it would allow ANY site to embed the app
+            // (clickjacking). Only Telegram Mini App and VK Mini App hosts are allowed.
+            value: "frame-ancestors 'self' https://*.telegram.org https://telegram.org https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.t.me https://t.me https://vk.com https://*.vk.com https://m.vk.com https://vk.ru https://*.vk.ru https://*.vk-apps.com https://*.vk-apps.ru https://*.vk-portal.net https://vk.me https://*.vk.me",
           },
         ],
       },

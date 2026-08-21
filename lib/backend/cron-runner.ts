@@ -459,11 +459,12 @@ export async function runEveningReview() {
       try {
         const chatId = Number(chat.chatId)
 
-        // Per-user lock check: strictly once per user per day
+        // Per-user lock check: strictly once per user per day.
+        // The lock is marked AFTER a successful send (like morning greeting),
+        // so a network failure doesn't silently skip the user for the whole day.
         if (await isUserCronDoneToday('evening_review', chatId, todayStr)) {
           continue
         }
-        await markUserCronDoneToday('evening_review', chatId, todayStr)
 
         // Plus+ users can disable news digests
         if (await isNewsDisabled(chatId) && planAtLeast(chat.plan, 'plus')) {
@@ -509,6 +510,7 @@ export async function runEveningReview() {
           } : undefined
 
           await sendTelegramMessage(chatId, reviewText, replyMarkup)
+          await markUserCronDoneToday('evening_review', chatId, todayStr)
         }
 
         await new Promise(r => setTimeout(r, 250))
@@ -590,12 +592,17 @@ export async function runWeeklySundayReport() {
           return compDate && compDate >= oneWeekAgo
         })
 
+        // weekTotal must be a superset of weekCompleted, otherwise the
+        // completion percentage can exceed 100% (tasks completed this week but
+        // created earlier were counted in the numerator but not denominator).
+        const weekCompletedIds = new Set(weekCompleted.map(t => t.id))
         const weekTotal = userTasks.filter(t => {
+          if (weekCompletedIds.has(t.id)) return true
           const crDate = new Date(t.createdAt)
           return crDate >= oneWeekAgo || t.status === 'todo'
         })
 
-        const completionPct = weekTotal.length > 0 ? Math.round((weekCompleted.length / weekTotal.length) * 100) : 0
+        const completionPct = weekTotal.length > 0 ? Math.min(100, Math.round((weekCompleted.length / weekTotal.length) * 100)) : 0
         const hoursSaved = (weekCompleted.length * 0.5).toFixed(1)
 
         const dayCounts: Record<string, number> = { 'Пн': 0, 'Вт': 0, 'Ср': 0, 'Чт': 0, 'Пт': 0, 'Сб': 0, 'Вс': 0 }

@@ -9,8 +9,13 @@ export * from '../plans'
 
 // ── Daily usage counters (Config-backed, no schema migration needed) ─────────
 
+// Daily counters must use the same day boundary as the TelegramChat daily
+// reset (Europe/Moscow), otherwise limits are inconsistent between 00:00–03:00 MSK
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
 }
 
 function counterKey(kind: string, chatId: string | number | bigint): string {

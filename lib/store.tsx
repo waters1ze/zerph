@@ -528,6 +528,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetch(`/api/tasks?id=${action.id}&type=habit`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'REMOVE_FRIEND') {
       recentlyDeletedIdsRef.current.set(action.id, Date.now())
+      // Persist friend removal server-side so background sync doesn't resurrect them
+      fetch(`/api/friends?id=${encodeURIComponent(action.id)}`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'TOGGLE_TASK') {
       const target = stateRef.current.tasks.find(t => t.id === action.id)
       const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
@@ -901,7 +903,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const chatId = getTgChatId()
         if (!chatId) return
 
-        const sseUrl = `/api/events?chatId=${encodeURIComponent(chatId)}`
+        // Auth via ?token= since EventSource cannot send custom headers
+        let authToken = ''
+        try {
+          authToken = localStorage.getItem('zerf_auth_token') || document.cookie.match(/(?:^|; )zerf_auth_token=([^;]*)/)?.[1] || ''
+          if (authToken) authToken = decodeURIComponent(authToken)
+        } catch {}
+        const sseUrl = `/api/events?chatId=${encodeURIComponent(chatId)}${authToken ? `&token=${encodeURIComponent(authToken)}` : ''}`
         eventSource = new EventSource(sseUrl)
 
         eventSource.addEventListener('sync', () => {
@@ -969,14 +977,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }, 15000)
 
-    // Hydrate currentView safely on client mount
-    try {
-      const savedView = localStorage.getItem('zerf_current_view') as View | null
-      if (savedView && savedView !== state.currentView) {
-        dispatch({ type: 'SET_VIEW', view: savedView })
-      }
-    } catch {}
-
     return () => {
       window.removeEventListener('focus', handleSyncNow)
       window.removeEventListener('pageshow', handleSyncNow)
@@ -988,7 +988,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try { eventSource?.close() } catch {}
       try { channel?.close() } catch {}
     }
-  }, [syncBackendData, state.currentView])
+  }, [syncBackendData])
 
   return (
     <AppContext.Provider value={{ state, dispatch: enhancedDispatch, syncData: () => syncBackendData(true), isSyncing }}>

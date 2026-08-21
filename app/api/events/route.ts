@@ -13,8 +13,11 @@ export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 export async function GET(req: NextRequest) {
+  // SECURITY: identity must come from verified auth only.
+  // A raw ?chatId= query param is never trusted — it would let anyone
+  // subscribe to another user's reminder/task event stream.
   const authUser = await getAuthenticatedUser(req)
-  const chatId = authUser?.chatId || req.nextUrl.searchParams.get('chatId')
+  const chatId = authUser?.chatId
 
   if (!chatId) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
