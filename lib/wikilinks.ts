@@ -149,25 +149,33 @@ export function getFolderColor(folderPath: string = ''): string {
 }
 
 function matchColorGroup(node: GraphNode, colorGroups: ColorGroup[]): string | null {
+  if (!colorGroups || colorGroups.length === 0) return null
+
   for (const group of colorGroups) {
-    const q = group.query.trim().toLowerCase()
+    const q = (group.query || '').trim().toLowerCase()
     if (!q) continue
 
     if (q.startsWith('tag:') || q.startsWith('#')) {
       const targetTag = q.replace(/^tag:/, '').replace(/^#/, '').toLowerCase()
-      if (node.type === 'tag' && node.title.toLowerCase().replace(/^#/, '') === targetTag) {
+      if (!targetTag) continue
+      if (node.type === 'tag' && node.title.toLowerCase().replace(/^#/, '').includes(targetTag)) {
         return group.color
       }
-      if (node.tags && node.tags.some(t => t.toLowerCase() === targetTag)) {
+      if (node.tags && node.tags.some(t => t.toLowerCase().includes(targetTag))) {
         return group.color
       }
     } else if (q.startsWith('path:') || q.startsWith('folder:')) {
       const targetPath = q.replace(/^path:/, '').replace(/^folder:/, '').toLowerCase()
+      if (!targetPath) continue
       if ((node.folder || '').toLowerCase().includes(targetPath)) {
         return group.color
       }
     } else {
-      if (node.title.toLowerCase().includes(q) || (node.folder || '').toLowerCase().includes(q)) {
+      // Obsidian-style flexible substring match: matches if title, folder, or any tag contains query `q`
+      const titleLower = (node.title || '').toLowerCase()
+      const folderLower = (node.folder || '').toLowerCase()
+      const tagMatch = (node.tags || []).some(t => t.toLowerCase().includes(q))
+      if (titleLower.includes(q) || folderLower.includes(q) || tagMatch) {
         return group.color
       }
     }
@@ -480,14 +488,17 @@ export function buildGraphData(
 
   finalNodes.forEach(n => {
     n.connectionCount = counts.get(n.id) || 0
+    const degree = n.connectionCount
+    // Obsidian-style dynamic node sizing: nodes grow larger as they connect to more notes
     if (n.type === 'tag') {
-      n.radius = Math.max(4, Math.min(14, 4 + n.connectionCount * 1.8))
+      n.radius = Math.max(5, Math.min(22, 5 + Math.sqrt(degree) * 4.8))
     } else if (n.type === 'folder') {
-      n.radius = Math.max(7, Math.min(22, 7 + n.connectionCount * 2.2))
+      n.radius = Math.max(8, Math.min(28, 8 + Math.sqrt(degree) * 5.5))
     } else if (n.type === 'unresolved') {
-      n.radius = 4.5
+      n.radius = Math.max(4.5, Math.min(14, 4.5 + Math.sqrt(degree) * 3.2))
     } else {
-      n.radius = Math.max(5, Math.min(18, 5 + n.connectionCount * 2.5))
+      // Note / Task: scales significantly with degree (from 5.5px up to 30px)
+      n.radius = Math.max(5.5, Math.min(30, 5.5 + Math.pow(degree, 0.7) * 5.8))
     }
   })
 

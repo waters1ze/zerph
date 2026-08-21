@@ -54,14 +54,34 @@ export function KnowledgeGraphModal({
   const [showArrows, setShowArrows] = useState(true)
   const [hideOrphanTags, setHideOrphanTags] = useState(true)
 
-  // Color Groups State (Obsidian-Style)
-  const [colorGroups, setColorGroups] = useState<ColorGroup[]>([
-    { id: 'cg_1', query: 'tag:#важное', color: '#ef4444', label: 'Важное (#важное)' },
-    { id: 'cg_2', query: 'path:Школа', color: '#10b981', label: 'Школа (path:Школа)' },
-    { id: 'cg_3', query: 'path:Проекты', color: '#f59e0b', label: 'Проекты (path:Проекты)' },
-  ])
+  // Color Groups State (Obsidian-Style, persistent in localStorage)
+  const [colorGroups, setColorGroups] = useState<ColorGroup[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('zerf_graph_color_groups')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        }
+      } catch {}
+    }
+    return [
+      { id: 'cg_1', query: '#важное', color: '#ef4444', label: 'Важное (#важное)' },
+      { id: 'cg_2', query: 'Школа', color: '#10b981', label: 'Школа' },
+      { id: 'cg_3', query: 'Проекты', color: '#f59e0b', label: 'Проекты' },
+    ]
+  })
   const [newGroupQuery, setNewGroupQuery] = useState('')
   const [newGroupColor, setNewGroupColor] = useState('#6366f1')
+
+  // Persist color groups to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('zerf_graph_color_groups', JSON.stringify(colorGroups))
+      } catch {}
+    }
+  }, [colorGroups])
 
   // Physics & Display Controls State (Tuned for organic, non-dispersed layout)
   const [activePanel, setActivePanel] = useState<'filters' | 'colors' | 'forces' | 'display' | null>('filters')
@@ -731,8 +751,25 @@ export function KnowledgeGraphModal({
     setNewGroupQuery('')
   }
 
+  const handleUpdateColorGroupColor = (id: string, newColor: string) => {
+    setColorGroups(prev => prev.map(g => g.id === id ? { ...g, color: newColor } : g))
+  }
+
+  const handleUpdateColorGroupQuery = (id: string, newQuery: string) => {
+    setColorGroups(prev => prev.map(g => g.id === id ? { ...g, query: newQuery, label: newQuery } : g))
+  }
+
   const handleRemoveColorGroup = (id: string) => {
     setColorGroups(prev => prev.filter(g => g.id !== id))
+  }
+
+  const handleResetDefaultColorGroups = () => {
+    const defaults: ColorGroup[] = [
+      { id: 'cg_1', query: '#важное', color: '#ef4444', label: 'Важное (#важное)' },
+      { id: 'cg_2', query: 'Школа', color: '#10b981', label: 'Школа' },
+      { id: 'cg_3', query: 'Проекты', color: '#f59e0b', label: 'Проекты' },
+    ]
+    setColorGroups(defaults)
   }
 
   const handleNodePrimaryAction = (node: GraphNode) => {
@@ -1055,9 +1092,9 @@ export function KnowledgeGraphModal({
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="absolute top-3 left-3 right-3 sm:right-auto sm:left-4 sm:top-4 w-auto sm:w-80 max-h-[65vh] overflow-y-auto p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3 z-30 text-xs"
+                className="absolute top-3 left-3 right-3 sm:right-auto sm:left-4 sm:top-4 w-auto sm:w-84 max-h-[70vh] overflow-y-auto p-4 rounded-2xl bg-card/95 border border-border shadow-2xl backdrop-blur-md space-y-3.5 z-30 text-xs"
               >
-                <div className="flex items-center justify-between pb-1 border-b border-border">
+                <div className="flex items-center justify-between pb-1.5 border-b border-border">
                   <h4 className="font-bold text-foreground flex items-center gap-1.5">
                     <Palette className="w-3.5 h-3.5 text-primary" />
                     <span>Цветовые группы (Obsidian)</span>
@@ -1067,51 +1104,118 @@ export function KnowledgeGraphModal({
                   </button>
                 </div>
 
-                {/* Existing Groups List */}
-                <div className="space-y-1.5 max-h-40 overflow-y-auto no-scrollbar">
-                  {colorGroups.map(grp => (
-                    <div key={grp.id} className="flex items-center justify-between p-2 rounded-xl bg-muted/40 border border-border/50">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: grp.color }} />
-                        <span className="font-mono text-[11px] truncate text-foreground">{grp.query}</span>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Введите любое слово или пару букв (например: <code className="text-primary font-mono">день</code>, <code className="text-primary font-mono">друг</code>, <code className="text-primary font-mono">#тег</code>, <code className="text-primary font-mono">проект</code>) — заметки окрасятся в выбранный цвет.
+                </p>
+
+                {/* Existing Groups List with Interactive Color Swatches and Editable Queries */}
+                <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+                  {colorGroups.map(grp => {
+                    const matchingCount = graphData.nodes.filter(n => {
+                      const q = grp.query.trim().toLowerCase()
+                      if (!q) return false
+                      const titleMatch = (n.title || '').toLowerCase().includes(q)
+                      const folderMatch = (n.folder || '').toLowerCase().includes(q)
+                      const tagMatch = (n.tags || []).some(t => t.toLowerCase().includes(q))
+                      return titleMatch || folderMatch || tagMatch
+                    }).length
+
+                    return (
+                      <div key={grp.id} className="flex items-center justify-between p-2 rounded-xl bg-muted/40 border border-border/60 gap-2 group">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {/* Interactive color picker input hidden over color dot */}
+                          <label className="relative w-4 h-4 rounded-full shrink-0 cursor-pointer shadow-xs border border-background hover:scale-110 transition-transform">
+                            <input
+                              type="color"
+                              value={grp.color}
+                              onChange={e => handleUpdateColorGroupColor(grp.id, e.target.value)}
+                              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                              title="Нажмите, чтобы изменить цвет"
+                            />
+                            <div className="w-full h-full rounded-full" style={{ backgroundColor: grp.color }} />
+                          </label>
+
+                          <input
+                            type="text"
+                            value={grp.query}
+                            onChange={e => handleUpdateColorGroupQuery(grp.id, e.target.value)}
+                            placeholder="Поиск по буквам..."
+                            className="flex-1 min-w-0 bg-transparent text-[11px] font-mono text-foreground outline-none border-b border-transparent focus:border-primary/60 px-0.5 py-0.5"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground" title="Количество совпадающих заметок и узлов">
+                            {matchingCount}
+                          </span>
+                          <button
+                            onClick={() => handleRemoveColorGroup(grp.id)}
+                            className="text-muted-foreground hover:text-red-400 p-1 rounded-md hover:bg-red-500/10 transition-colors cursor-pointer"
+                            title="Удалить группу"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleRemoveColorGroup(grp.id)}
-                        className="text-muted-foreground hover:text-red-400 p-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Add New Color Group */}
-                <div className="pt-2 border-t border-border/60 space-y-2">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase">Добавить правило цвета:</span>
-                  <input
-                    type="text"
-                    value={newGroupQuery}
-                    onChange={e => setNewGroupQuery(e.target.value)}
-                    placeholder="tag:#физика или path:Школа..."
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1">
-                      {DEFAULT_COLOR_PALETTE.slice(0, 6).map(c => (
-                        <button
-                          key={c}
-                          onClick={() => setNewGroupColor(c)}
-                          className={cn('w-4 h-4 rounded-full transition-transform cursor-pointer', newGroupColor === c && 'ring-2 ring-foreground scale-110')}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
+                <div className="pt-2.5 border-t border-border/60 space-y-2.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Новая группа:</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newGroupQuery}
+                      onChange={e => setNewGroupQuery(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleAddColorGroup()
+                      }}
+                      placeholder="Например: день, друг, школа, #важное..."
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <label className="relative w-7 h-7 rounded-lg shrink-0 cursor-pointer border border-border flex items-center justify-center hover:scale-105 transition-transform" style={{ backgroundColor: newGroupColor }}>
+                      <input
+                        type="color"
+                        value={newGroupColor}
+                        onChange={e => setNewGroupColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                        title="Выбрать свой цвет"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Palette Swatches */}
+                  <div className="flex items-center justify-between gap-1 flex-wrap pt-0.5">
+                    {[
+                      '#ef4444', '#f97316', '#f59e0b', '#10b981', 
+                      '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', 
+                      '#a855f7', '#ec4899'
+                    ].map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setNewGroupColor(c)}
+                        className={cn('w-4 h-4 rounded-full transition-transform cursor-pointer shadow-2xs', newGroupColor === c && 'ring-2 ring-foreground scale-125')}
+                        style={{ backgroundColor: c }}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <button
+                      onClick={handleResetDefaultColorGroups}
+                      className="text-[10px] text-muted-foreground hover:text-foreground underline transition-colors cursor-pointer"
+                    >
+                      Сбросить
+                    </button>
                     <button
                       onClick={handleAddColorGroup}
                       disabled={!newGroupQuery.trim()}
-                      className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
                     >
-                      + Добавить
+                      + Добавить группу
                     </button>
                   </div>
                 </div>
