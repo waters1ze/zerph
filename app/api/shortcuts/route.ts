@@ -329,10 +329,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (!inputText || !inputText.trim()) {
-      return NextResponse.json({
-        error: 'No text or audio provided',
-        spokenResponse: 'Текст задачи не был получен. Попробуйте еще раз.'
-      }, { status: 400, headers: NO_CACHE_HEADERS })
+      if (format === 'json') {
+        return NextResponse.json({
+          success: true,
+          cancelled: true,
+          spokenResponse: '',
+          text: '',
+        }, { headers: NO_CACHE_HEADERS })
+      }
+      return new NextResponse('', { headers: NO_CACHE_HEADERS, status: 200 })
     }
 
     const isMutationOrComplex = /(удали|стереть|сотри|очисти|вычеркни|отмени|измени|поменяй|перенеси|расписание|график)/i.test(inputText)
@@ -508,16 +513,16 @@ export async function GET(req: NextRequest) {
   }
 
   if (!text || !text.trim()) {
-    const hintMsg = 'Текст задачи не был получен. Проверьте, что в Командах Apple в самый конец ссылки после text= добавлена переменная [Кодированный в URL текст].'
     if (format === 'json') {
       return NextResponse.json({
-        error: 'No text provided',
-        spokenResponse: hintMsg,
-        result: hintMsg,
-        text: hintMsg,
-      }, { status: 400, headers: NO_CACHE_HEADERS })
+        success: true,
+        cancelled: true,
+        spokenResponse: '',
+        result: '',
+        text: '',
+      }, { headers: NO_CACHE_HEADERS })
     }
-    return new NextResponse(hintMsg, {
+    return new NextResponse('', {
       status: 200,
       headers: NO_CACHE_HEADERS,
     })

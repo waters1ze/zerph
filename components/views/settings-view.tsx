@@ -117,7 +117,52 @@ export function SettingsView() {
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage()
   const confirm = useConfirmDialog()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('account')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search)
+        const tabParam = params.get('tab') || params.get('section')
+        if (tabParam && SECTIONS.some(s => s.items.some(i => i.id === tabParam))) {
+          return tabParam as SettingsTab
+        }
+        const saved = localStorage.getItem('zerf_settings_active_tab')
+        if (saved && SECTIONS.some(s => s.items.some(i => i.id === saved))) {
+          return saved as SettingsTab
+        }
+      } catch {}
+    }
+    return 'account'
+  })
+
+  const handleSelectTab = (tab: SettingsTab) => {
+    setActiveTab(tab)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('zerf_settings_active_tab', tab)
+      } catch {}
+    }
+  }
+
+  const [liveAiModels, setLiveAiModels] = useState<any[]>([])
+
+  useEffect(() => {
+    fetch('/api/ai/models')
+      .then(r => r.json())
+      .then(d => {
+        if (d.models && Array.isArray(d.models)) {
+          setLiveAiModels(d.models)
+        }
+      })
+      .catch(() => {})
+
+    const handleAiModelsUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setLiveAiModels(e.detail)
+      }
+    }
+    window.addEventListener('zerf_ai_models_updated', handleAiModelsUpdate)
+    return () => window.removeEventListener('zerf_ai_models_updated', handleAiModelsUpdate)
+  }, [])
 
   // Auth form states
   const [email, setEmail] = useState('')
@@ -1211,7 +1256,7 @@ export function SettingsView() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => setActiveTab(item.id)}
+                        onClick={() => handleSelectTab(item.id)}
                         className={cn(
                           'w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none text-left',
                           isSel
@@ -1254,7 +1299,7 @@ export function SettingsView() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleSelectTab(item.id)}
                 className={cn(
                   'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer select-none touch-manipulation',
                   isSel
@@ -1997,31 +2042,40 @@ export function SettingsView() {
                       </p>
                     )}
 
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="submit"
-                        disabled={githubLoading || !githubInput.trim()}
-                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                      <a
+                        href="/api/auth/github"
+                        className="px-4 py-2 rounded-xl bg-foreground text-background text-xs font-bold hover:opacity-90 active:scale-95 transition-all shadow-sm cursor-pointer text-center flex items-center justify-center gap-2"
                       >
-                        {githubLoading ? 'Сохранение...' : (profileData.githubUsername || userGithub ? 'Обновить GitHub' : 'Привязать GitHub')}
-                      </button>
-                      {(profileData.githubUsername || userGithub) && (
+                        <GithubIcon className="w-4 h-4" />
+                        <span>Войти через GitHub OAuth</span>
+                      </a>
+                      <div className="flex items-center gap-2 flex-1">
+                        <button
+                          type="submit"
+                          disabled={githubLoading || !githubInput.trim()}
+                          className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                        >
+                          {githubLoading ? 'Сохранение...' : (profileData.githubUsername || userGithub ? 'Обновить логин' : 'Привязать логин')}
+                        </button>
+                        {(profileData.githubUsername || userGithub) && (
+                          <button
+                            type="button"
+                            onClick={handleUnlinkGithub}
+                            disabled={githubLoading}
+                            className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            Отвязать
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={handleUnlinkGithub}
-                          disabled={githubLoading}
-                          className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                          onClick={() => setShowGithubLinkModal(false)}
+                          className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
                         >
-                          Отвязать GitHub
+                          Отмена
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setShowGithubLinkModal(false)}
-                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
-                      >
-                        Отмена
-                      </button>
+                      </div>
                     </div>
                   </motion.form>
                 )}
@@ -4288,9 +4342,31 @@ GOOGLE_REDIRECT_URI=https://zerph.vercel.app/api/calendar/token
                           </p>
                         </div>
                         <ul className="space-y-1.5 text-[11px] text-foreground/90 pt-2 border-t border-border/50">
-                          {entry.features.map(f => (
-                            <li key={f} className="flex items-start gap-1.5">✓ {f}</li>
-                          ))}
+                          {entry.features.map(f => {
+                            let displayFeature = f
+                            if (f.includes('ИИ:') || f.includes('Флагманский ИИ')) {
+                              if (liveAiModels && liveAiModels.length > 0) {
+                                if (entry.id === 'free') {
+                                  const freeModels = liveAiModels.filter((m: any) => m.minTier === 'free' || m.paramsBillions <= 20)
+                                  const names = freeModels.slice(0, 3).map((m: any) => m.name || m.id).join(', ')
+                                  if (names) displayFeature = `🤖 ИИ: ${names}`
+                                } else if (entry.id === 'plus') {
+                                  const plusModels = liveAiModels.filter((m: any) => m.minTier === 'plus' || (m.paramsBillions > 20 && m.paramsBillions <= 70))
+                                  const names = plusModels.slice(0, 3).map((m: any) => m.name || m.id).join(', ')
+                                  if (names) displayFeature = `🤖 ИИ: ${names} (продвинутая логика)`
+                                } else if (entry.id === 'pro') {
+                                  const proModels = liveAiModels.filter((m: any) => m.minTier === 'pro' || m.paramsBillions > 70)
+                                  const names = proModels.slice(0, 3).map((m: any) => m.name || m.id).join(', ')
+                                  if (names) displayFeature = `🧠 Флагманский ИИ: ${names} + BYOK API`
+                                } else if (entry.id === 'corp') {
+                                  displayFeature = '🧠 Флагманский ИИ: Все нейросети без ограничений + Local CLI'
+                                }
+                              }
+                            }
+                            return (
+                              <li key={f} className="flex items-start gap-1.5">✓ {displayFeature}</li>
+                            )
+                          })}
                         </ul>
                       </div>
                       {purchasable ? (

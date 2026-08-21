@@ -3187,11 +3187,20 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
 
     const limits = PLANS[planId]
 
-    const [siriLifetimeUsed, siriDailyUsed, photoUsed, goalUsed, activeRemindersCount, storedNotesCount] = await Promise.all([
+    const [siriLifetimeUsed, siriDailyUsed, photoUsed, totalActiveGoalsCount, activeRemindersCount, storedNotesCount] = await Promise.all([
       getLifetimeCount(COUNTERS.siri, chatIdStr),
       getDailyCount(COUNTERS.siri, chatIdStr),
       getDailyCount(COUNTERS.photo, chatIdStr),
-      getDailyCount(COUNTERS.goal, chatIdStr),
+      prisma.task.count({
+        where: {
+          ownerChatId: cid,
+          OR: [
+            { tags: { has: 'goal' } },
+            { tags: { has: 'цель' } },
+          ],
+          status: { not: 'completed' },
+        }
+      }).catch(() => 0),
       getActiveRemindersCount(cid),
       getStoredNotesCount(cid),
     ])
@@ -3202,7 +3211,7 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
     const canCreateNote = storedNotesCount < limits.maxStoredNotes
     const canCreateReminder = activeRemindersCount < limits.maxActiveReminders
     const canUsePhoto = limits.photosPerDay > 0 && photoUsed < limits.photosPerDay
-    const canCreateGoal = goalUsed < limits.goalsPerDay
+    const canCreateGoal = totalActiveGoalsCount < limits.goalsPerDay
 
     return {
       plan: planId,
@@ -3219,7 +3228,7 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
       chat: { used: chat.chatMessagesToday, max: limits.chatMessagesPerDay },
       siri: { used: siriUsed, max: limits.siriLifetimeRequests },
       photos: { used: photoUsed, max: limits.photosPerDay },
-      goals: { used: goalUsed, max: limits.goalsPerDay },
+      goals: { used: totalActiveGoalsCount, max: limits.goalsPerDay },
       canSendVoice,
       canCreateNote,
       canCreateReminder,

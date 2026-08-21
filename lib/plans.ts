@@ -93,7 +93,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     voiceSecondsPerDay: 90, // 1 мин 30 сек в день
     meetingSummarizerMaxSeconds: 0, // Заблокировано на Free
     photosPerDay: 0,
-    goalsPerDay: 5,
+    goalsPerDay: 5, // Всего до 5 активных целей
     chatMessagesPerDay: 10,
     cliRequestsPerDay: 0, // CLI требует Plus+
     sharedRequiresPlan: 'plus',
@@ -104,11 +104,11 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     maxActiveReminders: 100,
     maxProjects: 25,
     maxExtensions: 10, // До 10 расширений на Plus
-    siriLifetimeRequests: 100, // 100 запросов Siri в день
+    siriLifetimeRequests: 30, // 30 запросов Siri в день
     voiceSecondsPerDay: 900, // 15 минут в день
     meetingSummarizerMaxSeconds: 0, // Доступно только в Pro и Corp
     photosPerDay: 25,
-    goalsPerDay: 25,
+    goalsPerDay: 25, // Всего до 25 активных целей
     chatMessagesPerDay: 150,
     cliRequestsPerDay: 300,
     sharedRequiresPlan: null,
@@ -123,7 +123,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     voiceSecondsPerDay: 7200, // 2 часа голоса в день
     meetingSummarizerMaxSeconds: 3600, // 1 час (60 мин) аудио встречи
     photosPerDay: 200,
-    goalsPerDay: 100,
+    goalsPerDay: 100, // Всего до 100 активных целей
     chatMessagesPerDay: 1000, // 1000 запросов к ИИ в день
     cliRequestsPerDay: 1500, // 1500 запросов в терминале
     sharedRequiresPlan: null,
@@ -172,7 +172,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '10 запросов Siri за всё время',
       '🎙 Голос: 1:30 мин в день',
       '💬 ИИ-сообщения: 10 в день',
-      '🎯 5 целей в день',
+      '🎯 Всего до 5 активных целей',
       '👥 Общие задачи с друзьями (нужен Plus у одного)',
     ],
   },
@@ -188,12 +188,12 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '🧩 До 10 активных расширений и виджетов',
       '250 заметок в аккаунте',
       '100 активных напоминаний',
-      '100 запросов Siri в день',
+      '30 запросов Siri в день',
       '🎙 Голос: 15 минут в день',
       '📷 Vision OCR (распознавание фото/расписаний): 25 в день',
       '💬 ИИ-сообщения: 150 в день',
       '💻 Zerf CLI: 300 запросов в день',
-      '🎯 25 целей в день',
+      '🎯 Всего до 25 активных целей',
       '🚫 Отключение дайджестов новостей',
     ],
   },
@@ -218,7 +218,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '📷 Vision OCR: 200 распознаваний в день',
       '💬 ИИ-сообщения: 1 000 в день',
       '💻 Zerf CLI: 1 500 запросов в день',
-      '🎯 100 целей в день',
+      '🎯 Всего до 100 активных целей',
       '📅 Двусторонняя синхронизация с Google Календарём (2-Way Sync)',
       '⚡ Smart Reschedule: авто-перепланирование дня',
       '📊 Еженедельная персональная AI-аналитика продуктивности',
@@ -244,6 +244,7 @@ export const PLAN_CATALOG: PlanCatalogEntry[] = [
       '🎙 Meeting Summarizer: расшифровка планёрок и митингов до 4 часов',
       '💬 ИИ-сообщения: 4 000 в день',
       '💻 Zerf CLI: 8 000 операций в день',
+      '🎯 Неограниченно целей (Unlimited)',
       '🏢 Неограниченные командные пространства (Workspaces)',
       '👥 Роли участников и контроль доступов',
       '📁 Командный трекинг эффективности и KPI',

@@ -19,9 +19,10 @@ export async function POST(req: NextRequest) {
 
     if (!text) {
       return NextResponse.json({
-        ok: false,
-        error: 'Отсутствует текст голосового сообщения для распознавания.',
-      }, { status: 400 })
+        ok: true,
+        cancelled: true,
+        task: null,
+      })
     }
 
     const nowIso = new Date().toISOString()

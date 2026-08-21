@@ -433,18 +433,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── ACTION: PUBLISH / UPDATE EXTENSION (Requires Zerf Plus) ──
+    // ── ACTION: PUBLISH / UPDATE EXTENSION (Available to all users, Free & Paid) ──
     if (action === 'publish_github' || action === 'publish') {
-      if (!checkInMemoryRateLimit(`publish:${chatId}`, 10, 60 * 60 * 1000)) {
+      if (!checkInMemoryRateLimit(`publish:${chatId}`, 20, 60 * 60 * 1000)) {
         return NextResponse.json({ error: 'Слишком много попыток публикации. Попробуйте позже.' }, { status: 429 })
-      }
-
-      const userPlan = normalizePlan((userRec as any)?.plan || 'free')
-      if (!planAtLeast(userPlan, 'plus')) {
-        return NextResponse.json({
-          error: '🔒 Публикация расширений доступна с тарифа Zerf Plus (99 ₽). Оформите подписку в Настройках!',
-          requiresPlus: true,
-        }, { status: 403 })
       }
 
       const {
@@ -460,6 +452,11 @@ export async function POST(req: NextRequest) {
         content = {},
         version = '1.0.0',
       } = body
+
+      // Prevent overwriting or spoofing protected core system extensions
+      if (id && (id.startsWith('system_') || id.startsWith('core_') || id === 'zerfik_live' || id === 'ai_planner_core')) {
+        return NextResponse.json({ error: 'Нельзя изменять системные расширения ядра платформы.' }, { status: 403 })
+      }
 
       let finalTitle = title
       let finalDesc = description
