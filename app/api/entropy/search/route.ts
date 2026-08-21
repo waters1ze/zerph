@@ -129,15 +129,51 @@ export interface EntropySearchResult {
   }
 }
 
-export function getEntropyModelForPlan(userPlan?: string, isPro = false): { model: string; displayName: string } {
+export function getEntropyModelMeta(modelId: string): { model: string; displayName: string } {
+  const m = String(modelId || '').toLowerCase()
+  if (m.includes('120b') || m.includes('gpt-oss-120b')) {
+    return { model: 'openai/gpt-oss-120b', displayName: 'GPT OSS 120B Flagship' }
+  }
+  if (m.includes('qwen') || m.includes('27b')) {
+    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B' }
+  }
+  if (m.includes('compound-mini') || m === 'groq/compound-mini') {
+    return { model: 'groq/compound-mini', displayName: 'Groq Compound Mini' }
+  }
+  if (m.includes('compound')) {
+    return { model: 'groq/compound', displayName: 'Groq Compound 70B' }
+  }
+  if (m.includes('20b') || m.includes('gpt-oss-20b')) {
+    return { model: 'openai/gpt-oss-20b', displayName: 'GPT OSS 20B Fast' }
+  }
+  if (m.includes('deepseek') || m.includes('r1')) {
+    return { model: 'deepseek-r1-distill-llama-70b', displayName: 'DeepSeek R1 70B' }
+  }
+  if (m.includes('3.3') || m.includes('llama-3.3')) {
+    return { model: 'openai/gpt-oss-120b', displayName: 'GPT OSS 120B Flagship' }
+  }
+  if (m.includes('3.1') || m.includes('8b')) {
+    return { model: 'openai/gpt-oss-20b', displayName: 'GPT OSS 20B Fast' }
+  }
+  return { model: modelId, displayName: modelId }
+}
+
+export function getEntropyModelForPlan(
+  userPlan?: string,
+  isPro = false,
+  customModel?: string
+): { model: string; displayName: string } {
+  if (customModel && typeof customModel === 'string' && customModel.trim()) {
+    return getEntropyModelMeta(customModel.trim())
+  }
   const norm = String(userPlan || 'free').toLowerCase()
   if (norm === 'corp' || norm === 'creator' || norm === 'admin' || norm === 'pro' || isPro) {
-    return { model: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Flagship' }
+    return { model: 'openai/gpt-oss-120b', displayName: 'GPT OSS 120B Flagship' }
   }
   if (norm === 'plus') {
-    return { model: 'deepseek-r1-distill-llama-70b', displayName: 'DeepSeek R1 70B Reasoning' }
+    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B' }
   }
-  return { model: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B Instant' }
+  return { model: 'groq/compound-mini', displayName: 'Groq Compound Mini' }
 }
 
 export async function GET(req: NextRequest) {
@@ -152,7 +188,28 @@ export async function GET(req: NextRequest) {
     const regUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropy, ownerChatId) : 0
     const proUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropyPro, ownerChatId) : 0
 
-    const modelInfo = getEntropyModelForPlan(userPlan)
+    let userSelectedModel: string | undefined = undefined
+    if (ownerChatId !== 'guest') {
+      try {
+        const taskModelsConf = await prisma.config.findUnique({
+          where: { key: `user_ai_task_models_${ownerChatId}` },
+        })
+        if (taskModelsConf?.value) {
+          const parsed = JSON.parse(taskModelsConf.value)
+          userSelectedModel = parsed.extensions || parsed.chat
+        }
+        if (!userSelectedModel) {
+          const globalModelConf = await prisma.config.findUnique({
+            where: { key: `user_ai_model_${ownerChatId}` },
+          })
+          if (globalModelConf?.value) {
+            userSelectedModel = globalModelConf.value
+          }
+        }
+      } catch {}
+    }
+
+    const modelInfo = getEntropyModelForPlan(userPlan, false, userSelectedModel)
 
     return NextResponse.json({
       success: true,
@@ -188,7 +245,7 @@ export async function POST(req: NextRequest) {
     const ownerChatId = authUser?.chatId || 'guest'
 
     const body = await req.json()
-    const { query, mode = 'web', isPro = false, focus, depth = 'high', apiKey, userNotes, userTasks, userGoals } = body
+    const { query, mode = 'web', isPro = false, focus, depth = 'high', apiKey, model, userNotes, userTasks, userGoals } = body
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return NextResponse.json({ error: 'Поисковый запрос обязателен' }, { status: 400 })
@@ -202,6 +259,27 @@ export async function POST(req: NextRequest) {
 
     const regUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropy, ownerChatId) : 0
     const proUsed = ownerChatId !== 'guest' ? await getDailyCount(COUNTERS.entropyPro, ownerChatId) : 0
+
+    let userSelectedModel = model
+    if (!userSelectedModel && ownerChatId !== 'guest') {
+      try {
+        const taskModelsConf = await prisma.config.findUnique({
+          where: { key: `user_ai_task_models_${ownerChatId}` },
+        })
+        if (taskModelsConf?.value) {
+          const parsed = JSON.parse(taskModelsConf.value)
+          userSelectedModel = parsed.extensions || parsed.chat
+        }
+        if (!userSelectedModel) {
+          const globalModelConf = await prisma.config.findUnique({
+            where: { key: `user_ai_model_${ownerChatId}` },
+          })
+          if (globalModelConf?.value) {
+            userSelectedModel = globalModelConf.value
+          }
+        }
+      } catch {}
+    }
 
     // Check Pro Search permission and quota
     if (isPro) {
@@ -267,6 +345,20 @@ export async function POST(req: NextRequest) {
       year: 'numeric', month: '2-digit', day: '2-digit',
     }).formatToParts(now)
     const todayStr = `${mskParts.find(p => p.type === 'year')?.value}-${mskParts.find(p => p.type === 'month')?.value}-${mskParts.find(p => p.type === 'day')?.value}`
+
+    const formattedDateRu = new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      weekday: 'long',
+    }).format(now)
+
+    const mskTime = now.toLocaleTimeString('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
 
     const isPersonalWorkspaceQuery = (
       mode === 'notes' ||
@@ -533,6 +625,9 @@ export async function POST(req: NextRequest) {
     // Build prompt for high-intelligence factual, human-friendly search with citations
     const prompt = `Ты — высокоинтеллектуальный исследовательский ИИ-движок Zerf AI (в стиле Perplexity AI Pro Search / ChatGPT Search) совместно с маскотом «Зерфик».
 
+📅 ТОЧНАЯ ТЕКУЩАЯ ДАТА: ${formattedDateRu} (${todayStr}), ${mskTime} МСК.
+ГОД: 2026.
+
 ПОЛЬЗОВАТЕЛЬСКИЙ ВОПРОС: "${cleanQuery}"
 РЕЖИМ ПОИСКА: ${mode} (${modePriorityInstruction})
 ${isPro ? 'РЕЖИМ СКАНИРОВАНИЯ: ⚡ PRO SEARCH (Глубокий многоступенчатый анализ первоисточников, перекрестная верификация фактов и расширенные инсайты)' : 'РЕЖИМ СКАНИРОВАНИЯ: STANDARD SEARCH'}
@@ -542,7 +637,10 @@ ${liveContext}
 
 ИНСТРУКЦИИ:
 1. Дай прямой, живой, фактологический и максимально полезный ответ на русском языке конкретно на вопрос пользователя.
-2. ГЛУБОКИЙ КОНТЕКСТУАЛЬНЫЙ ИНТЕЛЛЕКТ:
+2. ВРЕМЕННОЙ КОНТЕКСТ И АКТУАЛЬНОСТЬ (СТРОГО):
+   - Сегодня ${formattedDateRu} (${todayStr}). Любые ответы, обзоры моделей, новости и факты формулируй строго на текущий день 2026 года.
+   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать «на момент конца июля 2026 года» или придумывать устаревшие временные рамки! Всегда давай актуальную картину на текущий момент.
+3. ГЛУБОКИЙ КОНТЕКСТУАЛЬНЫЙ ИНТЕЛЛЕКТ:
    - Если вопрос касается ОБЩЕЙ СВОДКИ ИЛИ НОВОСТЕЙ НА СЕГОДНЯ («какую информацию на сегодня мне дашь?», «новости на сегодня», «что произошло в мире»):
      • Сформируй структурированную картину главных актуальных новостей дня (мировые события, технологии, культура, экономика) на основе новостных первоисточников.
      • КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО подмешивать личные выполненные задачи пользователя в мировые новости!
@@ -563,12 +661,12 @@ ${liveContext}
      • Дай четкий структурированный пошаговый план, лайфхаки, неочевидные подводные камни и чек-лист.
    - Если вопрос касается ПОЛИТИКИ, НОВОСТЕЙ, НАУКИ или ФАКТОВ:
      • Проведи объективный анализ первоисточников, укажи точные факты, хронологию и расставь сноски [1], [2], [3].
-3. Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал вопрос по программированию!
-4. Если предоставлены первоисточники или личные заметки/задачи, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
-5. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 400 симв.' : depth === 'max' ? 'ОТ 1500 ДО 2500 симв. (длинный лонгрид!)' : 'ОТ 800 ДО 1200 симв. (2–3 развернутых абзаца)'}).
-6. Сформируй 2-4 ключевых вывода/инсайта ("takeaways").
-7. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
-8. Напиши умный, тёплый и живой комментарий от Зерфика ("tikhonyaComment"), отражающий суть вопроса.
+4. Категорически запрещено использовать абстрактные шаблоны про «архитектуру», «декомпозицию модулей» или «снижение расходов на 35%», если пользователь не задавал вопрос по программированию!
+5. Если предоставлены первоисточники или личные заметки/задачи, обязательно опирайся на содержащиеся в них факты и расставляй сноски [1], [2], [3] в тексте.
+6. Строго соблюдай запрошенный объём символов (${depth === 'lite' ? 'до 400 симв.' : depth === 'max' ? 'ОТ 1500 ДО 2500 симв. (длинный лонгрид!)' : 'ОТ 800 ДО 1200 симв. (2–3 развернутых абзаца)'}).
+7. Сформируй 2-4 ключевых вывода/инсайта ("takeaways").
+8. Предложи 2-3 логичных уточняющих вопроса ("followUpQuestions").
+9. Напиши умный, тёплый и живой комментарий от Зерфика ("tikhonyaComment"), отражающий суть вопроса.
 
 ОТВЕТЬ ИСКЛЮЧИТЕЛЬНО В ФОРМАТЕ JSON:
 {
@@ -593,15 +691,15 @@ ${liveContext}
   "tikhonyaComment": "Зерфик исследовал тему и подготовил персональный ответ ✨"
 }`
 
-    const modelInfo = getEntropyModelForPlan(userPlan, isPro)
+    const modelInfo = getEntropyModelForPlan(userPlan, isPro, userSelectedModel)
     const effectiveModel = modelInfo.model
     let llmResult: any = null
 
     const systemPrompt = isDeepReport
-      ? 'You are Zerfik — a deep, comprehensive and analytical AI research engine (like Perplexity Pro Search). Write extensive, multi-paragraph in-depth reports in Russian with rich context, timeline, data points, nuances and precise source citations [1], [2], [3]. Never output short summaries when in Max or Pro Search mode. Always output pure valid JSON.'
+      ? `You are Zerfik — a deep, comprehensive and analytical AI research engine (like Perplexity Pro Search). Today is ${formattedDateRu} (${todayStr}). Write extensive, multi-paragraph in-depth reports in Russian with rich context, timeline, data points, nuances and precise source citations [1], [2], [3]. Never output short summaries when in Max or Pro Search mode. Always output pure valid JSON.`
       : depth === 'lite'
-      ? 'You are Zerfik — a fast, ultra-concise AI search engine (Lite mode). Write brief 1-2 sentence answers in Russian with key source citations. Always output pure valid JSON.'
-      : 'You are Zerfik — a smart, comprehensive and factual AI search engine. Write well-rounded, detailed 2-3 paragraph answers in Russian with rich context, key facts and source citations [1], [2]. Do not make the answer too brief or one-sentence. Always output pure valid JSON.'
+      ? `You are Zerfik — a fast, ultra-concise AI search engine (Lite mode). Today is ${formattedDateRu} (${todayStr}). Write brief 1-2 sentence answers in Russian with key source citations. Always output pure valid JSON.`
+      : `You are Zerfik — a smart, comprehensive and factual AI search engine. Today is ${formattedDateRu} (${todayStr}). Write well-rounded, detailed 2-3 paragraph answers in Russian with rich context, key facts and source citations [1], [2]. Do not make the answer too brief or one-sentence. Always output pure valid JSON.`
 
     try {
       const completion = await callGroqChatCompletion({

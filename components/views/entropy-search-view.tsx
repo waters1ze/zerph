@@ -57,6 +57,20 @@ const STARTER_TOPICS = [
   },
 ]
 
+function getFriendlyModelName(modelId?: string): string {
+  if (!modelId) return ''
+  const m = modelId.toLowerCase()
+  if (m.includes('120b') || m.includes('gpt-oss-120b')) return 'GPT OSS 120B Flagship'
+  if (m.includes('qwen') || m.includes('27b')) return 'Qwen 3.6 27B'
+  if (m.includes('compound-mini') || m === 'groq/compound-mini') return 'Groq Compound Mini'
+  if (m.includes('compound')) return 'Groq Compound 70B'
+  if (m.includes('20b') || m.includes('gpt-oss-20b')) return 'GPT OSS 20B Fast'
+  if (m.includes('deepseek') || m.includes('r1')) return 'DeepSeek R1 70B'
+  if (m.includes('3.3') || m.includes('llama-3.3')) return 'GPT OSS 120B Flagship'
+  if (m.includes('3.1') || m.includes('8b')) return 'GPT OSS 20B Fast'
+  return modelId
+}
+
 export function EntropySearchView() {
   const { state, dispatch } = useApp()
   const [query, setQuery] = useState('')
@@ -66,6 +80,9 @@ export function EntropySearchView() {
   const [isLoading, setIsLoading] = useState(false)
   const [searchStep, setSearchStep] = useState<number>(0)
   const [result, setResult] = useState<EntropySearchResult | null>(null)
+  
+  const userSelectedExtensionModel = state.settings.integrations?.aiTaskModels?.extensions || state.settings.integrations?.aiModel
+
   const [usageInfo, setUsageInfo] = useState<{
     used: number
     limit: number
@@ -97,8 +114,8 @@ export function EntropySearchView() {
           remaining: isUnlimited ? 999999 : 10,
           isUnlimited,
           plan: savedPlan,
-          model: 'deepseek-r1-distill-llama-70b',
-          modelDisplayName: 'DeepSeek R1 Distill 70B',
+          model: 'openai/gpt-oss-120b',
+          modelDisplayName: 'GPT OSS 120B Flagship',
           pro: {
             used: 0,
             limit: isUnlimited ? -1 : 5,
@@ -115,8 +132,8 @@ export function EntropySearchView() {
       remaining: 999999,
       isUnlimited: true,
       plan: 'creator',
-      model: 'deepseek-r1-distill-llama-70b',
-      modelDisplayName: 'DeepSeek R1 Distill 70B',
+      model: 'openai/gpt-oss-120b',
+      modelDisplayName: 'GPT OSS 120B Flagship',
       pro: {
         used: 0,
         limit: -1,
@@ -311,6 +328,7 @@ export function EntropySearchView() {
           mode: activeMode,
           isPro: isProSearch,
           depth: searchDepth,
+          model: userSelectedExtensionModel || undefined,
           userNotes: (state.notes || []).slice(0, 25).map(n => ({
             id: n.id,
             title: n.title,
@@ -509,13 +527,15 @@ export function EntropySearchView() {
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/80 text-[11px] text-muted-foreground font-mono">
             <Cpu className="w-3.5 h-3.5 text-primary" />
             <span>
-              {(usageInfo as any)?.modelDisplayName || (
-                usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator' || usageInfo?.plan === 'admin' || usageInfo?.plan === 'pro' || isProSearch
-                  ? 'DeepSeek R1 Distill 70B'
-                  : usageInfo?.plan === 'plus'
-                  ? 'Qwen 3.6 27B Reasoning'
-                  : 'Llama 3.1 8B Instant'
-              )}
+              {userSelectedExtensionModel
+                ? getFriendlyModelName(userSelectedExtensionModel)
+                : (usageInfo as any)?.modelDisplayName || (
+                  usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator' || usageInfo?.plan === 'admin' || usageInfo?.plan === 'pro' || isProSearch
+                    ? 'GPT OSS 120B Flagship'
+                    : usageInfo?.plan === 'plus'
+                    ? 'Qwen 3.6 27B'
+                    : 'Groq Compound Mini'
+                )}
             </span>
           </div>
 

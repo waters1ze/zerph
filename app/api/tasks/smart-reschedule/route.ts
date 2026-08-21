@@ -61,10 +61,10 @@ ${JSON.stringify(tasks.map((t: any) => ({ id: t.id, title: t.title, priority: t.
 
     const completion = await callGroqChatCompletion({
       messages: [{ role: 'system', content: prompt }],
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-120b',
       temperature: 0.2,
       response_format: { type: 'json_object' },
-      fallbackModels: ['llama-3.1-8b-instant', 'deepseek-r1-distill-llama-70b'],
+      fallbackModels: ['qwen/qwen3.6-27b', 'groq/compound', 'groq/compound-mini'],
     })
 
     const parsed = JSON.parse(completion.content || '{}')
