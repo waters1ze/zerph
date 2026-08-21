@@ -150,10 +150,9 @@ export async function getUserInstalledExtensions(chatId: string | number): Promi
       const parsed = JSON.parse(row.value)
       if (Array.isArray(parsed)) return parsed
     }
-    // Default installed extensions: Entropy AI Search + Zerfic Live
-    return ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+    return []
   } catch {
-    return ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+    return []
   }
 }
 
@@ -169,7 +168,7 @@ export async function getUserEnabledExtensions(chatId: string | number): Promise
     }
     return await getUserInstalledExtensions(cid)
   } catch {
-    return ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+    return []
   }
 }
 

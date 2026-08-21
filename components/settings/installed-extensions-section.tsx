@@ -150,30 +150,30 @@ const getInitialInstalledData = () => {
       const enabledRaw = localStorage.getItem('zerf_enabled_extensions')
 
       let catalog = DEFAULT_EXTENSIONS
-      let installedIds: string[] = ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
-      let enabledIds: string[] = ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+      let installedIds: string[] = []
+      let enabledIds: string[] = []
 
       if (cached) {
         const parsed = JSON.parse(cached)
         if (Array.isArray(parsed.catalog) && parsed.catalog.length > 0) {
           catalog = parsed.catalog
         }
-        if (Array.isArray(parsed.installedIds) && parsed.installedIds.length > 0) {
+        if (Array.isArray(parsed.installedIds)) {
           installedIds = parsed.installedIds
         }
-        if (Array.isArray(parsed.enabledIds) && parsed.enabledIds.length > 0) {
+        if (Array.isArray(parsed.enabledIds)) {
           enabledIds = parsed.enabledIds
         }
       }
       if (installedRaw) {
         const parsed = JSON.parse(installedRaw)
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           installedIds = parsed
         }
       }
       if (enabledRaw) {
         const parsed = JSON.parse(enabledRaw)
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           enabledIds = parsed
         }
       }
@@ -182,8 +182,8 @@ const getInitialInstalledData = () => {
   }
   return {
     catalog: DEFAULT_EXTENSIONS,
-    installedIds: ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d'],
-    enabledIds: ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d'],
+    installedIds: [],
+    enabledIds: [],
   }
 }
 
@@ -249,8 +249,8 @@ export function InstalledExtensionsSettingsSection() {
       const data = await res.json()
       if (data.success) {
         const loadedCatalog = Array.isArray(data.catalog) && data.catalog.length > 0 ? data.catalog : DEFAULT_EXTENSIONS
-        const loadedInstalled = Array.isArray(data.installedIds) && data.installedIds.length > 0 ? data.installedIds : ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
-        const loadedEnabled = Array.isArray(data.enabledIds) && data.enabledIds.length > 0 ? data.enabledIds : loadedInstalled
+        const loadedInstalled = Array.isArray(data.installedIds) ? data.installedIds : []
+        const loadedEnabled = Array.isArray(data.enabledIds) ? data.enabledIds : loadedInstalled
         setCatalog(loadedCatalog)
         setInstalledIds(loadedInstalled)
         setEnabledIds(loadedEnabled)

@@ -57,7 +57,8 @@ const getInitialInstalledExts = (): ExtensionItem[] => {
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem('zerf_installed_extensions')
-      const ids: string[] = raw ? JSON.parse(raw) : ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+      const ids: string[] = raw ? JSON.parse(raw) : []
+      if (!Array.isArray(ids) || ids.length === 0) return []
       const catRaw = localStorage.getItem('zerf_ext_catalog_cache')
       const cat = catRaw ? JSON.parse(catRaw)?.catalog || DEFAULT_EXTENSIONS : DEFAULT_EXTENSIONS
       if (Array.isArray(cat) && cat.length > 0) {
@@ -65,7 +66,7 @@ const getInitialInstalledExts = (): ExtensionItem[] => {
       }
     } catch {}
   }
-  return DEFAULT_EXTENSIONS
+  return []
 }
 
 export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: externalToggle }: SidebarProps) {
@@ -76,7 +77,15 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [isAdmin, setIsAdmin] = useState(false)
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>(getInitialInstalledExts)
-  const [enabledExtIds, setEnabledExtIds] = useState<string[]>(['ext_entropy_search', 'ext_gh_1787152496448_e36d8d'])
+  const [enabledExtIds, setEnabledExtIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('zerf_enabled_extensions') || localStorage.getItem('zerf_installed_extensions')
+        if (raw) return JSON.parse(raw)
+      } catch {}
+    }
+    return []
+  })
   const [disabledNotice, setDisabledNotice] = useState<string | null>(null)
   const [showZerficLiveModal, setShowZerficLiveModal] = useState<boolean>(false)
 
@@ -367,37 +376,16 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   // Map of extensions for quick lookup strictly from user's installed extensions
   const extensionsMap = useMemo(() => {
     const map = new Map<string, Partial<ExtensionItem>>()
-    // Built-in starter extensions fallback
-    DEFAULT_EXTENSIONS.forEach(e => map.set(e.id, e))
-    map.set('ext_entropy_search', {
-      id: 'ext_entropy_search',
-      title: 'Entropy AI Search',
-      icon: '🔮',
-      isPublished: true,
-      minPlan: 'free',
+    installedExts.forEach(e => {
+      map.set(e.id, e)
+      if (e.id === 'ext_gh_1787152496448_e36d8d') {
+        map.set('ext_zerfic_live', e)
+        map.set('zerfic-live', e)
+      }
+      if (e.id === 'ext_entropy_search') {
+        map.set('entropy', e)
+      }
     })
-    map.set('ext_gh_1787152496448_e36d8d', {
-      id: 'ext_gh_1787152496448_e36d8d',
-      title: 'Zerfic Live',
-      icon: '🎙️',
-      isPublished: true,
-      minPlan: 'free',
-    })
-    map.set('ext_zerfic_live', {
-      id: 'ext_gh_1787152496448_e36d8d',
-      title: 'Zerfic Live',
-      icon: '🎙️',
-      isPublished: true,
-      minPlan: 'free',
-    })
-    map.set('zerfic-live', {
-      id: 'ext_gh_1787152496448_e36d8d',
-      title: 'Zerfic Live',
-      icon: '🎙️',
-      isPublished: true,
-      minPlan: 'free',
-    })
-    installedExts.forEach(e => map.set(e.id, e))
     return map
   }, [installedExts])
 
