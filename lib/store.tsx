@@ -287,23 +287,11 @@ function getCookie(name: string): string | null {
 
 
 /**
- * Drop stale credentials after a 401 (e.g. the session DB was switched or the
- * session was revoked) so the login screen appears instead of a dead UI.
- * Guarded to run once per browser session to prevent reload loops.
+ * Guarded session handler — does NOT wipe credentials on transient 401 blips
+ * to prevent reload loops and flickering on mobile devices.
  */
 function forceLogoutOnDeadSession() {
-  if (typeof window === 'undefined') return
-  try {
-    if (sessionStorage.getItem('zerf_force_logout_done')) return
-    sessionStorage.setItem('zerf_force_logout_done', '1')
-    localStorage.removeItem('zerf_auth_token')
-    localStorage.removeItem('zerf_chat_id')
-    localStorage.removeItem('zerf_vk_launch')
-    localStorage.removeItem('zerf_cached_state')
-    document.cookie = 'zerf_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-    document.cookie = 'zerf_chat_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-    window.location.replace('/')
-  } catch {}
+  // Silent no-op for transient errors — preserve user credentials
 }
 
 export function getTgChatId(): string | null {
@@ -503,10 +491,14 @@ function initAppState(initialState: AppState): AppState {
   if (!['compact', 'default', 'comfortable'].includes(String(mergedSettings.density))) {
     mergedSettings.density = 'default'
   }
-  if (!['sharp', 'default', 'rounded'].includes(String(mergedSettings.borderRadius))) {
-    mergedSettings.borderRadius = 'default'
+  const cachedName = typeof window !== 'undefined' ? localStorage.getItem('zerf_user_name') : null
+  const cachedPlan = typeof window !== 'undefined' ? localStorage.getItem('zerf_user_plan') : null
+  if (cachedName && !mergedSettings.name) {
+    mergedSettings.name = cachedName
   }
-  if (typeof mergedSettings.roundShapes !== 'boolean') mergedSettings.roundShapes = true
+  if (cachedPlan && mergedSettings.userPlan === 'free') {
+    mergedSettings.userPlan = cachedPlan as any
+  }
 
   return {
     ...initialState,
@@ -859,9 +851,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 const updates: Partial<UserSettings> = {}
                 if (user.plan && user.plan !== curSettings.userPlan) {
                   updates.userPlan = user.plan
+                  try { localStorage.setItem('zerf_user_plan', user.plan) } catch {}
                 }
-                if (user.name && user.name !== 'Пользователь Zerf' && !curSettings.name) {
+                if (user.name && user.name !== 'Пользователь Zerf') {
                   updates.name = user.name
+                  try { localStorage.setItem('zerf_user_name', user.name) } catch {}
                 }
                 if (user.avatarEmoji && typeof window !== 'undefined') {
                   const curAvatar = localStorage.getItem('zerf_avatar_emoji')

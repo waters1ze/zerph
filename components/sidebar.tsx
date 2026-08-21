@@ -73,7 +73,13 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const { state, dispatch } = useApp()
   const { currentView, tasks, notes, settings } = state
 
-  const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(null)
+  const [tgUser, setTgUser] = useState<{ name: string; username: string; photoUrl?: string } | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedName = localStorage.getItem('zerf_user_name')
+      if (savedName) return { name: savedName, username: 'Telegram' }
+    }
+    return null
+  })
   const [isAdmin, setIsAdmin] = useState(false)
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>(getInitialInstalledExts)
