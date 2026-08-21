@@ -57,18 +57,43 @@ const STARTER_TOPICS = [
   },
 ]
 
-function getFriendlyModelName(modelId?: string): string {
-  if (!modelId) return ''
-  const m = modelId.toLowerCase()
-  if (m.includes('120b') || m.includes('gpt-oss-120b')) return 'GPT OSS 120B Flagship'
-  if (m.includes('qwen') || m.includes('27b')) return 'Qwen 3.6 27B'
-  if (m.includes('compound-mini') || m === 'groq/compound-mini') return 'Groq Compound Mini'
-  if (m.includes('compound')) return 'Groq Compound 70B'
-  if (m.includes('20b') || m.includes('gpt-oss-20b')) return 'GPT OSS 20B Fast'
-  if (m.includes('deepseek') || m.includes('r1')) return 'DeepSeek R1 70B'
-  if (m.includes('3.3') || m.includes('llama-3.3')) return 'GPT OSS 120B Flagship'
-  if (m.includes('3.1') || m.includes('8b')) return 'GPT OSS 20B Fast'
-  return modelId
+function formatDynamicModelName(modelId?: string | null): string {
+  if (!modelId || typeof modelId !== 'string') return ''
+  const trimmed = modelId.trim()
+  if (!trimmed) return ''
+
+  // Parse vendor / model parts dynamically
+  const parts = trimmed.split('/')
+  const vendor = parts.length > 1 ? parts[0] : ''
+  const rawModelName = parts[parts.length - 1]
+
+  // Clean and split words
+  const words = rawModelName
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+
+  const formattedWords = words.map(word => {
+    const lower = word.toLowerCase()
+    if (lower === 'gpt') return 'GPT'
+    if (lower === 'oss') return 'OSS'
+    if (lower === 'ai') return 'AI'
+    if (lower === 'llm') return 'LLM'
+    if (lower === 'moe') return 'MoE'
+    if (lower === 'r1') return 'R1'
+    if (/^v\d+$/i.test(lower)) return lower.toUpperCase()
+    if (/^\d+(\.\d+)?b$/i.test(lower)) return lower.toUpperCase()
+    return word.charAt(0).toUpperCase() + word.slice(1)
+  })
+
+  let result = formattedWords.join(' ')
+
+  if (vendor && vendor.toLowerCase() === 'groq' && !result.toLowerCase().includes('groq')) {
+    result = `Groq ${result}`
+  }
+
+  return result
 }
 
 function PerplexityCitationBadge({
@@ -753,7 +778,7 @@ export function EntropySearchView() {
             <Cpu className="w-3.5 h-3.5 text-primary" />
             <span>
               {userSelectedExtensionModel
-                ? getFriendlyModelName(userSelectedExtensionModel)
+                ? formatDynamicModelName(userSelectedExtensionModel)
                 : (usageInfo as any)?.modelDisplayName || (
                   usageInfo?.plan === 'corp' || usageInfo?.plan === 'creator' || usageInfo?.plan === 'admin' || usageInfo?.plan === 'pro' || isProSearch
                     ? 'GPT OSS 120B Flagship'

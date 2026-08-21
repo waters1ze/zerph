@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, isUserAdmin, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { aggregateLiveKnowledgeSources, type LiveSource } from '@/lib/backend/entropy-sources'
-import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
+import { callGroqChatCompletion, getModelForUserPlan, formatDynamicModelName } from '@/lib/backend/groq-pool'
 import {
   getDailyCount,
   incrementDailyCount,
@@ -129,51 +129,17 @@ export interface EntropySearchResult {
   }
 }
 
-export function getEntropyModelMeta(modelId: string): { model: string; displayName: string } {
-  const m = String(modelId || '').toLowerCase()
-  if (m.includes('120b') || m.includes('gpt-oss-120b')) {
-    return { model: 'openai/gpt-oss-120b', displayName: 'GPT OSS 120B Flagship' }
-  }
-  if (m.includes('qwen') || m.includes('27b')) {
-    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B' }
-  }
-  if (m.includes('compound-mini') || m === 'groq/compound-mini') {
-    return { model: 'groq/compound-mini', displayName: 'Groq Compound Mini' }
-  }
-  if (m.includes('compound')) {
-    return { model: 'groq/compound', displayName: 'Groq Compound 70B' }
-  }
-  if (m.includes('20b') || m.includes('gpt-oss-20b')) {
-    return { model: 'openai/gpt-oss-20b', displayName: 'GPT OSS 20B Fast' }
-  }
-  if (m.includes('deepseek') || m.includes('r1')) {
-    return { model: 'deepseek-r1-distill-llama-70b', displayName: 'DeepSeek R1 70B' }
-  }
-  if (m.includes('3.3') || m.includes('llama-3.3')) {
-    return { model: 'openai/gpt-oss-120b', displayName: 'GPT OSS 120B Flagship' }
-  }
-  if (m.includes('3.1') || m.includes('8b')) {
-    return { model: 'openai/gpt-oss-20b', displayName: 'GPT OSS 20B Fast' }
-  }
-  return { model: modelId, displayName: modelId }
-}
-
 export function getEntropyModelForPlan(
   userPlan?: string,
   isPro = false,
   customModel?: string
 ): { model: string; displayName: string } {
-  if (customModel && typeof customModel === 'string' && customModel.trim()) {
-    return getEntropyModelMeta(customModel.trim())
+  const planTier = isPro ? 'pro' : userPlan
+  const modelId = getModelForUserPlan(planTier, customModel, 'extensions')
+  return {
+    model: modelId,
+    displayName: formatDynamicModelName(modelId),
   }
-  const norm = String(userPlan || 'free').toLowerCase()
-  if (norm === 'corp' || norm === 'creator' || norm === 'admin' || norm === 'pro' || isPro) {
-    return { model: 'openai/gpt-oss-120b', displayName: 'GPT OSS 120B Flagship' }
-  }
-  if (norm === 'plus') {
-    return { model: 'qwen/qwen3.6-27b', displayName: 'Qwen 3.6 27B' }
-  }
-  return { model: 'groq/compound-mini', displayName: 'Groq Compound Mini' }
 }
 
 export async function GET(req: NextRequest) {

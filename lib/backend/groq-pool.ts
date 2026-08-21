@@ -212,6 +212,53 @@ export function classifyTierByParams(billions: number, category?: string): 'free
   return 'corp'
 }
 
+/**
+ * Fully dynamic model formatter:
+ * Automatically converts any model ID into a clean, human-readable name without hardcoded static lists.
+ */
+export function formatDynamicModelName(modelId?: string | null): string {
+  if (!modelId || typeof modelId !== 'string') return ''
+  const trimmed = modelId.trim()
+  if (!trimmed) return ''
+
+  // 1. Check known registry if present
+  const known = VERIFIED_GROQ_MODELS.find(m => m.id.toLowerCase() === trimmed.toLowerCase())
+  if (known && known.name) return known.name
+
+  // 2. Parse vendor / model parts dynamically
+  const parts = trimmed.split('/')
+  const vendor = parts.length > 1 ? parts[0] : ''
+  const rawModelName = parts[parts.length - 1]
+
+  // Clean and split words
+  const words = rawModelName
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+
+  const formattedWords = words.map(word => {
+    const lower = word.toLowerCase()
+    if (lower === 'gpt') return 'GPT'
+    if (lower === 'oss') return 'OSS'
+    if (lower === 'ai') return 'AI'
+    if (lower === 'llm') return 'LLM'
+    if (lower === 'moe') return 'MoE'
+    if (lower === 'r1') return 'R1'
+    if (/^v\d+$/i.test(lower)) return lower.toUpperCase()
+    if (/^\d+(\.\d+)?b$/i.test(lower)) return lower.toUpperCase()
+    return word.charAt(0).toUpperCase() + word.slice(1)
+  })
+
+  let result = formattedWords.join(' ')
+
+  if (vendor && vendor.toLowerCase() === 'groq' && !result.toLowerCase().includes('groq')) {
+    result = `Groq ${result}`
+  }
+
+  return result
+}
+
 const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // In-memory cache 24 hours
 
 let dynamicModelsCache: { timestamp: number; models: GroqModelMeta[] } | null = null
