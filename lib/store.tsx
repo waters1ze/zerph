@@ -738,7 +738,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/tasks', {
         headers,
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(25000),
       }).catch(err => {
         console.warn('[Zerf Sync Error]:', err)
         return null

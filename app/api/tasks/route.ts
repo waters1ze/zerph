@@ -53,10 +53,11 @@ export async function GET(req: NextRequest) {
     }
     
     try {
-      await touchUserLastActive(ownerChatId)
-      await syncFriendBirthdays(ownerChatId)
-      // Trigger evening review / daily crons asynchronously in background
+      // Run background maintenance asynchronously without blocking the user query
+      touchUserLastActive(ownerChatId).catch(() => {})
+      syncFriendBirthdays(ownerChatId).catch(() => {})
       runAllCronTasks().catch(e => console.error('[Background Cron Error]:', e))
+
       const [tasks, goals, notes, friends, habits] = await Promise.all([
         getAllTasks(ownerChatId),
         getAllGoals(ownerChatId),
