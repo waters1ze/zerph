@@ -739,9 +739,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers,
         cache: 'no-store',
         signal: AbortSignal.timeout(5000),
-      }).catch(() => null)
+      }).catch(err => {
+        console.warn('[Zerf Sync Error]:', err)
+        return null
+      })
 
       if (res) {
+        console.log('[Zerf Sync] /api/tasks response status:', res.status, 'x-chat-id:', headers['x-chat-id'])
         if (res.status === 401 && (headers['x-auth-token'] || headers['x-tg-init-data'] || headers['x-vk-launch'])) {
           deadSessionStrikesRef.current += 1
           if (deadSessionStrikesRef.current >= 2) {
@@ -754,6 +758,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (!res.ok) return
         const data = await res.json()
+        console.log('[Zerf Sync] Received tasks count:', data?.tasks?.length, data?.tasks)
 
         if (data && data.tasks !== undefined) {
           if (data._dbOffline && (!data.tasks || data.tasks.length === 0)) {
