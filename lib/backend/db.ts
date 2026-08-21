@@ -1011,6 +1011,11 @@ export async function registerChatId(
 
     const existing = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
 
+    // If no existing record and no name/username given, do not register blank phantom user
+    if (!existing && !firstName && !username && !lastName) {
+      return { isNewUser: false }
+    }
+
     if (existing) {
       // Preserve custom user firstName and lastName; only update username or fill empty names
       const updateData: { firstName?: string; username?: string; lastName?: string } = {}
@@ -3084,7 +3089,7 @@ export async function getUserUsageAndLimits(ownerChatId?: number | bigint | stri
 
     let chat = await prisma.telegramChat.findUnique({ where: { chatId: cid } })
     if (!chat) {
-      chat = await prisma.telegramChat.create({ data: { chatId: cid, lastResetDate: mskDate } })
+      return freeLimits()
     }
 
     // Daily reset

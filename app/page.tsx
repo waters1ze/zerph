@@ -292,8 +292,8 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
       {/* Voice recorder */}
       <VoiceRecorder open={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
-      {/* Telegram Auth Gate Modal */}
-      <AuthGateModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      {/* Telegram / Google / Email Auth Gate Modal */}
+      <AuthGateModal open={authModalOpen ? true : undefined} onClose={() => setAuthModalOpen(false)} />
 
       {/* ── Marketplace Modal Overlay (Floating Pop-up on top of workspace) ── */}
       <AnimatePresence>

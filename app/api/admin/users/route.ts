@@ -29,10 +29,18 @@ export async function GET(req: NextRequest) {
     const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
     const eightDaysAgo = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000)
 
-    // Fetch all users (excluding system IDs)
+    // Fetch all real authenticated users (excluding system IDs and blank phantom guests)
     const users = await prisma.telegramChat.findMany({
       where: {
-        chatId: { notIn: [BigInt(777000), BigInt(1087968824)] }
+        chatId: { notIn: [BigInt(777000), BigInt(1087968824)] },
+        OR: [
+          { username: { not: null } },
+          { firstName: { not: null } },
+          { email: { not: null } },
+          { googleEmail: { not: null } },
+          { vkId: { not: null } },
+          { authProvider: { not: null } },
+        ],
       },
       orderBy: { lastActiveAt: 'desc' },
     })

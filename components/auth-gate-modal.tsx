@@ -139,7 +139,9 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={() => {
+              if (isAuth && onClose) onClose()
+            }}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm"
           />
           <motion.div
