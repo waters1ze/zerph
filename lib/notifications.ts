@@ -231,54 +231,36 @@ export function showWebNotification(
 
   if ('Notification' in window && Notification.permission === 'granted') {
     shown = true
-    // Show via service worker when available; fall back to the Notification
-    // constructor ONLY if the SW path fails — otherwise the user gets duplicates.
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready
-        .then(reg => {
-          reg.showNotification(title, {
-            body: options?.body || defaultBody,
-            icon: defaultIcon,
-            badge: defaultIcon,
-            tag,
-            renotify: true,
-            vibrate: [200, 100, 200, 100, 300],
-            requireInteraction: options?.requireInteraction ?? true,
-          } as any)
-        })
-        .catch(() => {
-          try {
-            const notif = new Notification(title, {
+    try {
+      const notif = new Notification(title, {
+        body: options?.body || defaultBody,
+        icon: defaultIcon,
+        tag,
+        requireInteraction: options?.requireInteraction ?? true,
+      })
+      if (options?.onClick) {
+        notif.onclick = () => {
+          window.focus()
+          options.onClick!()
+          notif.close()
+        }
+      }
+    } catch {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then(reg => {
+            reg.showNotification(title, {
               body: options?.body || defaultBody,
               icon: defaultIcon,
+              badge: defaultIcon,
               tag,
+              renotify: true,
+              vibrate: [200, 100, 200, 100, 300],
               requireInteraction: options?.requireInteraction ?? true,
-            })
-            if (options?.onClick) {
-              notif.onclick = () => {
-                window.focus()
-                options.onClick!()
-                notif.close()
-              }
-            }
-          } catch {}
-        })
-    } else {
-      try {
-        const notif = new Notification(title, {
-          body: options?.body || defaultBody,
-          icon: defaultIcon,
-          tag,
-          requireInteraction: options?.requireInteraction ?? true,
-        })
-        if (options?.onClick) {
-          notif.onclick = () => {
-            window.focus()
-            options.onClick!()
-            notif.close()
-          }
-        }
-      } catch {}
+            } as any)
+          })
+          .catch(() => {})
+      }
     }
   }
 
