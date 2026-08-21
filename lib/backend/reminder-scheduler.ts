@@ -40,10 +40,13 @@ export async function checkAndSendReminders() {
 
 // Start interval if running on dedicated server
 let isRunning = false
-export function startReminderScheduler() {
-  if (isRunning || process.env.RUN_CRON_DAEMON !== 'true') return
+export function startReminderScheduler(force = false) {
+  if (isRunning) return
+  if (!force && process.env.RUN_CRON_DAEMON !== 'true' && !process.env.TELEGRAM_BOT_TOKEN) return
   isRunning = true
+  console.log('⏰ Reminder scheduler interval started (checks every 20s)')
+  checkAndSendReminders().catch(() => {})
   setInterval(() => {
     checkAndSendReminders().catch(() => {})
-  }, 30000)
+  }, 20000)
 }

@@ -112,7 +112,10 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
   useEffect(() => {
     const checkTicker = () => {
       const now = new Date()
-      const todayStr = now.toISOString().slice(0, 10)
+      const y = now.getFullYear()
+      const mo = String(now.getMonth() + 1).padStart(2, '0')
+      const dy = String(now.getDate()).padStart(2, '0')
+      const todayStr = `${y}-${mo}-${dy}`
       const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
       // 1. Find upcoming task with time across closest dates
@@ -120,10 +123,10 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
       const upcoming = state.tasks
         .filter(t => t.status !== 'done' && t.dueTime)
         .map(t => {
-          const d = t.dueDate || todayStr
+          const dateStr = t.dueDate || todayStr
+          const [dY, dM, dD] = dateStr.split('-').map(Number)
           const [h, m] = (t.dueTime || '23:59').split(':').map(Number)
-          const target = new Date(d)
-          target.setHours(isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0)
+          const target = new Date(dY, (dM || 1) - 1, dD || 1, isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0)
           return { task: t, targetTs: target.getTime() }
         })
         .filter(x => x.targetTs > nowMs)

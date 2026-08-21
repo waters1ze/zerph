@@ -154,25 +154,48 @@ export async function runReminderCheck() {
       let intervalMin = (task as any).reminderIntervalMinutes ?? 5
       let repeatCount = (task as any).reminderRepeatCount ?? 3
 
-      if (intervalMin === 0) intervalMin = 5
-      if (repeatCount === 0) repeatCount = 3
+      if (intervalMin <= 0) intervalMin = 5
+      if (repeatCount <= 0) repeatCount = 3
 
       const sentCount = (task as any).remindersSentCount || 0
-      if (sentCount >= repeatCount) continue
+      if (sentCount >= repeatCount + 2) continue
 
       let shouldFire = false
-      let stageText = 'через 5 минут'
+      let stageKey = 'due'
+      let stageHeader = '⏰ ВРЕМЯ НАСТУПИЛО!'
+      let stageText = 'прямо сейчас'
 
-      if (sentCount === 0) {
-        if (actualDiffMin <= intervalMin && actualDiffMin >= -5) {
+      // STAGE 1: Advance reminder (e.g. 1 to intervalMin minutes before due time)
+      if (actualDiffMin > 0 && actualDiffMin <= intervalMin) {
+        stageKey = 'advance'
+        stageHeader = `⏰ НАПОМИНАНИЕ (ЧЕРЕЗ ${actualDiffMin} МИН)!`
+        stageText = `через ${actualDiffMin} мин`
+        if (!isReminderInCooldown(task.id, 'advance', 8 * 60 * 1000)) {
           shouldFire = true
-          stageText = actualDiffMin <= 0 ? 'прямо сейчас' : `через ${actualDiffMin} мин`
         }
-      } else {
-        const nextExpectedDiff = -(sentCount * intervalMin)
-        if (actualDiffMin <= nextExpectedDiff && actualDiffMin >= nextExpectedDiff - 5) {
+      }
+      // STAGE 2: Exact due time reminder (at 00:00 / 0 min remaining or within -1 min)
+      else if (actualDiffMin <= 0 && actualDiffMin >= -2) {
+        stageKey = 'due'
+        stageHeader = '⏰ ВРЕМЯ НАСТУПИЛО (ПРЯМО СЕЙЧАС)!'
+        stageText = 'прямо сейчас'
+        if (!isReminderInCooldown(task.id, 'due', 8 * 60 * 1000)) {
           shouldFire = true
-          stageText = `повтор #${sentCount + 1}`
+        }
+      }
+      // STAGE 3: Overdue repeat reminders (after due time, repeated every intervalMin)
+      else if (actualDiffMin < -2) {
+        for (let r = 1; r <= repeatCount; r++) {
+          const expectedPastMin = r * intervalMin
+          if (actualDiffMin <= -expectedPastMin && actualDiffMin >= -(expectedPastMin + 3)) {
+            stageKey = `repeat_${r}`
+            stageHeader = `⏰ НАПОМИНАНИЕ (ПРОСРОЧЕНО НА ${Math.abs(actualDiffMin)} МИН)!`
+            stageText = `повтор #${r}`
+            if (!isReminderInCooldown(task.id, stageKey, (intervalMin - 1) * 60 * 1000)) {
+              shouldFire = true
+            }
+            break
+          }
         }
       }
 
@@ -185,11 +208,8 @@ export async function runReminderCheck() {
           }
         }
 
-        // Strict anti-duplicate check for this task and stage
-        if (isReminderInCooldown(task.id, sentCount + 1)) {
-          continue
-        }
-        markReminderSent(task.id, sentCount + 1)
+        // Strict cooldown per task and distinct stageKey
+        markReminderSent(task.id, stageKey as any)
 
         const isGroupTask = (task as any).source?.startsWith('group:')
         const groupHeader = isGroupTask ? `👥 *Групповая задача*\n\n` : ''
@@ -202,10 +222,10 @@ export async function runReminderCheck() {
             (task.description ? `_«${task.description}»_\n\n` : '\n') +
             `⏰ *Время:* ${task.dueTime}\n` +
             `✨ _Отправлено из Zerf AI_`
-          : `${groupHeader}⏰ *НАПОМИНАНИЕ (${stageText.toUpperCase()})!*\n\n` +
+          : `${groupHeader}${stageHeader}\n\n` +
             `📌 *${task.title}*` +
             descLine +
-            `📍 *Срок:* ${task.dueTime}\n` +
+            `📍 *Срок:* ${task.dueTime} (${stageText})\n` +
             `✨ _Отправлено из Zerf AI_`
 
         const replyMarkup = {
@@ -232,11 +252,11 @@ export async function runReminderCheck() {
 
           // 2. Deliver via Browser Web Push (even if browser tab is closed / mobile screen locked)
           sendWebPushNotification(recipient, {
-            title: isQuickNote ? '💬 Напоминание о заметке' : `⏰ Напоминание: ${task.title}`,
+            title: isQuickNote ? '💬 Напоминание о заметке' : `⏰ ${stageHeader}`,
             body: `${task.title}${task.description ? ` — ${task.description}` : ''} (${task.dueTime})`,
             icon: '/icon-192.png',
             url: `/?task=${task.id}`,
-            tag: `rem_${task.id}_${sentCount + 1}`,
+            tag: `rem_${task.id}_${stageKey}`,
           }).catch(() => {})
 
           // 3. Deliver via real-time SSE stream if client is actively open
@@ -259,7 +279,7 @@ export async function runReminderCheck() {
         }
 
         const nextSentCount = sentCount + 1
-        const isFinal = nextSentCount >= repeatCount || actualDiffMin <= 0
+        const isFinal = stageKey.startsWith('repeat_') && parseInt(stageKey.replace('repeat_', ''), 10) >= repeatCount
 
         try {
           await prisma.task.update({

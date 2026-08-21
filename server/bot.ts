@@ -277,7 +277,13 @@ async function sendAIResult(chatId: number, data: {
 // ── Reminder scheduler — runs every 60 seconds ────────────────────────────────
 
 function startReminderScheduler() {
-  console.log('⏰ Centralized Cron & Reminder scheduler started')
+  console.log('⏰ Centralized Cron & Reminder scheduler started (checks every 20s)')
+  ;(async () => {
+    try {
+      const { runAllCronTasks } = await import('@/lib/backend/cron-runner')
+      await runAllCronTasks()
+    } catch {}
+  })()
   // Run every 20 seconds using the deduplicated cron runner
   setInterval(async () => {
     try {

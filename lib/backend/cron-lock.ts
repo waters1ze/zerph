@@ -202,7 +202,7 @@ export async function markUserCronDoneToday(taskKey: string, userId: string | nu
 /**
  * Task Reminder Cooldown: prevents sending duplicate task reminders within 10 minutes for the same task & stage
  */
-export function isReminderInCooldown(taskId: string, stage = 1, cooldownMs = 10 * 60 * 1000): boolean {
+export function isReminderInCooldown(taskId: string, stage: string | number = 1, cooldownMs = 10 * 60 * 1000): boolean {
   const key = `${taskId}:${stage}`
   const lastTime = reminderCooldownMap.get(key)
   if (lastTime && Date.now() - lastTime < cooldownMs) {
@@ -211,7 +211,7 @@ export function isReminderInCooldown(taskId: string, stage = 1, cooldownMs = 10 
   return false
 }
 
-export function markReminderSent(taskId: string, stage = 1): void {
+export function markReminderSent(taskId: string, stage: string | number = 1): void {
   const key = `${taskId}:${stage}`
   reminderCooldownMap.set(key, Date.now())
 }
