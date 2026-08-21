@@ -12,10 +12,13 @@ interface VapidKeys {
   privateKey: string
 }
 
+const DEFAULT_VAPID_PUBLIC_KEY = 'BCrELgMn65bAWDnsnFk28O3v-JEtpBhJCOo8daLvAg15I0azzSCjZc-MDCndR3AJ9H3y3FCpfZtZ3tIZoNXd_fU'
+const DEFAULT_VAPID_PRIVATE_KEY = 'k9j28Oxa5yCUQaEadBqExJoHLTAEo5XQlj5VCtlhGAU'
+
 let cachedVapidKeys: VapidKeys | null = null
 
 /**
- * Retrieves or auto-generates VAPID keys, persisting them to Prisma Config table.
+ * Retrieves VAPID keys (from Env vars, DB, or stable system defaults).
  */
 export async function getVapidKeys(): Promise<VapidKeys> {
   if (cachedVapidKeys) return cachedVapidKeys
@@ -42,22 +45,23 @@ export async function getVapidKeys(): Promise<VapidKeys> {
     }
   } catch {}
 
-  // 3. Auto-generate new VAPID key pair once and store in Database
-  const generated = webpush.generateVAPIDKeys()
-  cachedVapidKeys = generated
+  // 3. Fallback to stable system VAPID keys
+  const stableKeys: VapidKeys = {
+    publicKey: DEFAULT_VAPID_PUBLIC_KEY,
+    privateKey: DEFAULT_VAPID_PRIVATE_KEY,
+  }
+  cachedVapidKeys = stableKeys
 
   try {
     await prisma.config.upsert({
       where: { key: 'system_vapid_keys' },
-      update: { value: JSON.stringify(generated) },
-      create: { key: 'system_vapid_keys', value: JSON.stringify(generated) },
+      update: { value: JSON.stringify(stableKeys) },
+      create: { key: 'system_vapid_keys', value: JSON.stringify(stableKeys) },
     })
-  } catch (err) {
-    console.error('Failed to save generated VAPID keys to DB:', err)
-  }
+  } catch {}
 
-  webpush.setVapidDetails('mailto:admin@zerf.app', generated.publicKey, generated.privateKey)
-  return generated
+  webpush.setVapidDetails('mailto:admin@zerf.app', stableKeys.publicKey, stableKeys.privateKey)
+  return stableKeys
 }
 
 /**
