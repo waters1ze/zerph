@@ -1338,14 +1338,21 @@ export function EntropySearchView() {
                 }}
               >
                 {(
-                  // Perplexity-style robust citation parser: converts [#1], [1], [#1][#4], [#1, #4] to interactive badges
+                  // Perplexity-style robust citation parser: converts **[#1]**, [#1], [1], [#1][#4], [#1, #4] to interactive badges
                   (() => {
                     const raw = isStreaming ? streamedAnswer : (result.answer || '')
                     let parsed = raw
-                      .replace(/\[#?(\d+)\]\s*\[#?(\d+)\]/g, '[[#$1]](cite:$1) [[#$2]](cite:$2)')
-                      .replace(/\[#?(\d+),\s*#?(\d+)\]/g, '[[#$1]](cite:$1) [[#$2]](cite:$2)')
-                      .replace(/\[#?(\d+),\s*#?(\d+),\s*#?(\d+)\]/g, '[[#$1]](cite:$1) [[#$2]](cite:$2) [[#$3]](cite:$3)')
-                      .replace(/\[#?(\d+)\](?!\()/g, '[[#$1]](cite:$1)')
+                      // 1. Strip bold markers around citations: **[#1]** -> [cite-1](cite:1), [**#1**] -> [cite-1](cite:1)
+                      .replace(/\*\*\[#?(\d+)\]\*\*/g, '[cite-$1](cite:$1)')
+                      .replace(/\[\*\*#?(\d+)\*\*\]/g, '[cite-$1](cite:$1)')
+                      .replace(/\*\[#?(\d+)\]\*/g, '[cite-$1](cite:$1)')
+                      .replace(/\[\*#?(\d+)\*\]/g, '[cite-$1](cite:$1)')
+                      // 2. Multi/clustered citations: [#1][#4] -> [cite-1](cite:1) [cite-4](cite:4)
+                      .replace(/\[#?(\d+)\]\s*\[#?(\d+)\]/g, '[cite-$1](cite:$1) [cite-$2](cite:$2)')
+                      .replace(/\[#?(\d+),\s*#?(\d+)\]/g, '[cite-$1](cite:$1) [cite-$2](cite:$2)')
+                      .replace(/\[#?(\d+),\s*#?(\d+),\s*#?(\d+)\]/g, '[cite-$1](cite:$1) [cite-$2](cite:$2) [cite-$3](cite:$3)')
+                      // 3. Standalone citations: [#1] or [1] -> [cite-1](cite:1)
+                      .replace(/\[#?(\d+)\](?!\()/g, '[cite-$1](cite:$1)')
                       .replace(/\\n/g, '\n')
                       .replace(/\\r/g, '')
                       .replace(/\\t/g, '  ')
