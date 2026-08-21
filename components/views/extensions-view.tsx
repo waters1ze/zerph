@@ -903,6 +903,40 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const handleSaveCard = async (e: React.FormEvent) => {
     e.preventDefault()
+    const cleanNumber = cardNumberInput.replace(/\s+/g, '')
+
+    if (cardPayoutType === 'yoomoney') {
+      if (cleanNumber.length < 14 || cleanNumber.length > 16 || !cleanNumber.startsWith('41001')) {
+        showToast('Введите корректный номер счёта ЮMoney (14–16 цифр, начинается с 41001)', 'error')
+        return
+      }
+    } else {
+      if (cleanNumber.length < 16 || cleanNumber.length > 19) {
+        showToast('Номер банковской карты должен содержать от 16 до 19 цифр', 'error')
+        return
+      }
+      // Luhn algorithm verification
+      let sum = 0
+      let isEven = false
+      for (let i = cleanNumber.length - 1; i >= 0; i--) {
+        let digit = parseInt(cleanNumber.charAt(i), 10)
+        if (isEven) {
+          digit *= 2
+          if (digit > 9) digit -= 9
+        }
+        sum += digit
+        isEven = !isEven
+      }
+      if (sum % 10 !== 0) {
+        showToast('Недействительный номер карты. Проверьте правильность введённых цифр.', 'error')
+        return
+      }
+      if (!cardBankInput) {
+        showToast('Пожалуйста, выберите банк вашей карты', 'error')
+        return
+      }
+    }
+
     try {
       setActionLoading('save_card')
       const res = await fetch('/api/extensions', {
@@ -911,8 +945,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         body: JSON.stringify({
           action: 'bind_card',
           payoutType: cardPayoutType,
-          cardNumber: cardNumberInput,
-          bankName: cardBankInput,
+          cardNumber: cleanNumber,
+          bankName: cardBankInput || (cardPayoutType === 'yoomoney' ? 'ЮMoney' : 'Карта РФ'),
           recipientName: cardRecipientInput,
         }),
       })
@@ -920,6 +954,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       if (data.success) {
         setBoundCard(data.boundCard)
         setShowCardModal(false)
+        setShowExtBankDropdown(false)
         showToast('✓ Реквизиты ЮMoney / карты успешно сохранены!', 'success')
       } else {
         showToast(data.error || 'Ошибка при сохранении реквизитов', 'error')
@@ -3481,7 +3516,11 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                     <input
                       type="text"
                       value={cardNumberInput}
-                      onChange={e => setCardNumberInput(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                      onChange={e => {
+                        const clean = e.target.value.replace(/\D/g, '').slice(0, 16)
+                        setCardNumberInput(clean)
+                        setCardBankInput('ЮMoney')
+                      }}
                       placeholder="4100119573095433"
                       className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-purple-500 font-mono text-xs"
                       required
@@ -3494,7 +3533,33 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                       <input
                         type="text"
                         value={cardNumberInput}
-                        onChange={e => setCardNumberInput(e.target.value.replace(/\D/g, '').slice(0, 19))}
+                        onChange={e => {
+                          const raw = e.target.value.replace(/\D/g, '').slice(0, 19)
+                          const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ')
+                          setCardNumberInput(formatted)
+
+                          // Auto BIN bank detection
+                          if (raw.startsWith('4100')) {
+                            setCardBankInput('ЮMoney')
+                            setCardPayoutType('yoomoney')
+                          } else if (['2200', '2204', '5213', '5489', '4377', '5536'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Т-Банк')
+                          } else if (['2202', '4276', '5469', '4279', '6390', '6761', '6762'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Сбербанк')
+                          } else if (['5486', '4154', '4790', '5211', '4584'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Альфа-Банк')
+                          } else if (['4272', '5337', '4173', '5230'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('ВТБ')
+                          } else if (['5599', '4084', '22007'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Ozon Банк')
+                          } else if (['5106', '4622'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Яндекс Банк')
+                          } else if (['5228', '4003', '4627'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Райффайзен')
+                          } else if (['5200', '4890', '5487'].some(p => raw.startsWith(p))) {
+                            setCardBankInput('Газпромбанк')
+                          }
+                        }}
                         placeholder="2202 2000 0000 0000"
                         className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-foreground outline-none focus:border-primary font-mono text-xs"
                         required
@@ -3510,21 +3575,20 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                             onClick={() => setShowExtBankDropdown(!showExtBankDropdown)}
                             className="w-full h-9 px-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground flex items-center justify-between gap-1.5 hover:border-primary transition-colors cursor-pointer"
                           >
-                            <span className="truncate font-medium">
-                              {cardBankInput
-                                ? (POPULAR_BANKS_LIST.find(b => b.name === cardBankInput)?.icon || '💳') + ' ' + cardBankInput
-                                : 'Выбрать банк...'}
+                            <span className="truncate font-medium flex items-center gap-1.5">
+                              <span>{POPULAR_BANKS_LIST.find(b => b.name === cardBankInput)?.icon || '💳'}</span>
+                              <span>{cardBankInput || 'Выбрать банк...'}</span>
                             </span>
-                            <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", showExtBankDropdown && "rotate-180")} />
+                            <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0", showExtBankDropdown && "rotate-180")} />
                           </button>
 
                           <AnimatePresence>
                             {showExtBankDropdown && (
                               <motion.div
-                                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                initial={{ opacity: 0, y: -4, scale: 0.98 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                                className="absolute left-0 top-full mt-1.5 w-60 p-1.5 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl z-50 space-y-0.5 max-h-56 overflow-y-auto"
+                                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                                className="absolute left-0 right-0 top-full mt-1.5 p-1.5 rounded-2xl bg-card/98 backdrop-blur-2xl border border-border shadow-2xl z-[100] space-y-0.5 max-h-56 overflow-y-auto"
                               >
                                 {POPULAR_BANKS_LIST.map(b => (
                                   <button
@@ -3533,6 +3597,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                                     onClick={() => {
                                       setCardBankInput(b.name)
                                       setShowExtBankDropdown(false)
+                                      if (b.name === 'ЮMoney') setCardPayoutType('yoomoney')
                                     }}
                                     className={cn(
                                       "w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-colors cursor-pointer",

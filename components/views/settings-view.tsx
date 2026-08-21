@@ -407,6 +407,40 @@ export function SettingsView() {
 
   const handleSavePaymentCard = async (e: React.FormEvent) => {
     e.preventDefault()
+    const cleanNumber = cardFormNumber.replace(/\s+/g, '')
+    
+    if (cardFormType === 'yoomoney') {
+      if (cleanNumber.length < 14 || cleanNumber.length > 16 || !cleanNumber.startsWith('41001')) {
+        alert('Пожалуйста, введите корректный номер счёта ЮMoney (14–16 цифр, начинается с 41001).')
+        return
+      }
+    } else {
+      if (cleanNumber.length < 16 || cleanNumber.length > 19) {
+        alert('Номер банковской карты должен содержать от 16 до 19 цифр.')
+        return
+      }
+      // Luhn algorithm verification
+      let sum = 0
+      let isEven = false
+      for (let i = cleanNumber.length - 1; i >= 0; i--) {
+        let digit = parseInt(cleanNumber.charAt(i), 10)
+        if (isEven) {
+          digit *= 2
+          if (digit > 9) digit -= 9
+        }
+        sum += digit
+        isEven = !isEven
+      }
+      if (sum % 10 !== 0) {
+        alert('Недействительный номер банковской карты. Пожалуйста, проверьте правильность введённых цифр.')
+        return
+      }
+      if (!cardFormBank) {
+        alert('Пожалуйста, выберите банк вашей карты.')
+        return
+      }
+    }
+
     setAutoRenewLoading(true)
     try {
       const res = await fetch('/api/subscription/autorenew', {
@@ -415,9 +449,9 @@ export function SettingsView() {
         body: JSON.stringify({
           autoRenew,
           payoutType: cardFormType,
-          cardNumber: cardFormNumber,
+          cardNumber: cleanNumber,
           phone: cardFormPhone,
-          bankName: cardFormBank,
+          bankName: cardFormBank || (cardFormType === 'yoomoney' ? 'ЮMoney' : 'Карта РФ'),
           recipientName: cardFormName,
         }),
       })
@@ -425,6 +459,7 @@ export function SettingsView() {
       if (data.success) {
         setUserPaymentCard(data.cardData)
         setShowCardForm(false)
+        setShowBankDropdown2(false)
         setSettingsSavedBadge(true)
         setTimeout(() => setSettingsSavedBadge(false), 2500)
       }
@@ -2225,7 +2260,7 @@ export function SettingsView() {
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     onSubmit={handleSavePaymentCard}
-                    className="p-4 sm:p-5 rounded-2xl bg-purple-500/5 border border-purple-500/30 space-y-4 mt-3 overflow-hidden shadow-xs"
+                    className="p-4 sm:p-5 rounded-2xl bg-purple-500/5 border border-purple-500/30 space-y-4 mt-3 shadow-xs relative"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -2233,7 +2268,7 @@ export function SettingsView() {
                           <CreditCard className="w-3.5 h-3.5" />
                         </div>
                         <p className="text-xs font-bold text-foreground">
-                          Привязка ЮMoney для автоматических выплат (80/20)
+                          Привязка реквизитов для автоматических выплат (80/20)
                         </p>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
@@ -2242,14 +2277,17 @@ export function SettingsView() {
                     </div>
 
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Укажите ваш кошелёк ЮMoney. <b>80% от каждой продажи ваших плагинов начисляются вам автоматически</b> (20% — комиссия платформы). Никаких ручных запросов делать не нужно.
+                      Укажите карту РФ или кошелёк ЮMoney. <b>80% от каждой продажи ваших плагинов начисляются вам автоматически</b> (20% — комиссия платформы). Никаких ручных запросов делать не нужно.
                     </p>
 
                     {/* Method Selector */}
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setCardFormType('yoomoney')}
+                        onClick={() => {
+                          setCardFormType('yoomoney')
+                          if (!cardFormBank) setCardFormBank('ЮMoney')
+                        }}
                         className={cn(
                           'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
                           cardFormType === 'yoomoney'
@@ -2261,7 +2299,10 @@ export function SettingsView() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCardFormType('card')}
+                        onClick={() => {
+                          setCardFormType('card')
+                          if (cardFormBank === 'ЮMoney') setCardFormBank('')
+                        }}
                         className={cn(
                           'flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center',
                           cardFormType === 'card'
@@ -2282,7 +2323,11 @@ export function SettingsView() {
                           type="text"
                           required
                           value={cardFormNumber}
-                          onChange={e => setCardFormNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                          onChange={e => {
+                            const clean = e.target.value.replace(/\D/g, '').slice(0, 16)
+                            setCardFormNumber(clean)
+                            setCardFormBank('ЮMoney')
+                          }}
                           placeholder="4100119573095433"
                           className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
                         />
@@ -2297,7 +2342,33 @@ export function SettingsView() {
                             type="text"
                             required
                             value={cardFormNumber}
-                            onChange={e => setCardFormNumber(e.target.value.replace(/\D/g, '').slice(0, 19))}
+                            onChange={e => {
+                              const raw = e.target.value.replace(/\D/g, '').slice(0, 19)
+                              const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ')
+                              setCardFormNumber(formatted)
+
+                              // Automatic bank detection by BIN prefix
+                              if (raw.startsWith('4100')) {
+                                setCardFormBank('ЮMoney')
+                                setCardFormType('yoomoney')
+                              } else if (['2200', '2204', '5213', '5489', '4377', '5536'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Т-Банк')
+                              } else if (['2202', '4276', '5469', '4279', '6390', '6761', '6762'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Сбербанк')
+                              } else if (['5486', '4154', '4790', '5211', '4584'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Альфа-Банк')
+                              } else if (['4272', '5337', '4173', '5230'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('ВТБ')
+                              } else if (['5599', '4084', '22007'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Ozon Банк')
+                              } else if (['5106', '4622'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Яндекс Банк')
+                              } else if (['5228', '4003', '4627'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Райффайзен')
+                              } else if (['5200', '4890', '5487'].some(p => raw.startsWith(p))) {
+                                setCardFormBank('Газпромбанк')
+                              }
+                            }}
                             placeholder="2200 0000 0000 0000"
                             className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-mono outline-none focus:border-purple-500"
                           />
@@ -2312,21 +2383,20 @@ export function SettingsView() {
                               onClick={() => setShowBankDropdown2(!showBankDropdown2)}
                               className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground flex items-center justify-between gap-1.5 hover:border-purple-500 transition-colors cursor-pointer"
                             >
-                              <span className="truncate font-medium">
-                                {cardFormBank
-                                  ? (POPULAR_BANKS_LIST.find(b => b.name === cardFormBank)?.icon || '💳') + ' ' + cardFormBank
-                                  : 'Выбрать банк...'}
+                              <span className="truncate font-medium flex items-center gap-1.5">
+                                <span>{POPULAR_BANKS_LIST.find(b => b.name === cardFormBank)?.icon || '💳'}</span>
+                                <span>{cardFormBank || 'Выбрать банк...'}</span>
                               </span>
-                              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", showBankDropdown2 && "rotate-180")} />
+                              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0", showBankDropdown2 && "rotate-180")} />
                             </button>
 
                             <AnimatePresence>
                               {showBankDropdown2 && (
                                 <motion.div
-                                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                                  className="absolute right-0 top-full mt-1.5 w-60 p-1.5 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl z-50 space-y-0.5 max-h-56 overflow-y-auto"
+                                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                                  className="absolute left-0 right-0 top-full mt-1.5 p-1.5 rounded-2xl bg-card/98 backdrop-blur-2xl border border-border shadow-2xl z-[100] space-y-0.5 max-h-56 overflow-y-auto"
                                 >
                                   {POPULAR_BANKS_LIST.map(b => (
                                     <button
@@ -2335,6 +2405,7 @@ export function SettingsView() {
                                       onClick={() => {
                                         setCardFormBank(b.name)
                                         setShowBankDropdown2(false)
+                                        if (b.name === 'ЮMoney') setCardFormType('yoomoney')
                                       }}
                                       className={cn(
                                         "w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between transition-colors cursor-pointer",
@@ -2364,11 +2435,18 @@ export function SettingsView() {
                         disabled={autoRenewLoading}
                         className="px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
                       >
-                        {autoRenewLoading ? 'Сохранение...' : 'Сохранить ЮMoney кошелёк'}
+                        {autoRenewLoading
+                          ? 'Сохранение...'
+                          : cardFormType === 'yoomoney'
+                          ? 'Сохранить ЮMoney кошелёк'
+                          : 'Привязать карту РФ'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setShowCardForm(false)}
+                        onClick={() => {
+                          setShowCardForm(false)
+                          setShowBankDropdown2(false)
+                        }}
                         className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
                       >
                         Отмена
