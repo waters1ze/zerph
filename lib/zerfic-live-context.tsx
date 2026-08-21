@@ -30,11 +30,11 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   {
     id: 'zerfik_original',
     name: 'Зерфик (Тихоня / Магический)',
-    subtitle: 'Звонкий, светлый, дружелюбный',
+    subtitle: 'Звонкий, светлый, сказочный',
     tag: 'Фирменный',
     gender: 'male',
-    pitch: 1.45,
-    rate: 1.05,
+    pitch: 1.70,
+    rate: 1.12,
     description: 'Звонкий и светлый тембр духа-Тихони для волшебной и дружеской атмосферы.',
   },
   {
@@ -43,8 +43,8 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
     subtitle: 'Естественный, живой, разговорный',
     tag: 'Человек',
     gender: 'male',
-    pitch: 0.95,
-    rate: 1.08,
+    pitch: 1.05,
+    rate: 1.05,
     description: 'Естественная человеческая речь, разговорный стиль и быстрый диалог без роботоподобности.',
   },
   {
@@ -53,8 +53,8 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
     subtitle: 'Глубокий, плотный мужской баритон',
     tag: 'Бас',
     gender: 'male',
-    pitch: 0.55,
-    rate: 0.88,
+    pitch: 0.35,
+    rate: 0.82,
     description: 'Глубокий бархатный мужской бас для спокойного разбора дня и солидных ответов.',
   },
   {
@@ -63,8 +63,8 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
     subtitle: 'Грубый, низкий, с хрипотцой',
     tag: 'Брутал',
     gender: 'male',
-    pitch: 0.45,
-    rate: 0.92,
+    pitch: 0.22,
+    rate: 0.86,
     description: 'Суровый, низкий и грубый мужской голос для дисциплины и железной продуктивности.',
   },
   {
@@ -73,8 +73,8 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
     subtitle: 'Энергичный, мотивирующий, четкий',
     tag: 'Драйв',
     gender: 'male',
-    pitch: 0.72,
-    rate: 1.20,
+    pitch: 0.88,
+    rate: 1.30,
     description: 'Динамичный и напористый мужской тембр для тайм-менеджмента и продуктивного фокуса.',
   },
   {
@@ -83,8 +83,8 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
     subtitle: 'Светлый, женский, умиротворяющий',
     tag: 'Нежный',
     gender: 'female',
-    pitch: 1.32,
-    rate: 1.02,
+    pitch: 1.38,
+    rate: 0.94,
     description: 'Приятный женский голос с мягкими интонациями для уютных разговоров.',
   },
   {
@@ -93,8 +93,8 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
     subtitle: 'Уверенный, структурный, женский',
     tag: 'Бизнес',
     gender: 'female',
-    pitch: 1.02,
-    rate: 1.10,
+    pitch: 0.98,
+    rate: 1.16,
     description: 'Четкий и выразительный женский голос персонального бизнес-ассистента.',
   },
 ]
@@ -125,7 +125,7 @@ interface ZerficLiveContextType {
   startListeningSession: () => Promise<void>
   stopListeningSession: () => void
   sendToZerfik: (text: string) => Promise<void>
-  speakText: (text: string) => void
+  speakText: (text: string, voiceOverride?: string | ZerfikVoiceProfile) => void
   stopSpeaking: () => void
   clearMessages: () => void
 }
@@ -148,19 +148,21 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_original')
   const [voiceVolume, setVoiceVolume] = useState<number>(0.85)
   const [selectedModelId, setSelectedModelId] = useState<string>('allam-2-7b')
-
   const [messages, setMessages] = useState<LiveChatMessage[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('zerf_live_chat_history')
-        if (saved) return JSON.parse(saved)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        }
       } catch {}
     }
     return [
       {
         id: 'welcome',
         role: 'assistant',
-        text: 'Привет! Я Зерфик. Можем обсудить твои дела на сегодня, распланировать задачи или просто поболтать. Я слушаю!',
+        text: 'Привет! Я Зерфик в живом голосовом эфире. Задавай вопросы, надиктовывай задачи или давай просто поболтаем!',
         mood: 'happy',
         gesture: 'waving_arms',
         timestamp: Date.now(),
@@ -168,35 +170,41 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     ]
   })
 
-  const recognitionRef = useRef<any>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const recognitionRef = useRef<any>(null)
   const isSpeakingRef = useRef(false)
+  const isActiveRef = useRef(false)
+  const silenceTimerRef = useRef<any>(null)
+  const lastProcessedSpeechRef = useRef<{ text: string; time: number }>({ text: '', time: 0 })
   const currentSpokenTextRef = useRef<string>('')
   const isInterruptedRef = useRef(false)
-  const lastProcessedSpeechRef = useRef<{ text: string; time: number }>({ text: '', time: 0 })
-  const isActiveRef = useRef(false)
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+
   isActiveRef.current = isActive
 
-  // Persist messages to storage
+  // Persist chat history
   useEffect(() => {
-    try {
-      localStorage.setItem('zerf_live_chat_history', JSON.stringify(messages.slice(-30)))
-    } catch {}
+    if (messages.length > 0) {
+      try {
+        localStorage.setItem('zerf_live_chat_history', JSON.stringify(messages.slice(-30)))
+      } catch {}
+    }
   }, [messages])
 
-  // Broadcast live state to floating pill across all views
+  // Broadcast state updates to widget and parent window
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
-        new CustomEvent('zerf_live_state_changed', {
+        new CustomEvent('zerfic_live_state_change', {
           detail: {
-            active: isActive,
-            status: isSpeaking ? 'speaking' : isThinking ? 'thinking' : isListening ? 'listening' : 'idle',
-            text: isSpeaking ? currentSpokenTextRef.current : interimText || statusText,
+            isActive,
+            isSpeaking,
+            isThinking,
+            isListening,
+            statusText,
+            interimText,
           },
         })
       )
@@ -237,19 +245,34 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     isInterruptedRef.current = true
   }, [])
 
-  // Speech synthesis with distinct timbres and pitch modulation
-  const speakText = useCallback((textToSpeak: string) => {
+  // Speech synthesis with distinct timbres, real-world cadence and pitch modulation
+  const speakText = useCallback((textToSpeak: string, voiceOverride?: string | ZerfikVoiceProfile) => {
     if (typeof window === 'undefined') return
     stopSpeaking()
+
+    const activeVoice = typeof voiceOverride === 'string'
+      ? ZERFIK_VOICE_PROFILES.find(v => v.id === voiceOverride) || selectedVoice
+      : voiceOverride || selectedVoice
 
     currentSpokenTextRef.current = textToSpeak.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
     isSpeakingRef.current = true
 
     if ('speechSynthesis' in window) {
       isInterruptedRef.current = false
-      const utterance = new SpeechSynthesisUtterance(textToSpeak)
-      utterance.rate = selectedVoice.rate
-      utterance.pitch = selectedVoice.pitch
+
+      // Character-based speech cadence formatting
+      let formattedSpeech = textToSpeak
+      if (activeVoice.id === 'alex_baritone') {
+        formattedSpeech = formattedSpeech.replace(/([,;:])\s*/g, '$1... ')
+      } else if (activeVoice.id === 'viktor_brutal') {
+        formattedSpeech = formattedSpeech.replace(/,\s*/g, '. ').replace(/!+/g, '! ')
+      } else if (activeVoice.id === 'dmitry_business') {
+        formattedSpeech = formattedSpeech.replace(/\.\.+/g, '! ')
+      }
+
+      const utterance = new SpeechSynthesisUtterance(formattedSpeech)
+      utterance.rate = activeVoice.rate
+      utterance.pitch = activeVoice.pitch
       utterance.volume = isMuted ? 0 : voiceVolume
       utterance.lang = 'ru-RU'
 
@@ -260,36 +283,52 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       const ruVoices = voices.filter(v => v.lang.toLowerCase().startsWith('ru'))
 
       if (ruVoices.length > 0) {
-        if (selectedVoice.gender === 'female') {
+        if (activeVoice.id === 'alisa_soft') {
           const femaleVoice = ruVoices.find(v => {
             const n = v.name.toLowerCase()
-            return n.includes('irina') || n.includes('tatiana') || n.includes('svetlana') || n.includes('alisa') || n.includes('dariya') || n.includes('female')
-          }) || ruVoices[0]
-          utterance.voice = femaleVoice
-        } else if (selectedVoice.id === 'alex_baritone' || selectedVoice.id === 'viktor_brutal' || selectedVoice.id === 'dmitry_business') {
-          // Deep male voice priority: Dmitry, Aleksandr, Ivan, Boris, Male
-          const deepMale = ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('dmitry') || n.includes('aleksandr') || n.includes('ivan') || n.includes('boris')
+            return n.includes('svetlana') || n.includes('alisa') || n.includes('milena') || n.includes('google русский') || n.includes('dariya')
           }) || ruVoices.find(v => {
             const n = v.name.toLowerCase()
-            return !n.includes('irina') && !n.includes('tatiana') && !n.includes('svetlana') && !n.includes('female') && !n.includes('alisa')
+            return n.includes('female') || n.includes('женск') || !n.includes('pavel')
+          }) || ruVoices[0]
+          utterance.voice = femaleVoice
+        } else if (activeVoice.id === 'elena_business') {
+          const femaleVoice = ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('ekaterina') || n.includes('tatiana') || n.includes('irina') || n.includes('female')
+          }) || ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('female') || n.includes('женск') || !n.includes('pavel')
+          }) || ruVoices[0]
+          utterance.voice = femaleVoice
+        } else if (activeVoice.id === 'alex_baritone' || activeVoice.id === 'viktor_brutal') {
+          const deepMale = ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('dmitry') || n.includes('boris') || n.includes('ivan') || n.includes('aleksandr')
+          }) || ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('pavel') || n.includes('male') || n.includes('мужск') || !n.includes('irina')
           }) || ruVoices[0]
           utterance.voice = deepMale
-        } else {
-          // Standard / High male voices
-          const maleVoice = ruVoices.find(v => {
+        } else if (activeVoice.id === 'dmitry_business') {
+          const fastMale = ruVoices.find(v => {
             const n = v.name.toLowerCase()
-            return n.includes('pavel') || n.includes('male') || n.includes('русский')
+            return n.includes('dmitry') || n.includes('pavel') || n.includes('male')
           }) || ruVoices[0]
-          utterance.voice = maleVoice
+          utterance.voice = fastMale
+        } else {
+          const standardMale = ruVoices.find(v => {
+            const n = v.name.toLowerCase()
+            return n.includes('pavel') || n.includes('male') || n.includes('google')
+          }) || ruVoices[0]
+          utterance.voice = standardMale
         }
       }
 
       utterance.onstart = () => {
         isSpeakingRef.current = true
         setIsSpeaking(true)
-        setStatusText('Зерфик говорит...')
+        setStatusText(`${activeVoice.name} говорит...`)
       }
 
       utterance.onend = () => {
@@ -317,7 +356,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       fetch('/api/extensions/zerfic-live/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSpeak, voiceId: selectedVoice.id }),
+        body: JSON.stringify({ text: textToSpeak, voiceId: activeVoice.id }),
       })
         .then(r => r.arrayBuffer())
         .then(buf => {
@@ -396,6 +435,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
           message: trimmed,
           history: historyPayload,
           model: selectedModelId,
+          voiceId: selectedVoiceId,
         }),
       })
 
@@ -441,7 +481,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       setIsThinking(false)
       setStatusText('Ошибка сети')
     }
-  }, [messages, selectedModelId, stopSpeaking, speakText])
+  }, [messages, selectedModelId, selectedVoiceId, stopSpeaking, speakText])
 
   // Setup Continuous Speech Recognition & VAD
   const startListeningSession = useCallback(async () => {

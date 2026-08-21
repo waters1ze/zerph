@@ -20,8 +20,8 @@ export async function POST(req: NextRequest) {
       .replace(/\s+/g, ' ')
       .trim()
 
-    // Generate neural audio buffer
-    const audioBuffer = await generateTtsAudio(cleanText, 'ru')
+    // Generate neural audio buffer with voiceId timbre profiling
+    const audioBuffer = await generateTtsAudio(cleanText, 'ru', voiceId)
     if (!audioBuffer) {
       return NextResponse.json({ error: 'Failed to synthesize speech.' }, { status: 500 })
     }

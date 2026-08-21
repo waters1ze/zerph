@@ -1,15 +1,23 @@
 import { Buffer } from 'buffer'
 import { prisma } from '@/lib/backend/prisma'
 
-export async function generateTtsAudio(text: string, lang = 'ru'): Promise<Buffer | null> {
+export async function generateTtsAudio(text: string, lang = 'ru', voiceId = 'zerfik_original'): Promise<Buffer | null> {
   try {
-    const cleanText = text
+    let cleanText = text
       .replace(/[*_`~#\[\]()]/g, '')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 250)
+      .slice(0, 300)
 
     if (!cleanText) return null
+
+    if (voiceId === 'alex_baritone') {
+      cleanText = cleanText.replace(/([,;:])\s*/g, '$1... ')
+    } else if (voiceId === 'viktor_brutal') {
+      cleanText = cleanText.replace(/,\s*/g, '. ')
+    } else if (voiceId === 'dmitry_business') {
+      cleanText = cleanText.replace(/\.\.+/g, '! ')
+    }
 
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=${lang}&client=tw-ob`
     const res = await fetch(url, {

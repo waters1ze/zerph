@@ -865,12 +865,22 @@ export function ZerficLiveView() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {ZERFIK_VOICE_PROFILES.map(voice => {
                     const isSelected = voice.id === selectedVoiceId
+                    const samplePhrases: Record<string, string> = {
+                      zerfik_original: 'Привет! Я звонкий Зерфик-Тихоня, давай творить продуктивность!',
+                      zerfik_friend: 'Здорово! Зерфик на связи, готов помочь со всеми делами!',
+                      alex_baritone: 'Добрый день. Это Алекс. Давайте спокойно и взвешенно разберём задачи дня.',
+                      viktor_brutal: 'Так, боец. Виктор на связи. Время не ждёт. Отставить прокрастинацию, за дело!',
+                      dmitry_business: 'Привет! На связи Дмитрий! Погнали забирать максимум из этого дня, делаем прямо сейчас!',
+                      alisa_soft: 'Привет... Я Алиса. Не переживай, мы со всем спокойно справимся, я рядом.',
+                      elena_business: 'Здравствуйте. Елена на связи. Готова к работе с задачами, проектами и расписанием.',
+                    }
+
                     return (
                       <button
                         key={voice.id}
                         onClick={() => {
                           setSelectedVoiceId(voice.id)
-                          speakText(`Привет! Я говорю голосом ${voice.name}`)
+                          speakText(samplePhrases[voice.id] || `Привет! Голос ${voice.name}`, voice.id)
                         }}
                         className={cn(
                           'p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5',
