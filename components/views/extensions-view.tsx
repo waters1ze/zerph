@@ -256,7 +256,7 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     version: '1.0.0',
     description: 'Интеллектуальный поисково-аналитический движок инсайтов в стиле Perplexity: глубокий синтез фактов, цитаты со ссылками на проверенные источники [1][2] и авто-экспорт в заметки.',
     type: 'widget',
-    category: 'Виджеты & Фокус',
+    category: 'ИИ & Промпты',
     icon: '🔮',
     githubUrl: 'https://github.com/waters1ze/Entropy',
     authorChatId: 'system',
@@ -265,6 +265,8 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     price: 0,
     minPlan: 'free',
     isOfficial: true,
+    isPublished: true,
+    isRunnable: true,
     rating: 5.0,
     ratingCount: 0,
     likesCount: 0,
@@ -280,6 +282,33 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     },
     createdAt: '2026-08-17T20:00:00Z',
     updatedAt: '2026-08-17T22:00:00Z',
+  },
+  {
+    id: 'ext_gh_1787152496448_e36d8d',
+    title: 'zerfic-live',
+    version: '1.0.0',
+    description: 'Полноценный живой разговорный ИИ-собеседник с мужским голосом Зерфика, эмоциями, анимациями, жестами и интеграцией во всю базу заметок и задач.',
+    type: 'widget',
+    category: 'ИИ & Голос',
+    icon: '🎙️',
+    githubUrl: 'https://github.com/waters1ze/zerfic-live',
+    authorChatId: '6136950061',
+    authorName: 'Создатель',
+    isOfficial: true,
+    isPublished: true,
+    isRunnable: false,
+    price: 0,
+    minPlan: 'free',
+    rating: 5.0,
+    ratingCount: 1,
+    likesCount: 1,
+    installCount: 2,
+    content: {
+      defaultMode: 'push_to_talk',
+      enableHesitations: true
+    },
+    createdAt: '2026-08-19T15:14:57.397Z',
+    updatedAt: '2026-08-19T15:18:31.978Z'
   },
 ]
 
@@ -346,7 +375,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [loading, setLoading] = useState<boolean>(false)
 
   const [activeTab, setActiveTab] = useState<'store' | 'installed' | 'my' | 'earnings'>('store')
-  const [selectedCategory, setSelectedCategory] = useState<string>('core')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'top_likes' | 'popular' | 'newest'>('top_likes')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
