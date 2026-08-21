@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { transcribeAudioWithGroq } from '@/lib/backend/groq'
-import { callGroqChatCompletion, getModelForUserPlan } from '@/lib/backend/groq-pool'
+import { callGroqChatCompletion, streamGroqChatCompletionText, getModelForUserPlan } from '@/lib/backend/groq-pool'
 import { getUserUsageAndLimits, incrementUserUsage, getExistingItemsContext } from '@/lib/backend/db'
 import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 import { getDailyCount, incrementDailyCount } from '@/lib/backend/plans'
@@ -203,6 +203,86 @@ export function getSystemPromptForVoice(voiceId: string = 'zerfik_original', bas
   return `${basePrompt}\n${characterBlock}`
 }
 
+// ── TRUE LIVE STREAMING (SSE) ─────────────────────────────────────────────────
+
+interface ZerficStreamCtx {
+  personaPrompt: string
+  model: string
+  history: Array<{ role: 'user' | 'assistant'; content: string }>
+  userMessage: string
+  chatId: string
+  userPlan: string
+  audioDurationSeconds: number
+}
+
+async function buildZerficLiveStreamResponse(ctx: ZerficStreamCtx): Promise<Response> {
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      // Build SSE frames without literal newline escapes (tooling-safe)
+      const NL = String.fromCharCode(10)
+      const send = (event: string, data: any) => {
+        try {
+          controller.enqueue(encoder.encode('event: ' + event + NL + 'data: ' + JSON.stringify(data) + NL + NL))
+        } catch {}
+      }
+
+      try {
+        // Mood/gesture arrive immediately so the mascot reacts instantly
+        send('meta', { mood: 'happy', gesture: 'waving_arms' })
+
+        // Plain-text variant of the persona prompt: no JSON wrapper, so tokens
+        // can be streamed directly to speech the moment they are generated.
+        const plainSystem = ctx.personaPrompt +
+          NL + NL + 'ФОРМАТ ОТВЕТА (СТРОГО): отвечай ТОЛЬКО чистым живым разговорным текстом 1–3 предложения. ' +
+          'КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ: JSON, фигурные скобки, markdown-символы (* # _ `), списки и эмодзи в тексте. ' +
+          'Текст идёт напрямую в речевой синтезатор.'
+
+        const messages = [
+          { role: 'system', content: plainSystem },
+          ...ctx.history.map(h => ({
+            role: h.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+            content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content),
+          })),
+          { role: 'user', content: ctx.userMessage },
+        ]
+
+        for await (const delta of streamGroqChatCompletionText({
+          messages,
+          model: ctx.model,
+          temperature: 0.7,
+          max_tokens: 220,
+        })) {
+          if (delta) send('delta', { t: delta })
+        }
+
+        // Usage accounting identical to the non-streaming path
+        if (ctx.userPlan === 'free') {
+          await incrementDailyCount('zerfic_live_queries', ctx.chatId, 1)
+        } else if (ctx.audioDurationSeconds > 0) {
+          await incrementUserUsage(ctx.chatId, 'voice', ctx.audioDurationSeconds)
+        }
+
+        send('done', {})
+      } catch (err: any) {
+        send('error', { message: err?.message || 'Ошибка стриминга' })
+      } finally {
+        try { controller.close() } catch {}
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform, no-store',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
@@ -219,6 +299,7 @@ export async function POST(req: NextRequest) {
     let requestedModel: string | undefined = undefined
     let voiceId: string = 'zerfik_original'
     let rawHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+    let wantsStream = false
 
     // Handle Multipart Audio or JSON Text
     const contentType = req.headers.get('content-type') || ''
@@ -250,10 +331,27 @@ export async function POST(req: NextRequest) {
       requestedModel = body.model
       if (body.voiceId) voiceId = body.voiceId
       if (Array.isArray(body.history)) rawHistory = body.history
+      wantsStream = body.stream === true
     }
 
     if (!userMessage.trim()) {
       return NextResponse.json({ error: 'Сообщение не распознано или пусто.' }, { status: 400 })
+    }
+
+    // ── TRUE LIVE STREAMING (SSE): first words are spoken while the LLM still generates ──
+    if (wantsStream) {
+      const streamModel = getModelForUserPlan(userPlan, requestedModel, 'chat') || 'allam-2-7b'
+      const personaPrompt = getSystemPromptForVoice(voiceId)
+
+      return buildZerficLiveStreamResponse({
+        personaPrompt,
+        model: streamModel,
+        history: rawHistory.slice(-6),
+        userMessage,
+        chatId,
+        userPlan,
+        audioDurationSeconds,
+      })
     }
 
     // Parallel fetch of live weather, workspace context (up to 2000ms), and extensions

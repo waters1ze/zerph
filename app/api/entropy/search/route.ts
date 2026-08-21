@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, isUserAdmin, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { aggregateLiveKnowledgeSources, type LiveSource } from '@/lib/backend/entropy-sources'
-import { callGroqChatCompletion, getModelForUserPlan, formatDynamicModelName } from '@/lib/backend/groq-pool'
+import { callGroqChatCompletion, streamGroqChatCompletionText, getModelForUserPlan, formatDynamicModelName } from '@/lib/backend/groq-pool'
 import {
   getDailyCount,
   incrementDailyCount,
@@ -667,6 +667,17 @@ ${liveContext}
       ? `You are Zerfik — a fast, ultra-concise AI search engine (Lite mode). Today is ${formattedDateRu} (${todayStr}). Write brief 1-2 sentence answers in Russian with key source citations. Always output pure valid JSON.`
       : `You are Zerfik — a smart, comprehensive and factual AI search engine. Today is ${formattedDateRu} (${todayStr}). Write well-rounded, detailed 2-3 paragraph answers in Russian with rich context, key facts and source citations [1], [2]. Do not make the answer too brief or one-sentence. Always output pure valid JSON.`
 
+    // ── TRUE LIVE STREAMING (SSE): tokens flow to the UI while the LLM generates ──
+    if (body.stream === true) {
+      return buildEntropyStreamResponse({
+        cleanQuery, mode, depth: depth as 'lite' | 'high' | 'max', isPro, focus,
+        liveSources, prompt, systemPrompt, modelInfo, effectiveModel,
+        apiKey: apiKey || process.env.GROQ_API_KEY,
+        isDeepReport, userPlan, ownerChatId,
+        regUsed, proUsed, regularLimit, proLimit,
+      })
+    }
+
     try {
       const completion = await callGroqChatCompletion({
         messages: [
@@ -755,6 +766,203 @@ ${liveContext}
       { status: 500 }
     )
   }
+}
+
+// ── TRUE LIVE STREAMING (Perplexity-style token streaming over SSE) ──────────
+
+const ZERF_EXTRAS_MARKER = '===ZERF_EXTRAS==='
+
+function safeEntropyHost(url?: string): string {
+  if (!url) return 'web'
+  try { return new URL(url).hostname } catch { return 'web' }
+}
+
+interface EntropyStreamCtx {
+  cleanQuery: string
+  mode: string
+  depth: 'lite' | 'high' | 'max'
+  isPro: boolean
+  focus?: string
+  liveSources: any[]
+  prompt: string
+  systemPrompt: string
+  modelInfo: { model: string; displayName: string }
+  effectiveModel: string
+  apiKey?: string
+  isDeepReport: boolean
+  userPlan: string
+  ownerChatId: string
+  regUsed: number
+  proUsed: number
+  regularLimit: number
+  proLimit: number
+}
+
+async function buildEntropyStreamResponse(ctx: EntropyStreamCtx): Promise<Response> {
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: string, data: any) => {
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        } catch {}
+      }
+
+      try {
+        // 1. META: sources & usage arrive immediately (before LLM tokens)
+        const finalSources = ctx.liveSources.map((s: any, idx: number) => ({
+          id: idx + 1,
+          title: s.title || `Источник #${idx + 1}`,
+          url: s.url || '',
+          domain: s.domain || safeEntropyHost(s.url),
+          snippet: s.snippet || '',
+          type: s.type || 'web',
+          noteId: s.noteId,
+          taskId: s.taskId,
+        }))
+
+        const limit = ctx.isPro ? ctx.proLimit : ctx.regularLimit
+        const used = (ctx.isPro ? ctx.proUsed : ctx.regUsed) + 1
+
+        send('meta', {
+          query: ctx.cleanQuery,
+          mode: ctx.mode,
+          depth: ctx.depth,
+          isPro: ctx.isPro,
+          sources: finalSources,
+          usage: {
+            used,
+            limit,
+            remaining: limit === -1 ? 999999 : Math.max(0, limit - used),
+            isUnlimited: limit === -1,
+            plan: ctx.userPlan,
+            model: ctx.effectiveModel,
+            modelDisplayName: ctx.modelInfo.displayName,
+          },
+        })
+
+        // 2. STREAM: answer tokens as the LLM generates them.
+        //    The model writes the answer, then a marker line, then one-line JSON extras.
+        const streamPrompt = ctx.prompt.split('ОТВЕТЬ ИСКЛЮЧИТЕЛЬНО В ФОРМАТЕ JSON')[0] +
+          `ОТВЕТЬ СТРОГО В ДВУХ ЧАСТЯХ:
+ЧАСТЬ 1 — ОТВЕТ: Полный ответ на вопрос пользователя обычным связным текстом (markdown разрешён) со сносками-источниками [1], [2] сразу после фактов. Без вступлений вроде «Вот ответ» и без JSON.
+Затем на ОТДЕЛЬНОЙ строке напиши точный маркер: ${ZERF_EXTRAS_MARKER}
+ЧАСТЬ 2 — сразу после маркера ОДНОЙ СТРОКОЙ валидный JSON без переносов строк:
+{"takeaways":["ключевой вывод 1","ключевой вывод 2"],"followUpQuestions":["уточняющий вопрос 1?"],"tikhonyaComment":"живой комментарий Зерфика"}`
+
+        let answerAcc = ''
+        let extrasRaw = ''
+        let tail = ''
+        let markerSeen = false
+
+        const processChunk = (chunk: string) => {
+          tail += chunk
+          if (!markerSeen) {
+            const mi = tail.indexOf(ZERF_EXTRAS_MARKER)
+            if (mi !== -1) {
+              markerSeen = true
+              const answerPart = tail.slice(0, mi)
+              if (answerPart) {
+                answerAcc += answerPart
+                send('delta', { t: answerPart })
+              }
+              extrasRaw = tail.slice(mi + ZERF_EXTRAS_MARKER.length)
+              tail = ''
+            } else {
+              // Hold back a tail that might contain a partial marker
+              const safeEnd = Math.max(0, tail.length - ZERF_EXTRAS_MARKER.length + 1)
+              if (safeEnd > 0) {
+                const part = tail.slice(0, safeEnd)
+                answerAcc += part
+                send('delta', { t: part })
+                tail = tail.slice(safeEnd)
+              }
+            }
+          } else {
+            extrasRaw += tail
+            tail = ''
+          }
+        }
+
+        for await (const delta of streamGroqChatCompletionText({
+          messages: [
+            {
+              role: 'system',
+              content: ctx.systemPrompt +
+                '\n\nФОРМАТ ВЫВОДА: ЧАСТЬ 1 — ответ обычным текстом (НЕ JSON). Затем строка-маркер. Затем ЧАСТЬ 2 — одна строка JSON. Никакого другого текста.',
+            },
+            { role: 'user', content: streamPrompt },
+          ],
+          model: ctx.effectiveModel,
+          apiKey: ctx.apiKey,
+          temperature: ctx.isDeepReport ? 0.35 : ctx.depth === 'lite' ? 0.2 : 0.28,
+          max_tokens: ctx.isDeepReport ? 3500 : ctx.depth === 'lite' ? 800 : 2200,
+        })) {
+          processChunk(delta)
+        }
+
+        // Flush remaining buffer
+        if (tail) {
+          if (!markerSeen) {
+            answerAcc += tail
+            send('delta', { t: tail })
+          } else {
+            extrasRaw += tail
+          }
+          tail = ''
+        }
+
+        // 3. EXTRAS: takeaways / follow-ups / mascot comment
+        let extras: any = {}
+        try {
+          const jStart = extrasRaw.indexOf('{')
+          const jEnd = extrasRaw.lastIndexOf('}')
+          if (jStart !== -1 && jEnd > jStart) {
+            extras = JSON.parse(extrasRaw.slice(jStart, jEnd + 1))
+          }
+        } catch {}
+
+        send('extras', {
+          takeaways: Array.isArray(extras.takeaways) ? extras.takeaways : [],
+          followUpQuestions: Array.isArray(extras.followUpQuestions) ? extras.followUpQuestions : [],
+          tikhonyaComment: typeof extras.tikhonyaComment === 'string'
+            ? extras.tikhonyaComment
+            : 'Зерфик завершил глубокое исследование первоисточников',
+        })
+
+        // 4. Count usage & finish
+        if (ctx.ownerChatId !== 'guest') {
+          await incrementDailyCount(ctx.isPro ? COUNTERS.entropyPro : COUNTERS.entropy, ctx.ownerChatId)
+        }
+
+        send('done', {
+          usage: {
+            used,
+            limit,
+            remaining: limit === -1 ? 999999 : Math.max(0, limit - used),
+            isUnlimited: limit === -1,
+            plan: ctx.userPlan,
+            model: ctx.effectiveModel,
+            modelDisplayName: ctx.modelInfo.displayName,
+          },
+        })
+      } catch (err: any) {
+        send('error', { message: err?.message || 'Ошибка стриминга ответа' })
+      } finally {
+        try { controller.close() } catch {}
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform, no-store',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }
 
 /**

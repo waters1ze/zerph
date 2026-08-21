@@ -576,9 +576,101 @@ export function EntropySearchView() {
         }),
       })
 
-      const data = await res.json()
       clearTimeout(stepTimer1)
       clearTimeout(stepTimer2)
+
+      // ── TRUE LIVE STREAMING: consume SSE tokens as the LLM generates them ──
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let sseBuf = ''
+        let accAnswer = ''
+        let streamError: string | null = null
+        let finalUsage: any = null
+
+        const handleSseEvent = (ev: string, dataStr: string) => {
+          let d: any = {}
+          try { d = JSON.parse(dataStr) } catch { return }
+          if (ev === 'meta') {
+            const skeleton: EntropySearchResult = {
+              query: d.query,
+              mode: d.mode,
+              depth: d.depth,
+              isPro: d.isPro,
+              sources: d.sources || [],
+              answer: '',
+              takeaways: [],
+              followUpQuestions: [],
+              tikhonyaComment: 'Зерфик синтезирует ответ...',
+              createdAt: new Date().toISOString(),
+              usage: d.usage,
+            }
+            setResult(skeleton)
+            if (d.usage) setUsageInfo(d.usage)
+            setIsLoading(false)
+            setSearchStep(0)
+            setIsStreaming(true)
+            setStreamedAnswer('')
+            setZerfikMood('happy')
+            setZerfikStatus('Пишу ответ в прямом эфире...')
+          } else if (ev === 'delta') {
+            accAnswer += d.t || ''
+            setStreamedAnswer(accAnswer)
+          } else if (ev === 'extras') {
+            setResult(prev => prev ? {
+              ...prev,
+              takeaways: Array.isArray(d.takeaways) ? d.takeaways : [],
+              followUpQuestions: Array.isArray(d.followUpQuestions) ? d.followUpQuestions : [],
+              tikhonyaComment: String(d.tikhonyaComment || prev.tikhonyaComment).replace(/тихоня/gi, 'Зерфик'),
+            } : prev)
+          } else if (ev === 'done') {
+            if (d.usage) finalUsage = d.usage
+          } else if (ev === 'error') {
+            streamError = d.message || 'Ошибка стриминга'
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          sseBuf += decoder.decode(value, { stream: true })
+          // Split SSE frames by blank line; each frame's fields by single newline
+          const blocks = sseBuf.split(/\r?\n\r?\n/)
+          sseBuf = blocks.pop() || ''
+          for (const block of blocks) {
+            const lines = block.split(/\r?\n/)
+            const evLine = lines.find(l => l.startsWith('event:'))
+            const dataStr = lines.filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('')
+            if (evLine && dataStr) handleSseEvent(evLine.slice(6).trim(), dataStr)
+          }
+        }
+
+        if (streamError) {
+          setZerfikMood('normal')
+          setZerfikStatus(streamError)
+          alert(streamError)
+          return
+        }
+
+        // Finalize the streamed result
+        setResult(prev => prev ? { ...prev, answer: accAnswer } : prev)
+        if (finalUsage) setUsageInfo(finalUsage)
+        setIsStreaming(false)
+        setZerfikStatus(prevStatus => prevStatus)
+
+        // Save to local history
+        setHistory(prev => {
+          const filtered = prev.filter(h => h.query.toLowerCase() !== targetQuery.toLowerCase())
+          const entry = { ...(result || ({} as EntropySearchResult)), query: targetQuery, answer: accAnswer }
+          const nextHistory = [entry, ...filtered].slice(0, 30)
+          try { localStorage.setItem('zerf_entropy_search_history', JSON.stringify(nextHistory)) } catch {}
+          return nextHistory
+        })
+        return
+      }
+
+      const data = await res.json()
 
       const rawResult = data.result || (data.answer ? data : null)
 

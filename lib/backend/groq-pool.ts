@@ -799,6 +799,102 @@ export function getHuggingFaceTokens(): string[] {
  * Secondary fallback: Hugging Face Serverless Router Chat/LLM API Pool
  * Tertiary fallback: OpenAI (if OPENAI_API_KEY is configured)
  */
+/**
+ * TRUE token-by-token streaming chat completion.
+ * Yields text deltas as the LLM generates them (SSE from Groq),
+ * with automatic key rotation and a non-streaming fallback.
+ */
+export async function* streamGroqChatCompletionText(options: {
+  messages: Array<{ role: string; content: any }>
+  model?: string
+  apiKey?: string
+  temperature?: number
+  max_tokens?: number
+}): AsyncGenerator<string> {
+  const keys = groqPool.getOrderedHealthyKeys(options.apiKey)
+
+  if (keys.length === 0) {
+    // No keys available — fall back to the battle-tested non-streaming path
+    const r = await callGroqChatCompletion({
+      messages: options.messages,
+      model: options.model,
+      apiKey: options.apiKey,
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+    } as any)
+    yield r.content
+    return
+  }
+
+  for (const key of keys.slice(0, 3)) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: options.model,
+          messages: options.messages,
+          temperature: options.temperature ?? 0.3,
+          max_tokens: options.max_tokens ?? 2000,
+          stream: true,
+        }),
+      })
+
+      if (!res.ok || !res.body) {
+        groqPool.markKeyRateLimited(key, 30)
+        continue
+      }
+
+      groqPool.markKeySuccess(key)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let gotAny = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) continue
+          const data = trimmed.slice(5).trim()
+          if (data === '[DONE]') continue
+          try {
+            const json = JSON.parse(data)
+            const delta = json.choices?.[0]?.delta?.content
+            if (delta) {
+              gotAny = true
+              yield delta
+            }
+          } catch {}
+        }
+      }
+
+      if (gotAny) return
+    } catch {
+      continue
+    }
+  }
+
+  // All streaming attempts failed — final non-streaming fallback
+  try {
+    const r = await callGroqChatCompletion({
+      messages: options.messages,
+      model: options.model,
+      apiKey: options.apiKey,
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+    } as any)
+    yield r.content
+  } catch {}
+}
+
 export async function callGroqChatCompletion(options: {
   messages: Array<{ role: string; content: any }>
   model?: string

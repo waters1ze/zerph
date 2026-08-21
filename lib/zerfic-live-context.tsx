@@ -496,6 +496,34 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     playSentenceFromQueue()
   }, [stopSpeaking, selectedVoice, playSentenceFromQueue])
 
+  // Append newly streamed sentences to the active speech queue WITHOUT
+  // resetting it — used by live streaming so later sentences continue
+  // seamlessly after the first one already started playing.
+  const queueMoreSpeech = useCallback((moreText: string) => {
+    const parts = moreText
+      .replace(/([.!?])\s+/g, '$1|__SPLIT__|')
+      .split('|__SPLIT__|')
+      .map(s => s.trim())
+      .filter(Boolean)
+    if (parts.length === 0) return
+
+    const sep = fullReplyRef.current && !/\s$/.test(fullReplyRef.current) ? ' ' : ''
+    const baseLen = fullReplyRef.current.length + sep.length
+    fullReplyRef.current = fullReplyRef.current + sep + moreText
+
+    let acc = baseLen
+    for (const p of parts) {
+      acc += p.length + 1
+      sentenceEndsRef.current.push(acc)
+    }
+    speechQueueRef.current.push(...parts)
+
+    // If playback already finished naturally, kick off the newly queued text
+    if (!isSpeakingRef.current && !isInterruptedRef.current && speechQueueRef.current.length > 0) {
+      playSentenceFromQueue()
+    }
+  }, [playSentenceFromQueue])
+
   // Send message to backend AI
   const sendToZerfik = useCallback(async (userText: string) => {
     const trimmed = userText.trim()
@@ -548,8 +576,105 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
           history: historyPayload,
           model: selectedModelId,
           voiceId: selectedVoiceId,
+          stream: true,
         }),
       })
+
+      // Create the assistant bubble up-front so the audio-synced reveal loop
+      // can fill it while sentences stream in and get spoken.
+      const botMsgId = `b_${Date.now()}`
+      setMessages(prev => [...prev, {
+        id: botMsgId,
+        role: 'assistant',
+        text: '',
+        mood: 'happy',
+        gesture: 'waving_arms',
+        timestamp: Date.now(),
+      }])
+
+      // ── TRUE LIVE STREAMING: speak each sentence the moment it is generated ──
+      const respType = res.headers.get('content-type') || ''
+      if (respType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let sseBuf = ''
+        let textBuf = ''
+        let processedIdx = 0
+        let speechStarted = false
+        let gotAnyText = false
+        let streamError: string | null = null
+
+        const flushCompletedSentences = () => {
+          const re = /[^.!?…]+[.!?…]+/g
+          re.lastIndex = 0
+          let lastEnd = -1
+          let m: RegExpExecArray | null
+          while ((m = re.exec(textBuf)) !== null) {
+            lastEnd = re.lastIndex
+          }
+          if (lastEnd > processedIdx) {
+            const chunk = textBuf.slice(processedIdx, lastEnd)
+            processedIdx = lastEnd
+            if (!speechStarted) {
+              speechStarted = true
+              activeBotMsgIdRef.current = botMsgId
+              setIsThinking(false)
+              setStatusText(`${selectedVoice.name} говорит...`)
+              speakText(chunk, selectedVoiceId)
+            } else {
+              queueMoreSpeech(chunk)
+            }
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          sseBuf += decoder.decode(value, { stream: true })
+          // Split SSE frames without literal newline escapes (tooling-safe)
+          const NL = String.fromCharCode(10)
+          const blocks = sseBuf.split(NL + NL)
+          sseBuf = blocks.pop() || ''
+          for (const block of blocks) {
+            const lines = block.split(NL)
+            const evLine = lines.find(l => l.startsWith('event:'))
+            const dataStr = lines.filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('')
+            if (!evLine || !dataStr) continue
+            const ev = evLine.slice(6).trim()
+            let d: any = {}
+            try { d = JSON.parse(dataStr) } catch { continue }
+            if (ev === 'meta') {
+              setMood(d.mood || 'happy')
+              setGesture(d.gesture || 'waving_arms')
+            } else if (ev === 'delta') {
+              gotAnyText = true
+              textBuf += d.t || ''
+              flushCompletedSentences()
+            } else if (ev === 'error') {
+              streamError = d.message || 'Ошибка стриминга'
+            }
+          }
+        }
+
+        // Speak any remaining tail after the stream ends
+        const tail = textBuf.slice(processedIdx).trim()
+        if (tail) {
+          if (!speechStarted) {
+            speechStarted = true
+            activeBotMsgIdRef.current = botMsgId
+            setIsThinking(false)
+            setStatusText(`${selectedVoice.name} говорит...`)
+            speakText(tail, selectedVoiceId)
+          } else {
+            queueMoreSpeech(tail)
+          }
+        } else if (!gotAnyText && !speechStarted) {
+          activeBotMsgIdRef.current = botMsgId
+          setIsThinking(false)
+          speakText(streamError || 'Я тебя услышал!', selectedVoiceId)
+        }
+        return
+      }
 
       const data = await res.json()
 
@@ -571,18 +696,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       const botReply = data.reply || 'Я тебя услышал!'
       const botMood: ZerfikMood = data.mood || 'happy'
       const botGesture: ZerfikGesture = data.gesture || 'waving_arms'
-      const botMsgId = `b_${Date.now()}`
 
-      const initialBotMsg: LiveChatMessage = {
-        id: botMsgId,
-        role: 'assistant',
-        text: '',
-        mood: botMood,
-        gesture: botGesture,
-        timestamp: Date.now(),
-      }
-
-      setMessages(prev => [...prev, initialBotMsg])
       setMood(botMood)
       setGesture(botGesture)
       setIsThinking(false)
