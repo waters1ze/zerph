@@ -147,11 +147,13 @@ export async function getUserInstalledExtensions(chatId: string | number): Promi
       where: { key: `user_extensions_${cid}` },
     })
     if (row?.value) {
-      return JSON.parse(row.value)
+      const parsed = JSON.parse(row.value)
+      if (Array.isArray(parsed)) return parsed
     }
-    return []
+    // Default installed extensions: Entropy AI Search + Zerfic Live
+    return ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
   } catch {
-    return []
+    return ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
   }
 }
 
@@ -162,11 +164,12 @@ export async function getUserEnabledExtensions(chatId: string | number): Promise
       where: { key: `user_enabled_extensions_${cid}` },
     })
     if (row?.value) {
-      return JSON.parse(row.value)
+      const parsed = JSON.parse(row.value)
+      if (Array.isArray(parsed)) return parsed
     }
     return await getUserInstalledExtensions(cid)
   } catch {
-    return []
+    return ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
   }
 }
 

@@ -47,12 +47,15 @@ export const DEFAULT_MENU_ITEMS: Record<string, { title: string; icon: any; isEx
   graph:              { title: 'Граф знаний',          icon: Network },
   calendar:           { title: 'Календарь',            icon: Calendar },
   goals:              { title: 'Цели',                 icon: Target },
-  projects:           { title: 'Проекты',              icon: FolderOpen },
-  ext_entropy_search: { title: 'Entropy AI Search',    icon: '🔮', isExt: true },
-  stats:              { title: 'Аналитика',            icon: BarChart2 },
-  friends:            { title: 'Друзья',               icon: UserCheck },
-  teams:              { title: 'Команды',              icon: Building2 },
-  settings:           { title: 'Настройки',            icon: Settings },
+  projects:                     { title: 'Проекты',              icon: FolderOpen },
+  ext_entropy_search:           { title: 'Entropy AI Search',    icon: '🔮', isExt: true },
+  ext_gh_1787152496448_e36d8d:  { title: 'Zerfic Live',          icon: '🎙️', isExt: true },
+  ext_zerfic_live:              { title: 'Zerfic Live',          icon: '🎙️', isExt: true },
+  'zerfic-live':                { title: 'Zerfic Live',          icon: '🎙️', isExt: true },
+  stats:                        { title: 'Аналитика',            icon: BarChart2 },
+  friends:                      { title: 'Друзья',               icon: UserCheck },
+  teams:                        { title: 'Команды',              icon: Building2 },
+  settings:                     { title: 'Настройки',            icon: Settings },
 }
 
 export const DEFAULT_SIDEBAR_FOLDERS: SidebarFolder[] = [

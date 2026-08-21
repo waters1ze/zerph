@@ -11,7 +11,7 @@ import {
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
-import { ExtensionIcon } from '@/components/views/extensions-view'
+import { ExtensionIcon, DEFAULT_EXTENSIONS } from '@/components/views/extensions-view'
 import type { ExtensionItem } from '@/app/api/extensions/route'
 import { planAtLeast, type PlanId } from '@/lib/plans'
 
@@ -142,14 +142,60 @@ function formatFieldLabel(key: string): string {
     .trim()
 }
 
+const getInitialInstalledData = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('zerf_ext_catalog_cache')
+      const installedRaw = localStorage.getItem('zerf_installed_extensions')
+      const enabledRaw = localStorage.getItem('zerf_enabled_extensions')
+
+      let catalog = DEFAULT_EXTENSIONS
+      let installedIds: string[] = ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+      let enabledIds: string[] = ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed.catalog) && parsed.catalog.length > 0) {
+          catalog = parsed.catalog
+        }
+        if (Array.isArray(parsed.installedIds) && parsed.installedIds.length > 0) {
+          installedIds = parsed.installedIds
+        }
+        if (Array.isArray(parsed.enabledIds) && parsed.enabledIds.length > 0) {
+          enabledIds = parsed.enabledIds
+        }
+      }
+      if (installedRaw) {
+        const parsed = JSON.parse(installedRaw)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          installedIds = parsed
+        }
+      }
+      if (enabledRaw) {
+        const parsed = JSON.parse(enabledRaw)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          enabledIds = parsed
+        }
+      }
+      return { catalog, installedIds, enabledIds }
+    } catch {}
+  }
+  return {
+    catalog: DEFAULT_EXTENSIONS,
+    installedIds: ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d'],
+    enabledIds: ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d'],
+  }
+}
+
 export function InstalledExtensionsSettingsSection() {
   const { state, dispatch, syncData } = useApp()
   const confirmDialog = useConfirmDialog()
 
-  const [loading, setLoading] = useState(true)
-  const [catalog, setCatalog] = useState<ExtensionItem[]>([])
-  const [installedIds, setInstalledIds] = useState<string[]>([])
-  const [enabledIds, setEnabledIds] = useState<string[]>([])
+  const initialData = useMemo(() => getInitialInstalledData(), [])
+  const [loading, setLoading] = useState(false)
+  const [catalog, setCatalog] = useState<ExtensionItem[]>(initialData.catalog)
+  const [installedIds, setInstalledIds] = useState<string[]>(initialData.installedIds)
+  const [enabledIds, setEnabledIds] = useState<string[]>(initialData.enabledIds)
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -193,18 +239,30 @@ export function InstalledExtensionsSettingsSection() {
     setTimeout(() => setSavedToastId(null), 1800)
   }
 
-  // Fetch installed extensions from backend
-  const fetchExtensions = async () => {
+  // Fetch installed extensions from backend and sync to local cache
+  const fetchExtensions = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent && catalog.length === 0) setLoading(true)
       const res = await fetch('/api/extensions', {
         headers: getAuthHeaders(),
       })
       const data = await res.json()
       if (data.success) {
-        setCatalog(Array.isArray(data.catalog) ? data.catalog : [])
-        setInstalledIds(Array.isArray(data.installedIds) ? data.installedIds : [])
-        setEnabledIds(Array.isArray(data.enabledIds) ? data.enabledIds : (Array.isArray(data.installedIds) ? data.installedIds : []))
+        const loadedCatalog = Array.isArray(data.catalog) && data.catalog.length > 0 ? data.catalog : DEFAULT_EXTENSIONS
+        const loadedInstalled = Array.isArray(data.installedIds) && data.installedIds.length > 0 ? data.installedIds : ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
+        const loadedEnabled = Array.isArray(data.enabledIds) && data.enabledIds.length > 0 ? data.enabledIds : loadedInstalled
+        setCatalog(loadedCatalog)
+        setInstalledIds(loadedInstalled)
+        setEnabledIds(loadedEnabled)
+        try {
+          localStorage.setItem('zerf_installed_extensions', JSON.stringify(loadedInstalled))
+          localStorage.setItem('zerf_enabled_extensions', JSON.stringify(loadedEnabled))
+          localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify({
+            catalog: loadedCatalog,
+            installedIds: loadedInstalled,
+            enabledIds: loadedEnabled,
+          }))
+        } catch {}
       }
     } catch (e) {
       console.error('Failed to fetch extensions', e)
@@ -214,7 +272,23 @@ export function InstalledExtensionsSettingsSection() {
   }
 
   useEffect(() => {
-    fetchExtensions()
+    fetchExtensions(true)
+
+    const handleExtensionsChanged = () => {
+      const fresh = getInitialInstalledData()
+      setCatalog(fresh.catalog)
+      setInstalledIds(fresh.installedIds)
+      setEnabledIds(fresh.enabledIds)
+      fetchExtensions(true)
+    }
+    window.addEventListener('zerf_extensions_updated', handleExtensionsChanged)
+    window.addEventListener('zerf_extension_installed', handleExtensionsChanged)
+    window.addEventListener('zerf_sidebar_config_changed', handleExtensionsChanged)
+    return () => {
+      window.removeEventListener('zerf_extensions_updated', handleExtensionsChanged)
+      window.removeEventListener('zerf_extension_installed', handleExtensionsChanged)
+      window.removeEventListener('zerf_sidebar_config_changed', handleExtensionsChanged)
+    }
   }, [])
 
   // Filter installed extensions
@@ -383,7 +457,7 @@ export function InstalledExtensionsSettingsSection() {
           </div>
 
           <button
-            onClick={fetchExtensions}
+            onClick={() => fetchExtensions(false)}
             disabled={loading}
             className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
             title="Обновить список"

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn, isYearlyEventTask } from '@/lib/utils'
-import { useApp, getAuthHeaders } from '@/lib/store'
+import { useApp, getAuthHeaders, isUserAuthenticated } from '@/lib/store'
 import type { View } from '@/lib/types'
 import {
   Sun, Inbox, CheckSquare, FileText, Calendar, Clock,
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, type SidebarFolder } from '@/components/settings/sidebar-customizer-section'
 import type { ExtensionItem } from '@/app/api/extensions/route'
-import { ExtensionIcon } from '@/components/views/extensions-view'
+import { ExtensionIcon, DEFAULT_EXTENSIONS } from '@/components/views/extensions-view'
 import { ZerfAvatar } from '@/components/ui/zerf-avatar'
 import { planAtLeast, type PlanId } from '@/lib/plans'
 import { ZerficLiveModal } from '@/components/views/zerfic-live-modal'
@@ -57,15 +57,15 @@ const getInitialInstalledExts = (): ExtensionItem[] => {
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem('zerf_installed_extensions')
-      const ids: string[] = raw ? JSON.parse(raw) : []
+      const ids: string[] = raw ? JSON.parse(raw) : ['ext_entropy_search', 'ext_gh_1787152496448_e36d8d']
       const catRaw = localStorage.getItem('zerf_ext_catalog_cache')
-      const cat = catRaw ? JSON.parse(catRaw)?.catalog || [] : []
+      const cat = catRaw ? JSON.parse(catRaw)?.catalog || DEFAULT_EXTENSIONS : DEFAULT_EXTENSIONS
       if (Array.isArray(cat) && cat.length > 0) {
         return cat.filter((e: any) => ids.includes(e.id))
       }
     } catch {}
   }
-  return []
+  return DEFAULT_EXTENSIONS
 }
 
 export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: externalToggle }: SidebarProps) {
@@ -76,7 +76,7 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   const [isAdmin, setIsAdmin] = useState(false)
   const [pendingTeamRequestsCount, setPendingTeamRequestsCount] = useState<number>(0)
   const [installedExts, setInstalledExts] = useState<ExtensionItem[]>(getInitialInstalledExts)
-  const [enabledExtIds, setEnabledExtIds] = useState<string[]>([])
+  const [enabledExtIds, setEnabledExtIds] = useState<string[]>(['ext_entropy_search', 'ext_gh_1787152496448_e36d8d'])
   const [disabledNotice, setDisabledNotice] = useState<string | null>(null)
   const [showZerficLiveModal, setShowZerficLiveModal] = useState<boolean>(false)
 
@@ -99,24 +99,22 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
       }
     }
     const checkAuth = () => {
-      const chatId = localStorage.getItem('zerf_chat_id')
-      const token = localStorage.getItem('zerf_auth_token')
-      const initData = (window as any).Telegram?.WebApp?.initData
-      const vkLaunch = localStorage.getItem('zerf_vk_launch')
-      setIsAuthed(Boolean(chatId && !chatId.startsWith('guest_') && (token || initData || vkLaunch)))
+      setIsAuthed(isUserAuthenticated())
     }
     checkAuth()
     window.addEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
     window.addEventListener('zerf_user_name_changed', handleNameChange as EventListener)
+    window.addEventListener('zerf:auth_changed', checkAuth)
     window.addEventListener('storage', checkAuth)
     return () => {
       window.removeEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
       window.removeEventListener('zerf_user_name_changed', handleNameChange as EventListener)
+      window.removeEventListener('zerf:auth_changed', checkAuth)
       window.removeEventListener('storage', checkAuth)
     }
   }, [dispatch])
 
-  const [isAuthed, setIsAuthed] = useState(true)
+  const [isAuthed, setIsAuthed] = useState(() => isUserAuthenticated())
 
   // Local collapse state if not provided externally
   const [localCollapsed, setLocalCollapsed] = useState<boolean>(() => {
@@ -369,11 +367,33 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
   // Map of extensions for quick lookup strictly from user's installed extensions
   const extensionsMap = useMemo(() => {
     const map = new Map<string, Partial<ExtensionItem>>()
-    // Built-in starter extension fallback
+    // Built-in starter extensions fallback
+    DEFAULT_EXTENSIONS.forEach(e => map.set(e.id, e))
     map.set('ext_entropy_search', {
       id: 'ext_entropy_search',
       title: 'Entropy AI Search',
       icon: '🔮',
+      isPublished: true,
+      minPlan: 'free',
+    })
+    map.set('ext_gh_1787152496448_e36d8d', {
+      id: 'ext_gh_1787152496448_e36d8d',
+      title: 'Zerfic Live',
+      icon: '🎙️',
+      isPublished: true,
+      minPlan: 'free',
+    })
+    map.set('ext_zerfic_live', {
+      id: 'ext_gh_1787152496448_e36d8d',
+      title: 'Zerfic Live',
+      icon: '🎙️',
+      isPublished: true,
+      minPlan: 'free',
+    })
+    map.set('zerfic-live', {
+      id: 'ext_gh_1787152496448_e36d8d',
+      title: 'Zerfic Live',
+      icon: '🎙️',
       isPublished: true,
       minPlan: 'free',
     })
