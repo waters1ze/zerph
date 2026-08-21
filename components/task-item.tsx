@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { TaskCheckbox } from './task-checkbox'
@@ -23,6 +24,17 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
   const isOverdue = task.status === 'overdue' || (task.dueDate && isPast(parseISO(task.dueDate)) && task.status !== 'done')
   const project = task.projectId ? state.projects.find(p => p.id === task.projectId) : null
 
+  // Live real-time clock ticker updated every second for active tasks with time
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    if (!task.dueTime || isDone) return
+    const interval = setInterval(() => {
+      setNow(new Date())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [task.dueTime, isDone])
+
   const dueDateLabel = task.dueDate
     ? isToday(parseISO(task.dueDate))
       ? 'Today'
@@ -35,45 +47,63 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
   let timeUntilText: string | null = null
   let minutesLeft = 0
   let isPassed = false
+
   if (task.dueTime && !isDone) {
-    const now = new Date()
     const startTimeStr = task.dueTime.split(/[\s–-]+/)[0].trim()
     const [h, m] = startTimeStr.split(':').map(Number)
     let due: Date
     if (task.dueDate && task.dueDate.includes('-') && !isNaN(h) && !isNaN(m)) {
       const [year, month, day] = task.dueDate.split('-').map(Number)
-      due = new Date(year, month - 1, day, h, m)
+      due = new Date(year, month - 1, day, h, m, 0, 0)
     } else if (!isNaN(h) && !isNaN(m)) {
-      due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m)
+      due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0)
     } else {
       due = now
     }
     const diffMs = due.getTime() - now.getTime()
-    minutesLeft = Math.round(diffMs / 60000)
 
-    if (minutesLeft > 0) {
+    // 1. Future (> 59 seconds left)
+    if (diffMs >= 60000) {
+      minutesLeft = Math.ceil(diffMs / 60000)
       if (minutesLeft < 60) {
         timeUntilText = `${minutesLeft} мин`
       } else if (minutesLeft < 1440) {
         const hours = Math.floor(minutesLeft / 60)
         const mins = minutesLeft % 60
-        timeUntilText = `${hours} ч ${mins} мин`
+        timeUntilText = mins > 0 ? `${hours} ч ${mins} мин` : `${hours} ч`
       } else {
         const days = Math.floor(minutesLeft / 1440)
         const remMins = minutesLeft % 1440
         const hours = Math.floor(remMins / 60)
-        const mins = remMins % 60
-        timeUntilText = `${days} д ${hours} ч ${mins} мин`
+        timeUntilText = `${days} д ${hours} ч`
       }
 
       if (isTaskDueToday || minutesLeft <= 1440) {
-        countdownLabel = `⌛ Осталось: ${timeUntilText}`
+        countdownLabel = `Осталось: ${timeUntilText}`
       }
-    } else if (minutesLeft >= -5 && minutesLeft <= 0) {
-      countdownLabel = `🔔 Напоминание прямо сейчас!`
-    } else if (isTaskDueToday) {
+    }
+    // 2. Exact Moment (0 to 59s of the exact due minute)
+    else if (diffMs >= 0 && diffMs < 60000) {
+      countdownLabel = `Прямо сейчас!`
+    }
+    // 3. Past / Expired (the exact moment it passes 0)
+    else {
       isPassed = true
-      countdownLabel = `⚠️ Истекло (${Math.abs(minutesLeft)} мин назад)`
+      const pastSeconds = Math.floor(Math.abs(diffMs) / 1000)
+      const pastMinutes = Math.floor(pastSeconds / 60)
+
+      if (pastMinutes < 1) {
+        countdownLabel = `Истекло только что`
+      } else if (pastMinutes < 60) {
+        countdownLabel = `Истекло ${pastMinutes} мин назад`
+      } else if (pastMinutes < 1440) {
+        const pastHours = Math.floor(pastMinutes / 60)
+        const remMins = pastMinutes % 60
+        countdownLabel = `Истекло ${pastHours} ч ${remMins > 0 ? `${remMins} мин ` : ''}назад`
+      } else {
+        const pastDays = Math.floor(pastMinutes / 1440)
+        countdownLabel = `Истекло ${pastDays} д назад`
+      }
     }
   }
 
@@ -108,17 +138,17 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
           <span className={cn(
             'text-sm font-medium leading-snug text-foreground',
             isDone && 'line-through text-muted-foreground',
-            compact ? 'text-[13px]' : ''
+            isPassed && !isDone && 'text-foreground'
           )}>
             {task.title}
           </span>
-          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button
               onClick={async (e) => {
                 e.stopPropagation()
                 const ok = await confirm({
-                  title: `Удалить задачу «${task.title}»?`,
-                  description: 'Задача будет удалена без возможности восстановления.',
+                  title: 'Удалить задачу?',
+                  description: `Задача «${task.title}» будет удалена навсегда.`,
                   confirmText: 'Удалить',
                   variant: 'danger',
                 })
@@ -126,7 +156,7 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
                   dispatch({ type: 'DELETE_TASK', id: task.id })
                 }
               }}
-              className="p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors"
+              className="p-1 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
               title="Удалить задачу"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -141,7 +171,7 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
 
             {dueDateLabel && (
               <span className={cn('inline-flex items-center gap-1 text-[11px]',
-                isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+                (isOverdue || isPassed) ? 'text-red-400 font-medium' : 'text-muted-foreground'
               )}>
                 <CalendarDays className="w-3 h-3" />
                 {dueDateLabel}
@@ -150,15 +180,18 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
 
             {task.dueTime && !isDone && (
               <span className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium transition-all shadow-xs",
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium transition-all shadow-xs select-none",
                 isPassed
-                  ? "bg-red-500/10 border-red-500/20 text-red-400"
+                  ? "bg-red-500/10 border-red-500/25 text-red-400 font-semibold"
+                  : countdownLabel === 'Прямо сейчас!'
+                  ? "bg-amber-500/20 border-amber-500/40 text-amber-300 animate-pulse font-bold"
                   : minutesLeft <= 15
-                  ? "bg-amber-500/15 border-amber-500/30 text-amber-300 animate-pulse"
+                  ? "bg-amber-500/15 border-amber-500/30 text-amber-300"
                   : "bg-amber-500/10 border-amber-500/20 text-amber-400"
               )}>
                 <Clock className="w-3 h-3" />
-                {task.dueTime} {countdownLabel ? `(${countdownLabel})` : ''}
+                <span>{task.dueTime}</span>
+                {countdownLabel && <span className="opacity-90">({countdownLabel})</span>}
               </span>
             )}
 
