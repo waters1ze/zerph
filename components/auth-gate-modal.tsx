@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Send, Lock, ExternalLink, Mail, Key, User, Loader2, CheckCircle2 } from 'lucide-react'
+import { Sparkles, Send, Lock, ExternalLink, Mail, Key, User, Loader2, CheckCircle2, X } from 'lucide-react'
 import { GithubIcon } from '@/components/views/extensions-view'
 import { getTgChatId } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -131,6 +131,16 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
     }
   }
 
+  useEffect(() => {
+    const handleGlobalOpen = () => {
+      if (open === undefined) {
+        setIsAuth(false)
+      }
+    }
+    window.addEventListener('zerf_open_auth_modal', handleGlobalOpen)
+    return () => window.removeEventListener('zerf_open_auth_modal', handleGlobalOpen)
+  }, [open])
+
   return (
     <AnimatePresence>
       {shouldOpen && (
@@ -139,9 +149,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => {
-              if (isAuth && onClose) onClose()
-            }}
+            onClick={onClose}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm"
           />
           <motion.div
@@ -155,20 +163,32 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
             <div className="absolute -top-16 -right-16 w-36 h-36 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
-            {/* Header Icon */}
-            <div className="flex items-center gap-3 border-b border-border/50 pb-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
-                <Lock className="w-5 h-5" />
+            {/* Header Icon + Close Button */}
+            <div className="flex items-center justify-between border-b border-border/50 pb-3.5 relative">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-[17px] font-bold text-foreground flex items-center gap-1.5">
+                    Вход в Zerf Note
+                    <Sparkles className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  </h3>
+                  <p className="text-[12px] text-muted-foreground">
+                    Войдите для сохранения задач и синхронизации
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-[17px] font-bold text-foreground flex items-center gap-1.5">
-                  Вход в Zerf Note
-                  <Sparkles className="w-4 h-4 text-amber-400 fill-amber-400" />
-                </h3>
-                <p className="text-[12px] text-muted-foreground">
-                  Выберите удобный способ авторизации
-                </p>
-              </div>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+                  title="Закрыть"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             {/* Tab Selector */}

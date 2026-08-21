@@ -45,11 +45,16 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [marketplaceModalOpen, setMarketplaceModalOpen] = useState(false)
 
-  // Listen to marketplace open events from anywhere in the app
+  // Listen to marketplace & auth modal open events from anywhere in the app
   useEffect(() => {
     const handleOpenMarketplace = () => setMarketplaceModalOpen(true)
+    const handleOpenAuth = () => setAuthModalOpen(true)
     window.addEventListener('zerf_open_marketplace', handleOpenMarketplace)
-    return () => window.removeEventListener('zerf_open_marketplace', handleOpenMarketplace)
+    window.addEventListener('zerf_open_auth_modal', handleOpenAuth)
+    return () => {
+      window.removeEventListener('zerf_open_marketplace', handleOpenMarketplace)
+      window.removeEventListener('zerf_open_auth_modal', handleOpenAuth)
+    }
   }, [])
 
   // Detect Telegram Mini App environment (via prop, path, WebApp SDK, or body class)
@@ -293,7 +298,7 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
       <VoiceRecorder open={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
       {/* Telegram / Google / Email Auth Gate Modal */}
-      <AuthGateModal open={authModalOpen ? true : undefined} onClose={() => setAuthModalOpen(false)} />
+      <AuthGateModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
       {/* ── Marketplace Modal Overlay (Floating Pop-up on top of workspace) ── */}
       <AnimatePresence>

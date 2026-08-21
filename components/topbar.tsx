@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn, calculateStreakInfo } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import { NotificationsPanel } from '@/components/notifications-panel'
-import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw } from 'lucide-react'
+import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw, Lock } from 'lucide-react'
 import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
 import { Clock } from 'lucide-react'
@@ -88,7 +88,21 @@ interface Props {
 
 export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
   const { state, dispatch, syncData, isSyncing } = useApp()
+  const [isAuthed, setIsAuthed] = useState(true)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  useEffect(() => {
+    const checkAuth = () => {
+      const chatId = localStorage.getItem('zerf_chat_id')
+      const token = localStorage.getItem('zerf_auth_token')
+      const initData = (window as any).Telegram?.WebApp?.initData
+      const vkLaunch = localStorage.getItem('zerf_vk_launch')
+      setIsAuthed(Boolean(chatId && !chatId.startsWith('guest_') && (token || initData || vkLaunch)))
+    }
+    checkAuth()
+    window.addEventListener('storage', checkAuth)
+    return () => window.removeEventListener('storage', checkAuth)
+  }, [])
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [nextTaskCountdown, setNextTaskCountdown] = useState<{ title: string; timeStr: string } | null>(null)
   const notifiedTasksRef = useRef<Set<string>>(new Set())
@@ -244,7 +258,20 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
+        {/* Login Button for unauthenticated visitors */}
+        {!isAuthed && (
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            onClick={() => window.dispatchEvent(new CustomEvent('zerf_open_auth_modal'))}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-gradient-to-r from-primary via-indigo-500 to-amber-500 hover:opacity-95 text-white text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer shrink-0 animate-pulse"
+            title="Войти или зарегистрироваться в Zerf Note"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span>Войти</span>
+          </motion.button>
+        )}
+
         {/* New Task - Global */}
         <motion.button
           whileTap={{ scale: 0.94 }}

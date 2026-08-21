@@ -9,7 +9,7 @@ import {
   Sun, Inbox, CheckSquare, FileText, Calendar, Clock,
   Target, BarChart2, Users, Settings, FolderOpen, LayoutGrid, Crown, Network,
   UserCheck, Building2, Puzzle, ChevronRight, ChevronDown, Circle, User, Menu,
-  PanelLeftClose, PanelLeftOpen, Folder, X
+  PanelLeftClose, PanelLeftOpen, Folder, X, Lock
 } from 'lucide-react'
 import { DEFAULT_SIDEBAR_FOLDERS, getInitialSidebarConfig, type SidebarConfig, type SidebarFolder } from '@/components/settings/sidebar-customizer-section'
 import type { ExtensionItem } from '@/app/api/extensions/route'
@@ -83,13 +83,25 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         dispatch({ type: 'UPDATE_SETTINGS', updates: { name: e.detail } })
       }
     }
+    const checkAuth = () => {
+      const chatId = localStorage.getItem('zerf_chat_id')
+      const token = localStorage.getItem('zerf_auth_token')
+      const initData = (window as any).Telegram?.WebApp?.initData
+      const vkLaunch = localStorage.getItem('zerf_vk_launch')
+      setIsAuthed(Boolean(chatId && !chatId.startsWith('guest_') && (token || initData || vkLaunch)))
+    }
+    checkAuth()
     window.addEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
     window.addEventListener('zerf_user_name_changed', handleNameChange as EventListener)
+    window.addEventListener('storage', checkAuth)
     return () => {
       window.removeEventListener('zerf_avatar_changed', handleAvatarChange as EventListener)
       window.removeEventListener('zerf_user_name_changed', handleNameChange as EventListener)
+      window.removeEventListener('storage', checkAuth)
     }
   }, [dispatch])
+
+  const [isAuthed, setIsAuthed] = useState(true)
 
   // Local collapse state if not provided externally
   const [localCollapsed, setLocalCollapsed] = useState<boolean>(() => {
@@ -385,17 +397,31 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
         'pt-2.5 pb-2 flex items-center border-b border-border/40',
         isCollapsed ? 'px-2 justify-center flex-col gap-2' : 'px-2.5 justify-between gap-1.5'
       )}>
-        {/* Dynamic User Profile Card */}
+        {/* Dynamic User Profile Card / Login Prompt */}
         <div 
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
+          onClick={() => {
+            if (!isAuthed) {
+              window.dispatchEvent(new CustomEvent('zerf_open_auth_modal'))
+            } else {
+              dispatch({ type: 'SET_VIEW', view: 'settings' })
+            }
+          }}
           className={cn(
-            'flex-1 min-w-0 rounded-xl bg-muted/40 hover:bg-muted/70 border border-border/50 flex items-center cursor-pointer transition-colors group touch-manipulation',
+            'flex-1 min-w-0 rounded-xl border flex items-center cursor-pointer transition-colors group touch-manipulation',
+            !isAuthed 
+              ? 'bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary shadow-xs' 
+              : 'bg-muted/40 hover:bg-muted/70 border-border/50',
             isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-1.5 gap-2.5'
           )}
-          title={`Профиль: ${displayName} (кликните для настроек)`}
+          title={!isAuthed ? 'Нажмите, чтобы войти в аккаунт' : `Профиль: ${displayName} (кликните для настроек)`}
         >
-          <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden border border-primary/30 text-primary group-hover:scale-105 transition-transform">
-            {userAvatarEmoji ? (
+          <div className={cn(
+            'w-7 h-7 rounded-full flex items-center justify-center shrink-0 overflow-hidden border transition-transform group-hover:scale-105',
+            !isAuthed ? 'bg-primary text-primary-foreground border-primary' : 'bg-primary/20 text-primary border-primary/30'
+          )}>
+            {!isAuthed ? (
+              <Lock className="w-3.5 h-3.5" />
+            ) : userAvatarEmoji ? (
               <ZerfAvatar emoji={userAvatarEmoji} size="sm" />
             ) : tgUser?.photoUrl ? (
               <img src={tgUser.photoUrl} alt="Avatar" className="w-full h-full object-cover grayscale contrast-125" />
@@ -409,21 +435,27 @@ export function Sidebar({ isCollapsed: externalCollapsed, onToggleCollapse: exte
           {!isCollapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate font-sans leading-tight" title={displayName}>
-                  {displayName}
+                <p className="text-xs font-bold text-foreground truncate font-sans leading-tight" title={!isAuthed ? 'Войти в аккаунт' : displayName}>
+                  {!isAuthed ? '⚡ Войти в аккаунт' : displayName}
                 </p>
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate font-sans leading-tight mt-0.5">
-                  <span className="text-foreground/90 font-medium">{activeTasksCount} активных</span>
-                  <span className="opacity-40">•</span>
-                  <span>{completedTodayCount} выполнено</span>
+                  {!isAuthed ? (
+                    <span className="text-primary font-semibold">Нажмите для авторизации</span>
+                  ) : (
+                    <>
+                      <span className="text-foreground/90 font-medium">{activeTasksCount} активных</span>
+                      <span className="opacity-40">•</span>
+                      <span>{completedTodayCount} выполнено</span>
+                    </>
+                  )}
                 </div>
               </div>
               <div
                 className={cn(
                   'w-1.5 h-1.5 rounded-full shrink-0',
-                  isConnected ? 'bg-[var(--status-done)]' : 'bg-muted-foreground/30'
+                  !isAuthed ? 'bg-amber-400 animate-pulse' : isConnected ? 'bg-[var(--status-done)]' : 'bg-muted-foreground/30'
                 )}
-                title={isConnected ? 'Telegram Подключён' : 'Не подключён'}
+                title={!isAuthed ? 'Требуется вход' : isConnected ? 'Telegram Подключён' : 'Не подключён'}
               />
             </>
           )}

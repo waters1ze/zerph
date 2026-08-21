@@ -206,6 +206,17 @@ export function NotesView() {
 
   // Create new note
   const handleCreateNote = () => {
+    const chatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
+    const token = typeof window !== 'undefined' ? localStorage.getItem('zerf_auth_token') : null
+    const initData = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initData : null
+    const vkLaunch = typeof window !== 'undefined' ? localStorage.getItem('zerf_vk_launch') : null
+    const isAuthed = Boolean(chatId && !chatId.startsWith('guest_') && (token || initData || vkLaunch))
+
+    if (!isAuthed) {
+      window.dispatchEvent(new CustomEvent('zerf_open_auth_modal'))
+      return
+    }
+
     const targetFolder = (selectedFolder !== 'all' && selectedFolder !== 'pinned' && selectedFolder !== 'dated')
       ? selectedFolder
       : 'Общее'
