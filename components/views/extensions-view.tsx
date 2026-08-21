@@ -310,70 +310,6 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     createdAt: '2026-08-19T15:14:57.397Z',
     updatedAt: '2026-08-19T15:18:31.978Z'
   },
-  {
-    id: 'ext_theme_cyberpunk_neon',
-    title: 'Cyberpunk Neon 2077',
-    version: '1.0.0',
-    description: 'Футуристическая неоновая тема оформления: глубокий OLED-фон, светящиеся кибер-акценты циан (#06b6d4) и розовый глоу для карточек и фокуса.',
-    type: 'theme',
-    category: 'Темы & Стили',
-    icon: '🌆',
-    githubUrl: 'https://github.com/waters1ze/zerf-theme-cyberpunk',
-    authorChatId: 'system',
-    authorName: 'Zerf Design',
-    authorGithub: 'zerf-official',
-    isOfficial: true,
-    isPublished: true,
-    isRunnable: false,
-    price: 0,
-    minPlan: 'free',
-    rating: 5.0,
-    ratingCount: 8,
-    likesCount: 14,
-    installCount: 36,
-    content: {
-      primaryColor: '#06b6d4',
-      accentColor: '#f43f5e',
-      bgDark: '#07090e',
-      cardBg: 'rgba(12, 17, 28, 0.85)',
-      glowColor: 'rgba(6, 182, 212, 0.25)',
-      fontStyle: 'modern'
-    },
-    createdAt: '2026-08-20T10:00:00Z',
-    updatedAt: '2026-08-20T10:00:00Z'
-  },
-  {
-    id: 'ext_theme_tokyo_night',
-    title: 'Tokyo Night Glass',
-    version: '1.0.0',
-    description: 'Премиальная полупрозрачная тема в стиле ночного Токио: мягкие фиолетово-лавандовые градиенты (#a855f7), глубокий сапфировый фон и матовое стекло Glassmorphism.',
-    type: 'theme',
-    category: 'Темы & Стили',
-    icon: '🌌',
-    githubUrl: 'https://github.com/waters1ze/zerf-theme-tokyo-night',
-    authorChatId: 'system',
-    authorName: 'Zerf Design',
-    authorGithub: 'zerf-official',
-    isOfficial: true,
-    isPublished: true,
-    isRunnable: false,
-    price: 0,
-    minPlan: 'free',
-    rating: 5.0,
-    ratingCount: 12,
-    likesCount: 19,
-    installCount: 52,
-    content: {
-      primaryColor: '#a855f7',
-      accentColor: '#3b82f6',
-      bgDark: '#090d1a',
-      cardBg: 'rgba(17, 24, 39, 0.75)',
-      glowColor: 'rgba(168, 85, 247, 0.25)',
-      fontStyle: 'clean'
-    },
-    createdAt: '2026-08-20T12:00:00Z',
-    updatedAt: '2026-08-20T12:00:00Z'
-  },
 ]
 
 const getInitialExtensionsData = () => {
@@ -1523,8 +1459,8 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     })
 
     const list = uniqueCatalog.filter(ext => {
-      // Hide unpublished drafts from public store
-      if (ext.isPublished === false) return false
+      // Strictly exclude themes from extensions catalog (themes belong exclusively in Settings -> Appearance)
+      if (ext.type === 'theme' || ext.category === 'Темы & Стили') return false
 
       const matchesSearch = ext.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ext.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1680,7 +1616,6 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 { id: 'all', label: 'Все расширения', icon: Puzzle },
                 { id: 'core', label: 'Системные', icon: Sparkles },
                 { id: 'widget', label: 'Виджеты', icon: Layout },
-                { id: 'theme', label: 'Темы', icon: Palette },
                 { id: 'template', label: 'Шаблоны', icon: FileCode },
               ].map(cat => {
                 const Icon = cat.icon
