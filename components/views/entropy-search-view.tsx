@@ -1170,16 +1170,14 @@ export function EntropySearchView() {
                 <div className="flex items-center gap-2">
                   <div className="flex items-center -space-x-1.5">
                     {result.sources.slice(0, 4).map((s) => {
-                      const clean = (s.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
-                      const hue = Array.from(clean).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                      const siteInfo = getCleanSiteName(s)
                       return (
                         <div
                           key={s.id}
-                          className="w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center border-2 border-background text-white shrink-0 shadow-2xs"
-                          style={{ backgroundColor: `hsl(${hue} 60% 45%)` }}
-                          title={s.title || clean}
+                          className="w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center border-2 border-background bg-zinc-800 text-zinc-200 shrink-0 shadow-2xs"
+                          title={s.title || siteInfo.name}
                         >
-                          {clean.charAt(0).toUpperCase()}
+                          {siteInfo.name.charAt(0).toUpperCase()}
                         </div>
                       )
                     })}
@@ -1204,13 +1202,7 @@ export function EntropySearchView() {
                 {(showAllSources ? result.sources : result.sources.slice(0, 4)).map((source) => {
                   const isInternalNote = source.type === 'note' || Boolean(source.noteId)
                   const isInternalTask = source.type === 'task' || Boolean(source.taskId)
-                  const rawDomain = source.domain || 'web'
-                  const cleanDomain = rawDomain
-                    .replace(/^www\./i, '')
-                    .replace(/^m\./i, '')
-                    .replace(/\.(org|com|ru|net|io|media|info|app|co|live|ai|tech|gov|edu)$/i, '')
-                    .toLowerCase()
-                  const hue = Array.from(rawDomain).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                  const siteInfo = getCleanSiteName(source)
 
                   const handleClick = (e: React.MouseEvent) => {
                     if (isInternalNote && source.noteId) {
@@ -1235,7 +1227,7 @@ export function EntropySearchView() {
                     >
                       <div className="space-y-1">
                         <h5 className="text-xs font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-                          {source.title || cleanDomain}
+                          {source.title || siteInfo.name}
                         </h5>
                         {source.snippet && (
                           <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed font-normal">
@@ -1247,12 +1239,18 @@ export function EntropySearchView() {
                       <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px] text-muted-foreground">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <div
-                            className="w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center text-white shrink-0"
-                            style={{ backgroundColor: isInternalNote ? '#f59e0b' : isInternalTask ? '#10b981' : `hsl(${hue} 60% 45%)` }}
+                            className={cn(
+                              "w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center shrink-0 border",
+                              isInternalNote
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                : isInternalTask
+                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                : "bg-zinc-800 text-zinc-300 border-zinc-700/60"
+                            )}
                           >
-                            {isInternalNote ? 'З' : isInternalTask ? '✓' : cleanDomain.charAt(0).toUpperCase()}
+                            {isInternalNote ? 'З' : isInternalTask ? '✓' : siteInfo.name.charAt(0).toUpperCase()}
                           </div>
-                          <span className="truncate font-medium">{cleanDomain}</span>
+                          <span className="truncate font-medium lowercase">{siteInfo.name}</span>
                         </div>
                         <span className="text-[9px] font-mono text-muted-foreground/70 shrink-0">#{source.id}</span>
                       </div>
@@ -1471,15 +1469,14 @@ export function EntropySearchView() {
                   >
                     <div className="flex items-center -space-x-1">
                       {result.sources.slice(0, 3).map((s) => {
-                        const clean = (s.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
-                        const hue = Array.from(clean).reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                        const siteInfo = getCleanSiteName(s)
                         return (
                           <div
                             key={s.id}
-                            className="w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center border border-background text-white shrink-0"
-                            style={{ backgroundColor: `hsl(${hue} 60% 45%)` }}
+                            className="w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center border border-background bg-zinc-800 text-zinc-300 shrink-0"
+                            title={siteInfo.name}
                           >
-                            {clean.charAt(0).toUpperCase()}
+                            {siteInfo.name.charAt(0).toUpperCase()}
                           </div>
                         )
                       })}
