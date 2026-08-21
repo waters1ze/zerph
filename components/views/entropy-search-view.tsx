@@ -1290,11 +1290,11 @@ export function EntropySearchView() {
                 }}
               >
                 {(
-                  // While streaming, hide raw [n] fragments (incomplete markdown
-                  // links would render as literal "[#2](cite..." text). Once the
-                  // answer is complete, [n] becomes a Perplexity-style badge.
+                  // Perplexity-style LIVE citations: complete [n] tokens become
+                  // badges even mid-stream; only an incomplete trailing "[1" is
+                  // stripped until its closing bracket arrives.
                   isStreaming
-                    ? streamedAnswer.replace(/\[(\d+)\]/g, '')
+                    ? streamedAnswer.replace(/\[(\d+)\](?!\()/g, '[[#$1]](cite:$1)').replace(/\[\d*$/, '')
                     : (result.answer || '').replace(/\[(\d+)\]/g, '[[#$1]](cite:$1)')
                 )
                   .replace(/\\n/g, '\n')
