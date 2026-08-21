@@ -37,10 +37,15 @@ export function EmojiPickerModal({
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('zerf_recent_emojis')
-        return saved ? JSON.parse(saved) : ['zerfik_spirit', 'zerfik_focus', 'zerfik_wink', 'zerf_brain', 'zerf_crystal', 'zerf_cli', 'zerf_crown', 'zerf_streak']
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed)) {
+            return parsed.filter((e: string) => typeof e === 'string' && (!e.includes('_') || e === 'zerfik_spirit'))
+          }
+        }
       } catch {}
     }
-    return ['zerfik_spirit', 'zerfik_focus', 'zerfik_wink', 'zerf_brain', 'zerf_crystal', 'zerf_cli', 'zerf_crown', 'zerf_streak']
+    return ['✦', '🤖', '👑', '⚡', '💎', '🔥', '🚀', '🧠']
   })
 
   // Auto-focus search when opened

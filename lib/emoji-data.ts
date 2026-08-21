@@ -16,7 +16,6 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
     name: '✦ Зерфик & Экосистема',
     icon: '✦',
     emojis: [
-      'zerfik_spirit', 'zerfik_sapling', 'zerfik_flying', 'zerfik_magic', 'zerfik_focus', 'zerfik_happy', 'zerfik_cyber', 'zerfik_crystal', 'zerfik_zen',
       '✦', '✧', '🤖', '🧠', '🔮', '⚡', '🌌', '💎', '💻', '👑',
       '🦾', '🔥', '🎯', '🚀', '👾', '🧬', '💡', '🛡️', '🗝️', '🛸',
       '🪐', '📡', '🕹️', '🧩', '🎲', '🪄', '👁️‍🗨️', '🎙️', '⏱️', '⏳',
@@ -28,9 +27,6 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
     name: 'ИИ & Нейросети',
     icon: '🤖',
     emojis: [
-      'ai_openai', 'ai_deepseek', 'ai_claude', 'ai_midjourney', 'ai_perplexity', 'ai_gemini',
-      'ai_groq', 'ai_mistral', 'ai_llama', 'ai_cursor', 'ai_v0', 'ai_huggingface',
-      'ai_qwen', 'ai_elevenlabs', 'ai_apple_intelligence', 'ai_copilot', 'ai_suno', 'ai_runway', 'ai_flux', 'ai_kling',
       '🤖', '🧠', '🔮', '⚡', '✨', '🌌', '💻', '🖥️', '🦾', '🦿',
       '📡', '🛰️', '🧬', '🔬', '🕹️', '🔋', '🔌', '💡', '🛸', '🚀',
       '🪐', '🌠', '👾', '⚙️', '🧮', '🌐', '💾', '💿', '📱', '⌨️',
