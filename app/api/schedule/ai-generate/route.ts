@@ -20,10 +20,11 @@ const SYSTEM_PROMPT = `Ты — специализированный интел�
 ВЫВОД ТОЛЬКО В ФОРМАТЕ СТРОГОГО JSON:
 {
   "understood": true | false,
-  "replyMessage": "Понятное вежливое объяснение на русском языке (например: ✨ Создал группу «Расписание понедельника» с 4 уроками.)",
+  "replyMessage": "Понятное вежливое объяснение на русском языке (например: ✨ Создал группу «Расписание понедельника» с 4 пунктами.)",
   "group": {
-    "title": "Название группы (например: Понедельник, Школа, Университет, Тренировки)",
+    "title": "Название группы (например: Понедельник, Школа, Университет, Тренировки, Дела)",
     "description": "Краткое описание расписания",
+    "scheduleType": "general" | "school" | "sport" | "business" | "courses", // "general" (Обычно) по умолчанию, если не указана специфическая школа/спорт/бизнес
     "icon": "GraduationCap" | "BookOpen" | "Activity" | "Dumbbell" | "Palette" | "Music" | "Trophy" | "Sparkles",
     "color": "#f59e0b" | "#10b981" | "#6366f1" | "#3b82f6" | "#8b5cf6" | "#ec4899" | "#ef4444" | "#06b6d4",
     "days": [
@@ -33,11 +34,11 @@ const SYSTEM_PROMPT = `Ты — специализированный интел�
         "lessons": [
           {
             "id": "les_1",
-            "name": "Название предмета/занятия",
+            "name": "Название действия / предмета / тренировки",
             "startTime": "08:30",
             "endTime": "09:15",
-            "room": "каб. 201",
-            "teacher": "Преподаватель"
+            "room": "каб. 201" | "", // только для school/sport/business/courses, пусто для general
+            "teacher": "Преподаватель" | "" // только для school/sport/business/courses, пусто для general
           }
         ]
       }
@@ -49,7 +50,7 @@ const SYSTEM_PROMPT = `Ты — специализированный интел�
 Если пользователь ввёл полную бессмыслицу или случайный набор букв (например: «аывжлао», «asdfgh»), установи:
 "understood": false,
 "group": null,
-"replyMessage": "Не совсем понял, какое расписание требуется составить. Укажите день недели, список предметов или время занятий (например: «Сделай группу расписание для понедельника: 4 урока» или «Тренировки вт и чт в 19:00»)."
+"replyMessage": "Не совсем понял, какое расписание требуется составить. Укажите день недели, список дел или время (например: «Сделай группу расписание для понедельника: 4 действия» или «Тренировки вт и чт в 19:00»)."
 `
 
 export async function POST(req: NextRequest) {
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
       const nowId = 'grp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
       data.group.id = nowId
       data.group.isActive = true
+      data.group.scheduleType = data.group.scheduleType || 'general'
       data.group.createdAt = new Date().toISOString()
       data.group.updatedAt = new Date().toISOString()
 

@@ -46,6 +46,7 @@ export interface ScheduleGroup {
   icon: string
   color: string
   description?: string
+  scheduleType?: 'general' | 'school' | 'sport' | 'business' | 'courses'
   days: DaySchedule[]
   isActive: boolean
   createdAt: string

@@ -6,7 +6,7 @@ import type { ScheduleGroup, ScheduleLesson, DaySchedule } from '@/lib/types'
 import { 
   X, Plus, Trash2, Copy, Check, Clock, GraduationCap, BookOpen, 
   Activity, Dumbbell, Palette, Music, Sparkles, Trophy, Calendar, MapPin, User, FileText, ChevronRight,
-  Mic, MicOff, Loader2, Wand2, AlertTriangle, CheckCircle2
+  Mic, MicOff, Loader2, Wand2, AlertTriangle, CheckCircle2, Briefcase
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/store'
@@ -19,15 +19,95 @@ interface ScheduleGroupModalProps {
   onDeleteGroup: (groupId: string) => void
 }
 
+export type ScheduleTypeKey = 'general' | 'school' | 'sport' | 'business' | 'courses'
+
+export interface ScheduleTypeConfig {
+  id: ScheduleTypeKey
+  label: string
+  icon: any
+  description: string
+  actionLabel: string
+  actionPlaceholder: string
+  addButtonText: string
+  secondaryLabel?: string
+  secondaryPlaceholder?: string
+  tertiaryLabel?: string
+  tertiaryPlaceholder?: string
+}
+
+export const SCHEDULE_TYPES: ScheduleTypeConfig[] = [
+  {
+    id: 'general',
+    label: 'Обычно',
+    icon: Sparkles,
+    description: 'Время и действие для напоминания (без лишних полей)',
+    actionLabel: 'Действие',
+    actionPlaceholder: 'Действие для выполнения (например: Принять витамины, Чтение, Пробежка...)',
+    addButtonText: 'Добавить действие',
+  },
+  {
+    id: 'school',
+    label: 'Школа / Учеба',
+    icon: GraduationCap,
+    description: 'Уроки, кабинеты и преподаватели',
+    actionLabel: 'Предмет',
+    actionPlaceholder: 'Предмет (например: Математика)',
+    addButtonText: 'Добавить урок',
+    secondaryLabel: 'Кабинет',
+    secondaryPlaceholder: 'Каб. 201',
+    tertiaryLabel: 'Преподаватель',
+    tertiaryPlaceholder: 'Преподаватель',
+  },
+  {
+    id: 'sport',
+    label: 'Спорт',
+    icon: Dumbbell,
+    description: 'Упражнения, зал и тренер/нагрузка',
+    actionLabel: 'Упражнение',
+    actionPlaceholder: 'Упражнение (например: Жим лежа, Бег, Плавание)',
+    addButtonText: 'Добавить упражнение',
+    secondaryLabel: 'Зал / Зона',
+    secondaryPlaceholder: 'Зал / Зона',
+    tertiaryLabel: 'Тренер / Нагрузка',
+    tertiaryPlaceholder: 'Тренер / Нагрузка',
+  },
+  {
+    id: 'business',
+    label: 'Бизнес / Работа',
+    icon: Briefcase,
+    description: 'Задачи, встречи, проекты и платформы',
+    actionLabel: 'Задача / Встреча',
+    actionPlaceholder: 'Задача (например: Daily Standup, Ревью макетов)',
+    addButtonText: 'Добавить задачу / встречу',
+    secondaryLabel: 'Проект / Клиент',
+    secondaryPlaceholder: 'Проект / Клиент',
+    tertiaryLabel: 'Платформа / Ссылка',
+    tertiaryPlaceholder: 'Zoom / Meet / Офис',
+  },
+  {
+    id: 'courses',
+    label: 'Курсы / Развитие',
+    icon: BookOpen,
+    description: 'Уроки, материалы и наставники',
+    actionLabel: 'Урок / Тема',
+    actionPlaceholder: 'Урок (например: English Speaking, Лекция 4)',
+    addButtonText: 'Добавить занятие',
+    secondaryLabel: 'Модуль / Материалы',
+    secondaryPlaceholder: 'Модуль / Ссылка',
+    tertiaryLabel: 'Куратор / Платформа',
+    tertiaryPlaceholder: 'Куратор',
+  },
+]
+
 const ICONS = [
+  { id: 'Sparkles', icon: Sparkles, label: 'Обычно / Развитие' },
   { id: 'GraduationCap', icon: GraduationCap, label: 'Школа / Учеба' },
   { id: 'BookOpen', icon: BookOpen, label: 'Университет / Книги' },
-  { id: 'Activity', icon: Activity, label: 'Спорт / Тренировки' },
+  { id: 'Activity', icon: Activity, label: 'Работа / Процессы' },
   { id: 'Dumbbell', icon: Dumbbell, label: 'Фитнес / Зал' },
   { id: 'Palette', icon: Palette, label: 'Творчество / Курсы' },
   { id: 'Music', icon: Music, label: 'Музыка / Вокал' },
   { id: 'Trophy', icon: Trophy, label: 'Секции / Соревнования' },
-  { id: 'Sparkles', icon: Sparkles, label: 'Развитие / Языки' },
 ]
 
 const COLORS = [
@@ -65,9 +145,10 @@ function createEmptyGroup(): ScheduleGroup {
   return {
     id: 'grp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     title: '',
-    icon: 'GraduationCap',
-    color: '#f59e0b',
+    icon: 'Sparkles',
+    color: '#6366f1',
     description: '',
+    scheduleType: 'general', // Default mode: "Обычно"
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -543,6 +624,40 @@ export function ScheduleGroupModal({
                 })}
               </div>
             </div>
+            {/* Schedule Mode Selector (Обычно / Школа / Спорт / Бизнес / Курсы) */}
+            <div className="space-y-1.5 pt-2 border-t border-border/40">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-muted-foreground">
+                  Режим расписания:
+                </label>
+                <span className="text-[11px] text-muted-foreground font-normal hidden sm:inline-block">
+                  {SCHEDULE_TYPES.find(st => st.id === (editingGroup.scheduleType || 'general'))?.description}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                {SCHEDULE_TYPES.map(st => {
+                  const StIcon = st.icon
+                  const isSel = (editingGroup.scheduleType || 'general') === st.id
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setEditingGroup(prev => ({ ...prev, scheduleType: st.id }))}
+                      className={cn(
+                        'flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer select-none',
+                        isSel
+                          ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                          : 'bg-background/80 hover:bg-muted text-muted-foreground border-border/70'
+                      )}
+                    >
+                      <StIcon className="w-3.5 h-3.5" />
+                      <span>{st.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Days of Week Navigation */}
@@ -555,7 +670,7 @@ export function ScheduleGroupModal({
                 <button
                   type="button"
                   onClick={() => handleCopyDayToOthers([1, 2, 3, 4, 5])}
-                  className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 bg-muted/40 px-2 py-1 rounded-md border border-border"
+                  className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 bg-muted/40 px-2 py-1 rounded-md border border-border cursor-pointer"
                   title="Скопировать расписание текущего дня на Пн–Пт"
                 >
                   <Copy className="w-3 h-3" />
@@ -577,7 +692,7 @@ export function ScheduleGroupModal({
                     key={d.id}
                     onClick={() => setActiveDay(d.id)}
                     className={cn(
-                      'flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-semibold transition-all',
+                      'flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
                       isSelected
                         ? 'bg-card text-foreground shadow-sm border border-border font-bold'
                         : 'text-muted-foreground hover:text-foreground hover:bg-card/50',
@@ -586,7 +701,7 @@ export function ScheduleGroupModal({
                   >
                     <span>{d.short}</span>
                     <span className="text-[10px] font-normal opacity-70">
-                      {isEnabled ? `${count} ур.` : 'вых.'}
+                      {isEnabled ? `${count} зап.` : 'вых.'}
                     </span>
                   </button>
                 )
@@ -603,7 +718,7 @@ export function ScheduleGroupModal({
                   {DAYS_OF_WEEK.find(d => d.id === activeDay)?.name}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  ({currentDaySchedule.lessons?.length || 0} занятий)
+                  ({currentDaySchedule.lessons?.length || 0} пунктов)
                 </span>
               </div>
 
@@ -613,7 +728,7 @@ export function ScheduleGroupModal({
                   type="checkbox"
                   checked={currentDaySchedule.enabled}
                   onChange={e => handleToggleDay(e.target.checked)}
-                  className="w-4 h-4 rounded text-primary focus:ring-primary"
+                  className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                 />
               </label>
             </div>
@@ -629,93 +744,109 @@ export function ScheduleGroupModal({
             {/* Lessons List */}
             {currentDaySchedule.enabled ? (
               <div className="space-y-2.5">
-                {currentDaySchedule.lessons?.map((lesson, idx) => (
-                  <div
-                    key={lesson.id}
-                    className="p-3 rounded-xl border border-border/80 bg-muted/20 hover:border-border transition-colors flex flex-col sm:flex-row sm:items-center gap-2.5"
-                  >
-                    {/* Index Badge & Times */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="w-6 h-6 rounded-lg bg-muted border border-border flex items-center justify-center text-xs font-bold text-muted-foreground">
-                        {idx + 1}
-                      </span>
-                      <div className="flex items-center gap-1 text-xs font-mono">
-                        <input
-                          type="time"
-                          value={lesson.startTime}
-                          onChange={e => handleUpdateLesson(lesson.id, 'startTime', e.target.value)}
-                          className="px-1.5 py-1 rounded bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
-                        <span className="text-muted-foreground">–</span>
-                        <input
-                          type="time"
-                          value={lesson.endTime}
-                          onChange={e => handleUpdateLesson(lesson.id, 'endTime', e.target.value)}
-                          className="px-1.5 py-1 rounded bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
-                      </div>
-                    </div>
+                {(() => {
+                  const currentScheduleType: ScheduleTypeKey = (editingGroup.scheduleType as ScheduleTypeKey) || 'general'
+                  const currentTypeConfig = SCHEDULE_TYPES.find(st => st.id === currentScheduleType) || SCHEDULE_TYPES[0]
+                  const isGeneralMode = currentScheduleType === 'general'
 
-                    {/* Lesson Title */}
-                    <div className="flex-1">
-                      <input
-                        type="text"
-                        value={lesson.name}
-                        onChange={e => handleUpdateLesson(lesson.id, 'name', e.target.value)}
-                        placeholder="Название предмета или занятия"
-                        className="w-full px-2.5 py-1.5 rounded-lg text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                      />
-                    </div>
+                  return (
+                    <>
+                      {currentDaySchedule.lessons?.map((lesson, idx) => (
+                        <div
+                          key={lesson.id}
+                          className="p-3 rounded-xl border border-border/80 bg-muted/20 hover:border-border transition-colors flex flex-col sm:flex-row sm:items-center gap-2.5"
+                        >
+                          {/* Index Badge & Times */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="w-6 h-6 rounded-lg bg-muted border border-border flex items-center justify-center text-xs font-bold text-muted-foreground">
+                              {idx + 1}
+                            </span>
+                            <div className="flex items-center gap-1 text-xs font-mono">
+                              <input
+                                type="time"
+                                value={lesson.startTime}
+                                onChange={e => handleUpdateLesson(lesson.id, 'startTime', e.target.value)}
+                                className="px-1.5 py-1 rounded bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                              <span className="text-muted-foreground">–</span>
+                              <input
+                                type="time"
+                                value={lesson.endTime}
+                                onChange={e => handleUpdateLesson(lesson.id, 'endTime', e.target.value)}
+                                className="px-1.5 py-1 rounded bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                            </div>
+                          </div>
 
-                    {/* Room / Cabinet & Teacher */}
-                    <div className="flex items-center gap-2">
-                      <div className="relative w-28 shrink-0">
-                        <MapPin className="w-3 h-3 text-muted-foreground absolute left-2 top-2.5" />
-                        <input
-                          type="text"
-                          value={lesson.room || ''}
-                          onChange={e => handleUpdateLesson(lesson.id, 'room', e.target.value)}
-                          placeholder="Каб. 201"
-                          className="w-full pl-6 pr-2 py-1.5 rounded-lg text-xs bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
-                      </div>
+                          {/* Action / Subject Title Input */}
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={lesson.name}
+                              onChange={e => handleUpdateLesson(lesson.id, 'name', e.target.value)}
+                              placeholder={currentTypeConfig.actionPlaceholder}
+                              className="w-full px-2.5 py-1.5 rounded-lg text-xs sm:text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                            />
+                          </div>
 
-                      <div className="relative w-32 shrink-0">
-                        <User className="w-3 h-3 text-muted-foreground absolute left-2 top-2.5" />
-                        <input
-                          type="text"
-                          value={lesson.teacher || ''}
-                          onChange={e => handleUpdateLesson(lesson.id, 'teacher', e.target.value)}
-                          placeholder="Преподаватель"
-                          className="w-full pl-6 pr-2 py-1.5 rounded-lg text-xs bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
-                      </div>
+                          {/* Extra Clarification Fields (Only for School, Sport, Business, Courses — Hidden in General/Обычно mode) */}
+                          {!isGeneralMode && (
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              {currentTypeConfig.secondaryPlaceholder && (
+                                <div className="relative w-28 shrink-0">
+                                  <MapPin className="w-3 h-3 text-muted-foreground absolute left-2 top-2.5" />
+                                  <input
+                                    type="text"
+                                    value={lesson.room || ''}
+                                    onChange={e => handleUpdateLesson(lesson.id, 'room', e.target.value)}
+                                    placeholder={currentTypeConfig.secondaryPlaceholder}
+                                    className="w-full pl-6 pr-2 py-1.5 rounded-lg text-xs bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                </div>
+                              )}
 
+                              {currentTypeConfig.tertiaryPlaceholder && (
+                                <div className="relative w-32 shrink-0">
+                                  <User className="w-3 h-3 text-muted-foreground absolute left-2 top-2.5" />
+                                  <input
+                                    type="text"
+                                    value={lesson.teacher || ''}
+                                    onChange={e => handleUpdateLesson(lesson.id, 'teacher', e.target.value)}
+                                    placeholder={currentTypeConfig.tertiaryPlaceholder}
+                                    className="w-full pl-6 pr-2 py-1.5 rounded-lg text-xs bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLesson(lesson.id)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 cursor-pointer"
+                            title="Удалить строку"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Add Lesson Button */}
                       <button
                         type="button"
-                        onClick={() => handleDeleteLesson(lesson.id)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-                        title="Удалить урок"
+                        onClick={handleAddLesson}
+                        className="w-full py-2.5 border border-dashed border-border rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Plus className="w-4 h-4 text-primary" />
+                        <span>+ {currentTypeConfig.addButtonText}</span>
                       </button>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Add Lesson Button */}
-                <button
-                  type="button"
-                  onClick={handleAddLesson}
-                  className="w-full py-2.5 border border-dashed border-border rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-4 h-4 text-primary" />
-                  <span>Добавить урок / занятие</span>
-                </button>
+                    </>
+                  )
+                })()}
               </div>
             ) : (
               <div className="py-8 text-center text-muted-foreground text-xs">
-                <span>В этот день занятия отключены (выходной). Нажмите галочку выше, чтобы добавить уроки.</span>
+                <span>В этот день занятия отключены (выходной). Нажмите галочку выше, чтобы добавить пункты.</span>
               </div>
             )}
           </div>
