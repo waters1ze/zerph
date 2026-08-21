@@ -54,16 +54,27 @@ export async function POST(req: NextRequest) {
     }
     const ownerChatId = authUser.chatId
 
+    const body = await req.json().catch(() => ({}))
+    const { messages = [], apiKey, context: clientContext, mode } = body
+
     const limits = await getUserUsageAndLimits(ownerChatId)
-    if (!limits.canSendChatMessage) {
+
+    // If user provided their own API key (BYOK), it costs us 0 tokens and doesn't consume platform quota
+    const hasCustomKey = Boolean(
+      apiKey || 
+      body?.customApiKey || 
+      req.headers.get('x-groq-api-key') || 
+      req.headers.get('x-openai-api-key') ||
+      req.headers.get('x-anthropic-api-key') ||
+      req.headers.get('x-gemini-api-key')
+    )
+
+    if (!hasCustomKey && !limits.canSendChatMessage) {
       return NextResponse.json({
-        error: '❌ Дневной лимит сообщений в ИИ чат исчерпан (10 сообщений в день на бесплатном тарифе). Оформите подписку Zerf Premium за 99 ₽ в Настройках!',
+        error: '❌ Дневной лимит сообщений в ИИ чат исчерпан. Оформите подписку Zerf Plus (150/день) или Pro (1000/день), либо подключите свой личный API ключ в Настройках!',
         limitReached: true,
       }, { status: 403 })
     }
-
-    const body = await req.json()
-    const { messages = [], apiKey, context: clientContext, mode } = body
     const groqApiKey = apiKey || req.headers.get('x-groq-api-key') || process.env.GROQ_API_KEY || GROQ_API_KEY
     const hasKeys = groqPool.getKeysCount() > 0 || getHuggingFaceTokens().length > 0 || Boolean(groqApiKey)
 
