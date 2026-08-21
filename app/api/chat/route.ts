@@ -289,106 +289,100 @@ export async function POST(req: NextRequest) {
       parsedItems = []
     }
 
-    const actionableItem = parsedItems.find(it => it.type !== 'answer' && it.action !== 'reply')
+    const actionableItems = parsedItems.filter(it => it.type !== 'answer' && it.action !== 'reply')
 
-    if (actionableItem) {
-      // Execute the action in the database
-      const saveResult = await saveParsedItemToDb(actionableItem, ownerChatId)
-      const saved = saveResult.item
+    if (actionableItems.length > 0) {
+      const executedActions: any[] = []
+      const replyParts: string[] = []
 
-      // Fetch the actual record from database to send full object back to client
-      let createdOrUpdatedRecord: any = null
-      if (saved.type === 'goal') {
-        createdOrUpdatedRecord = await prisma.goal.findFirst({
-          where: { ownerChatId: BigInt(ownerChatId || 0) },
-          orderBy: { createdAt: 'desc' },
-        })
-      } else if (saved.type === 'note') {
-        createdOrUpdatedRecord = await prisma.note.findFirst({
-          where: { ownerChatId: BigInt(ownerChatId || 0) },
-          orderBy: { createdAt: 'desc' },
-        })
-      } else {
-        createdOrUpdatedRecord = await prisma.task.findFirst({
-          where: { ownerChatId: BigInt(ownerChatId || 0) },
-          orderBy: { createdAt: 'desc' },
-        })
-      }
+      for (const item of actionableItems) {
+        // Execute the action in the database
+        const saveResult = await saveParsedItemToDb(item, ownerChatId)
+        const saved = saveResult.item
 
-      // Format stylish confirmation response
-      let reply = ''
-      let actionType: 'task_created' | 'goal_created' | 'note_created' | 'task_completed' | 'task_deleted' | 'task_updated' = 'task_created'
-      let targetType: 'today' | 'tasks' | 'goals' | 'notes' | 'calendar' | 'stats' = 'tasks'
-
-      if (saved.action === 'completion' || saved.type === 'completion') {
-        actionType = 'task_completed'
-        reply = `✔️ **Задача успешно выполнена!**\n\n📌 **${saved.targetTitle || saved.title}**\n\n🎉 Отличная работа! Ваш стрик активности и статистика продуктивности обновлены.`
-      } else if (saved.action === 'delete' || saved.action === 'delete_all') {
-        actionType = 'task_deleted'
-        reply = saved.action === 'delete_all'
-          ? `🗑️ **Все задачи успешно очищены из вашего списка.**`
-          : `🗑️ **Задача удалена:** «${saved.targetTitle || saved.title}»`
-      } else if (saved.type === 'goal') {
-        actionType = 'goal_created'
-        targetType = 'goals'
-        reply = `🎯 **Новая цель успешно поставлена!**\n\n`
-        reply += `🚩 **${saved.title}**\n`
-        if (saved.summary && saved.summary !== saved.title) reply += `📝 ${saved.summary}\n`
-        if (saved.dueDate) reply += `⏳ Дедлайн: \`${saved.dueDate}\`\n`
-        if (saved.milestones && saved.milestones.length > 0) {
-          reply += `\n**Ключевые этапы:**\n`
-          saved.milestones.forEach((m: string) => { reply += ` • ${m}\n` })
+        // Fetch the actual record from database to send full object back to client
+        let createdOrUpdatedRecord: any = null
+        if (saved.action === 'create' || saved.action === 'update' || !saved.action) {
+          if (saved.type === 'goal') {
+            createdOrUpdatedRecord = await prisma.goal.findFirst({
+              where: { ownerChatId: BigInt(ownerChatId || 0) },
+              orderBy: { createdAt: 'desc' },
+            })
+          } else if (saved.type === 'note') {
+            createdOrUpdatedRecord = await prisma.note.findFirst({
+              where: { ownerChatId: BigInt(ownerChatId || 0) },
+              orderBy: { createdAt: 'desc' },
+            })
+          } else {
+            createdOrUpdatedRecord = await prisma.task.findFirst({
+              where: { ownerChatId: BigInt(ownerChatId || 0) },
+              orderBy: { createdAt: 'desc' },
+            })
+          }
         }
-        reply += `\n🚀 _Цель добавлена в раздел Цели с отслеживанием прогресса!_`
-      } else if (saved.type === 'note') {
-        actionType = 'note_created'
-        targetType = 'notes'
-        reply = `📝 **Заметка сохранена!**\n\n`
-        reply += `📌 **${saved.title}**\n`
-        if (saved.summary) reply += `${saved.summary}\n`
-        if (saved.tags && saved.tags.length > 0) {
-          reply += `\n🏷️ ${saved.tags.map(t => `#${t}`).join(' ')}\n`
-        }
-        reply += `\n✨ _Заметка доступна в Базе знаний и поиске!_`
-      } else {
-        // Standard task
-        actionType = 'task_created'
-        targetType = 'tasks'
-        const pEmoji = saved.priority === 'urgent' ? '🔴' : saved.priority === 'high' ? '🟠' : saved.priority === 'medium' ? '🟢' : '🔵'
-        const pLabel = saved.priority === 'urgent' ? 'Срочно' : saved.priority === 'high' ? 'Высокий' : saved.priority === 'medium' ? 'Средний' : 'Низкий'
 
-        reply = `✨ **Задача успешно добавлена!**\n\n`
-        reply += `📌 **${saved.title}**\n`
-        if (saved.dueTime || saved.dueDate) {
-          reply += `⏰ Время: \`${saved.dueTime || 'Весь день'}\` · 📅 Дата: \`${saved.dueDate || todayYmd}\`\n`
-        }
-        reply += `${pEmoji} Приоритет: **${pLabel}**\n`
-        if (saved.tags && saved.tags.length > 0) {
-          reply += `🏷️ Теги: ${saved.tags.map(t => `#${t}`).join(' ')}\n`
-        }
-        if (saved.subtasks && saved.subtasks.length > 0) {
-          reply += `\n📋 **Подзадачи:**\n`
-          saved.subtasks.forEach((s: any) => {
-            const stTitle = typeof s === 'string' ? s : s.title
-            reply += ` • ${stTitle}\n`
-          })
-        }
-        reply += `\n🚀 _Синхронизировано с вашим календарем и расписанием!_`
-      }
+        let actionType: 'task_created' | 'goal_created' | 'note_created' | 'task_completed' | 'task_deleted' | 'note_deleted' | 'goal_deleted' | 'task_updated' = 'task_created'
+        let targetType: 'today' | 'tasks' | 'goals' | 'notes' | 'calendar' | 'stats' = 'tasks'
+        let singleReply = ''
 
-      if (ownerChatId) await incrementUserUsage(ownerChatId, 'chat')
+        if (saved.action === 'completion' || saved.type === 'completion') {
+          actionType = 'task_completed'
+          singleReply = `✔️ **Задача успешно выполнена:** «${saved.targetTitle || saved.title}»`
+        } else if (saved.action === 'delete' || saved.action === 'delete_all') {
+          if (saved.type === 'note') {
+            actionType = 'note_deleted'
+            targetType = 'notes'
+            singleReply = `🗑️ **Заметка удалена:** «${saved.targetTitle || saved.title}»`
+          } else if (saved.type === 'goal') {
+            actionType = 'goal_deleted'
+            targetType = 'goals'
+            singleReply = `🗑️ **Цель удалена:** «${saved.targetTitle || saved.title}»`
+          } else {
+            actionType = 'task_deleted'
+            targetType = 'tasks'
+            singleReply = saved.action === 'delete_all'
+              ? `🗑️ **Все задачи успешно очищены из вашего списка.**`
+              : `🗑️ **Задача удалена:** «${saved.targetTitle || saved.title}»`
+          }
+        } else if (saved.type === 'goal') {
+          actionType = 'goal_created'
+          targetType = 'goals'
+          singleReply = `🎯 **Цель поставлена:** «${saved.title}»`
+          if (saved.dueDate) singleReply += ` (дедлайн: \`${saved.dueDate}\`)`
+          if (saved.milestones && saved.milestones.length > 0) {
+            singleReply += `\n**Этапы:** ` + saved.milestones.map((m: string) => `• ${m}`).join(' ')
+          }
+        } else if (saved.type === 'note') {
+          actionType = 'note_created'
+          targetType = 'notes'
+          singleReply = `📝 **Заметка сохранена:** «${saved.title}»`
+          if (saved.summary) singleReply += `\n_${saved.summary}_`
+          if (saved.tags && saved.tags.length > 0) {
+            singleReply += `\n🏷️ ${saved.tags.map(t => `#${t}`).join(' ')}`
+          }
+        } else {
+          // Standard task
+          actionType = 'task_created'
+          targetType = 'tasks'
+          const pEmoji = saved.priority === 'urgent' ? '🔴' : saved.priority === 'high' ? '🟠' : saved.priority === 'medium' ? '🟢' : '🔵'
+          singleReply = `✨ **Задача добавлена:** «${saved.title}»`
+          if (saved.dueTime || saved.dueDate) {
+            singleReply += ` · ⏰ \`${saved.dueTime || 'Весь день'}\` · 📅 \`${saved.dueDate || todayYmd}\``
+          }
+          singleReply += ` (${pEmoji})`
+        }
 
-      const serializedRecord = createdOrUpdatedRecord ? {
-        ...createdOrUpdatedRecord,
-        ownerChatId: createdOrUpdatedRecord.ownerChatId ? String(createdOrUpdatedRecord.ownerChatId) : null,
-        authorChatId: createdOrUpdatedRecord.authorChatId ? String(createdOrUpdatedRecord.authorChatId) : null,
-        createdAt: createdOrUpdatedRecord.createdAt instanceof Date ? createdOrUpdatedRecord.createdAt.toISOString() : createdOrUpdatedRecord.createdAt,
-        updatedAt: createdOrUpdatedRecord.updatedAt instanceof Date ? createdOrUpdatedRecord.updatedAt.toISOString() : createdOrUpdatedRecord.updatedAt,
-      } : null
+        replyParts.push(singleReply)
 
-      return NextResponse.json({
-        content: reply,
-        action: {
+        const serializedRecord = createdOrUpdatedRecord ? {
+          ...createdOrUpdatedRecord,
+          ownerChatId: createdOrUpdatedRecord.ownerChatId ? String(createdOrUpdatedRecord.ownerChatId) : null,
+          authorChatId: createdOrUpdatedRecord.authorChatId ? String(createdOrUpdatedRecord.authorChatId) : null,
+          createdAt: createdOrUpdatedRecord.createdAt instanceof Date ? createdOrUpdatedRecord.createdAt.toISOString() : createdOrUpdatedRecord.createdAt,
+          updatedAt: createdOrUpdatedRecord.updatedAt instanceof Date ? createdOrUpdatedRecord.updatedAt.toISOString() : createdOrUpdatedRecord.updatedAt,
+        } : null
+
+        executedActions.push({
           type: actionType,
           targetType,
           targetId: createdOrUpdatedRecord?.id || saved.targetId || undefined,
@@ -398,7 +392,17 @@ export async function POST(req: NextRequest) {
           dueDate: saved.dueDate,
           tags: saved.tags,
           item: serializedRecord,
-        },
+        })
+      }
+
+      if (ownerChatId) await incrementUserUsage(ownerChatId, 'chat')
+
+      const combinedReply = replyParts.join('\n\n') + '\n\n🚀 _Синхронизировано с вашим расписанием и базой знаний!_'
+
+      return NextResponse.json({
+        content: combinedReply,
+        actions: executedActions,
+        action: executedActions[0],
       })
     }
 

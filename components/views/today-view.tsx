@@ -8,7 +8,7 @@ import { ScheduleWidget } from '@/components/schedule-widget'
 import { ScheduleGroupModal } from '@/components/schedule-group-modal'
 import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X, Settings2 } from 'lucide-react'
-import { parseISO, isToday } from 'date-fns'
+import { format, parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
 import type { ScheduleGroup } from '@/lib/types'
 
@@ -184,7 +184,7 @@ export function TodayView() {
     dispatch({ type: 'DELETE_SCHEDULE_GROUP', id: groupId })
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = format(new Date(), 'yyyy-MM-dd')
 
   const planDay = async () => {
     if (plannerLoading) return

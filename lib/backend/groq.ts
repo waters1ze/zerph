@@ -112,6 +112,9 @@ FEATURE INSTRUCTIONS & INTENT ROUTING:
    - If subtasks have individual times/dates, specify array of objects: [{"title": "1 этап: ...", "dueTime": "10:00", "dueDate": "YYYY-MM-DD"}].
 3. NOTES ("type": "note", "action": "create"):
    - ONLY if explicitly requested: "запиши заметку", "сохрани мысль", "запиши конспект", "сохрани идею".
+   - CRITICAL: If user specifies a time or reminder in a note request (e.g. "добавь заметку в час ночи поиграть в кс2", "запиши заметку на 15:00"): generate BOTH:
+     1) "type": "note", "action": "create" — for knowledge base;
+     2) "type": "task", "action": "create" with exact "dueTime" and "dueDate" — to trigger the reminder at that exact hour!
 4. DELEGATE & SHARED TASKS ("type": "delegate"):
    - Shared for both ("нам", "для нас", "мне и Вове", "вместе", "общая"): "isBothShared": true, "recipientName": "Name".
    - Assigned to one friend ("дай Вове задачу", "поручи Лере", "передай Артему"): "isBothShared": false, "recipientName": "Name".
@@ -122,15 +125,21 @@ FEATURE INSTRUCTIONS & INTENT ROUTING:
    - Lessons list: "tags": ["учеба", "школа", "расписание"].
    - Day off / cancel school for day ("завтра выходной", "отмени уроки на среду"): "action": "cancel_schedule", "type": "task", "dueDate": "YYYY-MM-DD".
    - Cancel recurring routine ("отмени бассейн по пятницам"): "action": "cancel_recurring_schedule", "targetTitle": "Бассейн".
-7. EDIT & DELETE:
-   - "удали задачу X": "action": "delete", "targetTitle": "X".
+7. EDIT & DELETE (SINGLE & COMBINED ACTIONS):
+   - "удали задачу X": "action": "delete", "type": "task", "targetTitle": "X".
+   - "удали заметку X": "action": "delete", "type": "note", "targetTitle": "X".
    - "удали все задачи": "action": "delete_all".
    - "перенеси на 18:00 / поменяй название": "action": "update", "targetTitle": "X", "dueDate": "...", "dueTime": "...".
+   - MULTI-ACTION (e.g. "удали эту заметку, сделай чтобы это была задача все таки", "удали задачу X и создай напоминание Y"):
+     ALWAYS output ALL actions in the "items" array in exact sequence!
+     Example for "удали эту заметку, сделай задачу на 01:00":
+     Item 1: {"action": "delete", "type": "note", "targetTitle": "Название заметки"}
+     Item 2: {"action": "create", "type": "task", "title": "Название задачи", "dueTime": "01:00", "dueDate": "YYYY-MM-DD"}
 8. BIRTHDAYS & HOLIDAYS:
    - Holiday / birthday of friend ("день рождения друга 15 мая", "Новый год 31 декабря"): "type": "task", "repeat": "yearly", "dueTime": "00:00", "tags": ["праздник", "календарь"].
    - User's own birthday ("мой др 3 апреля"): "action": "set_my_birthday", "dueDate": "YYYY-MM-DD".
 9. MULTI-ITEM INPUT:
-   - If multiple tasks/actions are mentioned (e.g. "купить хлеб и еще через 2 часа позвонить маме"), extract ALL items into the "items" array.`
+   - If multiple tasks/actions/notes are mentioned (e.g. "купить хлеб и еще через 2 часа позвонить маме"), extract ALL items into the "items" array.`
 
   if (extensionsContext) {
     prompt += `\n\n🧩 Активные расширения:\n${extensionsContext.slice(0, 1500)}`

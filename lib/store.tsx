@@ -80,18 +80,18 @@ type Action =
   | { type: 'TOGGLE_DETAIL'; open?: boolean }
   | { type: 'SET_SEARCH'; query: string }
   | { type: 'TOGGLE_TASK'; id: string }
-  | { type: 'ADD_TASK'; task: Task }
+  | { type: 'ADD_TASK'; task: Task; skipSync?: boolean }
   | { type: 'UPDATE_TASK'; id: string; updates: Partial<Task> }
   | { type: 'DELETE_TASK'; id: string }
-  | { type: 'ADD_NOTE'; note: Note }
+  | { type: 'ADD_NOTE'; note: Note; skipSync?: boolean }
   | { type: 'UPDATE_NOTE'; id: string; updates: Partial<Note> }
   | { type: 'DELETE_NOTE'; id: string }
-  | { type: 'ADD_GOAL'; goal: Goal }
+  | { type: 'ADD_GOAL'; goal: Goal; skipSync?: boolean }
   | { type: 'UPDATE_GOAL'; id: string; updates: Partial<Goal> }
   | { type: 'DELETE_GOAL'; id: string }
   | { type: 'ADD_PROJECT'; project: Project }
   | { type: 'UPDATE_PROJECT'; id: string; updates: Partial<Project> }
-  | { type: 'ADD_HABIT'; habit: Habit }
+  | { type: 'ADD_HABIT'; habit: Habit; skipSync?: boolean }
   | { type: 'UPDATE_HABIT'; id: string; updates: Partial<Habit> }
   | { type: 'REPLACE_TASK'; tempId: string; task: Task }
   | { type: 'REPLACE_NOTE'; tempId: string; note: Note }
@@ -143,8 +143,15 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       }
     }
-    case 'ADD_TASK':
+    case 'ADD_TASK': {
+      if (state.tasks.some(t => t.id === action.task.id)) {
+        return {
+          ...state,
+          tasks: state.tasks.map(t => t.id === action.task.id ? action.task : t),
+        }
+      }
       return { ...state, tasks: [action.task, ...state.tasks] }
+    }
     case 'REPLACE_TASK':
       // Replace temp optimistic task with real DB record (different id)
       return { ...state, tasks: state.tasks.map(t => t.id === action.tempId ? action.task : t) }
@@ -157,16 +164,30 @@ function reducer(state: AppState, action: Action): AppState {
       }
     case 'DELETE_TASK':
       return { ...state, tasks: state.tasks.filter(t => t.id !== action.id), selectedTaskId: null, isDetailOpen: false }
-    case 'ADD_NOTE':
+    case 'ADD_NOTE': {
+      if (state.notes.some(n => n.id === action.note.id)) {
+        return {
+          ...state,
+          notes: state.notes.map(n => n.id === action.note.id ? action.note : n),
+        }
+      }
       return { ...state, notes: [action.note, ...state.notes] }
+    }
     case 'REPLACE_NOTE':
       return { ...state, notes: state.notes.map(n => n.id === action.tempId ? action.note : n) }
     case 'UPDATE_NOTE':
       return { ...state, notes: state.notes.map(n => n.id === action.id ? { ...n, ...action.updates, updatedAt: new Date().toISOString() } : n) }
     case 'DELETE_NOTE':
       return { ...state, notes: state.notes.filter(n => n.id !== action.id), selectedNoteId: null }
-    case 'ADD_GOAL':
+    case 'ADD_GOAL': {
+      if (state.goals.some(g => g.id === action.goal.id)) {
+        return {
+          ...state,
+          goals: state.goals.map(g => g.id === action.goal.id ? action.goal : g),
+        }
+      }
       return { ...state, goals: [action.goal, ...state.goals] }
+    }
     case 'REPLACE_GOAL':
       return { ...state, goals: state.goals.map(g => g.id === action.tempId ? action.goal : g) }
     case 'UPDATE_GOAL':
@@ -557,69 +578,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
       }).catch(() => {})
     } else if (action.type === 'ADD_TASK') {
-      recentlyAddedIdsRef.current.set(action.task.id, Date.now())
-      fetch('/api/tasks', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(action.task),
-      })
-        .then(async r => {
-          const data = await r.json().catch(() => null)
-          if (r.ok && data?.task?.id) {
-            dispatch({ type: 'REPLACE_TASK', tempId: action.task.id, task: data.task })
-          } else if (!r.ok) {
-            dispatch({ type: 'DELETE_TASK', id: action.task.id })
-          }
+      if (!action.skipSync) {
+        recentlyAddedIdsRef.current.set(action.task.id, Date.now())
+        fetch('/api/tasks', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(action.task),
         })
-        .catch(() => {})
+          .then(async r => {
+            const data = await r.json().catch(() => null)
+            if (r.ok && data?.task?.id) {
+              dispatch({ type: 'REPLACE_TASK', tempId: action.task.id, task: data.task })
+            } else if (!r.ok) {
+              dispatch({ type: 'DELETE_TASK', id: action.task.id })
+            }
+          })
+          .catch(() => {})
+      }
     } else if (action.type === 'ADD_NOTE') {
-      recentlyAddedIdsRef.current.set(action.note.id, Date.now())
-      fetch('/api/tasks', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...action.note, itemType: 'note' }),
-      })
-        .then(async r => {
-          const data = await r.json().catch(() => null)
-          if (r.ok && data?.note?.id) {
-            dispatch({ type: 'REPLACE_NOTE', tempId: action.note.id, note: data.note })
-          } else if (!r.ok) {
-            dispatch({ type: 'DELETE_NOTE', id: action.note.id })
-          }
+      if (!action.skipSync) {
+        recentlyAddedIdsRef.current.set(action.note.id, Date.now())
+        fetch('/api/tasks', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...action.note, itemType: 'note' }),
         })
-        .catch(() => {})
+          .then(async r => {
+            const data = await r.json().catch(() => null)
+            if (r.ok && data?.note?.id) {
+              dispatch({ type: 'REPLACE_NOTE', tempId: action.note.id, note: data.note })
+            } else if (!r.ok) {
+              dispatch({ type: 'DELETE_NOTE', id: action.note.id })
+            }
+          })
+          .catch(() => {})
+      }
     } else if (action.type === 'ADD_GOAL') {
-      recentlyAddedIdsRef.current.set(action.goal.id, Date.now())
-      fetch('/api/tasks', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...action.goal, itemType: 'goal' }),
-      })
-        .then(async r => {
-          const data = await r.json().catch(() => null)
-          if (r.ok && data?.goal?.id) {
-            dispatch({ type: 'REPLACE_GOAL', tempId: action.goal.id, goal: data.goal })
-          } else if (!r.ok) {
-            dispatch({ type: 'DELETE_GOAL', id: action.goal.id })
-          }
+      if (!action.skipSync) {
+        recentlyAddedIdsRef.current.set(action.goal.id, Date.now())
+        fetch('/api/tasks', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...action.goal, itemType: 'goal' }),
         })
-        .catch(() => {})
+          .then(async r => {
+            const data = await r.json().catch(() => null)
+            if (r.ok && data?.goal?.id) {
+              dispatch({ type: 'REPLACE_GOAL', tempId: action.goal.id, goal: data.goal })
+            } else if (!r.ok) {
+              dispatch({ type: 'DELETE_GOAL', id: action.goal.id })
+            }
+          })
+          .catch(() => {})
+      }
     } else if (action.type === 'ADD_HABIT') {
-      recentlyAddedIdsRef.current.set(action.habit.id, Date.now())
-      fetch('/api/tasks', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...action.habit, itemType: 'habit' }),
-      })
-        .then(async r => {
-          const data = await r.json().catch(() => null)
-          if (r.ok && data?.habit?.id) {
-            dispatch({ type: 'REPLACE_HABIT', tempId: action.habit.id, habit: data.habit })
-          } else if (!r.ok) {
-            dispatch({ type: 'DELETE_HABIT', id: action.habit.id })
-          }
+      if (!action.skipSync) {
+        recentlyAddedIdsRef.current.set(action.habit.id, Date.now())
+        fetch('/api/tasks', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...action.habit, itemType: 'habit' }),
         })
-        .catch(() => {})
+          .then(async r => {
+            const data = await r.json().catch(() => null)
+            if (r.ok && data?.habit?.id) {
+              dispatch({ type: 'REPLACE_HABIT', tempId: action.habit.id, habit: data.habit })
+            } else if (!r.ok) {
+              dispatch({ type: 'DELETE_HABIT', id: action.habit.id })
+            }
+          })
+          .catch(() => {})
+      }
     } else if (action.type === 'UPDATE_HABIT') {
       fetch('/api/tasks', {
         method: 'PATCH',

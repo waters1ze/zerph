@@ -1797,48 +1797,75 @@ export async function saveParsedItemToDb(
       }
       return { item, updatedItem: false }
     } else {
-      // Find matching task or goal by title similarity
+      // Find matching item by type and title similarity
       const targetName = item.targetTitle || item.title || item.rawText
-      const tasks = await getAllTasks(ownerChatId)
-      let best: { id: string; score: number } | null = null
-      for (const t of tasks) {
-        const score = stringSimilarity(targetName, t.title)
-        if (score > 0.3 && (!best || score > best.score)) {
-          best = { id: t.id, score }
-        }
-      }
-      if (best) {
-        const taskToDelete = await prisma.task.findUnique({ where: { id: best.id } })
-        if (taskToDelete && taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
-           const friendId = taskToDelete.assignees[1]
-           await prisma.telegramChat.update({
-             where: { chatId: BigInt(friendId) },
-             data: { birthday: null }
-           }).catch(() => {})
-        }
-        await deleteTask(best.id, ownerChatId)
-        return { item, updatedItem: true }
-      } else {
-        // Fallback: Delete most recent note or task if no title match
-        if (ownerChatId) {
-          const lastNote = await prisma.note.findFirst({
-            where: { ownerChatId: BigInt(ownerChatId) },
-            orderBy: { createdAt: 'desc' }
-          })
-          const lastTask = await prisma.task.findFirst({
-            where: { ownerChatId: BigInt(ownerChatId) },
-            orderBy: { createdAt: 'desc' }
-          })
-          if (lastNote && (!lastTask || lastNote.createdAt > lastTask.createdAt)) {
-            await deleteNote(lastNote.id, ownerChatId)
-            item.title = `Заметка «${lastNote.title}» удалена`
-            return { item, updatedItem: true }
-          } else if (lastTask) {
-            await deleteTask(lastTask.id, ownerChatId)
-            item.title = `Задача «${lastTask.title}» удалена`
-            return { item, updatedItem: true }
+      const isNoteTarget = item.type === 'note' || /заметк|конспект|мысл/i.test(item.rawText || '')
+      const isGoalTarget = item.type === 'goal' || /цел[ьи]/i.test(item.rawText || '')
+
+      if (isNoteTarget) {
+        const notes = await getAllNotes(ownerChatId)
+        let bestNote: { id: string; score: number } | null = null
+        for (const n of notes) {
+          const score = stringSimilarity(targetName, n.title)
+          if (score > 0.25 && (!bestNote || score > bestNote.score)) {
+            bestNote = { id: n.id, score }
           }
         }
+        if (bestNote) {
+          await deleteNote(bestNote.id, ownerChatId)
+          return { item, updatedItem: true }
+        }
+      }
+
+      if (isGoalTarget) {
+        const goals = await getAllGoals(ownerChatId)
+        let bestGoal: { id: string; score: number } | null = null
+        for (const g of goals) {
+          const score = stringSimilarity(targetName, g.title)
+          if (score > 0.25 && (!bestGoal || score > bestGoal.score)) {
+            bestGoal = { id: g.id, score }
+          }
+        }
+        if (bestGoal) {
+          await deleteGoal(bestGoal.id, ownerChatId)
+          return { item, updatedItem: true }
+        }
+      }
+
+      // Check tasks
+      const tasks = await getAllTasks(ownerChatId)
+      let bestTask: { id: string; score: number } | null = null
+      for (const t of tasks) {
+        const score = stringSimilarity(targetName, t.title)
+        if (score > 0.25 && (!bestTask || score > bestTask.score)) {
+          bestTask = { id: t.id, score }
+        }
+      }
+      if (bestTask) {
+        const taskToDelete = await prisma.task.findUnique({ where: { id: bestTask.id } })
+        if (taskToDelete && taskToDelete.title.startsWith('🎂 День рождения:') && taskToDelete.assignees.length >= 2) {
+          const friendId = taskToDelete.assignees[1]
+          await prisma.telegramChat.update({
+            where: { chatId: BigInt(friendId) },
+            data: { birthday: null }
+          }).catch(() => {})
+        }
+        await deleteTask(bestTask.id, ownerChatId)
+        return { item, updatedItem: true }
+      }
+
+      // If not found in tasks, check notes as fallback
+      const notes = await getAllNotes(ownerChatId)
+      let bestNoteFallback: { id: string; score: number } | null = null
+      for (const n of notes) {
+        const score = stringSimilarity(targetName, n.title)
+        if (score > 0.25 && (!bestNoteFallback || score > bestNoteFallback.score)) {
+          bestNoteFallback = { id: n.id, score }
+        }
+      }
+      if (bestNoteFallback) {
+        await deleteNote(bestNoteFallback.id, ownerChatId)
+        return { item, updatedItem: true }
       }
     }
   }

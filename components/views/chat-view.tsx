@@ -176,17 +176,40 @@ export function ChatView() {
         throw new Error(data.error || 'Ошибка ИИ-ассистента')
       }
 
-      // Reactive update client store if item was created/modified
-      if (data.action) {
-        if (data.action.type === 'task_created' && data.action.item) {
-          dispatch({ type: 'ADD_TASK', task: data.action.item })
-        } else if (data.action.type === 'goal_created' && data.action.item) {
-          dispatch({ type: 'ADD_GOAL', goal: data.action.item })
-        } else if (data.action.type === 'note_created' && data.action.item) {
-          dispatch({ type: 'ADD_NOTE', note: data.action.item })
-        } else if (data.action.type === 'task_completed' || data.action.type === 'task_deleted' || data.action.type === 'task_updated') {
-          syncData()
+      // Reactive update client store if items were created/modified
+      const actionsToRun = Array.isArray(data.actions) && data.actions.length > 0 ? data.actions : (data.action ? [data.action] : [])
+      let shouldSync = false
+
+      for (const act of actionsToRun) {
+        if (act.type === 'task_created' && act.item) {
+          dispatch({ type: 'ADD_TASK', task: act.item, skipSync: true })
+        } else if (act.type === 'goal_created' && act.item) {
+          dispatch({ type: 'ADD_GOAL', goal: act.item, skipSync: true })
+        } else if (act.type === 'note_created' && act.item) {
+          dispatch({ type: 'ADD_NOTE', note: act.item, skipSync: true })
+        } else if (act.type === 'note_deleted') {
+          if (act.targetId) {
+            dispatch({ type: 'DELETE_NOTE', id: act.targetId })
+          } else {
+            shouldSync = true
+          }
+        } else if (act.type === 'goal_deleted') {
+          if (act.targetId) {
+            dispatch({ type: 'DELETE_GOAL', id: act.targetId })
+          } else {
+            shouldSync = true
+          }
+        } else if (act.type === 'task_completed' || act.type === 'task_deleted' || act.type === 'task_updated') {
+          if (act.type === 'task_deleted' && act.targetId) {
+            dispatch({ type: 'DELETE_TASK', id: act.targetId })
+          } else {
+            shouldSync = true
+          }
         }
+      }
+
+      if (shouldSync) {
+        syncData()
       }
 
       const botMsg: ChatMessage = {
