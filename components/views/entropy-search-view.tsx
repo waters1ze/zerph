@@ -612,20 +612,21 @@ export function EntropySearchView() {
         setStreamedAnswer('')
         setIsStreaming(true)
 
-        let charIndex = 0
-        const totalChars = fullAnswer.length
-        const typingSpeed = Math.max(10, Math.min(22, Math.floor(2200 / Math.max(1, totalChars))))
-        const stepSize = Math.max(1, Math.floor(totalChars / 80))
+        // Perplexity-style word-by-word streaming: reveal 2–4 words per tick
+        const tokens = fullAnswer.split(/(\s+)/)
+        let tokenIndex = 0
+        const tickMs = Math.max(26, Math.min(70, Math.floor(2800 / Math.max(1, tokens.length))))
 
         typingTimerRef.current = setInterval(() => {
-          charIndex = Math.min(totalChars, charIndex + Math.max(1, Math.floor(Math.random() * 2) + stepSize))
-          setStreamedAnswer(fullAnswer.slice(0, charIndex))
-          if (charIndex >= totalChars) {
+          const chunk = 2 + Math.floor(Math.random() * 3)
+          tokenIndex = Math.min(tokens.length, tokenIndex + chunk)
+          setStreamedAnswer(tokens.slice(0, tokenIndex).join(''))
+          if (tokenIndex >= tokens.length) {
             clearInterval(typingTimerRef.current)
             typingTimerRef.current = null
             setIsStreaming(false)
           }
-        }, typingSpeed)
+        }, tickMs)
       } else {
         setZerfikMood('normal')
         setZerfikStatus(data.error || 'Не удалось выполнить поиск. Попробуйте еще раз.')
@@ -1055,10 +1056,12 @@ export function EntropySearchView() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+              {/* Compact Perplexity-style numbered source chips (match inline citation badges) */}
+              <div className="flex items-center gap-2 flex-wrap">
                 {result.sources.map(source => {
                   const isInternalNote = source.type === 'note' || Boolean(source.noteId)
                   const isInternalTask = source.type === 'task' || Boolean(source.taskId)
+                  const cleanDomain = (source.domain || 'web').replace(/^www\./, '').replace(/^m\./, '')
 
                   const handleClick = (e: React.MouseEvent) => {
                     if (isInternalNote && source.noteId) {
@@ -1079,10 +1082,9 @@ export function EntropySearchView() {
                       target={isInternalNote || isInternalTask ? '_self' : '_blank'}
                       rel="noopener noreferrer"
                       onClick={handleClick}
-                      onMouseEnter={() => setActiveSourceHover(source)}
-                      onMouseLeave={() => setActiveSourceHover(null)}
+                      title={source.title}
                       className={cn(
-                        'p-3 rounded-2xl border shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between gap-2 group cursor-pointer',
+                        'group flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border shadow-2xs hover:shadow-sm transition-all max-w-[240px]',
                         isInternalNote
                           ? 'bg-amber-500/5 border-amber-500/30 hover:border-amber-500/60'
                           : isInternalTask
@@ -1090,35 +1092,19 @@ export function EntropySearchView() {
                           : 'bg-card border-border hover:border-primary/50'
                       )}
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className={cn(
-                            'px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono',
-                            isInternalNote
-                              ? 'bg-amber-500/20 text-amber-400'
-                              : isInternalTask
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : 'bg-primary/10 text-primary'
-                          )}>
-                            [{source.id}] {isInternalNote ? '📝 Заметка' : isInternalTask ? '✓ Задача' : ''}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
-                            {source.domain}
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                          {source.title}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                        <span className="truncate max-w-[130px]">{source.snippet || (isInternalNote ? 'Открыть заметку' : isInternalTask ? 'Открыть задачу' : 'Статья')}</span>
-                        {isInternalNote || isInternalTask ? (
-                          <ArrowRight className="w-3 h-3 text-primary shrink-0 transition-transform group-hover:translate-x-0.5" />
-                        ) : (
-                          <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
-                        )}
-                      </div>
+                      <span className={cn(
+                        'w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 transition-colors',
+                        isInternalNote
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : isInternalTask
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-primary/15 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
+                      )}>
+                        {source.id}
+                      </span>
+                      <span className="text-[11px] font-medium text-foreground/85 group-hover:text-foreground truncate">
+                        {isInternalNote ? '📝 Заметка' : isInternalTask ? '✓ Задача' : cleanDomain}
+                      </span>
                     </a>
                   )
                 })}
@@ -1259,12 +1245,18 @@ export function EntropySearchView() {
                   },
                 }}
               >
-                {(isStreaming ? streamedAnswer : (result.answer || ''))
+                {(
+                  // While streaming, hide raw [n] fragments (incomplete markdown
+                  // links would render as literal "[#2](cite..." text). Once the
+                  // answer is complete, [n] becomes a Perplexity-style badge.
+                  isStreaming
+                    ? streamedAnswer.replace(/\[(\d+)\]/g, '')
+                    : (result.answer || '').replace(/\[(\d+)\]/g, '[[#$1]](cite:$1)')
+                )
                   .replace(/\\n/g, '\n')
                   .replace(/\\r/g, '')
                   .replace(/\\t/g, '  ')
-                  .replace(/\\"/g, '"')
-                  .replace(/\[(\d+)\]/g, '[[#$1]](cite:$1)')}
+                  .replace(/\\"/g, '"')}
               </ReactMarkdown>
 
               {/* Blinking typewriter streaming indicator */}

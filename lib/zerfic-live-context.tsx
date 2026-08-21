@@ -183,6 +183,15 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
   const speechQueueRef = useRef<string[]>([])
   const activeVoiceRef = useRef<ZerfikVoiceProfile | null>(null)
+  // ── Audio-synced text reveal state ──
+  const activeBotMsgIdRef = useRef<string | null>(null)
+  const fullReplyRef = useRef('')
+  const sentenceEndsRef = useRef<number[]>([])
+  const sentenceCursorRef = useRef(0)
+  const revealIdxRef = useRef(0)
+  const revealTimerRef = useRef<any>(null)
+  // Guard window after speech ends: mic echo of TTS must not trigger a new turn
+  const lastSpeechEndRef = useRef(0)
 
   isActiveRef.current = isActive
 
@@ -236,11 +245,60 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     return ZERFIK_VOICE_PROFILES.find(v => v.id === selectedVoiceId) || ZERFIK_VOICE_PROFILES[0]
   }, [selectedVoiceId])
 
+  // Reveal exactly N characters of the bot reply in the transcript bubble
+  const setRevealedText = useCallback((n: number) => {
+    const botMsgId = activeBotMsgIdRef.current
+    if (!botMsgId) return
+    setMessages(prev => {
+      const idx = prev.findIndex(m => m.id === botMsgId)
+      if (idx === -1) return prev
+      const next = [...prev]
+      next[idx] = { ...next[idx], text: fullReplyRef.current.slice(0, n) }
+      return next
+    })
+  }, [])
+
+  const clearRevealTimer = useCallback(() => {
+    if (revealTimerRef.current) {
+      clearInterval(revealTimerRef.current)
+      revealTimerRef.current = null
+    }
+  }, [])
+
+  // Progressively reveal text up to `target` over `durationMs`,
+  // so on-screen typing speed matches the voice playback speed
+  const revealUpTo = useCallback((target: number, durationMs: number) => {
+    clearRevealTimer()
+    const start = revealIdxRef.current
+    if (target <= start) {
+      revealIdxRef.current = target
+      setRevealedText(target)
+      return
+    }
+    if (durationMs <= 80) {
+      revealIdxRef.current = target
+      setRevealedText(target)
+      return
+    }
+    const t0 = performance.now()
+    revealTimerRef.current = setInterval(() => {
+      const p = Math.min(1, (performance.now() - t0) / durationMs)
+      const n = Math.round(start + (target - start) * p)
+      revealIdxRef.current = n
+      setRevealedText(n)
+      if (p >= 1) clearRevealTimer()
+    }, 40)
+  }, [clearRevealTimer, setRevealedText])
+
   // Play next sentence in queue for ultra-fast early response start
   const playSentenceFromQueue = useCallback(() => {
     if (speechQueueRef.current.length === 0) {
       isSpeakingRef.current = false
       currentSpokenTextRef.current = ''
+      // Finish revealing any remaining text so the bubble shows the full reply
+      revealIdxRef.current = fullReplyRef.current.length
+      setRevealedText(fullReplyRef.current.length)
+      lastSpeechEndRef.current = Date.now()
       setIsSpeaking(false)
       if (autoListen && isActiveRef.current && !isInterruptedRef.current) {
         setStatusText('Слушаю вас...')
@@ -263,6 +321,16 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     isSpeakingRef.current = true
     setIsSpeaking(true)
     setStatusText(`${activeVoice.name} говорит...`)
+
+    // Sync on-screen text with this sentence's estimated voice duration
+    const k = sentenceCursorRef.current
+    sentenceCursorRef.current += 1
+    const startIdx = k === 0 ? 0 : (sentenceEndsRef.current[k - 1] ?? 0)
+    const endIdx = sentenceEndsRef.current[k] ?? fullReplyRef.current.length
+    // Russian TTS pace ≈ 13 chars/sec scaled by the voice rate
+    const cps = 13 * (activeVoice.rate || 1)
+    const estMs = Math.max(500, ((endIdx - startIdx) / cps) * 1000)
+    revealUpTo(endIdx, estMs)
 
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       isInterruptedRef.current = false
@@ -333,6 +401,10 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
       utterance.onend = () => {
         if (!isInterruptedRef.current) {
+          // Snap reveal to this sentence's true end to avoid text/audio drift
+          const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
+          revealIdxRef.current = sentEnd
+          setRevealedText(sentEnd)
           playSentenceFromQueue()
         }
       }
@@ -358,6 +430,9 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
           audio.volume = isMuted ? 0 : voiceVolume
           audio.onended = () => {
             if (!isInterruptedRef.current) {
+              const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
+              revealIdxRef.current = sentEnd
+              setRevealedText(sentEnd)
               playSentenceFromQueue()
             }
           }
@@ -369,19 +444,21 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
           playSentenceFromQueue()
         })
     }
-  }, [selectedVoice, voiceVolume, isMuted, autoListen])
+  }, [selectedVoice, voiceVolume, isMuted, autoListen, revealUpTo, setRevealedText])
 
   // Stop active speech synthesis and clear sentence queue
   const stopSpeaking = useCallback(() => {
     speechQueueRef.current = []
+    clearRevealTimer()
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
     isSpeakingRef.current = false
     currentSpokenTextRef.current = ''
+    lastSpeechEndRef.current = Date.now()
     setIsSpeaking(false)
     isInterruptedRef.current = true
-  }, [])
+  }, [clearRevealTimer])
 
   // Speech synthesis with distinct timbres, real-world cadence and sentence-by-sentence streaming
   const speakText = useCallback((textToSpeak: string, voiceOverride?: string | ZerfikVoiceProfile) => {
@@ -395,14 +472,27 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     activeVoiceRef.current = activeVoice
     isInterruptedRef.current = false
 
-    // Split text into natural sentence chunks for rapid early-start playback
+    // Split text into natural sentence chunks for rapid early-start playback.
+    // The first sentence starts speaking immediately while the rest are queued,
+    // and on-screen text is revealed in sync with each sentence's audio.
     const rawSentences = textToSpeak
       .replace(/([.!?])\s+/g, '$1|__SPLIT__|')
       .split('|__SPLIT__|')
       .map(s => s.trim())
       .filter(Boolean)
 
-    speechQueueRef.current = rawSentences.length > 0 ? rawSentences : [textToSpeak]
+    const sentences = rawSentences.length > 0 ? rawSentences : [textToSpeak]
+
+    fullReplyRef.current = textToSpeak
+    sentenceCursorRef.current = 0
+    revealIdxRef.current = 0
+    let acc = 0
+    sentenceEndsRef.current = sentences.map(s => {
+      acc += s.length + 1
+      return acc
+    })
+
+    speechQueueRef.current = sentences
     playSentenceFromQueue()
   }, [stopSpeaking, selectedVoice, playSentenceFromQueue])
 
@@ -498,27 +588,11 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       setIsThinking(false)
       setStatusText(`${selectedVoice.name} говорит...`)
 
-      // Immediately start speaking early sentence by sentence!
+      // The transcript bubble is filled by the audio-synced reveal loop inside
+      // speakText (sentence-by-sentence, at the speed of the voice) — no separate
+      // typewriter here, otherwise two writers would fight over the same message.
+      activeBotMsgIdRef.current = botMsgId
       speakText(botReply, selectedVoiceId)
-
-      // Smooth typewriter text streaming in parallel
-      let charIdx = 0
-      const totalChars = botReply.length
-      const step = Math.max(1, Math.floor(totalChars / 40))
-      const typeInterval = setInterval(() => {
-        charIdx = Math.min(totalChars, charIdx + step)
-        const partial = botReply.slice(0, charIdx)
-        setMessages(prev => {
-          const last = prev[prev.length - 1]
-          if (last && last.id === botMsgId) {
-            return [...prev.slice(0, -1), { ...last, text: partial }]
-          }
-          return prev
-        })
-        if (charIdx >= totalChars) {
-          clearInterval(typeInterval)
-        }
-      }, 25)
     } catch (err) {
       console.error('Zerfic Live Chat Error:', err)
       setIsThinking(false)
@@ -587,19 +661,14 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
           }
 
           const rawText = (finalTranscript || currentInterim).trim()
-          const normalizedIncoming = rawText.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '')
 
-          // Echo cancellation
-          if (isSpeakingRef.current && currentSpokenTextRef.current) {
-            if (
-              currentSpokenTextRef.current.includes(normalizedIncoming) ||
-              normalizedIncoming.includes(currentSpokenTextRef.current.slice(0, 30))
-            ) {
-              return
-            }
-            if (normalizedIncoming.length > 5) {
-              stopSpeaking()
-            }
+          // ANTI SELF-INTERRUPTION: while Zerfic is speaking (and for a short
+          // guard window after), ALL microphone input is ignored. Browser TTS
+          // played through speakers gets picked up by the mic and previously
+          // caused Zerfic to interrupt himself mid-sentence. The user can
+          // always interrupt manually via the Stop button or mascot tap.
+          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 900) {
+            return
           }
 
           if (currentInterim) {
