@@ -1021,26 +1021,27 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         sidebarCollapsed && 'md:w-20'
       )}>
         <div className="space-y-6">
-          {/* Logo & Platform Info */}
+          {/* Back to Home Button & Sidebar Toggle */}
           <div className="flex items-center justify-between border-b border-border pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-black text-sm shadow-md shadow-purple-500/20">
-                ⚡
+            <a
+              href="/"
+              className="flex items-center gap-3 p-1.5 pr-3 rounded-2xl bg-card hover:bg-primary hover:text-primary-foreground text-foreground border border-border hover:border-primary/40 transition-all cursor-pointer group shadow-xs"
+              title="Вернуться на главную страницу"
+            >
+              <div className="w-9 h-9 rounded-xl bg-primary/15 group-hover:bg-black/20 flex items-center justify-center text-primary group-hover:text-primary-foreground transition-colors shrink-0">
+                <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
               </div>
               {!sidebarCollapsed && (
-                <div>
-                  <h1 className="font-black text-sm text-foreground tracking-tight flex items-center gap-1.5">
-                    <span>Zerf Developer Hub</span>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">v2.6</span>
-                  </h1>
-                  <p className="text-[10px] text-muted-foreground">Платформа создания расширений</p>
+                <div className="min-w-0 pr-1">
+                  <span className="font-bold text-xs block leading-tight">На главную</span>
+                  <span className="text-[10px] text-muted-foreground group-hover:text-primary-foreground/80">Zerf Note</span>
                 </div>
               )}
-            </div>
+            </a>
             
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="hidden md:flex p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="hidden md:flex p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               title={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
             >
               <Sliders className="w-4 h-4" />
@@ -1143,34 +1144,24 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         
         {/* Header Breadcrumbs */}
         <header className="h-16 border-b border-border bg-card/30 backdrop-blur-md px-4 sm:px-8 flex items-center justify-between gap-4 sticky top-0 z-20 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <a
-              href="/"
-              className="p-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">← На главную</span>
-            </a>
-
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground truncate">
-              <span className="text-muted-foreground capitalize hidden md:inline">Студия</span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground hidden md:inline" />
-              <span className="text-primary truncate">
-                {navSection === 'manifest_builder' && 'Конструктор манифеста'}
-                {navSection === 'universal_template' && 'Универсальный шаблон'}
-                {navSection === 'import_export' && 'Импорт / Экспорт JSON'}
-                {navSection === 'live_sandbox' && 'Live Sandbox & Изолятор'}
-                {navSection === 'webhook_tester' && 'Webhook & REST Tester'}
-                {navSection === 'publish_github' && 'Публикация из GitHub'}
-                {navSection === 'my_releases' && 'Мои плагины & Релизы'}
-                {navSection === 'ai_prompts' && 'AI Промпты & Скиллы'}
-                {navSection === 'ui_kit' && 'UI Kit & Темы оформления'}
-                {navSection === 'inter_ai_protocol' && 'Двусторонний протокол'}
-                {navSection === 'earnings' && 'Баланс автора & ЮMoney'}
-                {navSection === 'sdk_docs' && 'Справочник SDK API'}
-                {navSection === 'cli_tools' && 'Zerf CLI & Терминал'}
-              </span>
-            </div>
+          <div className="flex items-center gap-2 text-xs font-bold text-foreground truncate min-w-0">
+            <span className="text-muted-foreground capitalize hidden md:inline">Студия</span>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground hidden md:inline" />
+            <span className="text-primary truncate">
+              {navSection === 'manifest_builder' && 'Конструктор манифеста'}
+              {navSection === 'universal_template' && 'Универсальный шаблон'}
+              {navSection === 'import_export' && 'Импорт / Экспорт JSON'}
+              {navSection === 'live_sandbox' && 'Live Sandbox & Изолятор'}
+              {navSection === 'webhook_tester' && 'Webhook & REST Tester'}
+              {navSection === 'publish_github' && 'Публикация из GitHub'}
+              {navSection === 'my_releases' && 'Мои плагины & Релизы'}
+              {navSection === 'ai_prompts' && 'AI Промпты & Скиллы'}
+              {navSection === 'ui_kit' && 'UI Kit & Темы оформления'}
+              {navSection === 'inter_ai_protocol' && 'Двусторонний протокол'}
+              {navSection === 'earnings' && 'Баланс автора & ЮMoney'}
+              {navSection === 'sdk_docs' && 'Справочник SDK API'}
+              {navSection === 'cli_tools' && 'Zerf CLI & Терминал'}
+            </span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
