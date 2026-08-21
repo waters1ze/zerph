@@ -349,6 +349,13 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       isInterruptedRef.current = false
 
+      // Unfreeze / resume speech synthesis for iOS Safari / Mobile
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume()
+        }
+      } catch {}
+
       let formattedSpeech = currentSentence
       if (activeVoice.id === 'alex_baritone') {
         formattedSpeech = formattedSpeech.replace(/([,;:])\s*/g, '$1... ')
@@ -360,13 +367,11 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
       const utterance = new SpeechSynthesisUtterance(formattedSpeech)
       utterance.rate = activeVoice.rate
-      // Wide pitch range (0.15 to 1.95) to ensure each persona has a distinct, unmistakable vocal timbre
       utterance.pitch = Math.min(1.95, Math.max(0.15, activeVoice.pitch))
-      utterance.volume = isMuted ? 0 : voiceVolume
+      utterance.volume = isMuted ? 0 : Math.max(0.2, voiceVolume)
       utterance.lang = 'ru-RU'
 
-      // Pick the system voice ONCE per profile and cache it — re-resolving per
-      // sentence caused the voice to "drift"/change mid-reply.
+      // Pick the system voice ONCE per profile and cache it
       let stableVoice = chosenVoiceCacheRef.current.get(activeVoice.id)
       if (!stableVoice) {
         const voices = browserVoicesRef.current.length > 0
@@ -409,7 +414,6 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
       utterance.onend = () => {
         if (!isInterruptedRef.current) {
-          // Snap reveal to this sentence's true end to avoid text/audio drift
           const sentEnd = sentenceEndsRef.current[sentenceCursorRef.current - 1] ?? fullReplyRef.current.length
           revealIdxRef.current = sentEnd
           setRevealedText(sentEnd)
@@ -417,13 +421,18 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      utterance.onerror = () => {
+      utterance.onerror = (err) => {
+        console.warn('[Zerfic TTS]', err)
         if (!isInterruptedRef.current) {
           playSentenceFromQueue()
         }
       }
 
       currentUtteranceRef.current = utterance
+
+      try {
+        window.speechSynthesis.resume()
+      } catch {}
       window.speechSynthesis.speak(utterance)
     } else {
       fetch('/api/extensions/zerfic-live/tts', {
