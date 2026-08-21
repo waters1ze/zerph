@@ -344,7 +344,9 @@ export async function POST(req: NextRequest) {
 
     // ── TRUE LIVE STREAMING (SSE): first words are spoken while the LLM still generates ──
     if (wantsStream) {
-      const streamModel = getModelForUserPlan(userPlan, requestedModel, 'chat') || 'allam-2-7b'
+      // Guard: 'allam-2-7b' produces garbled Russian — force a clean model
+      const safeRequested = requestedModel === 'allam-2-7b' ? undefined : requestedModel
+      const streamModel = getModelForUserPlan(userPlan, safeRequested, 'chat') || 'openai/gpt-oss-20b'
       const personaPrompt = getSystemPromptForVoice(voiceId)
 
       // Workspace context (notes/tasks/goals/extensions) so Zerfic can talk

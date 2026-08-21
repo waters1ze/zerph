@@ -29,7 +29,7 @@ export interface ZerfikVoiceProfile {
 export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   {
     id: 'zerfik_original',
-    name: 'Зерфик (Тихоня / Магический)',
+    name: 'Зерфик Волшебный',
     subtitle: 'Звонкий, светлый, сказочный',
     tag: 'Фирменный',
     gender: 'male',
@@ -39,7 +39,7 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   },
   {
     id: 'zerfik_friend',
-    name: 'Зерфик (Живой друг)',
+    name: 'Зерфик Дружелюбный',
     subtitle: 'Естественный, живой, разговорный',
     tag: 'Человек',
     gender: 'male',
@@ -49,7 +49,7 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   },
   {
     id: 'alex_baritone',
-    name: 'Алекс (Бархатный бас)',
+    name: 'Зерфик Мужественный',
     subtitle: 'Глубокий, плотный мужской баритон',
     tag: 'Бас',
     gender: 'male',
@@ -59,7 +59,7 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   },
   {
     id: 'viktor_brutal',
-    name: 'Виктор (Суровый командир)',
+    name: 'Зерфик Суровый',
     subtitle: 'Грубый, низкий, с хрипотцой',
     tag: 'Брутал',
     gender: 'male',
@@ -69,7 +69,7 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   },
   {
     id: 'dmitry_business',
-    name: 'Дмитрий (Коуч / Драйв)',
+    name: 'Зерфик Энергичный',
     subtitle: 'Энергичный, мотивирующий, четкий',
     tag: 'Драйв',
     gender: 'male',
@@ -79,7 +79,7 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   },
   {
     id: 'alisa_soft',
-    name: 'Алиса (Нежный / Мягкий)',
+    name: 'Зерфик Нежный',
     subtitle: 'Светлый, женский, умиротворяющий',
     tag: 'Нежный',
     gender: 'female',
@@ -89,7 +89,7 @@ export const ZERFIK_VOICE_PROFILES: ZerfikVoiceProfile[] = [
   },
   {
     id: 'elena_business',
-    name: 'Елена (Деловой / Четкий)',
+    name: 'Зерфик Деловой',
     subtitle: 'Уверенный, структурный, женский',
     tag: 'Бизнес',
     gender: 'female',
@@ -147,7 +147,8 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('zerfik_original')
   const [voiceVolume, setVoiceVolume] = useState<number>(0.85)
-  const [selectedModelId, setSelectedModelId] = useState<string>('allam-2-7b')
+  // gpt-oss-20b: ultra-fast with clean Russian — allam-2-7b produces garbled Russian
+  const [selectedModelId, setSelectedModelId] = useState<string>('openai/gpt-oss-20b')
   const [messages, setMessages] = useState<LiveChatMessage[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -194,6 +195,8 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
   const lastSpeechEndRef = useRef(0)
   // Full text of the last spoken reply — used to filter TTS echo picked up by mic
   const lastSpokenTextRef = useRef('')
+  // Stable voice per profile: prevents the voice "drifting" between sentences
+  const chosenVoiceCacheRef = useRef<Map<string, SpeechSynthesisVoice>>(new Map())
 
   isActiveRef.current = isActive
 
@@ -349,58 +352,43 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
 
       const utterance = new SpeechSynthesisUtterance(formattedSpeech)
       utterance.rate = activeVoice.rate
-      utterance.pitch = activeVoice.pitch
+      // Clamp pitch: extreme values make some engines fall back to the default voice
+      utterance.pitch = Math.min(1.5, Math.max(0.4, activeVoice.pitch))
       utterance.volume = isMuted ? 0 : voiceVolume
       utterance.lang = 'ru-RU'
 
-      let voices = browserVoicesRef.current
-      if (!voices || voices.length === 0) {
-        voices = window.speechSynthesis.getVoices() || []
-      }
-      const ruVoices = voices.filter(v => v.lang.toLowerCase().startsWith('ru'))
-
-      if (ruVoices.length > 0) {
-        if (activeVoice.id === 'alisa_soft') {
-          const femaleVoice = ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('svetlana') || n.includes('alisa') || n.includes('milena') || n.includes('google русский') || n.includes('dariya')
-          }) || ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('female') || n.includes('женск') || !n.includes('pavel')
-          }) || ruVoices[0]
-          utterance.voice = femaleVoice
-        } else if (activeVoice.id === 'elena_business') {
-          const femaleVoice = ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('ekaterina') || n.includes('tatiana') || n.includes('irina') || n.includes('female')
-          }) || ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('female') || n.includes('женск') || !n.includes('pavel')
-          }) || ruVoices[0]
-          utterance.voice = femaleVoice
-        } else if (activeVoice.id === 'alex_baritone' || activeVoice.id === 'viktor_brutal') {
-          const deepMale = ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('dmitry') || n.includes('boris') || n.includes('ivan') || n.includes('aleksandr')
-          }) || ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('pavel') || n.includes('male') || n.includes('мужск') || !n.includes('irina')
-          }) || ruVoices[0]
-          utterance.voice = deepMale
-        } else if (activeVoice.id === 'dmitry_business') {
-          const fastMale = ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('dmitry') || n.includes('pavel') || n.includes('male')
-          }) || ruVoices[0]
-          utterance.voice = fastMale
-        } else {
-          const standardMale = ruVoices.find(v => {
-            const n = v.name.toLowerCase()
-            return n.includes('pavel') || n.includes('male') || n.includes('google')
-          }) || ruVoices[0]
-          utterance.voice = standardMale
+      // Pick the system voice ONCE per profile and cache it — re-resolving per
+      // sentence caused the voice to "drift"/change mid-reply.
+      let stableVoice = chosenVoiceCacheRef.current.get(activeVoice.id)
+      if (!stableVoice) {
+        const voices = browserVoicesRef.current.length > 0
+          ? browserVoicesRef.current
+          : (window.speechSynthesis.getVoices() || [])
+        const ruVoices = voices.filter(v => v.lang.toLowerCase().startsWith('ru'))
+        if (ruVoices.length > 0) {
+          const wantFemale = activeVoice.gender === 'female'
+          stableVoice = wantFemale
+            ? (ruVoices.find(v => {
+                const n = v.name.toLowerCase()
+                return n.includes('svetlana') || n.includes('milena') || n.includes('alisa') ||
+                       n.includes('google русский') || n.includes('dariya') || n.includes('ekaterina') ||
+                       n.includes('tatiana') || n.includes('irina')
+              })
+              || ruVoices.find(v => {
+                const n = v.name.toLowerCase()
+                return n.includes('female') || n.includes('женск') || !n.includes('pavel')
+              })
+              || ruVoices[0])
+            : (ruVoices.find(v => {
+                const n = v.name.toLowerCase()
+                return n.includes('pavel') || n.includes('dmitry') || n.includes('yuri') ||
+                       n.includes('male') || n.includes('мужск')
+              })
+              || ruVoices[0])
+          if (stableVoice) chosenVoiceCacheRef.current.set(activeVoice.id, stableVoice)
         }
       }
+      if (stableVoice) utterance.voice = stableVoice
 
       utterance.onend = () => {
         if (!isInterruptedRef.current) {
@@ -751,6 +739,11 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
       checkLevel()
 
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (!SpeechRecognition) {
+        // Mobile browsers / Telegram WebView often lack the Web Speech API —
+        // tell the user honestly instead of silently doing nothing.
+        setStatusText('Диктовка не поддерживается в этом браузере — пишите текстом или откройте в Chrome')
+      }
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition()
         recognition.continuous = true
@@ -786,13 +779,19 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
           //    AND phantom follow-up turns (the "multiple answers" bug).
           // 2) Even after the window, input that matches the text Zerfic just
           //    spoke is treated as echo and dropped.
-          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 1800) {
+          if (isSpeakingRef.current || Date.now() - lastSpeechEndRef.current < 2500) {
             return
           }
+          // Word-overlap echo filter: ASR mishears its own TTS slightly, so an
+          // exact substring match is not enough — require <55% word overlap
+          // with what was just spoken to accept the turn.
           const normIncoming = rawText.toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '').trim()
           const spokenNorm = (lastSpokenTextRef.current || '').toLowerCase().replace(/[^a-zа-я0-9\s]/gi, '').trim()
           if (normIncoming.length > 6 && spokenNorm.length > 12) {
-            if (spokenNorm.includes(normIncoming) || normIncoming.includes(spokenNorm.slice(0, 40))) {
+            const spokenWords = new Set(spokenNorm.split(/\s+/))
+            const incWords = normIncoming.split(/\s+/)
+            const overlap = incWords.filter(w => spokenWords.has(w)).length
+            if (incWords.length > 0 && overlap / incWords.length >= 0.55) {
               return
             }
           }
