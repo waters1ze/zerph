@@ -427,6 +427,28 @@ export function getAuthHeaders(): Record<string, string> {
   return headers
 }
 
+/**
+ * Single source of truth for "is this visitor authenticated?".
+ * Checks localStorage AND cookies (PWA/iOS may clear localStorage but keep
+ * permanent cookies) so the "Войти" button never hangs for a returning user.
+ */
+export function isUserAuthenticated(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    const chatId = getTgChatId()
+    if (!chatId || chatId.startsWith('guest_')) return false
+    const token =
+      localStorage.getItem('zerf_auth_token') ||
+      document.cookie.match(/(?:^|; )zerf_auth_token=([^;]*)/)?.[1] ||
+      ''
+    const initData = (window as any).Telegram?.WebApp?.initData
+    const vkLaunch = localStorage.getItem('zerf_vk_launch')
+    return Boolean(token || initData || vkLaunch)
+  } catch {
+    return false
+  }
+}
+
 function initAppState(initialState: AppState): AppState {
   if (typeof window === 'undefined') return initialState
   const currentChatId = getTgChatId()

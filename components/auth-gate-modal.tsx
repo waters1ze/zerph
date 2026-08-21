@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sparkles, Send, Lock, ExternalLink, Mail, Key, User, Loader2, CheckCircle2, X } from 'lucide-react'
 import { GithubIcon } from '@/components/views/extensions-view'
-import { getTgChatId } from '@/lib/store'
+import { getTgChatId, isUserAuthenticated } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () => void }) {
-  const [isAuth, setIsAuth] = useState(true)
+  // Synchronous check (localStorage + cookie): returning users never see the
+  // login gate flash in and out on load.
+  const [isAuth, setIsAuth] = useState(() => isUserAuthenticated())
   const [authTab, setAuthTab] = useState<'google' | 'email' | 'tg' | 'vk' | 'github'>('google')
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
@@ -36,6 +38,8 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
       if (data.chatId) localStorage.setItem('zerf_chat_id', String(data.chatId))
       if (data.sessionToken) localStorage.setItem('zerf_auth_token', data.sessionToken)
       setSuccessMsg('Успешный вход!')
+      // Notify topbar/gate instantly, then reload to hydrate the new session
+      window.dispatchEvent(new CustomEvent('zerf:auth_changed'))
       setTimeout(() => {
         window.location.reload()
       }, 500)
@@ -47,17 +51,14 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
   }
 
   useEffect(() => {
-    const checkAuth = () => {
-      const chatId = getTgChatId()
-      const token = localStorage.getItem('zerf_auth_token')
-      const initData = (window as any).Telegram?.WebApp?.initData
-      const vkLaunch = localStorage.getItem('zerf_vk_launch')
-      const hasCredentials = Boolean(token || initData || vkLaunch)
-      setIsAuth(Boolean(chatId && !chatId.startsWith('guest_') && hasCredentials))
-    }
+    const checkAuth = () => setIsAuth(isUserAuthenticated())
     checkAuth()
     window.addEventListener('storage', checkAuth)
-    return () => window.removeEventListener('storage', checkAuth)
+    window.addEventListener('zerf:auth_changed', checkAuth)
+    return () => {
+      window.removeEventListener('storage', checkAuth)
+      window.removeEventListener('zerf:auth_changed', checkAuth)
+    }
   }, [])
 
   const shouldOpen = open !== undefined ? open : !isAuth
@@ -83,6 +84,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
       if (data.firstName) localStorage.setItem('zerf_user_name', data.firstName)
 
       setSuccessMsg(data.message || 'Успешный вход!')
+      window.dispatchEvent(new CustomEvent('zerf:auth_changed'))
       setTimeout(() => {
         window.location.reload()
       }, 700)
@@ -121,6 +123,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
       if (data.firstName) localStorage.setItem('zerf_user_name', data.firstName)
 
       setSuccessMsg(data.message || 'Успешно!')
+      window.dispatchEvent(new CustomEvent('zerf:auth_changed'))
       setTimeout(() => {
         window.location.reload()
       }, 700)
@@ -192,7 +195,7 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
             </div>
 
             {/* Tab Selector */}
-            <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-muted/60 border border-border/60">
+            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-muted/60 border border-border/60">
               <button
                 type="button"
                 onClick={() => { setAuthTab('google'); setError(null) }}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn, calculateStreakInfo } from '@/lib/utils'
-import { useApp } from '@/lib/store'
+import { useApp, isUserAuthenticated } from '@/lib/store'
 import { NotificationsPanel } from '@/components/notifications-panel'
 import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw, Lock } from 'lucide-react'
 import { format } from 'date-fns'
@@ -88,20 +88,21 @@ interface Props {
 
 export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
   const { state, dispatch, syncData, isSyncing } = useApp()
-  const [isAuthed, setIsAuthed] = useState(true)
+  // Synchronous auth check (localStorage + cookie) — no flash of the login
+  // button for returning users, and no "Войти" hanging after a session exists.
+  const [isAuthed, setIsAuthed] = useState(() => isUserAuthenticated())
   const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   useEffect(() => {
-    const checkAuth = () => {
-      const chatId = localStorage.getItem('zerf_chat_id')
-      const token = localStorage.getItem('zerf_auth_token')
-      const initData = (window as any).Telegram?.WebApp?.initData
-      const vkLaunch = localStorage.getItem('zerf_vk_launch')
-      setIsAuthed(Boolean(chatId && !chatId.startsWith('guest_') && (token || initData || vkLaunch)))
-    }
+    // Re-check on cross-tab changes and after any auth flow completes
+    const checkAuth = () => setIsAuthed(isUserAuthenticated())
     checkAuth()
     window.addEventListener('storage', checkAuth)
-    return () => window.removeEventListener('storage', checkAuth)
+    window.addEventListener('zerf:auth_changed', checkAuth)
+    return () => {
+      window.removeEventListener('storage', checkAuth)
+      window.removeEventListener('zerf:auth_changed', checkAuth)
+    }
   }, [])
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [nextTaskCountdown, setNextTaskCountdown] = useState<{ title: string; timeStr: string } | null>(null)
@@ -259,18 +260,25 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
 
       {/* Actions */}
       <div className="flex items-center gap-1.5">
-        {/* Login Button for unauthenticated visitors */}
-        {!isAuthed && (
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={() => window.dispatchEvent(new CustomEvent('zerf_open_auth_modal'))}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-gradient-to-r from-primary via-indigo-500 to-amber-500 hover:opacity-95 text-white text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer shrink-0 animate-pulse"
-            title="Войти или зарегистрироваться в Zerf Note"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>Войти</span>
-          </motion.button>
-        )}
+        {/* Login Button for unauthenticated visitors — smooth enter/exit */}
+        <AnimatePresence>
+          {!isAuthed && (
+            <motion.button
+              key="login-btn"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.18 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={() => window.dispatchEvent(new CustomEvent('zerf_open_auth_modal'))}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-gradient-to-r from-primary via-indigo-500 to-amber-500 hover:opacity-95 text-white text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer shrink-0 animate-pulse"
+              title="Войти или зарегистрироваться в Zerf Note"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Войти</span>
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         {/* New Task - Global */}
         <motion.button
