@@ -13,6 +13,7 @@ import {
   CreditCard, Wallet, Banknote, CheckCircle2, X, Loader2, Key
 } from 'lucide-react'
 import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
+import { markExtensionPending, clearExtensionPending, hasFreshExtensionPending } from '@/lib/extension-state'
 import { planAtLeast } from '@/lib/plans'
 import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -552,6 +553,9 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
 
   const fetchExtensions = async () => {
+    // While a user-triggered mutation is in flight, applying server state
+    // would visually revert the optimistic update (toggle flicker).
+    if (hasFreshExtensionPending()) return
     try {
       if (!initialCache.hasCache) setLoading(true)
       const res = await fetch('/api/extensions', { headers: getAuthHeaders() })
@@ -1208,12 +1212,14 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   const handleToggleEnable = async (extensionId: string) => {
     const isCurrentlyEnabled = enabledIds.includes(extensionId)
+    const prevEnabled = enabledIds
     const nextEnabled = isCurrentlyEnabled
       ? enabledIds.filter(id => id !== extensionId)
       : [...enabledIds, extensionId]
-    
+
     // Instant optimistic update
     setEnabledIds(nextEnabled)
+    markExtensionPending(`toggle_${extensionId}`)
 
     try {
       setActionLoading(`toggle_${extensionId}`)
@@ -1225,17 +1231,22 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       const data = await res.json()
       if (data.success) {
         setEnabledIds(data.enabledIds || nextEnabled)
-        window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+        try {
+          localStorage.setItem('zerf_enabled_extensions', JSON.stringify(data.enabledIds || nextEnabled))
+        } catch {}
+        // Notify the sidebar with the already-reconciled truth (guarded
+        // listeners skip this while our pending window is still open).
         window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
         showToast(isCurrentlyEnabled ? '⚪ Расширение отключено' : '🟢 Расширение включено', 'info')
       } else {
-        setEnabledIds(enabledIds) // rollback
+        setEnabledIds(prevEnabled) // rollback
         showToast(data.error || 'Ошибка изменения статуса', 'error')
       }
     } catch {
-      setEnabledIds(enabledIds) // rollback
+      setEnabledIds(prevEnabled) // rollback
       showToast('Ошибка изменения статуса', 'error')
     } finally {
+      clearExtensionPending(`toggle_${extensionId}`)
       setActionLoading(null)
     }
   }
@@ -1258,6 +1269,31 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     }
 
     setActionLoading(extensionId)
+    markExtensionPending(extensionId)
+
+    // Instant optimistic install: the card reacts on click, not after the
+    // network round-trip. Rolled back only on a definitive failure.
+    const prevInstalled = installedIds
+    const prevEnabled = enabledIds
+    const optimisticInstalled = Array.from(new Set([...installedIds, extensionId]))
+    const optimisticEnabled = Array.from(new Set([...enabledIds, extensionId]))
+    setInstalledIds(optimisticInstalled)
+    setEnabledIds(optimisticEnabled)
+    try {
+      localStorage.setItem('zerf_installed_extensions', JSON.stringify(optimisticInstalled))
+      localStorage.setItem('zerf_enabled_extensions', JSON.stringify(optimisticEnabled))
+    } catch {}
+    setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
+
+    const revertOptimisticInstall = () => {
+      setInstalledIds(prevInstalled)
+      setEnabledIds(prevEnabled)
+      try {
+        localStorage.setItem('zerf_installed_extensions', JSON.stringify(prevInstalled))
+        localStorage.setItem('zerf_enabled_extensions', JSON.stringify(prevEnabled))
+      } catch {}
+      setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
+    }
 
     try {
       const res = await fetch('/api/extensions', {
@@ -1272,16 +1308,17 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         const finalEnabled = Array.from(new Set([...(data.enabledIds || enabledIds), extensionId]))
         setInstalledIds(finalInstalled)
         setEnabledIds(finalEnabled)
-        setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
         try {
           localStorage.setItem('zerf_installed_extensions', JSON.stringify(finalInstalled))
           localStorage.setItem('zerf_enabled_extensions', JSON.stringify(finalEnabled))
         } catch {}
+        // Notify listeners with the already-reconciled truth
         window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
         window.dispatchEvent(new CustomEvent('zerf_extension_installed', { detail: { extensionId } }))
         window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
         showToast('✓ Расширение успешно установлено в панель!', 'success')
       } else {
+        revertOptimisticInstall()
         if (data.requiresPlan || data.requiresUpgrade) {
           const ok = await confirmDialog({
             title: '⭐ Требуется тариф Plus / Pro',
@@ -1296,8 +1333,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         }
       }
     } catch {
+      revertOptimisticInstall()
       showToast('Ошибка сети при установке расширения', 'error')
     } finally {
+      clearExtensionPending(extensionId)
       setActionLoading(null)
     }
   }
@@ -1313,8 +1352,17 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       localStorage.setItem('zerf_enabled_extensions', JSON.stringify(nextEnabled))
     } catch {}
     setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: Math.max(0, (item.installCount || 1) - 1) } : item))
-    window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
-    window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
+    markExtensionPending(extensionId)
+
+    const rollbackUninstall = () => {
+      setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
+      setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
+      try {
+        localStorage.setItem('zerf_installed_extensions', JSON.stringify(Array.from(new Set([...nextInstalled, extensionId]))))
+        localStorage.setItem('zerf_enabled_extensions', JSON.stringify(Array.from(new Set([...nextEnabled, extensionId]))))
+      } catch {}
+      setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
+    }
 
     try {
       setActionLoading(extensionId)
@@ -1333,23 +1381,19 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
           localStorage.setItem('zerf_installed_extensions', JSON.stringify(finalInstalled))
           localStorage.setItem('zerf_enabled_extensions', JSON.stringify(finalEnabled))
         } catch {}
+        // Notify listeners with the already-reconciled truth
         window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
         window.dispatchEvent(new CustomEvent('zerf_sidebar_config_changed'))
         showToast('✓ Расширение удалено из вашего списка', 'info')
       } else {
-        // Rollback
-        setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
-        setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
-        setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
+        rollbackUninstall()
         showToast(data.error || 'Ошибка при удалении', 'error')
       }
     } catch {
-      // Rollback
-      setInstalledIds(prev => Array.from(new Set([...prev, extensionId])))
-      setEnabledIds(prev => Array.from(new Set([...prev, extensionId])))
-      setCatalog(prev => prev.map(item => item.id === extensionId ? { ...item, installCount: (item.installCount || 0) + 1 } : item))
+      rollbackUninstall()
       showToast('Ошибка при удалении', 'error')
     } finally {
+      clearExtensionPending(extensionId)
       setActionLoading(null)
     }
   }
@@ -2015,7 +2059,11 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                                   className="p-2 h-8 rounded-xl bg-muted/60 hover:bg-rose-500/15 text-muted-foreground hover:text-rose-400 border border-border transition-all flex items-center justify-center cursor-pointer shrink-0"
                                   title="Удалить расширение с аккаунта"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  {actionLoading === ext.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
                                 </button>
                               </div>
                             ) : isFree ? (

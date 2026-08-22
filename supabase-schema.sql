@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS "TelegramChat" (
     "birthday" TEXT,
     "timezone" TEXT DEFAULT 'Europe/Moscow',
     "reminderIntervalMinutes" INTEGER NOT NULL DEFAULT 5,
-    "reminderRepeatCount" INTEGER NOT NULL DEFAULT 3,
+    "reminderRepeatCount" INTEGER NOT NULL DEFAULT 0, -- 0 = single notification per task
     "plan" TEXT NOT NULL DEFAULT 'free',
     "subscriptionExpiry" TIMESTAMP(3),
     "voiceCountToday" INTEGER NOT NULL DEFAULT 0,

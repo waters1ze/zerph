@@ -2902,12 +2902,15 @@ export async function POST(req: NextRequest) {
         })
         await send(chatId, `✅ *Интервал обновлен:* ${val} минут!`, { reply_markup: miniAppKeyboard(chatId) })
       } else if (data === 'cfg_repeat_menu') {
-        await send(chatId, `🔁 *Выберите количество повторов напоминаний:*`, {
+        await send(chatId, `⏱ *Повторы напоминаний:*\n\n▫ Без повторов — одно уведомление на задачу (рекомендуется)\n▫ Повторы — напомним ещё, если задача не выполнена`, {
           reply_markup: {
             inline_keyboard: [
               [
+                { text: 'Без повторов', callback_data: 'set_rep_0' },
                 { text: '1 раз', callback_data: 'set_rep_1' },
                 { text: '2 раза', callback_data: 'set_rep_2' },
+              ],
+              [
                 { text: '3 раза', callback_data: 'set_rep_3' },
                 { text: '5 раз', callback_data: 'set_rep_5' },
               ],
@@ -2915,13 +2918,16 @@ export async function POST(req: NextRequest) {
           },
         })
       } else if (data.startsWith('set_rep_')) {
-        const val = parseInt(data.replace('set_rep_', ''), 10)
+        const val = Math.max(0, parseInt(data.replace('set_rep_', ''), 10) || 0)
         await prisma.telegramChat.upsert({
           where: { chatId: BigInt(chatId) },
           update: { reminderRepeatCount: val },
           create: { chatId: BigInt(chatId), reminderRepeatCount: val },
         })
-        await send(chatId, `✅ *Количество повторов обновлено:* ${val} раза!`, { reply_markup: miniAppKeyboard(chatId) })
+        const replyText = val === 0
+          ? `▪ *Повторы отключены* — теперь одно уведомление на задачу.`
+          : `▪ *Повторы обновлены:* ${val} доп. уведомлени${val === 1 ? 'е' : 'я'}.`
+        await send(chatId, replyText, { reply_markup: miniAppKeyboard(chatId) })
       } else if (data.startsWith('friend_accept_')) {
         const inviterId = BigInt(data.replace('friend_accept_', ''))
         await autoAddFriends(Number(inviterId), chatId)

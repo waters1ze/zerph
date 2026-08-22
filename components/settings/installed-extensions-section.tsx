@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { markExtensionPending, clearExtensionPending, hasFreshExtensionPending } from '@/lib/extension-state'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ExtensionIcon, DEFAULT_EXTENSIONS } from '@/components/views/extensions-view'
 import type { ExtensionItem } from '@/app/api/extensions/route'
@@ -241,6 +242,10 @@ export function InstalledExtensionsSettingsSection() {
 
   // Fetch installed extensions from backend and sync to local cache
   const fetchExtensions = async (silent = false) => {
+    // While a user-triggered mutation (install/enable/uninstall) is in
+    // flight, applying server state would visually revert the optimistic
+    // update — the flicker "сначала убралось, потом появилось".
+    if (hasFreshExtensionPending()) return
     try {
       if (!silent && catalog.length === 0) setLoading(true)
       const res = await fetch('/api/extensions', {
@@ -275,6 +280,9 @@ export function InstalledExtensionsSettingsSection() {
     fetchExtensions(true)
 
     const handleExtensionsChanged = () => {
+      // Skip refreshes while our own mutation is being applied — its response
+      // handler will set the authoritative state (no status flip-flop).
+      if (hasFreshExtensionPending()) return
       const fresh = getInitialInstalledData()
       setCatalog(fresh.catalog)
       setInstalledIds(fresh.installedIds)
@@ -320,10 +328,11 @@ export function InstalledExtensionsSettingsSection() {
   }
 
   const handleToggleEnable = async (ext: ExtensionItem) => {
+    const isCurrentlyEnabled = enabledIds.includes(ext.id)
+    const nextState = !isCurrentlyEnabled
     try {
       setActionLoading(`enable_${ext.id}`)
-      const isCurrentlyEnabled = enabledIds.includes(ext.id)
-      const nextState = !isCurrentlyEnabled
+      markExtensionPending(`enable_${ext.id}`)
 
       // Optimistic UI update
       setEnabledIds(prev =>
@@ -346,8 +355,13 @@ export function InstalledExtensionsSettingsSection() {
         showToast(data.error || 'Ошибка изменения статуса расширения', 'error')
       }
     } catch {
+      // Network error: revert strictly to the pre-click state
+      setEnabledIds(prev =>
+        isCurrentlyEnabled ? [...new Set([...prev, ext.id])] : prev.filter(id => id !== ext.id)
+      )
       showToast('Ошибка сети при изменении статуса расширения', 'error')
     } finally {
+      clearExtensionPending(`enable_${ext.id}`)
       setActionLoading(null)
     }
   }
@@ -362,8 +376,21 @@ export function InstalledExtensionsSettingsSection() {
     })
     if (!ok) return
 
+    // Optimistic instant removal
+    const prevInstalled = installedIds
+    const prevEnabled = enabledIds
+    const nextInstalled = installedIds.filter(id => id !== ext.id)
+    const nextEnabled = enabledIds.filter(id => id !== ext.id)
+    setInstalledIds(nextInstalled)
+    setEnabledIds(nextEnabled)
+    try {
+      localStorage.setItem('zerf_installed_extensions', JSON.stringify(nextInstalled))
+      localStorage.setItem('zerf_enabled_extensions', JSON.stringify(nextEnabled))
+    } catch {}
+
     try {
       setActionLoading(ext.id)
+      markExtensionPending(ext.id)
       const res = await fetch('/api/extensions', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
@@ -371,13 +398,21 @@ export function InstalledExtensionsSettingsSection() {
       })
       const data = await res.json()
       if (data.success) {
-        setInstalledIds(data.installedIds || [])
+        setInstalledIds(data.installedIds || nextInstalled)
         if (data.enabledIds) setEnabledIds(data.enabledIds)
         showToast(`✓ Расширение «${ext.title}» успешно удалено`, 'info')
+      } else {
+        // Revert on server refusal
+        setInstalledIds(prevInstalled)
+        setEnabledIds(prevEnabled)
+        showToast(data.error || 'Ошибка при удалении расширения', 'error')
       }
     } catch {
+      setInstalledIds(prevInstalled)
+      setEnabledIds(prevEnabled)
       showToast('Ошибка при удалении расширения', 'error')
     } finally {
+      clearExtensionPending(ext.id)
       setActionLoading(null)
     }
   }
@@ -724,8 +759,12 @@ export function InstalledExtensionsSettingsSection() {
                         className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs border border-primary/20 flex items-center gap-1.5 transition-colors cursor-pointer"
                         title="Применить задачи шаблона"
                       >
-                        <CheckSquare className="w-3 h-3" />
-                        <span className="hidden sm:inline">Применить</span>
+                        {actionLoading === `apply_${ext.id}` ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <CheckSquare className="w-3 h-3" />
+                        )}
+                        <span className="hidden sm:inline">{actionLoading === `apply_${ext.id}` ? 'Применение…' : 'Применить'}</span>
                       </button>
                     )}
 
@@ -736,7 +775,11 @@ export function InstalledExtensionsSettingsSection() {
                       className="p-1.5 rounded-xl bg-muted/60 hover:bg-rose-500/15 text-muted-foreground hover:text-rose-400 border border-border transition-colors cursor-pointer"
                       title="Удалить расширение"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      {actionLoading === ext.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
                     </button>
 
                     {/* Settings Expand/Collapse Button */}

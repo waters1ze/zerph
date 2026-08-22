@@ -994,13 +994,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch {}
           }
           if (Array.isArray(data.installedExtensions) && typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('zerf_installed_extensions', JSON.stringify(data.installedExtensions))
-              if (Array.isArray(data.enabledExtensions)) {
-                localStorage.setItem('zerf_enabled_extensions', JSON.stringify(data.enabledExtensions))
-              }
-              window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
-            } catch {}
+            // Skip while an extension mutation is in flight: this sync may
+            // carry pre-mutation server state that would clobber the
+            // optimistic UI and cause toggle flicker ("туда-сюда").
+            const { hasFreshExtensionPending } = await import('@/lib/extension-state')
+            if (!hasFreshExtensionPending()) {
+              try {
+                localStorage.setItem('zerf_installed_extensions', JSON.stringify(data.installedExtensions))
+                if (Array.isArray(data.enabledExtensions)) {
+                  localStorage.setItem('zerf_enabled_extensions', JSON.stringify(data.enabledExtensions))
+                }
+                window.dispatchEvent(new CustomEvent('zerf_extensions_updated'))
+              } catch {}
+            }
           }
 
           if (Object.keys(loadStateUpdates).length > 0) {

@@ -34,16 +34,18 @@ self.addEventListener('push', (event) => {
     body: payload.body,
     icon: payload.icon || '/icon-192.png',
     badge: payload.badge || '/icon-192.png',
-    vibrate: [200, 100, 200, 100, 300],
+    vibrate: [150, 80, 150],
     data: {
       url: targetUrl,
       timestamp: Date.now(),
     },
+    // Same-tag notifications REPLACE each other (no stacks of duplicates);
+    // banners auto-dismiss instead of demanding a click (requireInteraction).
     tag: payload.tag || `zerf-push-${Date.now()}`,
     renotify: true,
-    requireInteraction: true,
+    requireInteraction: false,
     actions: [
-      { action: 'open', title: 'Открыть' }
+      { action: 'open', title: 'Открыть Zerf' }
     ]
   }
 

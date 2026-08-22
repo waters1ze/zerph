@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
             siriKey,
             timezone: chat.timezone || 'Europe/Moscow',
             reminderIntervalMinutes: chat.reminderIntervalMinutes ?? 5,
-            reminderRepeatCount: chat.reminderRepeatCount ?? 3,
+            reminderRepeatCount: chat.reminderRepeatCount ?? 0,
             ttsEnabled: Boolean(chat.ttsEnabled),
             aiModel,
             aiTaskModels,
@@ -329,7 +329,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (reminderRepeatCount !== undefined) {
-      updateData.reminderRepeatCount = Math.max(1, Math.min(10, Number(reminderRepeatCount) || 3))
+      updateData.reminderRepeatCount = Math.max(0, Math.min(10, Number(reminderRepeatCount) || 0))
     }
 
     if (ttsEnabled !== undefined) {

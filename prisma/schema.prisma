@@ -107,7 +107,7 @@ model TelegramChat {
   birthday               String?   // YYYY-MM-DD or MM-DD
   timezone               String?   @default("Europe/Moscow") // e.g. "Europe/Moscow", "Asia/Yekaterinburg", etc.
   reminderIntervalMinutes Int       @default(5)
-  reminderRepeatCount    Int       @default(3)
+  reminderRepeatCount    Int       @default(0) // 0 = single notification per task (repeats are opt-in)
   plan                   String    @default("free") // "free" | "premium" | "unlimited"
   subscriptionExpiry     DateTime?
   voiceCountToday        Int       @default(0)
