@@ -342,7 +342,7 @@ export async function postDailyMorningPostToChannel(channelId = DEFAULT_CHANNEL,
       `[2 новости в формате: ▪ <b>[Точный заголовок]</b> — [Большой текст 3-5 предложений] <a href="[URL]">[Источник]</a>]\n\n` +
       `<blockquote><b>Фокус & Прогноз дня:</b> [Стратегический совет по распределению внимания, когнитивной продуктивности и системной работе в Zerf Note]</blockquote>\n\n` +
       `▫️ <i>Выпуск 4 из 4 | Наука & Фокус</i>\n` +
-      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zerph.vercel.app">zerph.vercel.app</a>`
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
     const prompts = [
       { id: 'geo', prompt: prompt1, topic: 'Мировая повестка' },
@@ -487,7 +487,7 @@ export async function postDailyEveningPostToChannel(channelId = DEFAULT_CHANNEL,
       `<b>Вечерняя рефлексия:</b> [2-3 предложения о важности выгрузки мыслей и фиксации задач в Zerf Note перед сном для восстановления ресурсов].\n\n` +
       `<blockquote>❝ [Вдохновляющая мысль о дисциплине, спокойствии ума и системности]</blockquote>\n\n` +
       `▫️ <i>Вечерний выпуск 3 из 3 | Наука & Рефлексия</i>\n` +
-      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zerph.vercel.app">zerph.vercel.app</a>`
+      `▪ <a href="https://t.me/Zerph_bot">@Zerph_bot</a> | <a href="https://zeprh.vercel.app">zeprh.vercel.app</a>`
 
     const prompts = [
       { id: 'dev', prompt: prompt1, topic: 'Инженерия' },

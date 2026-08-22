@@ -473,7 +473,7 @@ async function runAction(promptText) {
   // Download Starter Kit JSON
   const handleDownloadStarterKit = () => {
     const starterKitJson = {
-      $schema: 'https://zerph.vercel.app/schemas/extension-v2.json',
+      $schema: 'https://zeprh.vercel.app/schemas/extension-v2.json',
       name: mName,
       title: mTitle,
       version: mVersion,
@@ -545,7 +545,7 @@ async function runAction(promptText) {
   // Generated JSON string
   const manifestJsonString = JSON.stringify(
     {
-      $schema: 'https://zerph.vercel.app/schemas/extension-v2.json',
+      $schema: 'https://zeprh.vercel.app/schemas/extension-v2.json',
       name: mName,
       title: mTitle,
       version: mVersion,
@@ -598,7 +598,7 @@ async function runAction(promptText) {
       icon: '⚡',
       badge: 'Cursor Rules',
       tags: ['Cursor', '.cursorrules', 'Typescript', 'Tailwind', 'ZerfContext'],
-      prompt: `You are an expert developer building extensions, widgets, and themes for the Zerf Note platform (https://zerph.vercel.app).
+      prompt: `You are an expert developer building extensions, widgets, and themes for the Zerf Note platform (https://zeprh.vercel.app).
 When building a Zerf extension:
 1. Always adhere to the Manifest V2 specification (zerf-extension.json).
 2. Utilize the ZerfContext API for tasks, notes, user preferences, and AI prompts.
@@ -695,7 +695,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         'Поддержка прямых триггеров /research и голосовых команд'
       ],
       manifest: {
-        "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+        "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
         "name": "zerf-plugin-ai-research",
         "title": "AI Deep Research & Fact Checker",
         "version": "1.0.0",
@@ -729,7 +729,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         'Учет завершенных помидоров в ежедневный стрик'
       ],
       manifest: {
-        "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+        "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
         "name": "zerf-plugin-pomodoro",
         "title": "Pomodoro Focus Timer & Streak",
         "version": "1.1.0",
@@ -763,7 +763,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         'Безопасное хранение токена бота в настройках расширения'
       ],
       manifest: {
-        "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+        "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
         "name": "zerf-plugin-tg-notifier",
         "title": "Telegram Webhook Event Broadcaster",
         "version": "1.0.0",
@@ -797,7 +797,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         'Интеграция с ИИ для перераспределения перегруженных списков'
       ],
       manifest: {
-        "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+        "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
         "name": "zerf-plugin-eisenhower",
         "title": "Eisenhower Priority Matrix 2x2",
         "version": "1.2.0",
@@ -831,7 +831,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         'Совместимость со всеми встроенными разделами Zerf Note'
       ],
       manifest: {
-        "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+        "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
         "name": "zerf-plugin-theme-cyberpunk",
         "title": "Cyberpunk Neon Glow Theme",
         "version": "1.0.0",
@@ -865,7 +865,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         'Разрешение конфликтов расписания через ИИ'
       ],
       manifest: {
-        "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+        "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
         "name": "zerf-plugin-calendar-sync",
         "title": "Two-Way Calendar Sync Bridge",
         "version": "1.0.0",
@@ -2979,7 +2979,7 @@ pnpm add @zerf/sdk</pre>
                       </p>
                       <pre className="p-4 rounded-xl bg-zinc-950 text-primary font-mono text-xs overflow-x-auto leading-relaxed whitespace-pre-wrap">
 {`{
-  "$schema": "https://zerph.vercel.app/schemas/extension-v2.json",
+  "$schema": "https://zeprh.vercel.app/schemas/extension-v2.json",
   "name": "zerf-plugin-my-widget",
   "title": "Умный виджет продуктивности",
   "version": "1.0.0",

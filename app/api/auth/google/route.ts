@@ -17,7 +17,7 @@ const COOKIE_OPTS = {
  * GET: 1-Click Google OAuth entry (redirects to Google with whitelist redirect_uri)
  */
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin || 'https://zerph.vercel.app'
+  const origin = req.nextUrl.origin || 'https://zeprh.vercel.app'
   const redirectUri = getRedirectUri(origin)
   
   // Detect active logged in user from session or cookies or query

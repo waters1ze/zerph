@@ -22,7 +22,7 @@ import {
 import { prisma } from '@/lib/backend/prisma'
 import { parseTimezoneInput } from '@/lib/backend/timezone'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
 export async function POST(req: NextRequest) {
   try {

@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     await saveAuthEntry(code, entry)
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
     const authUrl = `${appUrl}/cli-auth?code=${code}`
 
     return NextResponse.json({

@@ -8,7 +8,7 @@ const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824
 // The protected key must come from env only — it was previously hardcoded
 // here and leaked into git history (rotate it in the VK app settings).
 const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || null
-const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 const CALLBACK_URL = `${ORIGIN}/api/auth/vk/callback`
 
 const COOKIE_OPTS = {

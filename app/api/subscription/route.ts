@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     const label = `${ownerChatId}_${product.labelSuffix}`
 
     const receiver = process.env.YOOMONEY_RECEIVER || '4100119573095433'
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
     const successUrl = `${appUrl}/?payment=success`
 
     // ЮMoney QuickPay form parameters

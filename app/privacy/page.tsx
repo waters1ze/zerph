@@ -47,7 +47,7 @@ export default function PrivacyPolicyPage() {
               <span>Общие положения и оператор данных</span>
             </h2>
             <p>
-              Настоящая Политика конфиденциальности определяет порядок обработки и защиты персональной информации пользователей сервиса <b>Zerf Note</b> (доступного по адресу <a href="https://zerph.vercel.app" className="text-primary hover:underline font-mono">https://zerph.vercel.app</a>, в боте Telegram <span className="font-mono text-foreground">@Zerph_bot</span>, мобильных и десктопных приложениях).
+              Настоящая Политика конфиденциальности определяет порядок обработки и защиты персональной информации пользователей сервиса <b>Zerf Note</b> (доступного по адресу <a href="https://zeprh.vercel.app" className="text-primary hover:underline font-mono">https://zeprh.vercel.app</a>, в боте Telegram <span className="font-mono text-foreground">@Zerph_bot</span>, мобильных и десктопных приложениях).
             </p>
             <p>
               Мы со всей серьезностью относимся к вашей приватности. Сервис Zerf Note разработан по принципу <b>Privacy-First</b>: мы собираем только тот минимум данных, который строго необходим для функционирования планировщика, синхронизации задач и работы персонального ИИ-ассистента.

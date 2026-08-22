@@ -8,7 +8,7 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
 // The client secret must come from env only — it was previously hardcoded
 // here and leaked into git history (rotate it in the GitHub app settings).
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || null
-const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
+const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 const CALLBACK_URL = `${ORIGIN}/api/auth/github/callback`
 
 const COOKIE_OPTS = {

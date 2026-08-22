@@ -14,7 +14,7 @@ const COOKIE_OPTS = {
 }
 
 export async function GET(req: NextRequest) {
-  const host = req.headers.get('host') || 'zerph.vercel.app'
+  const host = req.headers.get('host') || 'zeprh.vercel.app'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const origin = `${protocol}://${host}`
 
