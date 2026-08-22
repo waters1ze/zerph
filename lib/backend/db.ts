@@ -3950,4 +3950,71 @@ export async function cleanupInactiveAccounts(): Promise<{ deletedCount: number;
   }
 }
 
+/**
+ * Automatically compacts completed tasks older than 7 days without deleting them.
+ * Trims bulky descriptions, strips rawText, clears subtasks and reminder flags
+ * so they occupy minimum database storage while preserving all metadata for profiles,
+ * weekly graphs, streak analytics, and knowledge graph history!
+ */
+export async function compactOldCompletedTasks(chatId?: number | bigint | string | null): Promise<{ compactedCount: number }> {
+  try {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const oneWeekAgoDateStr = oneWeekAgo.toISOString().slice(0, 10)
+
+    const whereClause: any = {
+      status: 'done',
+      OR: [
+        { completedAt: { lt: oneWeekAgo } },
+        { dueDate: { lt: oneWeekAgoDateStr } },
+        { updatedAt: { lt: oneWeekAgo } },
+      ],
+    }
+
+    if (chatId) {
+      const cid = BigInt(chatId)
+      whereClause.OR = [
+        { ownerChatId: cid, completedAt: { lt: oneWeekAgo } },
+        { ownerChatId: cid, dueDate: { lt: oneWeekAgoDateStr } },
+        { ownerChatId: cid, updatedAt: { lt: oneWeekAgo } },
+      ]
+    }
+
+    const oldDoneTasks = await prisma.task.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        rawText: true,
+        subtasks: true,
+      },
+    })
+
+    let compactedCount = 0
+
+    for (const task of oldDoneTasks) {
+      const hasBulkyDesc = task.description && task.description.length > 60
+      const hasRawText = Boolean(task.rawText)
+      const hasBulkySubtasks = Array.isArray(task.subtasks) && task.subtasks.length > 0
+
+      if (hasBulkyDesc || hasRawText || hasBulkySubtasks) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: {
+            description: task.description ? task.description.slice(0, 60) : '',
+            rawText: null,
+            subtasks: [],
+            reminderOffsetMinutes: 0,
+          },
+        }).catch(() => {})
+        compactedCount++
+      }
+    }
+
+    return { compactedCount }
+  } catch (err) {
+    console.error('[compactOldCompletedTasks] Error:', err)
+    return { compactedCount: 0 }
+  }
+}
 

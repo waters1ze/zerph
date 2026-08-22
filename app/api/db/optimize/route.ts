@@ -63,8 +63,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Clean up inactive accounts past their retention period (1/3/6/12 months)
-    const { cleanupInactiveAccounts } = await import('@/lib/backend/db')
+    const { cleanupInactiveAccounts, compactOldCompletedTasks } = await import('@/lib/backend/db')
     const inactiveCleanup = await cleanupInactiveAccounts().catch(() => ({ deletedCount: 0, checkedCount: 0 }))
+
+    // 4. Maximize compaction of completed tasks older than 7 days without deleting history/graphs
+    const taskCompaction = await compactOldCompletedTasks(authUser.chatId).catch(() => ({ compactedCount: 0 }))
 
     return NextResponse.json({
       success: true,
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest) {
       stats: {
         cleanedConfigs,
         compactedExtensions,
+        compactedOldTasks: taskCompaction.compactedCount,
         deletedInactiveAccounts: inactiveCleanup.deletedCount,
         checkedAccounts: inactiveCleanup.checkedCount,
         timestamp: new Date().toISOString(),

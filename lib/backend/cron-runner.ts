@@ -999,6 +999,7 @@ if (process.env.RUN_CRON_DAEMON === 'true' && !globalObj.__reminderCronStarted) 
     runEveningReview().catch(() => {})
     runWeeklySundayReport().catch(() => {})
     runGoogleCalendarPeriodicSync().catch(() => {})
+    import('@/lib/backend/db').then(m => m.compactOldCompletedTasks()).catch(() => {})
   }, 60_000)
 
   setInterval(() => {
