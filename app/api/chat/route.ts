@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
 
     // ── 2. INTENT PARSER & ACTION MUTATION (Create, Delete, Complete, Goal, Note) ──
 
-    const serverContext = ownerChatId ? await getExistingItemsContext(ownerChatId) : ''
+    const serverContext = ownerChatId ? await getExistingItemsContext(ownerChatId, userText) : ''
     const friendsContext = ''
     const extensionsContext = ownerChatId ? await getUserExtensionsAIContext(ownerChatId) : ''
     // Resolve user's preferred model (from request body or saved DB settings)

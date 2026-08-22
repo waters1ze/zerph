@@ -1465,7 +1465,10 @@ export async function getAllChatIds(): Promise<number[]> {
   return chats.map((c: { chatId: bigint }) => Number(c.chatId))
 }
 
-export async function getExistingItemsContext(ownerChatId?: number | bigint | string | null): Promise<string> {
+export async function getExistingItemsContext(
+  ownerChatId?: number | bigint | string | null,
+  userQuery?: string
+): Promise<string> {
   try {
     if (!ownerChatId) return ''
     const cid = BigInt(ownerChatId)
@@ -1476,6 +1479,24 @@ export async function getExistingItemsContext(ownerChatId?: number | bigint | st
       getAllNotes(ownerChatId),
       prisma.habit.findMany({ where: { ownerChatId: cid } }).catch(() => []),
     ])
+
+    // Calculate MSK dates
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    const [{ value: day }, , { value: month }, , { value: year }] = formatter.formatToParts(now)
+    const todayMsk = `${year}-${month}-${day}`
+    const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    const [{ value: tDay }, , { value: tMonth }, , { value: tYear }] = formatter.formatToParts(tomorrowDate)
+    const tomorrowMsk = `${tYear}-${tMonth}-${tDay}`
+
+    const q = (userQuery || '').toLowerCase()
+    const isAskingTomorrow = q.includes('завтра') || q.includes('завтрашн')
+    const isAskingToday = q.includes('сегодня') || q.includes('сегодняшн')
 
     // Fetch user projects
     let userProjects: any[] = []
@@ -1532,76 +1553,77 @@ export async function getExistingItemsContext(ownerChatId?: number | bigint | st
 
     const lines: string[] = []
 
-    // 1. Projects
-    if (userProjects.length > 0) {
-      lines.push('📁 ПРОЕКТЫ ПОЛЬЗОВАТЕЛЯ:')
-      userProjects.forEach(p => {
-        const role = p.ownerChatId === cid ? 'Владелец' : 'Участник'
-        lines.push(`- Проект: "${p.title}" | ID: ${p.id} | Роль: ${role} | Статус: ${p.status || 'active'}${p.description ? ` | Описание: ${p.description}` : ''}`)
-      })
+    // 1. Target Day Schedule
+    if (isAskingTomorrow) {
+      const tomorrowTasks = tasks.filter(t => t.dueDate === tomorrowMsk)
+        .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
+
+      lines.push(`📅 РАСПИСАНИЕ И ПЛАН НА ЗАВТРА (${tomorrowMsk}) [Всего задач: ${tomorrowTasks.length}]:`)
+      if (tomorrowTasks.length === 0) {
+        lines.push('На завтра задач не запланировано.')
+      } else {
+        tomorrowTasks.forEach(t => {
+          const time = t.dueTime ? ` в ${t.dueTime}` : ''
+          const statusStr = t.status === 'done' ? ' [Выполнено]' : ''
+          lines.push(`- ${sanitizeTaskTitle(t.title)}${time}${statusStr}`)
+        })
+      }
+    } else if (isAskingToday) {
+      const todayTasks = tasks.filter(t => t.dueDate === todayMsk || !t.dueDate)
+        .sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'))
+
+      lines.push(`📅 РАСПИСАНИЕ И ПЛАН НА СЕГОДНЯ (${todayMsk}) [Всего задач: ${todayTasks.length}]:`)
+      if (todayTasks.length === 0) {
+        lines.push('На сегодня активных задач нет.')
+      } else {
+        todayTasks.forEach(t => {
+          const time = t.dueTime ? ` в ${t.dueTime}` : ''
+          const statusStr = t.status === 'done' ? ' [Выполнено]' : ''
+          lines.push(`- ${sanitizeTaskTitle(t.title)}${time}${statusStr}`)
+        })
+      }
+    } else {
+      // General Context (Fallback)
+      if (userProjects.length > 0) {
+        lines.push('📁 ПРОЕКТЫ:')
+        userProjects.forEach(p => {
+          lines.push(`- ${p.title} (${p.status || 'active'})`)
+        })
+      }
+      if (userTeams.length > 0) {
+        lines.push('\n🏢 КОМАНДЫ:')
+        userTeams.forEach(t => lines.push(`- ${t.name}`))
+      }
+      if (friendsList.length > 0) {
+        lines.push('\n👥 ДРУЗЬЯ:')
+        friendsList.forEach(f => {
+          const name = `${f.firstName || ''} ${f.lastName || ''}`.trim() || 'Без имени'
+          lines.push(`- ${name} ${f.allowTasks ? '(доступ к задачам)' : ''}`)
+        })
+      }
+      const activeTasks = tasks.filter(t => t.status !== 'done').slice(0, 10)
+      if (activeTasks.length > 0) {
+        lines.push('\n📋 АКТУАЛЬНЫЕ ЗАДАЧИ:')
+        activeTasks.forEach(t => {
+          lines.push(`- ${sanitizeTaskTitle(t.title)}${t.dueDate ? ` (${t.dueDate})` : ''}`)
+        })
+      }
     }
 
-    // 2. Teams
-    if (userTeams.length > 0) {
-      lines.push('\n🏢 КОМАНДЫ ПОЛЬЗОВАТЕЛЯ:')
-      userTeams.forEach(t => {
-        lines.push(`- Команда: "${t.name}" | ID: ${t.id}${t.description ? ` | Описание: ${t.description}` : ''}`)
-      })
-    }
-
-    // 3. Friends
-    if (friendsList.length > 0) {
-      lines.push('\n👥 ДРУЗЬЯ ПОЛЬЗОВАТЕЛЯ:')
-      friendsList.forEach(f => {
-        const name = `${f.firstName || ''} ${f.lastName || ''}`.trim() || 'Без имени'
-        const un = f.username ? ` (@${f.username})` : ''
-        const tasksStatus = f.allowTasks ? 'задачи разрешены' : 'задачи отключены'
-        lines.push(`- Друг: ${name}${un} | ID: ${f.chatId} | Доступ: ${tasksStatus}`)
-      })
-    }
-
-    // 4. Goals
-    const activeGoals = goals.slice(0, 10)
+    // 2. Goals (compact)
+    const activeGoals = goals.slice(0, 5)
     if (activeGoals.length > 0) {
-      lines.push('\n🎯 ЦЕЛИ ПОЛЬЗОВАТЕЛЯ:')
+      lines.push('\n🎯 ЦЕЛИ:')
       activeGoals.forEach(g => {
-        lines.push(`- ID: ${g.id} | Название: "${g.title}" | Дедлайн: ${g.deadline || 'не указан'}${g.description ? ` | Описание: ${g.description}` : ''}`)
+        lines.push(`- ${g.title}${g.deadline ? ` (дедлайн: ${g.deadline})` : ''}`)
       })
     }
 
-    // 5. Habits
-    if (habits.length > 0) {
-      lines.push('\n🔥 ПРИВЫЧКИ И СЕРИИ:')
-      habits.forEach((h: any) => {
-        lines.push(`- Привычка: "${h.title}" | Стрик: ${h.streak || 0} дней | Частота: ${h.frequency || 'daily'}`)
-      })
-    }
-
-    // 6. Active Tasks with Origin Context
-    const activeTasks = tasks.filter(t => t.status !== 'done').slice(0, 20)
-    if (activeTasks.length > 0) {
-      lines.push('\n📋 ЗАДАЧИ / НАПОМИНАНИЯ ПОЛЬЗОВАТЕЛЯ:')
-      activeTasks.forEach(t => {
-        let originNote = ''
-        if (t.projectId && projectMap.has(t.projectId)) {
-          originNote += ` [В проекте: "${projectMap.get(t.projectId)}"]`
-        }
-        if (t.authorChatId && t.authorChatId !== cid) {
-          const authorName = friendNameMap.get(String(t.authorChatId)) || `ID ${t.authorChatId}`
-          originNote += ` [Задача передана другом/коллегой: ${authorName}]`
-        }
-        const timeStr = t.dueTime ? ` в ${t.dueTime}` : ''
-        const dateStr = t.dueDate ? ` | Дедлайн: ${t.dueDate}${timeStr}` : ''
-        lines.push(`- ID: ${t.id} | Название: "${t.title}"${dateStr} | Приоритет: ${t.priority || 'medium'}${originNote}${t.description ? ` | Описание: ${t.description}` : ''}`)
-      })
-    }
-
-    // 7. Notes
+    // 3. Notes (compact)
     if (notes.length > 0) {
-      lines.push('\n📌 ЗАМЕТКИ ПОЛЬЗОВАТЕЛЯ:')
-      notes.slice(0, 15).forEach(n => {
-        const bodyText = (n.content || n.originalText || '').replace(/\n+/g, ' ').slice(0, 300)
-        lines.push(`- ID: ${n.id} | Заголовок: "${n.title}" | Содержание: "${bodyText}"`)
+      lines.push('\n📌 ЗАМЕТКИ:')
+      notes.slice(0, 8).forEach(n => {
+        lines.push(`- ${n.title}`)
       })
     }
 

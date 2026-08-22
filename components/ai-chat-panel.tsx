@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
-import { cn } from '@/lib/utils'
+import { cn, isTaskOnDate } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import ReactMarkdown, { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -160,10 +160,12 @@ function TypewriterMessage({
  */
 function AiAnalysisProgress({
   tasksCount,
+  contextLabel = 'задач',
   goalsCount,
   notesCount,
 }: {
   tasksCount: number
+  contextLabel?: string
   goalsCount: number
   notesCount: number
 }) {
@@ -221,7 +223,7 @@ function AiAnalysisProgress({
         <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
           <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">Контекст:</span>
           <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted/80 text-foreground border border-border/50">
-            📌 {tasksCount} задач
+            📌 {tasksCount} {contextLabel}
           </span>
           {goalsCount > 0 && (
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted/80 text-foreground border border-border/50">
@@ -877,13 +879,34 @@ export function AiChatPanel() {
 
               {/* Animated Analysis & Progress Indicator */}
               <AnimatePresence>
-                {isTyping && (
-                  <AiAnalysisProgress
-                    tasksCount={state.tasks.length}
-                    goalsCount={state.goals.length}
-                    notesCount={state.notes.length}
-                  />
-                )}
+                {isTyping && (() => {
+                  const lastUserMsg = state.chat.slice().reverse().find(m => m.role === 'user')?.content || ''
+                  const qLower = lastUserMsg.toLowerCase()
+                  const todayYmd = format(new Date(), 'yyyy-MM-dd')
+                  const tomorrowYmd = format(new Date(Date.now() + 86400000), 'yyyy-MM-dd')
+
+                  let relevantTasksCount = state.tasks.filter(t => t.status !== 'done').length
+                  let contextLabel = 'активных задач'
+
+                  if (qLower.includes('завтра') || qLower.includes('завтрашн')) {
+                    const tomorrowTasks = state.tasks.filter(t => t.dueDate === tomorrowYmd || isTaskOnDate(t, tomorrowYmd, tomorrowYmd))
+                    relevantTasksCount = tomorrowTasks.length
+                    contextLabel = 'на завтра'
+                  } else if (qLower.includes('сегодня') || qLower.includes('сегодняшн')) {
+                    const todayTasks = state.tasks.filter(t => t.dueDate === todayYmd || !t.dueDate || isTaskOnDate(t, todayYmd, todayYmd))
+                    relevantTasksCount = todayTasks.length
+                    contextLabel = 'на сегодня'
+                  }
+
+                  return (
+                    <AiAnalysisProgress
+                      tasksCount={relevantTasksCount}
+                      contextLabel={contextLabel}
+                      goalsCount={state.goals.length}
+                      notesCount={state.notes.length}
+                    />
+                  )
+                })()}
               </AnimatePresence>
 
               <div ref={bottomRef} />

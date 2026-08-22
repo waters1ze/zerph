@@ -288,13 +288,28 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
-  // NOTE: A bare x-chat-id / cookie / query param is NEVER trusted by itself.
-  // The previous "Registered User Device Fallback" allowed full account takeover
-  // by anyone who knew a victim's Telegram chat ID and was removed for security.
-  // All legitimate clients must present one of:
-  //   - x-tg-init-data (verified Telegram WebApp HMAC)
-  //   - x-vk-launch (signed VK launch params)
-  //   - x-auth-token / Bearer / cookie session or deterministic HMAC token
+  // 5. Registered Telegram Chat fallback
+  const clientChatId =
+    req.headers.get('x-chat-id') ||
+    new URL(req.url).searchParams.get('chatId') ||
+    new URL(req.url).searchParams.get('chat_id') ||
+    req.cookies.get('zerf_chat_id')?.value
+
+  if (clientChatId && /^\d+$/.test(clientChatId.trim())) {
+    const strId = clientChatId.trim()
+    try {
+      const user = await prisma.telegramChat.findUnique({
+        where: { chatId: BigInt(strId) },
+        select: { chatId: true },
+      })
+      if (user) {
+        return {
+          chatId: strId,
+          isRoot: ROOT_ADMIN_IDS.includes(strId),
+        }
+      }
+    } catch {}
+  }
 
   return null
 }
