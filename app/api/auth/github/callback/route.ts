@@ -43,8 +43,20 @@ export async function GET(req: NextRequest) {
     let decodedState: any = {}
     if (state) {
       try {
-        decodedState = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8'))
-      } catch {}
+        let raw = state
+        try { raw = decodeURIComponent(raw) } catch {}
+        try {
+          decodedState = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'))
+        } catch {
+          try {
+            decodedState = JSON.parse(Buffer.from(raw, 'base64url').toString('utf-8'))
+          } catch {
+            decodedState = JSON.parse(raw)
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to parse OAuth state:', err)
+      }
     }
 
     const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`

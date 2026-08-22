@@ -86,6 +86,32 @@ export async function GET(req: NextRequest) {
             }
           } catch {}
 
+          let finalGoogleEmail = chat.googleEmail || (chat.authProvider === 'google' ? chat.email : null)
+          if (!finalGoogleEmail && chat.email && chat.email.includes('@gmail.com')) {
+            finalGoogleEmail = chat.email
+          }
+          if (!finalGoogleEmail) {
+            try {
+              const googleConf = await prisma.config.findFirst({
+                where: {
+                  key: { in: [`user_google_${cid}`, `user_google_email_${cid}`, `user_google`] },
+                },
+              })
+              if (googleConf?.value) finalGoogleEmail = googleConf.value
+            } catch {}
+          }
+
+          if (!githubUsername) {
+            try {
+              const ghConf = await prisma.config.findFirst({
+                where: {
+                  key: { in: [`user_github_${cid}`, `user_github`] },
+                },
+              })
+              if (ghConf?.value) githubUsername = ghConf.value
+            } catch {}
+          }
+
           const siriKey = getSiriUserKey(chat.chatId)
 
           return NextResponse.json({
@@ -99,7 +125,7 @@ export async function GET(req: NextRequest) {
             avatarEmoji,
             hasPassword: Boolean(chat.passwordHash),
             vkId: chat.vkId || null,
-            googleEmail: chat.googleEmail || (chat.authProvider === 'google' ? chat.email : null),
+            googleEmail: finalGoogleEmail,
             githubUsername,
             authProvider: chat.authProvider || 'telegram',
             birthday: chat.birthday || null,

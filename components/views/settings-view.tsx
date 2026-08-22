@@ -244,8 +244,51 @@ export function SettingsView() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
+      let shouldCleanUrl = false
+
       if (params.get('github_oauth_setup_needed') === '1') {
         setShowGithubSetupModal(true)
+        shouldCleanUrl = true
+      }
+
+      if (params.get('github_auth_success') === '1') {
+        const gh = params.get('username')
+        if (gh) {
+          try {
+            localStorage.setItem('zerf_github_username', gh)
+          } catch {}
+          setUserGithub(gh)
+          setProfileData(prev => ({ ...prev, githubUsername: gh }))
+        }
+        setAuthSuccess(gh ? `GitHub аккаунт @${gh} успешно привязан!` : 'GitHub аккаунт успешно привязан!')
+        setTimeout(() => setAuthSuccess(null), 4000)
+        shouldCleanUrl = true
+        fetchProfile()
+      }
+
+      if (params.get('vk_auth_success') === '1') {
+        const vk = params.get('vk_id')
+        if (vk) {
+          setProfileData(prev => ({ ...prev, vkId: vk }))
+        }
+        setAuthSuccess('ВКонтакте успешно привязан!')
+        setTimeout(() => setAuthSuccess(null), 4000)
+        shouldCleanUrl = true
+        fetchProfile()
+      }
+
+      if (params.get('google_auth_success') === '1' || params.get('google_calendar_success') === '1') {
+        const gEmail = params.get('email')
+        if (gEmail) {
+          setProfileData(prev => ({ ...prev, googleEmail: gEmail }))
+        }
+        setAuthSuccess(gEmail ? `Google аккаунт ${gEmail} успешно привязан!` : 'Google аккаунт успешно привязан!')
+        setTimeout(() => setAuthSuccess(null), 4000)
+        shouldCleanUrl = true
+        fetchProfile()
+      }
+
+      if (shouldCleanUrl) {
         window.history.replaceState({}, '', window.location.pathname + '#settings')
       }
     }
