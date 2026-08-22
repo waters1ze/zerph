@@ -5,8 +5,10 @@ import { createServerSession } from '@/lib/backend/auth'
 export const dynamic = 'force-dynamic'
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'acb04b9e1b10d79b208603feebce151f203d0e8e'
-const ORIGIN = 'https://zeprh.vercel.app'
+// The client secret must come from env only — it was previously hardcoded
+// here and leaked into git history (rotate it in the GitHub app settings).
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || null
+const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 const CALLBACK_URL = `${ORIGIN}/api/auth/github/callback`
 
 const COOKIE_OPTS = {
@@ -24,6 +26,11 @@ export async function GET(req: NextRequest) {
 
   if (error || !code) {
     return NextResponse.redirect(`${ORIGIN}/?github_auth_error=${encodeURIComponent(error || 'no_code')}#settings`)
+  }
+
+  if (!GITHUB_CLIENT_SECRET) {
+    console.error('[GitHub OAuth] GITHUB_CLIENT_SECRET is not configured — refusing token exchange')
+    return NextResponse.redirect(`${ORIGIN}/?github_auth_error=server_not_configured#settings`)
   }
 
   try {

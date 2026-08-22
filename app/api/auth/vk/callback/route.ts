@@ -5,8 +5,10 @@ import { createServerSession } from '@/lib/backend/auth'
 export const dynamic = 'force-dynamic'
 
 const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824701'
-const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || 'aaQ13axAPQEcczQa'
-const ORIGIN = 'https://zeprh.vercel.app'
+// The protected key must come from env only — it was previously hardcoded
+// here and leaked into git history (rotate it in the VK app settings).
+const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || null
+const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 const CALLBACK_URL = `${ORIGIN}/api/auth/vk/callback`
 
 const COOKIE_OPTS = {
@@ -24,6 +26,11 @@ export async function GET(req: NextRequest) {
 
   if (error || !code) {
     return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=${encodeURIComponent(error || 'no_code')}#settings`)
+  }
+
+  if (!VK_CLIENT_SECRET) {
+    console.error('[VK OAuth] VK_CLIENT_SECRET is not configured — refusing token exchange')
+    return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=server_not_configured#settings`)
   }
 
   try {

@@ -8,7 +8,7 @@ import { LanguageProvider } from '@/lib/i18n/LanguageContext'
 // (@theme --font-sans), куда входит и монохромный Noto Emoji для эмодзи
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter', display: 'swap' })
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zerph.vercel.app'
 
 export const viewport: Viewport = {
   themeColor: '#090d16',
