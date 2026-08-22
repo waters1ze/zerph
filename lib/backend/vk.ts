@@ -14,21 +14,25 @@ const VK_API_VERSION = '5.199'
 const VK_API_BASE = 'https://api.vk.com/method'
 
 export function getVkGroupToken(): string | null {
-  return process.env.VK_GROUP_TOKEN || process.env.VK_API_KEY || 'vk1.a.2llizaJb8VJzeQRuMv8dE5U6oPzKt-ddt1Y72K6cO6TE5QyLHhesPGT8_NR3r2cHIu5PzKy-kSdgugxPZqB-MxwV-IWFcIxamvKiemieJ5flWzvNvvPG-heOaNJJU6nHwX2GCO2O897NbPlbArw-SJQZTpbTsmp2pjVk3TWxrNjRZTbX6NidGYfWTHDRUWyROyayfkXTJ4v_1UcgvmfyDg'
+  // Env only. A real group access token was previously hardcoded here as a
+  // fallback and leaked into git history — it MUST be rotated in the VK
+  // community settings (Работа с API → Ключи доступа).
+  return process.env.VK_GROUP_TOKEN || process.env.VK_API_KEY || null
 }
 
 export function getVkGroupId(): string | null {
-  const raw = process.env.VK_GROUP_ID || '240878278'
+  const raw = process.env.VK_GROUP_ID || null
   if (!raw) return null
   return raw.replace(/^-/, '') // ensure positive group id
 }
 
 export function getVkConfirmationCode(): string {
-  return process.env.VK_CONFIRMATION_CODE || '6942605c'
+  return process.env.VK_CONFIRMATION_CODE || ''
 }
 
 export function getVkSecretKey(): string | null {
-  return process.env.VK_SECRET_KEY || 'aaQ13axAPQEcczQa'
+  // Env only (was hardcoded as a fallback before — rotate in VK settings).
+  return process.env.VK_SECRET_KEY || null
 }
 
 /** Call any VK API method */

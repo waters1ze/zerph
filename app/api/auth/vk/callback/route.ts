@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { createServerSession } from '@/lib/backend/auth'
+import { createServerSession, getAuthenticatedUser } from '@/lib/backend/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,17 +34,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Decode state
-    let chatId = req.cookies.get('zerf_chat_id')?.value || ''
-    if (state) {
-      try {
-        let raw = state
-        try { raw = decodeURIComponent(state) } catch {}
-        const parsed = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'))
-        if (parsed?.chatId) chatId = parsed.chatId
-      } catch {}
-    }
-
     // Exchange code for VK access token
     const tokenUrl = `https://oauth.vk.com/access_token?client_id=${VK_CLIENT_ID}&client_secret=${VK_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(CALLBACK_URL)}&code=${code}`
     const tokenRes = await fetch(tokenUrl)
@@ -87,23 +76,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Find or create user
+    // ── Identity resolution ──────────────────────────────────────────────
+    // Only a VERIFIED server session (DB sessionToken) proves who is linking.
+    // The bare zerf_chat_id cookie is NOT proof of identity: trusting it
+    // would let anyone link their own VK to somebody else's account and
+    // then log into it via vkId lookup (full account takeover).
+    const verified = await getAuthenticatedUser(req).catch(() => null)
+
+    // ── Find or create user ──────────────────────────────────────────────
     let finalChatId: bigint | null = null
 
-    if (chatId && /^-?\d+$/.test(chatId)) {
-      finalChatId = BigInt(chatId)
-      // Link VK to existing user
+    if (verified && /^-?\d+$/.test(verified.chatId)) {
+      // LINK MODE: authenticated user attaches this VK profile to their account
+      const current = BigInt(verified.chatId)
+      const vkOwner = await prisma.telegramChat.findFirst({ where: { vkId: vkUserId } })
+      if (vkOwner && vkOwner.chatId !== current) {
+        // This VK is already attached to a different account — do not hijack it
+        return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=already_linked_to_another_account#settings`)
+      }
       await prisma.telegramChat.update({
-        where: { chatId: finalChatId },
+        where: { chatId: current },
         data: { vkId: vkUserId },
-      }).catch(() => {})
+      })
+      finalChatId = current
     } else {
-      // Find by vkId in telegramChat
-      const existing = await prisma.telegramChat.findFirst({ where: { vkId: vkUserId } })
-      if (existing) {
-        finalChatId = existing.chatId
-      } else {
-        // Also check config table
+      // LOGIN MODE: no verified session — sign in or register
+      const existingByVk = await prisma.telegramChat.findFirst({ where: { vkId: vkUserId } })
+      if (existingByVk) {
+        finalChatId = existingByVk.chatId
+      }
+
+      // Legacy mapping stored in Config table
+      if (!finalChatId) {
         const existingConf = await prisma.config.findFirst({
           where: { key: { startsWith: 'user_vk_' }, value: vkUserId }
         })
@@ -113,27 +117,47 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Match by VK email → attach VK to the existing account instead of duplicating
+      if (!finalChatId && vkEmail) {
+        const byEmail = await prisma.telegramChat.findUnique({ where: { email: vkEmail } }).catch(() => null)
+        if (byEmail && byEmail.vkId !== vkUserId) {
+          await prisma.telegramChat.update({
+            where: { chatId: byEmail.chatId },
+            data: { vkId: vkUserId },
+          })
+          finalChatId = byEmail.chatId
+        }
+      }
+
       if (!finalChatId) {
-        // Create new user with real VK name
+        // CREATE MODE: no account exists — register a new profile
         let newId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
         for (let i = 0; i < 5; i++) {
           const clash = await prisma.telegramChat.findUnique({ where: { chatId: newId } })
           if (!clash) break
           newId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
         }
-        await prisma.telegramChat.create({
-          data: {
-            chatId: newId,
-            vkId: vkUserId,
-            authProvider: 'vk',
-            firstName: vkFirstName,
-            lastName: vkLastName || null,
-            username: vkScreenName || null,
-            email: vkEmail || null,
-            lastActiveAt: new Date(),
-          }
-        }).catch(() => {})
-        finalChatId = newId
+        try {
+          const created = await prisma.telegramChat.create({
+            data: {
+              chatId: newId,
+              vkId: vkUserId,
+              authProvider: 'vk',
+              firstName: vkFirstName,
+              lastName: vkLastName || null,
+              username: vkScreenName || null,
+              email: vkEmail || null,
+              lastActiveAt: new Date(),
+            }
+          })
+          finalChatId = created.chatId
+        } catch (createErr: any) {
+          // Race: another request created this VK user first — find and reuse it
+          console.error('VK OAuth user create failed:', createErr)
+          const raced = await prisma.telegramChat.findFirst({ where: { vkId: vkUserId } })
+          if (!raced) throw createErr
+          finalChatId = raced.chatId
+        }
       }
     }
 
