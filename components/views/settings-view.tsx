@@ -401,25 +401,13 @@ export function SettingsView() {
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
 
   const getGithubAuthUrl = () => {
-    const origin = typeof window !== 'undefined' && window.location.origin.includes('zeprh')
-      ? window.location.origin
-      : 'https://zeprh.vercel.app'
-    let state = ''
-    try {
-      state = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({ chatId: currentChatId || '', origin })))))
-    } catch {}
-    return `https://github.com/login/oauth/authorize?client_id=Ov23li5itN8nX8pNVJsy&redirect_uri=${encodeURIComponent(`${origin}/api/auth/github/callback`)}&scope=read:user%20user:email&state=${state}`
+    const cid = currentChatId || ''
+    return cid ? `/api/auth/github?chatId=${encodeURIComponent(cid)}` : '/api/auth/github'
   }
 
   const getVkAuthUrl = () => {
-    const origin = typeof window !== 'undefined' && window.location.origin.includes('zeprh')
-      ? window.location.origin
-      : 'https://zeprh.vercel.app'
-    let state = ''
-    try {
-      state = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({ chatId: currentChatId || '', origin })))))
-    } catch {}
-    return `https://oauth.vk.com/authorize?client_id=51824701&display=page&redirect_uri=${encodeURIComponent(`${origin}/api/auth/vk/callback`)}&scope=email,offline&response_type=code&v=5.131&state=${state}`
+    const cid = currentChatId || ''
+    return cid ? `/api/auth/vk?chatId=${encodeURIComponent(cid)}` : '/api/auth/vk'
   }
 
   const handleDirectGithubAuth = () => {
