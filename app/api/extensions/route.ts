@@ -56,16 +56,48 @@ export function getGithubRawUrls(repoUrl: string): string[] {
 }
 
 /**
- * Fetches and parses manifest from GitHub with 0 AI tokens
+ * Fetches and parses manifest from GitHub with 0 AI tokens (supports public & private repos)
  */
-export async function fetchManifestFromGithub(githubUrl: string): Promise<{ manifest: any; rawUrl: string } | null> {
+export async function fetchManifestFromGithub(githubUrl: string, token?: string): Promise<{ manifest: any; rawUrl: string } | null> {
+  const match = githubUrl.match(/github\.com\/([^\/]+)\/([^\/\s#?]+)/i)
+  if (match && token) {
+    const owner = match[1]
+    const repo = match[2].replace(/\.git$/i, '')
+    
+    // For private repositories, fetch content via GitHub REST API
+    for (const filename of ['zerf-extension.json', 'manifest.json']) {
+      try {
+        const apiRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
+          headers: {
+            'User-Agent': 'Zerf-Note-Parser/1.0',
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.raw+json'
+          },
+          cache: 'no-store'
+        })
+        if (apiRes.ok) {
+          const text = await apiRes.text()
+          const parsed = JSON.parse(text)
+          if (parsed && (parsed.name || parsed.title)) {
+            return { manifest: parsed, rawUrl: `https://github.com/${owner}/${repo}/blob/main/${filename}` }
+          }
+        }
+      } catch {}
+    }
+  }
+
   const candidateUrls = getGithubRawUrls(githubUrl)
   if (candidateUrls.length === 0) return null
+
+  const headers: Record<string, string> = { 'User-Agent': 'Zerf-Note-Parser/1.0' }
+  if (token) {
+    headers['Authorization'] = `token ${token}`
+  }
 
   for (const url of candidateUrls) {
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': 'Zerf-Note-Parser/1.0' },
+        headers,
         cache: 'no-store',
       })
       if (res.ok) {
@@ -480,6 +512,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, createdCount: taskEntries.length })
     }
 
+    // ── ACTION: SAVE GITHUB PERSONAL ACCESS TOKEN (PAT) ──
+    if (action === 'save_github_token') {
+      const { token } = body
+      if (chatId && token) {
+        await prisma.config.upsert({
+          where: { key: `user_github_token_${chatId}` },
+          update: { value: String(token).trim() },
+          create: { key: `user_github_token_${chatId}`, value: String(token).trim() },
+        })
+        return NextResponse.json({ success: true })
+      }
+      return NextResponse.json({ success: false, error: 'Token or user session required' }, { status: 400 })
+    }
+
     // ── ACTION: PARSE / VALIDATE GITHUB MANIFEST IN REAL-TIME (0 AI Tokens) ──
     if (action === 'parse_github' || action === 'validate_github_repo') {
       const githubUrl = body.repoUrl || body.githubUrl
@@ -492,6 +538,7 @@ export async function POST(req: NextRequest) {
       const repo = match ? match[2].replace(/\.git$/i, '') : ''
 
       let userGh = ''
+      let token = body.token || ''
       if (chatId) {
         try {
           const ghRow = await prisma.config.findUnique({ where: { key: `user_github_${chatId}` } })
@@ -508,10 +555,14 @@ export async function POST(req: NextRequest) {
             })
             if (fallbackGh?.value) userGh = fallbackGh.value.trim().replace(/^@/, '')
           }
+          if (!token) {
+            const tokenRow = await prisma.config.findUnique({ where: { key: `user_github_token_${chatId}` } })
+            if (tokenRow?.value) token = tokenRow.value
+          }
         } catch {}
       }
 
-      const ghData = await fetchManifestFromGithub(githubUrl)
+      const ghData = await fetchManifestFromGithub(githubUrl, token)
       const errors: string[] = []
 
       const ownerMatches = !userGh || !owner || userGh.toLowerCase() === owner.toLowerCase()

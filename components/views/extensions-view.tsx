@@ -10,7 +10,7 @@ import {
   RefreshCw, ExternalLink, Copy, CheckCheck, GitBranch, Heart,
   Flame, CheckSquare, Play, Clock, Image as ImageIcon, Upload, ImagePlus,
   Settings, Tag, Globe, FileCode, ToggleLeft, ToggleRight, History, ChevronDown,
-  CreditCard, Wallet, Banknote, CheckCircle2, X, Loader2
+  CreditCard, Wallet, Banknote, CheckCircle2, X, Loader2, Key
 } from 'lucide-react'
 import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
 import { planAtLeast } from '@/lib/plans'
@@ -497,13 +497,38 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [githubRepoPrivacyFilter, setGithubRepoPrivacyFilter] = useState<'all' | 'public' | 'private'>('all')
   const [githubModalTab, setGithubModalTab] = useState<'repos' | 'url'>('repos')
   const [customGithubInput, setCustomGithubInput] = useState<string>('')
+  const [showPatInput, setShowPatInput] = useState<boolean>(false)
+  const [customPatToken, setCustomPatToken] = useState<string>('')
+  const [savingPat, setSavingPat] = useState<boolean>(false)
 
-  const fetchUserGithubRepos = async (usernameOverride?: string) => {
+  const handleSavePat = async () => {
+    if (!customPatToken.trim()) return
+    setSavingPat(true)
+    try {
+      localStorage.setItem('zerf_github_token', customPatToken.trim())
+      await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_github_token', token: customPatToken.trim() }),
+      })
+      showToast('✓ Токен GitHub сохранён! Загрузка приватных репозиториев...', 'success')
+      setShowPatInput(false)
+      fetchUserGithubRepos(undefined, customPatToken.trim())
+    } catch {
+      showToast('Ошибка сохранения токена', 'error')
+    } finally {
+      setSavingPat(false)
+    }
+  }
+
+  const fetchUserGithubRepos = async (usernameOverride?: string, tokenOverride?: string) => {
     const targetUser = (usernameOverride || userGithubUsername || '').trim().replace(/^@/, '').replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').trim()
     if (!targetUser) return
+    const token = tokenOverride || (typeof window !== 'undefined' ? (localStorage.getItem('zerf_github_token') || '') : '')
     setLoadingGithubRepos(true)
     try {
-      const res = await fetch(`/api/extensions?action=user_repos&username=${encodeURIComponent(targetUser)}`, {
+      const url = `/api/extensions?action=user_repos&username=${encodeURIComponent(targetUser)}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+      const res = await fetch(url, {
         headers: getAuthHeaders(),
       })
       const data = await res.json()
@@ -2801,6 +2826,15 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
+                            onClick={() => setShowPatInput(!showPatInput)}
+                            className="px-2 py-1 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Указать GitHub Token для приватных репозиториев"
+                          >
+                            <Key className="w-3 h-3 text-amber-400" />
+                            <span>Приватные</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => fetchUserGithubRepos(userGithubUsername)}
                             disabled={loadingGithubRepos}
                             className="px-2 py-1 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
@@ -2822,6 +2856,44 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                           </button>
                         </div>
                       </div>
+
+                      {/* PAT Token / OAuth Banner for Private Repositories */}
+                      {showPatInput && (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-amber-300 flex items-center gap-1.5">
+                              <Key className="w-3.5 h-3.5" />
+                              <span>Доступ к приватным репозиториям GitHub</span>
+                            </p>
+                            <a
+                              href="/api/auth/github"
+                              className="text-[10px] text-primary hover:underline font-semibold"
+                            >
+                              Войти через OAuth (repo) →
+                            </a>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Для отображения приватных репозиториев вставьте Personal Access Token (PAT) или войдите через GitHub OAuth выше:
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="password"
+                              value={customPatToken}
+                              onChange={e => setCustomPatToken(e.target.value)}
+                              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                              className="flex-1 h-8 px-3 rounded-lg bg-background border border-border text-xs text-foreground font-mono outline-none focus:border-primary"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleSavePat}
+                              disabled={savingPat || !customPatToken.trim()}
+                              className="px-3 h-8 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50"
+                            >
+                              {savingPat ? 'Сохранение...' : 'Сохранить'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Repositories Filter Pills & Search */}
                       {userGithubRepos.length > 0 && (

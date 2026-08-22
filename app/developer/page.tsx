@@ -176,6 +176,9 @@ async function runAction(promptText) {
   const [repoSearchFilter, setRepoSearchFilter] = useState('')
   const [repoTypeFilter, setRepoTypeFilter] = useState<'all' | 'public' | 'private'>('all')
   const [publishMode, setPublishMode] = useState<'picker' | 'manual'>('picker')
+  const [showPatInput, setShowPatInput] = useState(false)
+  const [customPatToken, setCustomPatToken] = useState('')
+  const [savingPat, setSavingPat] = useState(false)
   const [publishValidation, setPublishValidation] = useState<{
     tested: boolean
     valid: boolean
@@ -186,6 +189,46 @@ async function runAction(promptText) {
     manifest?: any
     errors: string[]
   } | null>(null)
+
+  const handleSavePat = async () => {
+    if (!customPatToken.trim()) return
+    setSavingPat(true)
+    try {
+      localStorage.setItem('zerf_github_token', customPatToken.trim())
+      await fetch('/api/extensions', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_github_token', token: customPatToken.trim() }),
+      })
+      alert('✓ Токен GitHub сохранён! Загрузка приватных репозиториев...')
+      setShowPatInput(false)
+      fetchUserRepos(userGh || undefined, customPatToken.trim())
+    } catch {
+      alert('Ошибка сохранения токена')
+    } finally {
+      setSavingPat(false)
+    }
+  }
+
+  // Fetch Repositories from GitHub
+  const fetchUserRepos = async (usernameOverride?: string, tokenOverride?: string) => {
+    const target = (usernameOverride || userGh || '').trim().replace(/^@/, '')
+    if (!target) return
+    const token = tokenOverride || (typeof window !== 'undefined' ? (localStorage.getItem('zerf_github_token') || '') : '')
+    setLoadingUserRepos(true)
+    try {
+      const url = `/api/extensions?action=user_repos&username=${encodeURIComponent(target)}${token ? `&token=${encodeURIComponent(token)}` : ''}`
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success && Array.isArray(data.repos)) {
+        setUserRepos(data.repos)
+      }
+    } catch {} finally {
+      setLoadingUserRepos(false)
+    }
+  }
 
   // AI Prompts Section State
   const [activePromptTab, setActivePromptTab] = useState<'cursor_skill' | 'theme_styler' | 'action_protocol'>('cursor_skill')
@@ -229,24 +272,6 @@ async function runAction(promptText) {
     navigator.clipboard.writeText(text)
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2200)
-  }
-
-  // Fetch GitHub repos for picker
-  const fetchUserRepos = async (uname?: string) => {
-    const target = (uname || userGh || '').trim().replace(/^@/, '')
-    if (!target) return
-    setLoadingUserRepos(true)
-    try {
-      const res = await fetch(`/api/extensions?action=user_repos&username=${encodeURIComponent(target)}`, {
-        headers: getAuthHeaders(),
-      })
-      const data = await res.json()
-      if (data.success && Array.isArray(data.repos)) {
-        setUserRepos(data.repos)
-      }
-    } catch {} finally {
-      setLoadingUserRepos(false)
-    }
   }
 
   // Load Initial Developer Stats
@@ -2233,15 +2258,64 @@ When processing user instructions and extension triggers, ALWAYS output your fin
                     </div>
                   </div>
 
-                  {!userGh && (
-                    <a
-                      href="/settings"
-                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowPatInput(!showPatInput)}
+                      className="px-3 py-1.5 rounded-xl bg-card border border-border text-foreground hover:bg-muted/60 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                      title="Указать токен для доступа к приватным репозиториям"
                     >
-                      Привязать в Настройках
-                    </a>
-                  )}
+                      <Key className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Приватные репозитории</span>
+                    </button>
+                    {!userGh && (
+                      <a
+                        href="/settings"
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+                      >
+                        Привязать в Настройках
+                      </a>
+                    )}
+                  </div>
                 </div>
+
+                {/* PAT Token / OAuth Banner for Private Repositories */}
+                {showPatInput && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <Key className="w-3.5 h-3.5" />
+                        <span>Доступ к приватным репозиториям GitHub</span>
+                      </p>
+                      <a
+                        href="/api/auth/github"
+                        className="text-[10px] text-primary hover:underline font-semibold"
+                      >
+                        Войти через OAuth (repo) →
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Для чтения ваших приватных репозиториев укажите Personal Access Token (PAT) с правами `repo` или войдите через OAuth:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        value={customPatToken}
+                        onChange={e => setCustomPatToken(e.target.value)}
+                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                        className="flex-1 h-8 px-3 rounded-xl bg-background border border-border text-xs text-foreground font-mono outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSavePat}
+                        disabled={savingPat || !customPatToken.trim()}
+                        className="px-3.5 h-8 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50"
+                      >
+                        {savingPat ? 'Сохранение...' : 'Сохранить'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Mode Switcher */}
                 <div className="flex items-center gap-2 border-b border-border pb-3">

@@ -116,12 +116,25 @@ export async function GET(req: NextRequest) {
       update: { value: ghUsername },
       create: { key: `user_github_${cid}`, value: ghUsername },
     }).catch(async () => {
-      // Fallback
       try {
         await prisma.config.delete({ where: { key: `user_github_${cid}` } })
         await prisma.config.create({ data: { key: `user_github_${cid}`, value: ghUsername } })
       } catch {}
     })
+
+    // Save GitHub Access Token for private repo access & manifest parsing
+    if (accessToken) {
+      await prisma.config.upsert({
+        where: { key: `user_github_token_${cid}` },
+        update: { value: accessToken },
+        create: { key: `user_github_token_${cid}`, value: accessToken },
+      }).catch(async () => {
+        try {
+          await prisma.config.delete({ where: { key: `user_github_token_${cid}` } })
+          await prisma.config.create({ data: { key: `user_github_token_${cid}`, value: accessToken } })
+        } catch {}
+      })
+    }
 
     // Create session
     const sessionToken = await createServerSession(cid, 'GitHub OAuth', 'web',
