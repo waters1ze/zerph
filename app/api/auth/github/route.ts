@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic'
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
 
 function getCanonicalOrigin(rawOrigin: string): string {
-  if (!rawOrigin || rawOrigin.includes('zerph') || rawOrigin.includes('zcrph') || rawOrigin.includes('zeprh')) {
-    return 'https://zerph.vercel.app'
+  if (!rawOrigin || rawOrigin.includes('zeprh') || rawOrigin.includes('zerph') || rawOrigin.includes('zcrph')) {
+    return 'https://zeprh.vercel.app'
   }
   if (rawOrigin.includes('localhost')) {
     return rawOrigin
@@ -21,7 +21,8 @@ function getCanonicalOrigin(rawOrigin: string): string {
  * 1-Click GitHub OAuth Entry point
  */
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin || 'https://zeprh.vercel.app'
+  const rawOrigin = req.nextUrl.origin || 'https://zeprh.vercel.app'
+  const origin = getCanonicalOrigin(rawOrigin)
   const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
   
   const authUser = await getAuthenticatedUser(req)

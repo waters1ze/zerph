@@ -356,7 +356,7 @@ export function SettingsView() {
   const importFileRef = useRef<HTMLInputElement>(null)
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
   const siriKeyParam = profileData.siriKey ? `&key=${profileData.siriKey}` : ''
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
@@ -2023,8 +2023,8 @@ export function SettingsView() {
                         <li>Перейдите в <a href="https://github.com/settings/developers" target="_blank" rel="noreferrer" className="text-primary font-bold underline inline-flex items-center gap-0.5">GitHub Developer Settings <ExternalLink className="w-2.5 h-2.5" /></a></li>
                         <li>Нажмите кнопку <b>«New OAuth App»</b></li>
                         <li>Укажите <b>Application name:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">Zerf Note</code></li>
-                        <li>Укажите <b>Homepage URL:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'}</code></li>
-                        <li>Укажите <b>Authorization callback URL:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{typeof window !== 'undefined' ? `${window.location.origin}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'}</code></li>
+                        <li>Укажите <b>Homepage URL:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'}</code></li>
+                        <li>Укажите <b>Authorization callback URL:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{typeof window !== 'undefined' ? `${window.location.origin}/api/auth/github/callback` : 'https://zeprh.vercel.app/api/auth/github/callback'}</code></li>
                         <li>Нажмите <b>«Register application»</b>, скопируйте <b>Client ID</b> и сгенерируйте <b>Client Secret</b></li>
                         <li>Добавьте переменные <b>GITHUB_CLIENT_ID</b> и <b>GITHUB_CLIENT_SECRET</b> в Vercel Settings → Environment Variables</li>
                       </ol>
