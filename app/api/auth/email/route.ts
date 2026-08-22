@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { createServerSession } from '@/lib/backend/auth'
 import { hashPassword, verifyPassword, isLegacyPasswordHash, generateEmailChatId } from '@/lib/backend/passwords'
-import { checkInMemoryRateLimit, getClientIp } from '@/lib/backend/rate-limit'
+import { checkHybridRateLimit, getClientIp } from '@/lib/backend/rate-limit'
 
 const COOKIE_OPTS = {
   path: '/',
@@ -21,14 +21,15 @@ export async function POST(req: NextRequest) {
     const { action, email, password, firstName } = body
 
     // Brute-force protection: per-IP and per-IP+email limits on login/register
+    // (hybrid: in-memory burst guard + DB-backed cap shared by all instances)
     const ip = getClientIp(req)
-    if (!checkInMemoryRateLimit(`emailauth:ip:${ip}`, 30, 15 * 60 * 1000)) {
+    if (!(await checkHybridRateLimit(`emailauth:ip:${ip}`, 30, 15 * 60 * 1000))) {
       return NextResponse.json({ error: 'Слишком много попыток входа. Попробуйте позже.' }, { status: 429 })
     }
 
     const cleanEmail = (email || '').trim().toLowerCase()
     if (action === 'login' && cleanEmail) {
-      if (!checkInMemoryRateLimit(`emailauth:acct:${ip}:${cleanEmail}`, 10, 15 * 60 * 1000)) {
+      if (!(await checkHybridRateLimit(`emailauth:acct:${ip}:${cleanEmail}`, 10, 15 * 60 * 1000))) {
         return NextResponse.json({ error: 'Слишком много попыток входа для этого Email. Попробуйте через 15 минут.' }, { status: 429 })
       }
     }

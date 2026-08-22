@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   try {
     const { title, description, color, memberUsernames } = await req.json()
     if (!title?.trim()) return NextResponse.json({ error: 'Title required' }, { status: 400 })
-    let memberIds: bigint[] = [chatId]
+    const memberIds: bigint[] = [chatId]
     if (memberUsernames?.length) {
       for (const username of memberUsernames) {
         const chat = await prisma.telegramChat.findFirst({ where: { username: { equals: username.replace('@','').trim(), mode: 'insensitive' } } })

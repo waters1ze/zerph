@@ -63,7 +63,6 @@ export function AuthGateModal({ open, onClose }: { open?: boolean; onClose?: () 
 
   const shouldOpen = open !== undefined ? open : !isAuth
 
-  if (isAuth && open === undefined) return null
 
   const handleGoogleDirectAuth = async (e: React.FormEvent) => {
     e.preventDefault()

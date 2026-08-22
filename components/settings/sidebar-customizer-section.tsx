@@ -296,7 +296,7 @@ export function SidebarCustomizerSection() {
 
             if (missingExtIds.length === 0) return currConfig
 
-            let extFolder = currConfig.folders.find(f => f.id === 'extensions' || f.title.toLowerCase() === 'расширения')
+            const extFolder = currConfig.folders.find(f => f.id === 'extensions' || f.title.toLowerCase() === 'расширения')
             let nextFolders = [...currConfig.folders]
 
             if (extFolder) {

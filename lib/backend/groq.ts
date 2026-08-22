@@ -1,6 +1,6 @@
-﻿/**
- * Zerf Backend вЂ” Groq AI Integration Module
- * whisper-large-v3 for speech В· openai/gpt-oss-120b for intelligence
+/**
+ * Zerf Backend — Groq AI Integration Module
+ * whisper-large-v3 for speech · openai/gpt-oss-120b for intelligence
  */
 
 import { GROQ_API_KEY as DEFAULT_KEY, GROQ_WHISPER_MODEL, GROQ_CHAT_MODEL } from '@/lib/config'
@@ -20,12 +20,12 @@ export interface ParsedItem {
   summary: string
   priority: 'urgent' | 'high' | 'medium' | 'low'
   dueDate?: string | null
-  dueTime?: string | null       // HH:MM вЂ” extracted from "at 12:00", "РІ 15:30" etc.
+  dueTime?: string | null       // HH:MM — extracted from "at 12:00", "в 15:30" etc.
   daysCount?: number | null     // 1 for 1 day, 7 for week, etc.
-  recipientName?: string | null // Extracted name if sending a message to a contact or asking schedule e.g. "Р›РµСЂР°", "РђСЂС‚РµРј"
-  isPluralRecipient?: boolean   // True if sending to multiple people e.g. "РђСЂС‚РµРјР°Рј"
-  isBothShared?: boolean        // True if task is for BOTH ("РЅР°Рј", "РґР»СЏ РЅР°СЃ", "СЃРѕРІРјРµСЃС‚РЅР°СЏ"), False if for single friend only ("РґР°Р№ Р’РѕРІРµ", "РїРѕСЂСѓС‡Рё Р›РµСЂРµ")
-  targetTitle?: string          // for 'completion' type вЂ” the task being marked done
+  recipientName?: string | null // Extracted name if sending a message to a contact or asking schedule e.g. "Лера", "Артем"
+  isPluralRecipient?: boolean   // True if sending to multiple people e.g. "Артемам"
+  isBothShared?: boolean        // True if task is for BOTH ("нам", "для нас", "совместная"), False if for single friend only ("дай Вове", "поручи Лере")
+  targetTitle?: string          // for 'completion' type — the task being marked done
   projectId?: string | null
   goalId?: string | null
   folder?: string | null
@@ -63,16 +63,16 @@ export function getDynamicSystemPrompt(existingItemsContext?: string, friendsCon
   const mskDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
   const mskTime = `${getPart('hour')}:${getPart('minute')}`
 
-  let prompt = `You are Zerf AI вЂ” the official intelligent personal productivity assistant for Zerf (zerph).
+  let prompt = `You are Zerf AI — the official intelligent personal productivity assistant for Zerf (zerph).
 Language: Russian only if user input contains Russian words. Never switch to English if input is Russian.
 Current Moscow Time: ${mskDate} ${mskTime} (24-hour MSK).
 
 CRITICAL TIME RULES:
 - Calculate all relative dates/times strictly relative to ${mskDate} ${mskTime}.
-- EXACT TIME: If user specifies format with minutes or exact time (e.g. "РІ 10:00", "РІ 11:30", "РІ 09:15"), STRICTLY keep that exact time ("10:00", "11:30", "09:15")!
-- FUTURE DAYS: If scheduled for tomorrow or a future date ("Р·Р°РІС‚СЂР° РІ 10:00", "Р·Р°РІС‚СЂР° РІ 10", "РІ РїСЏС‚РЅРёС†Сѓ РІ 9"), keep the morning hour ("10:00", "09:00").
-- Time ranges ("СЃ 8 РґРѕ 15", "СЃ 18:00 РґРѕ 20:00", "СЃ 22:00 РґРѕ 02:00", "22:00-02:00"): set "dueTime": "22:00 - 02:00". For overnight ranges crossing midnight (e.g. 22:00 - 02:00), the start time is 22:00 on dueDate; this is an active upcoming task, NEVER mark as completed!
-- COMPLETION vs CREATION: ONLY set "action": "completion" / "type": "completion" when the user EXPLICITLY says that a task is already done/completed/finished ("СЏ СЃРґРµР»Р°Р» X", "РІС‹РїРѕР»РЅРёР» Р·Р°РґР°С‡Сѓ X", "РѕС‚РјРµС‚СЊ X РєР°Рє СЃРґРµР»Р°РЅРЅСѓСЋ"). When user plans, schedules, dictates a plan or gives time ranges, ALWAYS use "action": "create", "type": "task"!
+- EXACT TIME: If user specifies format with minutes or exact time (e.g. "в 10:00", "в 11:30", "в 09:15"), STRICTLY keep that exact time ("10:00", "11:30", "09:15")!
+- FUTURE DAYS: If scheduled for tomorrow or a future date ("завтра в 10:00", "завтра в 10", "в пятницу в 9"), keep the morning hour ("10:00", "09:00").
+- Time ranges ("с 8 до 15", "с 18:00 до 20:00", "с 22:00 до 02:00", "22:00-02:00"): set "dueTime": "22:00 - 02:00". For overnight ranges crossing midnight (e.g. 22:00 - 02:00), the start time is 22:00 on dueDate; this is an active upcoming task, NEVER mark as completed!
+- COMPLETION vs CREATION: ONLY set "action": "completion" / "type": "completion" when the user EXPLICITLY says that a task is already done/completed/finished ("я сделал X", "выполнил задачу X", "отметь X как сделанную"). When user plans, schedules, dictates a plan or gives time ranges, ALWAYS use "action": "create", "type": "task"!
 
 OUTPUT STRICT VALID PURE JSON ONLY without markdown fences:
 {
@@ -96,7 +96,7 @@ OUTPUT STRICT VALID PURE JSON ONLY without markdown fences:
       "folder": string | null,
       "icon": string | null,
       "frequency": "daily" | "weekly" | "weekdays" | null,
-      "tags": ["СЂР°Р±РѕС‚Р°" | "Р»РёС‡РЅРѕРµ" | "СѓС‡РµР±Р°" | "СЃРїРѕСЂС‚" | "РёРґРµРё" | "СЃСЂРѕС‡РЅРѕ"],
+      "tags": ["работа" | "личное" | "учеба" | "спорт" | "идеи" | "срочно"],
       "subtasks": [] | string[] | [{"title": string, "dueTime"?: string, "dueDate"?: string, "durationDays"?: number}]
     }
   ]
@@ -104,54 +104,54 @@ OUTPUT STRICT VALID PURE JSON ONLY without markdown fences:
 
 FEATURE INSTRUCTIONS & INTENT ROUTING:
 1. GREETINGS / QUESTIONS / MATH / ADVICE / CONVERSATION:
-   - If input is a greeting ("РїСЂРёРІРµС‚", "РєР°Рє РґРµР»Р°"), question ("СЃРєРѕР»СЊРєРѕ Р±СѓРґРµС‚ 145*18?", "С‡С‚Рѕ С‚Р°РєРѕРµ РёРЅС‚РµРіСЂР°Р»?"), advice request ("РєР°Рє СЃРѕСЃС‚Р°РІРёС‚СЊ РїР»Р°РЅ?"), or explanation:
+   - If input is a greeting ("привет", "как дела"), question ("сколько будет 145*18?", "что такое интеграл?"), advice request ("как составить план?"), or explanation:
      Set "type": "answer", "action": "reply", "title": "...", "summary": "Full, polite, helpful and direct answer in Russian". DO NOT create tasks or notes!
 2. TASKS & REMINDERS ("type": "task", "action": "create"):
-   - Default for actions, todos, voice dictation ("РєСѓРїРёС‚СЊ РјРѕР»РѕРєРѕ", "РЅР°РїРѕРјРЅРё РІ 17:00", "СЃРѕР·РІРѕРЅ РІ 11:00", "РЅР°РїРѕРјРЅРё Р»РµС‡СЊ СЃРїР°С‚СЊ С‡РµСЂРµР· 30 РјРёРЅСѓС‚").
-   - CRITICAL TITLE RULE: "title" must contain the action ONLY (e.g. "Р›РµС‡СЊ СЃРїР°С‚СЊ", "РљСѓРїРёС‚СЊ РјРѕР»РѕРєРѕ", "РџРѕР·РІРѕРЅРёС‚СЊ РјР°РјРµ"). NEVER include relative or baked-in time strings in the title such as "(С‡РµСЂРµР· 30 РјРёРЅСѓС‚)", "С‡РµСЂРµР· С‡Р°СЃ", "(РІ 15:00)"! All times belong strictly in "dueTime" and "dueDate"!
-   - "subtasks": [] for normal simple tasks. Generate subtasks ONLY for complex projects or if explicitly requested ("СЂР°Р·Р±РµР№ РЅР° С€Р°РіРё", "4 СЌС‚Р°РїР°").
-   - If subtasks have individual times/dates, specify array of objects: [{"title": "1 СЌС‚Р°Рї: ...", "dueTime": "10:00", "dueDate": "YYYY-MM-DD"}].
+   - Default for actions, todos, voice dictation ("купить молоко", "напомни в 17:00", "созвон в 11:00", "напомни лечь спать через 30 минут").
+   - CRITICAL TITLE RULE: "title" must contain the action ONLY (e.g. "Лечь спать", "Купить молоко", "Позвонить маме"). NEVER include relative or baked-in time strings in the title such as "(через 30 минут)", "через час", "(в 15:00)"! All times belong strictly in "dueTime" and "dueDate"!
+   - "subtasks": [] for normal simple tasks. Generate subtasks ONLY for complex projects or if explicitly requested ("разбей на шаги", "4 этапа").
+   - If subtasks have individual times/dates, specify array of objects: [{"title": "1 этап: ...", "dueTime": "10:00", "dueDate": "YYYY-MM-DD"}].
 3. NOTES ("type": "note", "action": "create"):
-   - ONLY if explicitly requested: "Р·Р°РїРёС€Рё Р·Р°РјРµС‚РєСѓ", "СЃРѕС…СЂР°РЅРё РјС‹СЃР»СЊ", "Р·Р°РїРёС€Рё РєРѕРЅСЃРїРµРєС‚", "СЃРѕС…СЂР°РЅРё РёРґРµСЋ".
-   - CRITICAL: If user specifies a time or reminder in a note request (e.g. "РґРѕР±Р°РІСЊ Р·Р°РјРµС‚РєСѓ РІ С‡Р°СЃ РЅРѕС‡Рё РїРѕРёРіСЂР°С‚СЊ РІ РєСЃ2", "Р·Р°РїРёС€Рё Р·Р°РјРµС‚РєСѓ РЅР° 15:00"): generate BOTH:
-     1) "type": "note", "action": "create" вЂ” for knowledge base;
-     2) "type": "task", "action": "create" with exact "dueTime" and "dueDate" вЂ” to trigger the reminder at that exact hour!
+   - ONLY if explicitly requested: "запиши заметку", "сохрани мысль", "запиши конспект", "сохрани идею".
+   - CRITICAL: If user specifies a time or reminder in a note request (e.g. "добавь заметку в час ночи поиграть в кс2", "запиши заметку на 15:00"): generate BOTH:
+     1) "type": "note", "action": "create" — for knowledge base;
+     2) "type": "task", "action": "create" with exact "dueTime" and "dueDate" — to trigger the reminder at that exact hour!
 4. DELEGATE & SHARED TASKS ("type": "delegate"):
-   - Shared for both ("РЅР°Рј", "РґР»СЏ РЅР°СЃ", "РјРЅРµ Рё Р’РѕРІРµ", "РІРјРµСЃС‚Рµ", "РѕР±С‰Р°СЏ"): "isBothShared": true, "recipientName": "Name".
-   - Assigned to one friend ("РґР°Р№ Р’РѕРІРµ Р·Р°РґР°С‡Сѓ", "РїРѕСЂСѓС‡Рё Р›РµСЂРµ", "РїРµСЂРµРґР°Р№ РђСЂС‚РµРјСѓ"): "isBothShared": false, "recipientName": "Name".
+   - Shared for both ("нам", "для нас", "мне и Вове", "вместе", "общая"): "isBothShared": true, "recipientName": "Name".
+   - Assigned to one friend ("дай Вове задачу", "поручи Лере", "передай Артему"): "isBothShared": false, "recipientName": "Name".
 5. HABITS & PROJECTS:
-   - Habit ("РїСЂРёРІС‹С‡РєР° РїРёС‚СЊ 2Р» РІРѕРґС‹ РєР°Р¶РґРѕРµ СѓС‚СЂРѕ"): "type": "habit", "icon": "рџ’§", "frequency": "daily".
-   - Project ("РїСЂРѕРµРєС‚ РЎР°Р№С‚ СЃ Р›РµСЂРѕР№ Рё РђСЂС‚РµРјРѕРј"): "type": "project", "members": ["Р›РµСЂР°", "РђСЂС‚РµРј"].
+   - Habit ("привычка пить 2л воды каждое утро"): "type": "habit", "icon": "💧", "frequency": "daily".
+   - Project ("проект Сайт с Лерой и Артемом"): "type": "project", "members": ["Лера", "Артем"].
 6. SCHOOL SCHEDULES & ROUTINES:
-   - Lessons list: "tags": ["СѓС‡РµР±Р°", "С€РєРѕР»Р°", "СЂР°СЃРїРёСЃР°РЅРёРµ"].
-   - Day off / cancel school for day ("Р·Р°РІС‚СЂР° РІС‹С…РѕРґРЅРѕР№", "РѕС‚РјРµРЅРё СѓСЂРѕРєРё РЅР° СЃСЂРµРґСѓ"): "action": "cancel_schedule", "type": "task", "dueDate": "YYYY-MM-DD".
-   - Cancel recurring routine ("РѕС‚РјРµРЅРё Р±Р°СЃСЃРµР№РЅ РїРѕ РїСЏС‚РЅРёС†Р°Рј"): "action": "cancel_recurring_schedule", "targetTitle": "Р‘Р°СЃСЃРµР№РЅ".
+   - Lessons list: "tags": ["учеба", "школа", "расписание"].
+   - Day off / cancel school for day ("завтра выходной", "отмени уроки на среду"): "action": "cancel_schedule", "type": "task", "dueDate": "YYYY-MM-DD".
+   - Cancel recurring routine ("отмени бассейн по пятницам"): "action": "cancel_recurring_schedule", "targetTitle": "Бассейн".
 7. EDIT & DELETE (SINGLE & COMBINED ACTIONS):
-   - "СѓРґР°Р»Рё Р·Р°РґР°С‡Сѓ X": "action": "delete", "type": "task", "targetTitle": "X".
-   - "СѓРґР°Р»Рё Р·Р°РјРµС‚РєСѓ X": "action": "delete", "type": "note", "targetTitle": "X".
-   - "СѓРґР°Р»Рё РІСЃРµ Р·Р°РґР°С‡Рё": "action": "delete_all".
-   - "РїРµСЂРµРЅРµСЃРё РЅР° 18:00 / РїРѕРјРµРЅСЏР№ РЅР°Р·РІР°РЅРёРµ": "action": "update", "targetTitle": "X", "dueDate": "...", "dueTime": "...".
-   - MULTI-ACTION (e.g. "СѓРґР°Р»Рё СЌС‚Сѓ Р·Р°РјРµС‚РєСѓ, СЃРґРµР»Р°Р№ С‡С‚РѕР±С‹ СЌС‚Рѕ Р±С‹Р»Р° Р·Р°РґР°С‡Р° РІСЃРµ С‚Р°РєРё", "СѓРґР°Р»Рё Р·Р°РґР°С‡Сѓ X Рё СЃРѕР·РґР°Р№ РЅР°РїРѕРјРёРЅР°РЅРёРµ Y"):
+   - "удали задачу X": "action": "delete", "type": "task", "targetTitle": "X".
+   - "удали заметку X": "action": "delete", "type": "note", "targetTitle": "X".
+   - "удали все задачи": "action": "delete_all".
+   - "перенеси на 18:00 / поменяй название": "action": "update", "targetTitle": "X", "dueDate": "...", "dueTime": "...".
+   - MULTI-ACTION (e.g. "удали эту заметку, сделай чтобы это была задача все таки", "удали задачу X и создай напоминание Y"):
      ALWAYS output ALL actions in the "items" array in exact sequence!
-     Example for "СѓРґР°Р»Рё СЌС‚Сѓ Р·Р°РјРµС‚РєСѓ, СЃРґРµР»Р°Р№ Р·Р°РґР°С‡Сѓ РЅР° 01:00":
-     Item 1: {"action": "delete", "type": "note", "targetTitle": "РќР°Р·РІР°РЅРёРµ Р·Р°РјРµС‚РєРё"}
-     Item 2: {"action": "create", "type": "task", "title": "РќР°Р·РІР°РЅРёРµ Р·Р°РґР°С‡Рё", "dueTime": "01:00", "dueDate": "YYYY-MM-DD"}
+     Example for "удали эту заметку, сделай задачу на 01:00":
+     Item 1: {"action": "delete", "type": "note", "targetTitle": "Название заметки"}
+     Item 2: {"action": "create", "type": "task", "title": "Название задачи", "dueTime": "01:00", "dueDate": "YYYY-MM-DD"}
 8. BIRTHDAYS & HOLIDAYS:
-   - Holiday / birthday of friend ("РґРµРЅСЊ СЂРѕР¶РґРµРЅРёСЏ РґСЂСѓРіР° 15 РјР°СЏ", "РќРѕРІС‹Р№ РіРѕРґ 31 РґРµРєР°Р±СЂСЏ"): "type": "task", "repeat": "yearly", "dueTime": "00:00", "tags": ["РїСЂР°Р·РґРЅРёРє", "РєР°Р»РµРЅРґР°СЂСЊ"].
-   - User's own birthday ("РјРѕР№ РґСЂ 3 Р°РїСЂРµР»СЏ"): "action": "set_my_birthday", "dueDate": "YYYY-MM-DD".
+   - Holiday / birthday of friend ("день рождения друга 15 мая", "Новый год 31 декабря"): "type": "task", "repeat": "yearly", "dueTime": "00:00", "tags": ["праздник", "календарь"].
+   - User's own birthday ("мой др 3 апреля"): "action": "set_my_birthday", "dueDate": "YYYY-MM-DD".
 9. MULTI-ITEM INPUT:
-   - If multiple tasks/actions/notes are mentioned (e.g. "РєСѓРїРёС‚СЊ С…Р»РµР± Рё РµС‰Рµ С‡РµСЂРµР· 2 С‡Р°СЃР° РїРѕР·РІРѕРЅРёС‚СЊ РјР°РјРµ"), extract ALL items into the "items" array.`
+   - If multiple tasks/actions/notes are mentioned (e.g. "купить хлеб и еще через 2 часа позвонить маме"), extract ALL items into the "items" array.`
 
   if (extensionsContext) {
-    prompt += `\n\nрџ§© РђРєС‚РёРІРЅС‹Рµ СЂР°СЃС€РёСЂРµРЅРёСЏ:\n${extensionsContext.slice(0, 1500)}`
+    prompt += `\n\n🧩 Активные расширения:\n${extensionsContext.slice(0, 1500)}`
   }
 
   if (existingItemsContext) {
-    prompt += `\n\nрџ“‹ РЎСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ СЌР»РµРјРµРЅС‚С‹:\n${existingItemsContext.slice(0, 2000)}`
+    prompt += `\n\n📋 Существующие элементы:\n${existingItemsContext.slice(0, 2000)}`
   }
 
   if (friendsContext) {
-    prompt += `\n\nрџ‘Ґ РљРѕРЅС‚Р°РєС‚С‹ Рё РґСЂСѓР·СЊСЏ:\n${friendsContext.slice(0, 1000)}`
+    prompt += `\n\n👥 Контакты и друзья:\n${friendsContext.slice(0, 1000)}`
   }
 
   return prompt
@@ -219,7 +219,7 @@ export async function parseIntentWithGroq(
       if (item.action === 'set_my_birthday') return true
       if (item.action === 'delete_all') return true
       const t = (item.title || '').toLowerCase()
-      return item.title && !t.includes('РЅРµРёР·РІРµСЃС‚РЅРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ') && !t.includes('РЅРµС‡РёС‚Р°РµРјРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ') && !t.includes('РЅРµРёР·РІРµСЃС‚РЅС‹Р№ С‚РµРєСЃС‚')
+      return item.title && !t.includes('неизвестное сообщение') && !t.includes('нечитаемое сообщение') && !t.includes('неизвестный текст')
     })
 
     if (rawItems.length === 0) return []
@@ -251,7 +251,7 @@ export async function parseIntentWithGroq(
         daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
         recipientName: cleanRecName,
         isBothShared: cleanIsBothShared,
-        repeat: item.repeat || ((item.title || text).toLowerCase().match(/РґРµРЅСЊ СЂРѕР¶Рґ|РґСЂ|РїСЂР°Р·РґРЅРёРє|РіРѕРґРѕРІС‰РёРЅ/) ? 'yearly' : null),
+        repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
         targetTitle: item.targetTitle || null,
         projectId: item.projectId || null,
         goalId: item.goalId || null,
@@ -285,7 +285,7 @@ export async function parseIntentWithGroq(
 }
 
 /**
- * Normalizes ambiguous relative times (e.g. "РІ 6 С‡Р°СЃРѕРІ" -> 18:00 if morning has passed, or tomorrow if evening passed)
+ * Normalizes ambiguous relative times (e.g. "в 6 часов" -> 18:00 if morning has passed, or tomorrow if evening passed)
  */
 export function normalizeSmartTimeAndDate(
   dueDate: string | null | undefined,
@@ -318,16 +318,16 @@ export function normalizeSmartTimeAndDate(
   let finalDate = dueDate || todayStr
   let finalTime = dueTime ? dueTime.trim() : null
 
-  // If no dueTime was extracted by LLM, check if rawText mentions a time like "РІ 6", "РІ 6 С‡Р°СЃРѕРІ", "РІ 18:00", "РІ 7:30"
+  // If no dueTime was extracted by LLM, check if rawText mentions a time like "в 6", "в 6 часов", "в 18:00", "в 7:30"
   if (!finalTime && rawText) {
-    const timeMatch = rawText.match(/(?:^|\s)РІ\s*(\d{1,2})(?::(\d{2}))?\s*(?:С‡Р°СЃ(?:Р°|РѕРІ|РѕРј)?)?(?:\s*(СѓС‚СЂР°|РІРµС‡РµСЂР°|РґРЅСЏ|РЅРѕС‡Рё))?/i)
+    const timeMatch = rawText.match(/(?:^|\s)в\s*(\d{1,2})(?::(\d{2}))?\s*(?:час(?:а|ов|ом)?)?(?:\s*(утра|вечера|дня|ночи))?/i)
     if (timeMatch) {
       let h = parseInt(timeMatch[1], 10)
       const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0
       const period = (timeMatch[3] || '').toLowerCase()
-      if (period.includes('РІРµС‡РµСЂ') || period.includes('РґРЅСЏ')) {
+      if (period.includes('вечер') || period.includes('дня')) {
         if (h < 12) h += 12
-      } else if (period.includes('РЅРѕС‡') || period.includes('СѓС‚СЂ')) {
+      } else if (period.includes('ноч') || period.includes('утр')) {
         if (h === 12) h = 0
       }
       finalTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
@@ -344,26 +344,26 @@ export function normalizeSmartTimeAndDate(
     let hour = parseInt(match[1], 10)
     const min = parseInt(match[2], 10)
     const textLower = rawText.toLowerCase()
-    const hasExplicitMorning = textLower.includes('СѓС‚СЂР°') || textLower.includes('СѓС‚СЂРѕРј') || textLower.includes('РЅРѕС‡Рё') || textLower.includes('am')
-    const hasExplicitEvening = textLower.includes('РІРµС‡РµСЂР°') || textLower.includes('РІРµС‡РµСЂРѕРј') || textLower.includes('РґРЅСЏ') || textLower.includes('pm')
-    const hasTomorrow = textLower.includes('Р·Р°РІС‚СЂР°') || textLower.includes('РїРѕСЃР»РµР·Р°РІС‚СЂР°')
+    const hasExplicitMorning = textLower.includes('утра') || textLower.includes('утром') || textLower.includes('ночи') || textLower.includes('am')
+    const hasExplicitEvening = textLower.includes('вечера') || textLower.includes('вечером') || textLower.includes('дня') || textLower.includes('pm')
+    const hasTomorrow = textLower.includes('завтра') || textLower.includes('послезавтра')
 
     // If hour <= 12 and no explicit morning indicator, resolve ambiguity ONLY for TODAY
     if (hour <= 12 && !hasExplicitMorning) {
       if (hasExplicitEvening) {
         if (hour < 12) hour += 12
       } else if (!hasTomorrow && (!dueDate || dueDate === todayStr)) {
-        // Ambiguous hour on TODAY (e.g. "РІ 6", "РІ 6 С‡Р°СЃРѕРІ", "РІ 7", "РІ 2")
+        // Ambiguous hour on TODAY (e.g. "в 6", "в 6 часов", "в 7", "в 2")
         // Check if morning hour has already passed today
         const morningPassed = curHour > hour || (curHour === hour && curMin >= min)
         const pmHour = hour === 12 ? 12 : hour + 12
         const pmPassed = curHour > pmHour || (curHour === pmHour && curMin >= min)
 
         if (morningPassed && !pmPassed) {
-          // e.g. currently 16:00, user said "РІ 6" -> 18:00 today!
+          // e.g. currently 16:00, user said "в 6" -> 18:00 today!
           hour = pmHour
         } else if (morningPassed && pmPassed) {
-          // e.g. currently 19:30, user said "РІ 6" -> both passed today -> 18:00 tomorrow!
+          // e.g. currently 19:30, user said "в 6" -> both passed today -> 18:00 tomorrow!
           hour = pmHour
           finalDate = tomorrowStr
         }
@@ -394,8 +394,8 @@ export function extractCleanRecipientAndSharing(
   let recName = itemRecipientName ? String(itemRecipientName).trim() : null
   const text = rawText || ''
 
-  // Check if rawText contains "РЅР°Рј", "РґР»СЏ РЅР°СЃ", "РѕР±С‰Р°СЏ", "СЃРѕРІРјРµСЃС‚РЅР°СЏ", "РјРЅРµ Рё", "РЅР°Рј СЃ", "РґР»СЏ РјРµРЅСЏ Рё", "РІРјРµСЃС‚Рµ", "РѕР±РѕРёРј"
-  const hasUsKeywords = /(?:^|[^Р°-СЏС‘a-z0-9])(?:РЅР°Рј|РґР»СЏ\s+РЅР°СЃ|РІРјРµСЃС‚Рµ|РѕР±РѕРёРј|РѕР±С‰Р°СЏ|СЃРѕРІРјРµСЃС‚РЅР°СЏ|СЃРѕРІРјРµСЃС‚РЅРѕ|РјРЅРµ\s+Рё|РЅР°Рј\s+СЃ|РґР»СЏ\s+РјРµРЅСЏ\s+Рё|СЃ\s+РЅР°РјРё)(?:[^Р°-СЏС‘a-z0-9]|$)/i.test(text)
+  // Check if rawText contains "нам", "для нас", "общая", "совместная", "мне и", "нам с", "для меня и", "вместе", "обоим"
+  const hasUsKeywords = /(?:^|[^а-яёa-z0-9])(?:нам|для\s+нас|вместе|обоим|общая|совместная|совместно|мне\s+и|нам\s+с|для\s+меня\s+и|с\s+нами)(?:[^а-яёa-z0-9]|$)/i.test(text)
 
   let isShared: boolean
   if (itemIsBothShared !== undefined) {
@@ -404,29 +404,29 @@ export function extractCleanRecipientAndSharing(
     isShared = hasUsKeywords
   }
 
-  // Clean recName from "РјРЅРµ Рё X" / "РЅР°Рј СЃ X" / "РґР»СЏ РјРµРЅСЏ Рё X"
+  // Clean recName from "мне и X" / "нам с X" / "для меня и X"
   if (recName) {
     recName = recName
-      .replace(/^(?:РјРЅРµ\s+Рё|РЅР°Рј\s+СЃ|РґР»СЏ\s+РјРµРЅСЏ\s+Рё|РґР»СЏ\s+РЅР°СЃ\s+СЃ|СЏ\s+Рё|СЃ\s+)\s+/i, '')
-      .replace(/\s+(?:Рё\s+РјРЅРµ|Рё\s+СЏ|СЃРѕ\s+РјРЅРѕР№|СЃ\s+РЅР°РјРё)$/i, '')
-      .replace(/^(?:РґР»СЏ|РєРѕРјСѓ|РґСЂСѓРіСѓ|РєРѕР»Р»РµРіРµ)\s+/i, '')
+      .replace(/^(?:мне\s+и|нам\s+с|для\s+меня\s+и|для\s+нас\s+с|я\s+и|с\s+)\s+/i, '')
+      .replace(/\s+(?:и\s+мне|и\s+я|со\s+мной|с\s+нами)$/i, '')
+      .replace(/^(?:для|кому|другу|коллеге)\s+/i, '')
       .trim()
   }
 
   // If no recName was extracted by LLM, try regexes on rawText:
   if (!recName && text) {
     const patterns = [
-      // "РґР°Р№ РјРЅРµ Рё РІРѕРІС‡РёРєСѓ Р±РµСЂРµРіРѕРІРѕРјСѓ РѕР±С‰СѓСЋ Р·Р°РґР°С‡Сѓ РїРѕРёРіСЂР°С‚СЊ..."
-      // "СЃРѕР·РґР°Р№ РЅР°Рј СЃ Р»РµСЂРѕР№ Р·Р°РґР°С‡Сѓ РїСЂРёРіРѕС‚РѕРІРёС‚СЊ..."
-      /(?:РґР°Р№|РїРѕСЃС‚Р°РІСЊ|СЃРѕР·РґР°Р№|РЅР°Р·РЅР°С‡СЊ|Р·Р°РїРёС€Рё|РґРѕР±Р°РІСЊ|СЃРґРµР»Р°Р№)\s+(?:РјРЅРµ\s+Рё|РЅР°Рј\s+СЃ|РґР»СЏ\s+РјРµРЅСЏ\s+Рё|РґР»СЏ\s+РЅР°СЃ\s+СЃ)\s+([Р°-СЏС‘a-z0-9_@\s]+?)\s+(?:РѕР±С‰СѓСЋ\s+Р·Р°РґР°С‡Сѓ|СЃРѕРІРјРµСЃС‚РЅСѓСЋ\s+Р·Р°РґР°С‡Сѓ|РѕР±С‰СѓСЋ|СЃРѕРІРјРµСЃС‚РЅСѓСЋ|Р·Р°РґР°С‡Сѓ|С†РµР»СЊ|РґРµР»Рѕ|РЅР°РїРѕРјРёРЅР°РЅРёРµ|РїРѕРёРіСЂР°С‚СЊ|СЃРґРµР»Р°С‚СЊ|СЃРѕР·РІРѕРЅРёС‚СЊСЃСЏ|РІСЃС‚СЂРµС‚РёС‚СЊСЃСЏ|РїРѕР№С‚Рё)/i,
-      // "РѕР±С‰Р°СЏ Р·Р°РґР°С‡Р° РјРЅРµ Рё РІРѕРІРµ РїРѕРёРіСЂР°С‚СЊ..."
-      /(?:РѕР±С‰Р°СЏ|СЃРѕРІРјРµСЃС‚РЅР°СЏ)\s+(?:Р·Р°РґР°С‡Р°|С†РµР»СЊ|РґРµР»Рѕ)\s+(?:РґР»СЏ\s+)?(?:РјРµРЅСЏ\s+Рё\s+|РЅР°Рј\s+СЃ\s+|РјРЅРµ\s+Рё\s+)?([Р°-СЏС‘a-z0-9_@\s]+?)(?:,|$|\s+РїРѕ|\s+РЅР°|\s+РІ\s+\d|\s+С‡С‚РѕР±С‹|\s+РїРѕРёРіСЂР°С‚СЊ|\s+СЃРґРµР»Р°С‚СЊ)/i,
-      // "РґР°Р№ Р·Р°РґР°С‡Сѓ РІРѕРІРµ РїРѕР·РІРѕРЅРёС‚СЊ..."
-      /(?:РґР°Р№\s+Р·Р°РґР°С‡Сѓ|РїРѕСЂСѓС‡Рё\s+Р·Р°РґР°С‡Сѓ|РїРµСЂРµРґР°Р№\s+Р·Р°РґР°С‡Сѓ|РѕС‚РїСЂР°РІСЊ\s+Р·Р°РґР°С‡Сѓ|РЅР°Р·РЅР°С‡СЊ\s+Р·Р°РґР°С‡Сѓ|СЃРєРёРЅСЊ\s+Р·Р°РґР°С‡Сѓ|РєРёРЅСЊ\s+Р·Р°РґР°С‡Сѓ)\s+([Р°-СЏС‘a-z0-9_@\s]+?)(?:,|$|\s+С‡С‚РѕР±С‹|\s+РЅР°|\s+РІ\s+\d|\s+РїРѕ|\s+СЃРґРµР»Р°С‚СЊ|\s+РїРѕРёРіСЂР°С‚СЊ)/i,
-      // "РґР°Р№ РІРѕРІРµ Р·Р°РґР°С‡Сѓ..." / "РїРѕСЂСѓС‡Рё Р»РµСЂРµ РѕС‚С‡РµС‚..."
-      /(?:РґР°Р№|РїРѕСЂСѓС‡Рё|РїРµСЂРµРґР°Р№|РѕС‚РїСЂР°РІСЊ|РЅР°Р·РЅР°С‡СЊ|СЃРєРёРЅСЊ|РєРёРЅСЊ)\s+([Р°-СЏС‘a-z0-9_@\s]+?)\s+(?:Р·Р°РґР°С‡Сѓ|С†РµР»СЊ|РґРµР»Рѕ|СЃРґРµР»Р°С‚СЊ|РїРѕРёРіСЂР°С‚СЊ|СЃРѕР·РІРѕРЅРёС‚СЊСЃСЏ|РєСѓРїРёС‚СЊ|РЅР°РїРёСЃР°С‚СЊ|РїСЂРѕРІРµСЂРёС‚СЊ|РїРѕРґРіРѕС‚РѕРІРёС‚СЊ|РІСЃС‚СЂРµС‚РёС‚СЊСЃСЏ|РїРѕР№С‚Рё|РѕС‚С‡РµС‚)/i,
-      // "Р·Р°РґР°С‡Р° РЅР°Рј СЃ Р»РµСЂРѕР№..."
-      /Р·Р°РґР°С‡Р°\s+(?:РЅР°Рј\s+СЃ|РјРЅРµ\s+Рё)\s+([Р°-СЏС‘a-z0-9_@\s]+?)(?:,|$|\s+РїРѕ|\s+РЅР°|\s+РІ\s+\d|\s+С‡С‚РѕР±С‹)/i,
+      // "дай мне и вовчику береговому общую задачу поиграть..."
+      // "создай нам с лерой задачу приготовить..."
+      /(?:дай|поставь|создай|назначь|запиши|добавь|сделай)\s+(?:мне\s+и|нам\s+с|для\s+меня\s+и|для\s+нас\s+с)\s+([а-яёa-z0-9_@\s]+?)\s+(?:общую\s+задачу|совместную\s+задачу|общую|совместную|задачу|цель|дело|напоминание|поиграть|сделать|созвониться|встретиться|пойти)/i,
+      // "общая задача мне и вове поиграть..."
+      /(?:общая|совместная)\s+(?:задача|цель|дело)\s+(?:для\s+)?(?:меня\s+и\s+|нам\s+с\s+|мне\s+и\s+)?([а-яёa-z0-9_@\s]+?)(?:,|$|\s+по|\s+на|\s+в\s+\d|\s+чтобы|\s+поиграть|\s+сделать)/i,
+      // "дай задачу вове позвонить..."
+      /(?:дай\s+задачу|поручи\s+задачу|передай\s+задачу|отправь\s+задачу|назначь\s+задачу|скинь\s+задачу|кинь\s+задачу)\s+([а-яёa-z0-9_@\s]+?)(?:,|$|\s+чтобы|\s+на|\s+в\s+\d|\s+по|\s+сделать|\s+поиграть)/i,
+      // "дай вове задачу..." / "поручи лере отчет..."
+      /(?:дай|поручи|передай|отправь|назначь|скинь|кинь)\s+([а-яёa-z0-9_@\s]+?)\s+(?:задачу|цель|дело|сделать|поиграть|созвониться|купить|написать|проверить|подготовить|встретиться|пойти|отчет)/i,
+      // "задача нам с лерой..."
+      /задача\s+(?:нам\s+с|мне\s+и)\s+([а-яёa-z0-9_@\s]+?)(?:,|$|\s+по|\s+на|\s+в\s+\d|\s+чтобы)/i,
     ]
 
     for (const pat of patterns) {
@@ -434,8 +434,8 @@ export function extractCleanRecipientAndSharing(
       if (m && m[1]) {
         let candidate = m[1].trim()
         candidate = candidate
-          .replace(/^(?:РјРЅРµ\s+Рё|РЅР°Рј\s+СЃ|РґР»СЏ\s+РјРµРЅСЏ\s+Рё|РґР»СЏ\s+РЅР°СЃ\s+СЃ)\s+/i, '')
-          .replace(/\s+(?:РѕР±С‰СѓСЋ|СЃРѕРІРјРµСЃС‚РЅСѓСЋ|Р·Р°РґР°С‡Сѓ|С†РµР»СЊ|РґРµР»Рѕ)$/i, '')
+          .replace(/^(?:мне\s+и|нам\s+с|для\s+меня\s+и|для\s+нас\s+с)\s+/i, '')
+          .replace(/\s+(?:общую|совместную|задачу|цель|дело)$/i, '')
           .trim()
         if (candidate && candidate.length <= 40) {
           recName = candidate
@@ -445,7 +445,7 @@ export function extractCleanRecipientAndSharing(
     }
   }
 
-  if (recName && (recName.toLowerCase() === 'РјРЅРµ' || recName.toLowerCase() === 'СЏ' || recName.toLowerCase() === 'СЃРµР±Рµ')) {
+  if (recName && (recName.toLowerCase() === 'мне' || recName.toLowerCase() === 'я' || recName.toLowerCase() === 'себе')) {
     recName = null
     isShared = false
   }
@@ -454,7 +454,7 @@ export function extractCleanRecipientAndSharing(
 }
 
 /**
- * Fuzzy similarity score between two strings (0вЂ“1)
+ * Fuzzy similarity score between two strings (0–1)
  */
 export function stringSimilarity(a: string, b: string): number {
   a = a.toLowerCase().trim()
@@ -484,15 +484,15 @@ export async function generateReminderContext(
       messages: [
         {
           role: 'system',
-          content: `РўС‹ вЂ” РґСЂСѓР¶РµР»СЋР±РЅС‹Р№ AI-Р°СЃСЃРёСЃС‚РµРЅС‚. РќР°РїРёС€Рё 2-3 РїСЂРµРґР»РѕР¶РµРЅРёСЏ РЅР° Р РЈРЎРЎРљРћРњ СЏР·С‹РєРµ:
-1. РџСЂРёСЏС‚РЅРѕРµ РїРѕР¶РµР»Р°РЅРёРµ РёР»Рё РЅР°РїРѕРјРёРЅР°РЅРёРµ Рѕ РїСЂРµРґСЃС‚РѕСЏС‰РµРј СЃРѕР±С‹С‚РёРё
-2. 1 РїСЂР°РєС‚РёС‡РµСЃРєСѓСЋ СЂРµРєРѕРјРµРЅРґР°С†РёСЋ РёР»Рё СЃРѕРІРµС‚
-РЎС‚РёР»СЊ: С‚С‘РїР»С‹Р№, РїРѕРґРґРµСЂР¶РёРІР°СЋС‰РёР№, РєРѕРЅРєСЂРµС‚РЅС‹Р№. Р‘РµР· С€Р°Р±Р»РѕРЅРЅС‹С… С„СЂР°Р·. Р‘РµР· СѓРїРѕРјРёРЅР°РЅРёСЏ В«ZerfВ».
-РћС‚РІРµС‚СЊ РўРћР›Р¬РљРћ СЌС‚РёРјРё 2-3 РїСЂРµРґР»РѕР¶РµРЅРёСЏРјРё, Р±РµР· Р»РёС€РЅРµРіРѕ С‚РµРєСЃС‚Р°.`,
+          content: `Ты — дружелюбный AI-ассистент. Напиши 2-3 предложения на РУССКОМ языке:
+1. Приятное пожелание или напоминание о предстоящем событии
+2. 1 практическую рекомендацию или совет
+Стиль: тёплый, поддерживающий, конкретный. Без шаблонных фраз. Без упоминания «Zerf».
+Ответь ТОЛЬКО этими 2-3 предложениями, без лишнего текста.`,
         },
         {
           role: 'user',
-          content: `РЎРѕР±С‹С‚РёРµ/С‚РµРјР°: В«${noteTitle}В»\nР’СЂРµРјСЏ: ${dueTime}\nРљРѕРЅС‚РµРєСЃС‚: ${noteContent.slice(0, 400)}`,
+          content: `Событие/тема: «${noteTitle}»\nВремя: ${dueTime}\nКонтекст: ${noteContent.slice(0, 400)}`,
         },
       ],
       model: GROQ_CHAT_MODEL,
@@ -500,9 +500,9 @@ export async function generateReminderContext(
       max_tokens: 200,
       apiKey,
     })
-    return result.content?.trim() || `РќР°РїРѕРјРёРЅР°РЅРёРµ: В«${noteTitle}В» РІ ${dueTime}. рџЋЇ`
+    return result.content?.trim() || `Напоминание: «${noteTitle}» в ${dueTime}. 🎯`
   } catch {
-    return `РќР°РїРѕРјРёРЅР°РЅРёРµ: В«${noteTitle}В» РІ ${dueTime}. РЈРґР°С‡Рё! рџљЂ`
+    return `Напоминание: «${noteTitle}» в ${dueTime}. Удачи! 🚀`
   }
 }
 
@@ -525,11 +525,11 @@ export async function generateMorningGreeting(
 
   try {
     const contextLines: string[] = []
-    if (todayBirthdays.length) contextLines.push(`РџСЂР°Р·РґРЅРёРєРё Рё Р”РЅРё СЂРѕР¶РґРµРЅРёСЏ РЎР•Р“РћР”РќРЇ: ${todayBirthdays.join(', ')}`)
+    if (todayBirthdays.length) contextLines.push(`Праздники и Дни рождения СЕГОДНЯ: ${todayBirthdays.join(', ')}`)
     if (pendingTasks.length) {
-      contextLines.push(`РџР»Р°РЅС‹ Рё Р·Р°РґР°С‡Рё РЅР° СЃРµРіРѕРґРЅСЏ (${pendingTasks.length}): ${pendingTasks.slice(0, 6).join(', ')}`)
+      contextLines.push(`Планы и задачи на сегодня (${pendingTasks.length}): ${pendingTasks.slice(0, 6).join(', ')}`)
     } else {
-      contextLines.push(`Р—Р°РґР°С‡ РЅР° СЃРµРіРѕРґРЅСЏ РЅРµС‚ (РґРµРЅСЊ РїРѕР»РЅРѕСЃС‚СЊСЋ СЃРІРѕР±РѕРґРµРЅ)`)
+      contextLines.push(`Задач на сегодня нет (день полностью свободен)`)
     }
 
     if (memoryHint && memoryHint.trim()) {
@@ -540,26 +540,26 @@ export async function generateMorningGreeting(
       messages: [
         {
           role: 'system',
-          content: `РўС‹ вЂ” РїРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ AI-Р°СЃСЃРёСЃС‚РµРЅС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РІ Telegram (Zerf AI). РљР°Р¶РґРѕРµ СѓС‚СЂРѕ С‚С‹ РїРёС€РµС€СЊ РµРјСѓ С‚С‘РїР»РѕРµ, РІРґРѕС…РЅРѕРІР»СЏСЋС‰РµРµ Рё СЃС‚СЂРѕРіРѕ Р°РєС‚СѓР°Р»СЊРЅРѕРµ СѓС‚СЂРµРЅРЅРµРµ СЃРѕРѕР±С‰РµРЅРёРµ.
-Р¤РѕСЂРјР°С‚ РѕС‚РІРµС‚Р° вЂ” Markdown РґР»СЏ Telegram (Р¶РёСЂРЅС‹Р№ *С‚РµРєСЃС‚*, РєСѓСЂСЃРёРІ _С‚РµРєСЃС‚_). РџРёС€Рё РўРћР›Р¬РљРћ РЅР° СЂСѓСЃСЃРєРѕРј СЏР·С‹РєРµ.
+          content: `Ты — персональный AI-ассистент пользователя в Telegram (Zerf AI). Каждое утро ты пишешь ему тёплое, вдохновляющее и строго актуальное утреннее сообщение.
+Формат ответа — Markdown для Telegram (жирный *текст*, курсив _текст_). Пиши ТОЛЬКО на русском языке.
 
-РљР РРўРР§Р•РЎРљРР• РџР РђР’РР›Рђ:
-1. РћРїРёСЂР°Р№СЃСЏ РРЎРљР›Р®Р§РРўР•Р›Р¬РќРћ РЅР° СЃРїРёСЃРѕРє В«РџР»Р°РЅС‹ Рё Р·Р°РґР°С‡Рё РЅР° СЃРµРіРѕРґРЅСЏВ». РљРђРўР•Р“РћР РР§Р•РЎРљР Р—РђРџР Р•Р©Р•РќРћ РІС‹РґСѓРјС‹РІР°С‚СЊ РґРµР»Р°, Р»СЋРґРµР№, РїСЂРѕС€Р»С‹Рµ РІС‹РїРѕР»РЅРµРЅРЅС‹Рµ Р·Р°РґР°С‡Рё РёР»Рё РЅРµСЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ СЃРѕР±С‹С‚РёСЏ!
-2. Р•СЃР»Рё РІ СЃС‚СЂРѕРєРµ В«РџР»Р°РЅС‹ Рё Р·Р°РґР°С‡Рё РЅР° СЃРµРіРѕРґРЅСЏВ» РЅР°РїРёСЃР°РЅРѕ В«Р—Р°РґР°С‡ РЅР° СЃРµРіРѕРґРЅСЏ РЅРµС‚В» вЂ” РЅР°РїРёС€Рё, С‡С‚Рѕ РґРµРЅСЊ СЃРІРѕР±РѕРґРµРЅ РѕС‚ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹С… РґРµР», РїРѕР¶РµР»Р°Р№ РїСЂРѕРґСѓРєС‚РёРІРЅРѕРіРѕ РґРЅСЏ/РѕС‚РґС‹С…Р° Рё РґР°Р№ РїРѕР»РµР·РЅС‹Рµ СЃРѕРІРµС‚С‹ РїРѕ С„РѕРєСѓСЃСѓ РёР»Рё РїР»Р°РЅРёСЂРѕРІР°РЅРёСЋ.
-3. Р”РЅРё СЂРѕР¶РґРµРЅРёСЏ СѓРїРѕРјРёРЅР°Р№ РўРћР›Р¬РљРћ РµСЃР»Рё РµСЃС‚СЊ СЃС‚СЂРѕРєР° В«РџСЂР°Р·РґРЅРёРєРё Рё Р”РЅРё СЂРѕР¶РґРµРЅРёСЏ РЎР•Р“РћР”РќРЇВ».
+КРИТИЧЕСКИЕ ПРАВИЛА:
+1. Опирайся ИСКЛЮЧИТЕЛЬНО на список «Планы и задачи на сегодня». КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО выдумывать дела, людей, прошлые выполненные задачи или несуществующие события!
+2. Если в строке «Планы и задачи на сегодня» написано «Задач на сегодня нет» — напиши, что день свободен от запланированных дел, пожелай продуктивного дня/отдыха и дай полезные советы по фокусу или планированию.
+3. Дни рождения упоминай ТОЛЬКО если есть строка «Праздники и Дни рождения СЕГОДНЯ».
 
-РЎС‚СЂСѓРєС‚СѓСЂР° СЃРѕРѕР±С‰РµРЅРёСЏ:
-1. РџСЂРёРІРµС‚СЃС‚РІРёРµ СЃ РёРјРµРЅРµРј (1 СЃС‚СЂРѕРєР°: В«Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ, [РРјСЏ]!В»).
-2. Р”РµРЅСЊ РЅРµРґРµР»Рё Рё РґР°С‚Р° (В«РЎРµРіРѕРґРЅСЏ вЂ” [РґРµРЅСЊ], [РґР°С‚Р°].В»).
-3. Р•СЃР»Рё РµСЃС‚СЊ Р·Р°РґР°С‡Рё РЅР° СЃРµРіРѕРґРЅСЏ вЂ” РєСЂР°С‚РєРёР№ РґСЂСѓР¶РµСЃРєРёР№ РєРѕРјРјРµРЅС‚Р°СЂРёР№ РїРѕ РЅРёРј (1-2 РїСЂРµРґР»РѕР¶РµРЅРёСЏ). Р•СЃР»Рё Р·Р°РґР°С‡ РЅРµС‚ вЂ” РїРѕР¶РµР»Р°Р№ РїСЂРѕРґСѓРєС‚РёРІРЅРѕРіРѕ РґРЅСЏ Рё С…РѕСЂРѕС€РµРіРѕ РЅР°СЃС‚СЂРѕРµРЅРёСЏ.
-4. 2 РїРѕР»РµР·РЅС‹С… РїСЂР°РєС‚РёС‡РµСЃРєРёС… СЃРѕРІРµС‚Р° РЅР° РґРµРЅСЊ.
-5. РљРѕСЂРѕС‚РєР°СЏ РјРѕС‚РёРІРёСЂСѓСЋС‰Р°СЏ С„СЂР°Р·Р°.
+Структура сообщения:
+1. Приветствие с именем (1 строка: «Доброе утро, [Имя]!»).
+2. День недели и дата («Сегодня — [день], [дата].»).
+3. Если есть задачи на сегодня — краткий дружеский комментарий по ним (1-2 предложения). Если задач нет — пожелай продуктивного дня и хорошего настроения.
+4. 2 полезных практических совета на день.
+5. Короткая мотивирующая фраза.
 
-РњР°РєСЃРёРјСѓРј 130 СЃР»РѕРІ. Р‘РµР· Р»РёС€РЅРµР№ РІРѕРґС‹.`,
+Максимум 130 слов. Без лишней воды.`,
         },
         {
           role: 'user',
-          content: `РРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ: ${firstName}\nР”Р°С‚Р°: ${dayName}\n${contextLines.join('\n')}`,
+          content: `Имя пользователя: ${firstName}\nДата: ${dayName}\n${contextLines.join('\n')}`,
         },
       ],
       model: GROQ_CHAT_MODEL,
@@ -576,15 +576,15 @@ export async function generateMorningGreeting(
 }
 
 function buildFallbackGreeting(firstName: string, dayName: string, pendingTasks: string[], todayBirthdays: string[] = []): string {
-  const bdayLine = todayBirthdays.length ? `рџЋ‚ *РџСЂР°Р·РґРЅРёРєРё СЃРµРіРѕРґРЅСЏ:*\n${todayBirthdays.map(b => `в–Є ${b}`).join('\n')}\n\n` : ''
+  const bdayLine = todayBirthdays.length ? `🎂 *Праздники сегодня:*\n${todayBirthdays.map(b => `▪ ${b}`).join('\n')}\n\n` : ''
   return (
-    `вњ¦ *Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ, ${firstName}!*\n\n` +
-    `РЎРµРіРѕРґРЅСЏ ${dayName}.\n\n` +
+    `✦ *Доброе утро, ${firstName}!*\n\n` +
+    `Сегодня ${dayName}.\n\n` +
     bdayLine +
     (pendingTasks.length
-      ? `рџ“‹ *РќР° СЃРµРіРѕРґРЅСЏ (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `в–Є ${t}`).join('\n')}\n\n`
-      : `вњ“ РќР° СЃРµРіРѕРґРЅСЏ Р·Р°РґР°С‡ РЅРµС‚ вЂ” РѕС‚Р»РёС‡РЅР°СЏ РІРѕР·РјРѕР¶РЅРѕСЃС‚СЊ СЃРїР»Р°РЅРёСЂРѕРІР°С‚СЊ РґРµРЅСЊ!\n\n`) +
-    `_РџСЂРѕРґСѓРєС‚РёРІРЅРѕРіРѕ РґРЅСЏ! вњ¦_`
+      ? `📋 *На сегодня (${pendingTasks.length}):*\n${pendingTasks.slice(0, 5).map(t => `▪ ${t}`).join('\n')}\n\n`
+      : `✓ На сегодня задач нет — отличная возможность спланировать день!\n\n`) +
+    `_Продуктивного дня! ✦_`
   )
 }
 
@@ -603,34 +603,34 @@ export async function generateEveningReview(
       messages: [
         {
           role: 'system',
-          content: `РўС‹ вЂ” С‚Р°РєС‚РёС‡РЅС‹Р№ Рё СѓРјРЅС‹Р№ РІРµС‡РµСЂРЅРёР№ Р°СЃСЃРёСЃС‚РµРЅС‚ Zerf AI. Р’ 21:00 С‚С‹ РїРѕРґРІРѕРґРёС€СЊ СЃ РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј РёС‚РѕРіРё РїСЂРѕС€РµРґС€РµРіРѕ РґРЅСЏ РІ Telegram.
-РџРёС€Рё РўРћР›Р¬РљРћ РЅР° СЂСѓСЃСЃРєРѕРј СЏР·С‹РєРµ, РІ Markdown РґР»СЏ Telegram (Р¶РёСЂРЅС‹Р№ **С‚РµРєСЃС‚**, РєСѓСЂСЃРёРІ _С‚РµРєСЃС‚_).
-РЎС‚РёР»СЊ: СЃРїРѕРєРѕР№РЅС‹Р№, Р»Р°РєРѕРЅРёС‡РЅС‹Р№, РїРѕРґРґРµСЂР¶РёРІР°СЋС‰РёР№.
+          content: `Ты — тактичный и умный вечерний ассистент Zerf AI. В 21:00 ты подводишь с пользователем итоги прошедшего дня в Telegram.
+Пиши ТОЛЬКО на русском языке, в Markdown для Telegram (жирный **текст**, курсив _текст_).
+Стиль: спокойный, лаконичный, поддерживающий.
 
-РЎРўР РћР“РР• РџР РђР’РР›Рђ (РќР• РќРђР РЈРЁРђР™ РќР РџР Р РљРђРљРРҐ РЈРЎР›РћР’РРЇРҐ!):
-1. Р§РЃРўРљРћ Р РђР—Р”Р•Р›РЇР™ Р”РќР: РЎР•Р“РћР”РќРЇ Рё Р—РђР’РўР Рђ вЂ” СЌС‚Рѕ СЂР°Р·РЅС‹Рµ РґРЅРё. РќРёРєРѕРіРґР° РЅРµ РїСѓС‚Р°Р№ РёС…!
-2. РќР•Р—РђРљР Р«РўР«Р• Р—РђР”РђР§Р Р—Рђ РЎР•Р“РћР”РќРЇ:
-   - Р•СЃР»Рё Р·Р° СЃРµРіРѕРґРЅСЏ РµСЃС‚СЊ РЅРµР·Р°РєСЂС‹С‚С‹Рµ Р·Р°РґР°С‡Рё, С‚С‹ РўРћР›Р¬РљРћ РјСЏРіРєРѕ РЅР°РїРѕРјРёРЅР°РµС€СЊ Рѕ РЅРёС… РёР»Рё СЃРїСЂР°С€РёРІР°РµС€СЊ: РІРѕР·РјРѕР¶РЅРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ СѓР¶Рµ РІС‹РїРѕР»РЅРёР» РёС…, РЅРѕ Р·Р°Р±С‹Р» РѕС‚РјРµС‚РёС‚СЊ РІС‹РїРѕР»РЅРµРЅРЅС‹РјРё РІ РїСЂРёР»РѕР¶РµРЅРёРё Zerf.
-   - РљРђРўР•Р“РћР РР§Р•РЎРљР Р—РђРџР Р•Р©Р•РќРћ РґР°РІР°С‚СЊ СЃРѕРІРµС‚С‹ РїРѕ СЃРµРіРѕРґРЅСЏС€РЅРёРј РЅРµРІС‹РїРѕР»РЅРµРЅРЅС‹Рј Р·Р°РґР°С‡Р°Рј!
-   - РљРђРўР•Р“РћР РР§Р•РЎРљР Р—РђРџР Р•Р©Р•РќРћ РїРµСЂРµРЅРѕСЃРёС‚СЊ СЃРµРіРѕРґРЅСЏС€РЅРёРµ РЅРµР·Р°РєСЂС‹С‚С‹Рµ Р·Р°РґР°С‡Рё РЅР° Р·Р°РІС‚СЂР° РІ С‚РµРєСЃС‚Рµ (РЅР°РїСЂРёРјРµСЂ, РµСЃР»Рё СЃРµРіРѕРґРЅСЏ Р±С‹Р»Р° Р·Р°РґР°С‡Р° "РІСЃС‚СЂРµС‡Р° СЃ РІСЂР°С‡РѕРј", РќР•Р›Р¬Р—РЇ РїРёСЃР°С‚СЊ "Р·Р°РІС‚СЂР° СѓРґР°С‡Рё Сѓ РІСЂР°С‡Р°"!).
-3. РЎРћР’Р•Рў Р Р—РђР”РђР§Р РќРђ Р—РђР’РўР Рђ:
-   - Р‘Р»РѕРє В«**РЎРѕРІРµС‚:**В» СЃС‚СЂРѕРёС‚СЃСЏ РРЎРљР›Р®Р§РРўР•Р›Р¬РќРћ РЅР° РѕСЃРЅРѕРІРµ СЃРїРёСЃРєР° В«Р—РђРџР›РђРќРР РћР’РђРќРћ РќРђ Р—РђР’РўР РђВ» (РµСЃР»Рё РѕРЅРё РµСЃС‚СЊ).
-   - Р•СЃР»Рё РЅР° Р·Р°РІС‚СЂР° РµСЃС‚СЊ Р·Р°РґР°С‡Рё: РґР°Р№ 1 РєРѕСЂРѕС‚РєРёР№ РїСЂР°РєС‚РёС‡РЅС‹Р№ СЃРѕРІРµС‚, РєР°Рє РїРѕРґРіРѕС‚РѕРІРёС‚СЊСЃСЏ РєРѕ СЃРЅСѓ Рё Р·Р°РІС‚СЂР°С€РЅРёРј РґРµР»Р°Рј.
-   - Р•СЃР»Рё РЅР° Р·Р°РІС‚СЂР° Р·Р°РґР°С‡ РЅРµС‚ (СЃРїРёСЃРѕРє РїСѓСЃС‚): РґР°Р№ РЅРµР№С‚СЂР°Р»СЊРЅС‹Р№ СЃРѕРІРµС‚ РїРѕ РІРµС‡РµСЂРЅРµРјСѓ РѕС‚РґС‹С…Сѓ, СЃРЅСѓ Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЋ (Р±РµР· СѓРїРѕРјРёРЅР°РЅРёСЏ С‡СѓР¶РёС… РёР»Рё СЃРµРіРѕРґРЅСЏС€РЅРёС… РґРµР»).
+СТРОГИЕ ПРАВИЛА (НЕ НАРУШАЙ НИ ПРИ КАКИХ УСЛОВИЯХ!):
+1. ЧЁТКО РАЗДЕЛЯЙ ДНИ: СЕГОДНЯ и ЗАВТРА — это разные дни. Никогда не путай их!
+2. НЕЗАКРЫТЫЕ ЗАДАЧИ ЗА СЕГОДНЯ:
+   - Если за сегодня есть незакрытые задачи, ты ТОЛЬКО мягко напоминаешь о них или спрашиваешь: возможно пользователь уже выполнил их, но забыл отметить выполненными в приложении Zerf.
+   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО давать советы по сегодняшним невыполненным задачам!
+   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО переносить сегодняшние незакрытые задачи на завтра в тексте (например, если сегодня была задача "встреча с врачом", НЕЛЬЗЯ писать "завтра удачи у врача"!).
+3. СОВЕТ И ЗАДАЧИ НА ЗАВТРА:
+   - Блок «**Совет:**» строится ИСКЛЮЧИТЕЛЬНО на основе списка «ЗАПЛАНИРОВАНО НА ЗАВТРА» (если они есть).
+   - Если на завтра есть задачи: дай 1 короткий практичный совет, как подготовиться ко сну и завтрашним делам.
+   - Если на завтра задач нет (список пуст): дай нейтральный совет по вечернему отдыху, сну и восстановлению (без упоминания чужих или сегодняшних дел).
 
-РЎРўР РЈРљРўРЈР Рђ РЎРћРћР‘Р©Р•РќРРЇ:
-1. РћР±СЂР°С‰РµРЅРёРµ РїРѕ РёРјРµРЅРё (РЅР°РїСЂРёРјРµСЂ: В«**РџСЂРёРІРµС‚, [РРјСЏ]! рџЊ™**В» РёР»Рё В«**Р”РѕР±СЂС‹Р№ РІРµС‡РµСЂ, [РРјСЏ]! рџЊ™**В»).
-2. РС‚РѕРіРё Р·Р° РЎР•Р“РћР”РќРЇ:
-   - Р•СЃР»Рё Р±С‹Р»Рё Р·Р°РєСЂС‹С‚С‹ Р·Р°РґР°С‡Рё: РїРѕС…РІР°Р»Рё Р·Р° РєРѕРЅРєСЂРµС‚РЅРѕ РІС‹РїРѕР»РЅРµРЅРЅС‹Рµ РґРµР»Р°.
-   - Р•СЃР»Рё РѕСЃС‚Р°Р»РёСЃСЊ РЅРµР·Р°РєСЂС‹С‚С‹Рµ Р·Р°РґР°С‡Рё: РјСЏРіРєРѕ СѓРїРѕРјСЏРЅРё РёС… СЃРїРёСЃРєРѕРј (В«РћСЃС‚Р°Р»РёСЃСЊ РЅРµР·Р°РєСЂС‹С‚С‹РјРё: ... Р’РѕР·РјРѕР¶РЅРѕ, С‚С‹ СѓР¶Рµ РІСЃС‘ СЃРґРµР»Р°Р»(Р°), РЅРѕ Р·Р°Р±С‹Р»(Р°) РѕС‚РјРµС‚РёС‚СЊ РіР°Р»РѕС‡РєРѕР№ РІ РїСЂРёР»РѕР¶РµРЅРёРёВ»).
-   - Р•СЃР»Рё Р·Р°РґР°С‡ РІРѕРѕР±С‰Рµ РЅРµ Р±С‹Р»Рѕ: СЃРєР°Р¶Рё, С‡С‚Рѕ РґРµРЅСЊ РїСЂРѕС€С‘Р» РІ СЃРїРѕРєРѕР№РЅРѕРј СЂРёС‚РјРµ.
-3. Р‘Р»РѕРє В«**РЎРѕРІРµС‚:**В» вЂ” 1вЂ“2 РїСЂРµРґР»РѕР¶РµРЅРёСЏ СЃ СЂРµРєРѕРјРµРЅРґР°С†РёРµР№ РЅР° РІРµС‡РµСЂ/СЃРѕРЅ (СЃС‚СЂРѕРіРѕ СЃ СѓС‡С‘С‚РѕРј Р·Р°РґР°С‡ РЅР° Р·Р°РІС‚СЂР°, РµСЃР»Рё РѕРЅРё РµСЃС‚СЊ).
+СТРУКТУРА СООБЩЕНИЯ:
+1. Обращение по имени (например: «**Привет, [Имя]! 🌙**» или «**Добрый вечер, [Имя]! 🌙**»).
+2. Итоги за СЕГОДНЯ:
+   - Если были закрыты задачи: похвали за конкретно выполненные дела.
+   - Если остались незакрытые задачи: мягко упомяни их списком («Остались незакрытыми: ... Возможно, ты уже всё сделал(а), но забыл(а) отметить галочкой в приложении»).
+   - Если задач вообще не было: скажи, что день прошёл в спокойном ритме.
+3. Блок «**Совет:**» — 1–2 предложения с рекомендацией на вечер/сон (строго с учётом задач на завтра, если они есть).
 
-РњР°РєСЃРёРјСѓРј 110 СЃР»РѕРІ. Р‘РµР· Р»РёС€РЅРµР№ РІРѕРґС‹.`,
+Максимум 110 слов. Без лишней воды.`,
         },
         {
           role: 'user',
-          content: `РРјСЏ: ${firstName}\nР’С‹РїРѕР»РЅРµРЅРѕ Р·Р°РґР°С‡ РЎР•Р“РћР”РќРЇ (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'РЅРµС‚'}\nРћСЃС‚Р°Р»РёСЃСЊ РЅРµР·Р°РєСЂС‹С‚С‹РјРё РЎР•Р“РћР”РќРЇ (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'РІСЃРµ Р·Р°РєСЂС‹С‚С‹'}\nР—Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ РќРђ Р—РђР’РўР Рђ (${tomorrowTasks.length}): ${tomorrowTasks.slice(0, 5).join(', ') || 'РЅРµС‚ РєРѕРЅРєСЂРµС‚РЅС‹С… Р·Р°РґР°С‡ РЅР° Р·Р°РІС‚СЂР°'}`,
+          content: `Имя: ${firstName}\nВыполнено задач СЕГОДНЯ (${completedTasks.length}): ${completedTasks.slice(0, 5).join(', ') || 'нет'}\nОстались незакрытыми СЕГОДНЯ (${pendingTasks.length}): ${pendingTasks.slice(0, 5).join(', ') || 'все закрыты'}\nЗапланировано НА ЗАВТРА (${tomorrowTasks.length}): ${tomorrowTasks.slice(0, 5).join(', ') || 'нет конкретных задач на завтра'}`,
         },
       ],
       model: GROQ_CHAT_MODEL,
@@ -652,28 +652,28 @@ function buildFallbackEveningReview(
   pendingTasks: string[],
   tomorrowTasks: string[] = []
 ): string {
-  let msg = `вњ¦ **Р”РѕР±СЂС‹Р№ РІРµС‡РµСЂ, ${firstName}! рџЊ™**\n\n`
+  let msg = `✦ **Добрый вечер, ${firstName}! 🌙**\n\n`
   if (completedTasks.length > 0) {
-    msg += `вњ“ **Р’С‹РїРѕР»РЅРµРЅРѕ Р·Р° СЃРµРіРѕРґРЅСЏ (${completedTasks.length}):**\n` +
-      completedTasks.slice(0, 5).map(t => `  в–« ~${t}~`).join('\n') + `\n\n`
+    msg += `✓ **Выполнено за сегодня (${completedTasks.length}):**\n` +
+      completedTasks.slice(0, 5).map(t => `  ▫ ~${t}~`).join('\n') + `\n\n`
   } else {
-    msg += `РЎРµРіРѕРґРЅСЏ РЅРµ Р±С‹Р»Рѕ РѕС‚РјРµС‡РµРЅРѕ РІС‹РїРѕР»РЅРµРЅРЅС‹С… Р·Р°РґР°С‡.\n\n`
+    msg += `Сегодня не было отмечено выполненных задач.\n\n`
   }
 
   if (pendingTasks.length > 0) {
-    msg += `вЏ± **РћСЃС‚Р°Р»РёСЃСЊ РЅРµР·Р°РєСЂС‹С‚С‹РјРё Р·Р° СЃРµРіРѕРґРЅСЏ (${pendingTasks.length}):**\n` +
-      pendingTasks.slice(0, 5).map(t => `  в–Є ${t}`).join('\n') + `\n` +
-      `_Р•СЃР»Рё РІС‹ РёС… СѓР¶Рµ РІС‹РїРѕР»РЅРёР»Рё, РЅРµ Р·Р°Р±СѓРґСЊС‚Рµ РѕС‚РјРµС‚РёС‚СЊ РіР°Р»РѕС‡РєРѕР№ РІ РїСЂРёР»РѕР¶РµРЅРёРё._\n\n`
+    msg += `⏱ **Остались незакрытыми за сегодня (${pendingTasks.length}):**\n` +
+      pendingTasks.slice(0, 5).map(t => `  ▪ ${t}`).join('\n') + `\n` +
+      `_Если вы их уже выполнили, не забудьте отметить галочкой в приложении._\n\n`
   } else {
-    msg += `вњ¦ **Р’СЃРµ Р·Р°РґР°С‡Рё Р·Р° СЃРµРіРѕРґРЅСЏ Р·Р°РєСЂС‹С‚С‹! РћС‚Р»РёС‡РЅР°СЏ СЂР°Р±РѕС‚Р°.**\n\n`
+    msg += `✦ **Все задачи за сегодня закрыты! Отличная работа.**\n\n`
   }
 
   if (tomorrowTasks.length > 0) {
-    msg += `рџ“… **РџР»Р°РЅС‹ РЅР° Р·Р°РІС‚СЂР° (${tomorrowTasks.length}):**\n` +
-      tomorrowTasks.slice(0, 3).map(t => `  в–« ${t}`).join('\n') + `\n\n`
-    msg += `**РЎРѕРІРµС‚:** РѕС‚РґРѕС…РЅРёС‚Рµ РІРµС‡РµСЂРѕРј Рё РІС‹СЃРїРёС‚РµСЃСЊ, С‡С‚РѕР±С‹ Р·Р°РІС‚СЂР° РїСЂРѕРґСѓРєС‚РёРІРЅРѕ Р·Р°РєСЂС‹С‚СЊ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹Рµ РґРµР»Р°.`
+    msg += `📅 **Планы на завтра (${tomorrowTasks.length}):**\n` +
+      tomorrowTasks.slice(0, 3).map(t => `  ▫ ${t}`).join('\n') + `\n\n`
+    msg += `**Совет:** отдохните вечером и выспитесь, чтобы завтра продуктивно закрыть запланированные дела.`
   } else {
-    msg += `**РЎРѕРІРµС‚:** РѕС‚Р»РѕР¶РёС‚Рµ С‚РµР»РµС„РѕРЅ РїРµСЂРµРґ СЃРЅРѕРј, РІС‹РїРµР№С‚Рµ С‚С‘РїР»РѕРіРѕ С‡Р°СЏ РёР»Рё СЃРґРµР»Р°Р№С‚Рµ Р»С‘РіРєСѓСЋ СЂР°СЃС‚СЏР¶РєСѓ, С‡С‚РѕР±С‹ С…РѕСЂРѕС€Рѕ РІС‹СЃРїР°С‚СЊСЃСЏ.`
+    msg += `**Совет:** отложите телефон перед сном, выпейте тёплого чая или сделайте лёгкую растяжку, чтобы хорошо выспаться.`
   }
 
   return msg
@@ -697,7 +697,7 @@ export async function generateSmartReschedulePlan(
   apiKey?: string
 ): Promise<{ plan: ReschedulePlanItem[]; aiAdvice: string }> {
   if (!tasks || tasks.length === 0) {
-    return { plan: [], aiAdvice: 'РќРµС‚ Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°С‡ РґР»СЏ РїРµСЂРµРїР»Р°РЅРёСЂРѕРІР°РЅРёСЏ.' }
+    return { plan: [], aiAdvice: 'Нет активных задач для перепланирования.' }
   }
 
   const [curH, curM] = currentMskTime.split(':').map(n => parseInt(n, 10))
@@ -716,7 +716,7 @@ export async function generateSmartReschedulePlan(
       oldTime: t.dueTime,
       newTime: `${h}:${m}`,
       isTomorrow,
-      reason: isTomorrow ? 'РџРµСЂРµРЅРµСЃРµРЅРѕ РЅР° Р·Р°РІС‚СЂР° РЅР° СѓС‚СЂРѕ' : 'РћРїС‚РёРјР°Р»СЊРЅС‹Р№ РёРЅС‚РµСЂРІР°Р» РЅР° СЃРµРіРѕРґРЅСЏ'
+      reason: isTomorrow ? 'Перенесено на завтра на утро' : 'Оптимальный интервал на сегодня'
     }
   })
 
@@ -725,21 +725,21 @@ export async function generateSmartReschedulePlan(
       messages: [
         {
           role: 'system',
-          content: `РўС‹ вЂ” СѓРјРЅС‹Р№ AI-С‚Р°Р№Рј-РјРµРЅРµРґР¶РµСЂ. РўРµР±Рµ РґР°РЅ СЃРїРёСЃРѕРє Р·Р°РґР°С‡ Рё С‚РµРєСѓС‰РµРµ РјРѕСЃРєРѕРІСЃРєРѕРµ РІСЂРµРјСЏ (${currentMskTime}).
-Р Р°СЃРїСЂРµРґРµР»Рё Р·Р°РґР°С‡Рё РїРѕ СЂРµР°Р»РёСЃС‚РёС‡РЅС‹Рј СЃР»РѕС‚Р°Рј РІСЂРµРјРµРЅРё.
-РџСЂР°РІРёР»Р°:
-- РЎСЂРѕС‡РЅС‹Рµ Р·Р°РґР°С‡Рё (urgent/high) СЃС‚Р°РІСЊ СЂР°РЅСЊС€Рµ.
-- РњРµР¶РґСѓ Р·Р°РґР°С‡Р°РјРё РѕСЃС‚Р°РІР»СЏР№ 30вЂ“60 РјРёРЅСѓС‚.
-- Р•СЃР»Рё РІСЂРµРјРµРЅРё РІ СЃСѓС‚РєР°С… СѓР¶Рµ РЅРµ С…РІР°С‚Р°РµС‚ (РїРѕСЃР»Рµ 22:00), РїРµСЂРµРЅРѕСЃРё РЅР° Р·Р°РІС‚СЂР° ("isTomorrow": true, РЅР°С‡РёРЅР°СЏ СЃ 10:00).
-- Р’РµСЂРЅРё РЎРўР РћР“РР™ JSON С„РѕСЂРјР°С‚:
+          content: `Ты — умный AI-тайм-менеджер. Тебе дан список задач и текущее московское время (${currentMskTime}).
+Распредели задачи по реалистичным слотам времени.
+Правила:
+- Срочные задачи (urgent/high) ставь раньше.
+- Между задачами оставляй 30–60 минут.
+- Если времени в сутках уже не хватает (после 22:00), переноси на завтра ("isTomorrow": true, начиная с 10:00).
+- Верни СТРОГИЙ JSON формат:
 {
-  "aiAdvice": "РљРѕСЂРѕС‚РєРёР№ СЃРѕРІРµС‚ (1-2 РїСЂРµРґР»РѕР¶РµРЅРёСЏ) РїРѕС‡РµРјСѓ С‚Р°РєРѕР№ РіСЂР°С„РёРє РѕРїС‚РёРјР°Р»РµРЅ",
+  "aiAdvice": "Короткий совет (1-2 предложения) почему такой график оптимален",
   "plan": [
     {
-      "id": "ID Р·Р°РґР°С‡Рё",
+      "id": "ID задачи",
       "newTime": "HH:MM",
       "isTomorrow": boolean,
-      "reason": "РєСЂР°С‚РєР°СЏ РїСЂРёС‡РёРЅР° РІСЂРµРјРµРЅРё"
+      "reason": "краткая причина времени"
     }
   ]
 }`
@@ -760,23 +760,23 @@ export async function generateSmartReschedulePlan(
       const orig = tasks.find(t => t.id === p.id)
       return {
         id: p.id,
-        title: orig?.title || 'Р—Р°РґР°С‡Р°',
+        title: orig?.title || 'Задача',
         oldTime: orig?.dueTime || null,
         newTime: p.newTime || '18:00',
         isTomorrow: !!p.isTomorrow,
-        reason: p.reason || 'РћРїС‚РёРјР°Р»СЊРЅРѕРµ РІСЂРµРјСЏ'
+        reason: p.reason || 'Оптимальное время'
       }
     })
 
     return {
       plan: plan.length > 0 ? plan : fallbackPlan,
-      aiAdvice: parsed.aiAdvice || 'Р Р°СЃРїРёСЃР°РЅРёРµ РѕРїС‚РёРјРёР·РёСЂРѕРІР°РЅРѕ РР.'
+      aiAdvice: parsed.aiAdvice || 'Расписание оптимизировано ИИ.'
     }
   } catch (err) {
     console.error('Smart reschedule error:', err)
     return {
       plan: fallbackPlan,
-      aiAdvice: 'Р—Р°РґР°С‡Рё СЂР°РІРЅРѕРјРµСЂРЅРѕ СЂР°СЃРїСЂРµРґРµР»РµРЅС‹ РїРѕ СЃРІРѕР±РѕРґРЅС‹Рј РёРЅС‚РµСЂРІР°Р»Р°Рј.'
+      aiAdvice: 'Задачи равномерно распределены по свободным интервалам.'
     }
   }
 }
@@ -830,9 +830,9 @@ Schema:
 
 Rules:
 1. Title MUST be in Russian.
-2. Relative times ("С‡РµСЂРµР· 10 РјРёРЅСѓС‚", "РІ 18:00", "Р·Р°РІС‚СЂР° РІ 9 СѓС‚СЂР°", "Р±СѓРґРёР»СЊРЅРёРє РЅР° 7:00") MUST be calculated relative to current Moscow time ${mskTime} on ${mskDate}.
-3. If user says "РїРѕСЂСѓС‡Рё [РРјСЏ]..." -> "type": "delegate", "isBothShared": false, "recipientName": "[РРјСЏ]".
-4. If user says "РЅР°Рј СЃ [РРјСЏ] РѕР±С‰Р°СЏ Р·Р°РґР°С‡Р°..." -> "type": "delegate", "isBothShared": true, "recipientName": "[РРјСЏ]".`
+2. Relative times ("через 10 минут", "в 18:00", "завтра в 9 утра", "будильник на 7:00") MUST be calculated relative to current Moscow time ${mskTime} on ${mskDate}.
+3. If user says "поручи [Имя]..." -> "type": "delegate", "isBothShared": false, "recipientName": "[Имя]".
+4. If user says "нам с [Имя] общая задача..." -> "type": "delegate", "isBothShared": true, "recipientName": "[Имя]".`
 
   if (extensionsContext) {
     systemPrompt += `\nExtensions Instructions:\n${extensionsContext}`
@@ -889,13 +889,13 @@ Rules:
         daysCount: item.daysCount !== undefined ? Number(item.daysCount) : null,
         recipientName: cleanRecName,
         isBothShared: cleanIsBothShared,
-        repeat: item.repeat || ((item.title || text).toLowerCase().match(/РґРµРЅСЊ СЂРѕР¶Рґ|РґСЂ|РїСЂР°Р·РґРЅРёРє|РіРѕРґРѕРІС‰РёРЅ/) ? 'yearly' : null),
+        repeat: item.repeat || ((item.title || text).toLowerCase().match(/день рожд|др|праздник|годовщин/) ? 'yearly' : null),
         targetTitle: item.targetTitle || null,
         projectId: null,
         goalId: null,
         folder: null,
         members: null,
-        tags: ['siri', 'Р±С‹СЃС‚СЂС‹Р№ РІРІРѕРґ'],
+        tags: ['siri', 'быстрый ввод'],
         subtasks: [],
         milestones: [],
         motivation: null,

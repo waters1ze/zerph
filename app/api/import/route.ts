@@ -189,8 +189,8 @@ function parseGenericCsv(content: string): ImportTaskData[] {
       else if (p.includes('низк') || p.includes('low') || p === '4' || p === 'p4') priority = 'low'
     }
 
-    let dueDate = dueDateIdx !== -1 ? normalizeDate(r[dueDateIdx]) : undefined
-    let dueTime = dueTimeIdx !== -1 ? normalizeTime(r[dueTimeIdx]) : undefined
+    const dueDate = dueDateIdx !== -1 ? normalizeDate(r[dueDateIdx]) : undefined
+    const dueTime = dueTimeIdx !== -1 ? normalizeTime(r[dueTimeIdx]) : undefined
     let tags: string[] = []
     if (tagsIdx !== -1 && r[tagsIdx]) {
       tags = r[tagsIdx].split(/[,;]/).map(t => t.trim().replace(/^#/, '')).filter(Boolean)

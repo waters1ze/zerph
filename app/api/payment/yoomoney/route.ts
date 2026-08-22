@@ -53,6 +53,18 @@ async function consumeOperation(operationId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Release a consumed replay-guard key so the provider's retry can reprocess
+ * the payment after a transient activation failure (money taken, plan not
+ * granted). Best-effort: if release fails we still return 500 to trigger retry.
+ */
+async function releaseOperation(operationId: string): Promise<void> {
+  if (!operationId) return
+  try {
+    await prisma.config.delete({ where: { key: `yoomoney_op_${operationId}` } })
+  } catch {}
+}
+
 export async function POST(req: NextRequest) {
   try {
     const text = await req.text()
@@ -368,6 +380,15 @@ export async function POST(req: NextRequest) {
     const actualChatId = buyerChatId
     const success = await activateUserSubscription(actualChatId, product.days, product.plan as 'plus' | 'pro' | 'corp')
 
+    if (!success) {
+      // Activation failed (DB error etc.): release the replay-guard so the
+      // provider's retry reprocesses this payment, and answer 500 (not 200)
+      // — otherwise the user pays and silently gets nothing.
+      console.error('[YooMoney] Subscription activation failed, releasing operation for retry', operation_id)
+      await releaseOperation(operation_id)
+      return new Response('Activation Failed', { status: 500 })
+    }
+
     if (success) {
       // A discount is single-use: burn it once the paid subscription is live
       if (appliedDiscountKey) {
@@ -404,19 +425,22 @@ export async function POST(req: NextRequest) {
           select: { referredBy: true, referralRewarded: true },
         })
         if (paidUserRecord?.referredBy && !paidUserRecord.referralRewarded) {
-          const referrerId = paidUserRecord.referredBy
-          // Grant +7 days Plus to the referrer
-          await activateUserSubscription(String(referrerId), 7, 'plus')
-          // Mark as rewarded to prevent double-rewarding
-          await prisma.telegramChat.update({
-            where: { chatId: BigInt(actualChatId) },
+          // Atomic claim first (prevents double +7 days when two webhook
+          // deliveries race); only the winner grants the bonus.
+          const claim = await prisma.telegramChat.updateMany({
+            where: { chatId: BigInt(actualChatId), referralRewarded: false },
             data: { referralRewarded: true },
           })
-          await sendTgNotification(
-            String(referrerId),
-            `🎁 *Ваш друг оформил Zerf Plus!*\n\nВам начислено *+7 дней Zerf Plus* в подарок за приглашение 🎉\n` +
-            `Продолжайте приглашать друзей — за каждого получайте бонусные дни!`
-          )
+          if (claim.count === 1) {
+            const referrerId = paidUserRecord.referredBy
+            // Grant +7 days Plus to the referrer
+            await activateUserSubscription(String(referrerId), 7, 'plus')
+            await sendTgNotification(
+              String(referrerId),
+              `🎁 *Ваш друг оформил Zerf Plus!*\n\nВам начислено *+7 дней Zerf Plus* в подарок за приглашение 🎉\n` +
+              `Продолжайте приглашать друзей — за каждого получайте бонусные дни!`
+            )
+          }
         }
       } catch (refErr) {
         console.error('[YooMoney] Referral bonus error:', refErr)

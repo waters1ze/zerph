@@ -22,6 +22,7 @@ import {
 } from '@/lib/backend/db'
 import { prisma } from '@/lib/backend/prisma'
 import { parseTimezoneInput } from '@/lib/backend/timezone'
+import { mskToday, localDateStr } from '@/lib/backend/tz'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 
@@ -344,7 +345,7 @@ export async function POST(req: NextRequest) {
       // ── 3. /today & /tasks ───────────────────────────────────────────────────
       if (cmd === '/today' || cmd === '/tasks' || lower === 'задачи' || lower === 'сегодня' || lower === '📋 задачи на сегодня') {
         const tasks = await getAllTasks(vkChatId)
-        const todayStr = new Date().toISOString().slice(0, 10)
+        const todayStr = mskToday()
         const todayTasks = tasks.filter(t => t.dueDate === todayStr || (!t.dueDate && t.status === 'todo'))
 
         if (todayTasks.length === 0) {
@@ -366,8 +367,8 @@ export async function POST(req: NextRequest) {
         const tasks = await getAllTasks(vkChatId)
         const today = new Date()
         const nextWeek = new Date(Date.now() + 7 * 86400000)
-        const todayStr = today.toISOString().slice(0, 10)
-        const nextWeekStr = nextWeek.toISOString().slice(0, 10)
+        const todayStr = localDateStr(today, 'Europe/Moscow')
+        const nextWeekStr = localDateStr(nextWeek, 'Europe/Moscow')
 
         const weekTasks = tasks.filter(t => t.dueDate && t.dueDate >= todayStr && t.dueDate <= nextWeekStr)
 
@@ -569,7 +570,7 @@ export async function POST(req: NextRequest) {
               title: taskText.slice(0, 80),
               summary: taskText,
               priority: 'medium',
-              dueDate: new Date().toISOString().slice(0, 10),
+              dueDate: mskToday(),
               tags: [],
             }
 
@@ -579,7 +580,7 @@ export async function POST(req: NextRequest) {
                 description: item.summary,
                 priority: item.priority || 'medium',
                 status: 'todo',
-                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                dueDate: item.dueDate || mskToday(),
                 dueTime: item.dueTime || null,
                 tags: item.tags || [],
                 ownerChatId: targetId,
@@ -648,39 +649,29 @@ export async function POST(req: NextRequest) {
               const friendUser = allowedMatch.friend
               const isBothShared = cleanIsBothShared
 
+              // Single record for both delegation and isBothShared (mirrors the
+              // Telegram bot): owner = author for shared tasks, assignees list
+              // carries the recipient so both users see one synchronized task.
+              const taskOwnerChatId = isBothShared ? vkChatId : friendUser.chatId
+              const taskAssignees = isBothShared
+                ? [String(vkChatId), String(friendUser.chatId)]
+                : [String(friendUser.chatId)]
+
               await prisma.task.create({
                 data: {
                   title: item.title,
                   description: item.summary,
                   priority: item.priority || 'medium',
                   status: 'todo',
-                  dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                  dueDate: item.dueDate || mskToday(),
                   dueTime: item.dueTime || null,
                   tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
-                  ownerChatId: friendUser.chatId,
+                  ownerChatId: taskOwnerChatId,
                   authorChatId: vkChatId,
-                  assignees: [String(vkChatId)],
+                  assignees: taskAssignees,
                   isShared: true,
                 } as any,
               })
-
-              if (isBothShared) {
-                await prisma.task.create({
-                  data: {
-                    title: item.title,
-                    description: item.summary,
-                    priority: item.priority || 'medium',
-                    status: 'todo',
-                    dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
-                    dueTime: item.dueTime || null,
-                    tags: ['общая', ...(item.tags || [])],
-                    ownerChatId: vkChatId,
-                    authorChatId: vkChatId,
-                    assignees: [String(friendUser.chatId)],
-                    isShared: true,
-                  } as any,
-                })
-              }
 
               const notifyMsg = isBothShared
                 ? `🤝 *${vkFirstName}* создал(а) общую задачу для вас двоих:\n📌 *«${item.title}»*\n` + (item.dueDate ? `📅 Срок: ${item.dueDate}${item.dueTime ? ` в ${item.dueTime}` : ''}\n` : '')

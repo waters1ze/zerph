@@ -12,9 +12,7 @@ export async function handleAddCommand(
 
   // Basic date/time parsing
   let dueTime: string | undefined
-  let dueDate: string | undefined
-  const todayStr = new Date().toISOString().slice(0, 10)
-  dueDate = todayStr
+  const dueDate: string | undefined = new Date().toISOString().slice(0, 10)
 
   const timeMatch = text.match(/\b([0-1]?[0-9]|2[0-3]):[0-5][0-9]\b/)
   if (timeMatch) {

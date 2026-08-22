@@ -20,6 +20,8 @@ import {
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
 
+const FRESH_AUTH_DATE = String(Math.floor(Date.now() / 1000))
+
 /** Builds Telegram WebApp initData signed exactly per the official algorithm. */
 function buildSignedInitData(fields: Record<string, string>, token = BOT_TOKEN): string {
   const params = new URLSearchParams(fields)
@@ -103,23 +105,41 @@ describe('verifyTelegramWebAppData', () => {
   it('accepts correctly signed initData', () => {
     const initData = buildSignedInitData({
       user: JSON.stringify({ id: 555000111, first_name: 'Test' }),
-      auth_date: '1700000000',
+      auth_date: FRESH_AUTH_DATE,
     })
     expect(verifyTelegramWebAppData(initData)).toBe(true)
   })
 
   it('rejects a tampered payload (signature mismatch)', () => {
-    const initData = buildSignedInitData({ user: JSON.stringify({ id: 555000111 }), auth_date: '1700000000' })
+    const initData = buildSignedInitData({ user: JSON.stringify({ id: 555000111 }), auth_date: FRESH_AUTH_DATE })
     const tampered = initData.replace('555000111', '999999999')
     expect(verifyTelegramWebAppData(tampered)).toBe(false)
   })
 
   it('rejects signature produced with a foreign bot token', () => {
     const forged = buildSignedInitData(
-      { user: JSON.stringify({ id: 42 }), auth_date: '1700000000' },
+      { user: JSON.stringify({ id: 42 }), auth_date: FRESH_AUTH_DATE },
       '123456:ATTACKER_TOKEN'
     )
     expect(verifyTelegramWebAppData(forged)).toBe(false)
+  })
+
+  it('rejects stale initData (auth_date older than 24h — replay protection)', () => {
+    const stale = buildSignedInitData({
+      user: JSON.stringify({ id: 555000111 }),
+      auth_date: String(Math.floor(Date.now() / 1000) - 25 * 3600),
+    })
+    expect(verifyTelegramWebAppData(stale)).toBe(false)
+  })
+
+  it('rejects missing auth_date and future auth_date beyond clock skew', () => {
+    const noDate = buildSignedInitData({ user: JSON.stringify({ id: 555000111 }) })
+    expect(verifyTelegramWebAppData(noDate)).toBe(false)
+    const future = buildSignedInitData({
+      user: JSON.stringify({ id: 555000111 }),
+      auth_date: String(Math.floor(Date.now() / 1000) + 3600),
+    })
+    expect(verifyTelegramWebAppData(future)).toBe(false)
   })
 
   it('rejects missing or malformed input', () => {

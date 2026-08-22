@@ -113,7 +113,7 @@ export function ActivityHeatmap({
     const startDay = start.getDay()
     start.setDate(start.getDate() - startDay)
 
-    let current = new Date(start)
+    const current = new Date(start)
     let currentWeek: Array<{
       date: string
       count: number

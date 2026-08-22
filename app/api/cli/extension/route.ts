@@ -18,7 +18,7 @@ async function requireCliIdentity(
   const authUser = await getAuthenticatedUser(req)
   if (!authUser) return null
 
-  let token: string | null =
+  const token: string | null =
     req.headers.get('x-auth-token') ||
     req.cookies.get('zerf_auth_token')?.value ||
     new URL(req.url).searchParams.get('token') ||

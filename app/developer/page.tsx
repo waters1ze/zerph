@@ -14,6 +14,7 @@ import {
   ChevronDown, ToggleLeft, ToggleRight, Database, Share2, CornerDownRight,
   Workflow, Compass, AlertTriangle, ShieldCheck
 } from 'lucide-react'
+import Link from 'next/link'
 import { getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { ExtensionItem } from '@/lib/backend/extensions'
@@ -1106,7 +1107,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
         <div className="space-y-6">
           {/* Back to Home Button & Sidebar Toggle */}
           <div className="flex items-center justify-between border-b border-border pb-4">
-            <a
+            <Link
               href="/"
               className="flex items-center gap-3 p-1.5 pr-3 rounded-2xl bg-card hover:bg-primary hover:text-primary-foreground text-foreground border border-border hover:border-primary/40 transition-all cursor-pointer group shadow-xs"
               title="Вернуться на главную страницу"
@@ -1120,7 +1121,7 @@ When processing user instructions and extension triggers, ALWAYS output your fin
                   <span className="text-[10px] text-muted-foreground group-hover:text-primary-foreground/80">Zerf Note</span>
                 </div>
               )}
-            </a>
+            </Link>
             
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { prisma } from '@/lib/backend/prisma'
 import { createServerSession, getAuthenticatedUser } from '@/lib/backend/auth'
 
@@ -10,6 +11,53 @@ const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '54722
 const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || null
 const ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://zeprh.vercel.app'
 const CALLBACK_URL = `${ORIGIN}/api/auth/vk/callback`
+
+const STATE_TTL_MS = 15 * 60 * 1000
+
+/**
+ * SECURITY: verifies the HMAC-protected state issued by /api/auth/vk and its
+ * browser-bound nonce cookie. Without this check an attacker could complete
+ * OAuth with their own VK account and force a victim's browser through the
+ * redirect (login-CSRF: victim ends up in the attacker's session), or craft
+ * an arbitrary link payload. Returns the trusted payload or null.
+ */
+function verifySignedState(req: NextRequest, state: string | null): { chatId?: string; origin?: string; iat: number; nonce?: string } | null {
+  if (!state) return null
+  try {
+    let raw = state
+    try { raw = decodeURIComponent(state) } catch {}
+    const dot = raw.lastIndexOf('.')
+    if (dot <= 0) return null
+    const payloadB64 = raw.slice(0, dot)
+    const sig = raw.slice(dot + 1)
+
+    const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.ADMIN_SECRET || ''
+    if (!secret) return null
+    const expected = crypto.createHmac('sha256', `vk-oauth-state:${secret}`).update(payloadB64).digest('base64url')
+
+    // timing-safe comparison over equal-length digests
+    const a = Buffer.from(sig)
+    const b = Buffer.from(expected)
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
+
+    const parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'))
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.iat !== 'number') return null
+    if (Date.now() - parsed.iat > STATE_TTL_MS) return null // expired link
+
+    // Browser binding: the nonce cookie must have been set by OUR issuance
+    // endpoint in this same browser and match the signed payload.
+    if (typeof parsed.nonce !== 'string' || !parsed.nonce) return null
+    const cookieNonce = req.cookies.get('vk_oauth_nonce')?.value
+    if (!cookieNonce) return null
+    const ca = Buffer.from(cookieNonce)
+    const cb2 = Buffer.from(parsed.nonce)
+    if (ca.length !== cb2.length || !crypto.timingSafeEqual(ca, cb2)) return null
+
+    return parsed
+  } catch {
+    return null
+  }
+}
 
 const COOKIE_OPTS = {
   path: '/',
@@ -31,6 +79,16 @@ export async function GET(req: NextRequest) {
   if (!VK_CLIENT_SECRET) {
     console.error('[VK OAuth] VK_CLIENT_SECRET is not configured — refusing token exchange')
     return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=server_not_configured#settings`)
+  }
+
+  // State must be server-issued (HMAC) and bound to this browser (nonce cookie)
+  const statePayload = verifySignedState(req, state)
+  if (!statePayload) {
+    console.warn('[VK OAuth] Invalid, expired or forged OAuth state rejected')
+    return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=invalid_state#settings`)
+  }
+  if (statePayload.origin && statePayload.origin !== ORIGIN) {
+    return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=state_origin_mismatch#settings`)
   }
 
   try {
@@ -182,6 +240,8 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(`${ORIGIN}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}&name=${encodeURIComponent(vkFirstName)}&chatId=${encodeURIComponent(String(cid))}#settings`)
     res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
     res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
+    // Nonce is single-use
+    res.cookies.set('vk_oauth_nonce', '', { path: '/', maxAge: 0 })
     return res
   } catch (err: any) {
     console.error('VK OAuth callback error:', err)

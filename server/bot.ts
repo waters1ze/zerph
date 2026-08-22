@@ -181,7 +181,7 @@ async function processWithAI(chatId: number, text?: string, voiceFileId?: string
   await sendAction(chatId)
 
   try {
-    let transcript = text || ''
+    const transcript = text || ''
     const adminSecret = getAdminSecret() || process.env.ADMIN_SECRET || ''
 
     // Download voice from Telegram, send to /api/voice

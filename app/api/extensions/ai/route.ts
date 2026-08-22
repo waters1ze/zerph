@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getExtensionById } from '@/lib/backend/extensions'
 import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
@@ -24,12 +24,12 @@ export async function POST(req: NextRequest) {
 
     const ext = await getExtensionById(extensionId)
     if (!ext) {
-      return NextResponse.json({ error: 'Р Р°СЃС€РёСЂРµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' }, { status: 404 })
+      return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
     }
 
     const aiEndpoint = ext.content?.aiEndpoint || ext.content?.endpoint
     if (!aiEndpoint) {
-      return NextResponse.json({ error: 'РЈ СЌС‚РѕРіРѕ СЂР°СЃС€РёСЂРµРЅРёСЏ РЅРµ РЅР°СЃС‚СЂРѕРµРЅ РІРЅРµС€РЅРёР№ AI-СЃРµСЂРІРµСЂ (aiEndpoint)' }, { status: 400 })
+      return NextResponse.json({ error: 'У этого расширения не настроен внешний AI-сервер (aiEndpoint)' }, { status: 400 })
     }
 
     // Strict SSRF validation
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     if (dailyLimit !== -1 && dailyUsed >= dailyLimit) {
       return NextResponse.json({
-        error: `РСЃС‡РµСЂРїР°РЅ РґРЅРµРІРЅРѕР№ Р»РёРјРёС‚ Р·Р°РїСЂРѕСЃРѕРІ Рє РР РґР»СЏ СЂР°СЃС€РёСЂРµРЅРёР№ (${dailyUsed}/${dailyLimit}). РџРµСЂРµР№РґРёС‚Рµ РЅР° С‚Р°СЂРёС„ Plus (50/РґРµРЅСЊ) РёР»Рё Pro (150/РґРµРЅСЊ) РґР»СЏ СѓРІРµР»РёС‡РµРЅРёСЏ РєРІРѕС‚С‹.`,
+        error: `Исчерпан дневной лимит запросов к ИИ для расширений (${dailyUsed}/${dailyLimit}). Перейдите на тариф Plus (50/день) или Pro (150/день) для увеличения квоты.`,
         limitReached: true,
         limit: dailyLimit,
         used: dailyUsed,
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     // Rate limiting: max 15 requests per minute per user per extension
     if (!checkInMemoryRateLimit(`ext_ai:${user.chatId}:${extensionId}`, 15, 60 * 1000)) {
-      return NextResponse.json({ error: 'РџСЂРµРІС‹С€РµРЅ Р»РёРјРёС‚ Р·Р°РїСЂРѕСЃРѕРІ Рє РР-СЃРµСЂРІРµСЂСѓ СЂР°СЃС€РёСЂРµРЅРёСЏ. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїРѕРґРѕР¶РґРёС‚Рµ РјРёРЅСѓС‚Сѓ.' }, { status: 429 })
+      return NextResponse.json({ error: 'Превышен лимит запросов к ИИ-серверу расширения. Пожалуйста, подождите минуту.' }, { status: 429 })
     }
 
     const hashedUserId = crypto.createHash('sha256').update(String(user.chatId)).digest('hex').slice(0, 16)
@@ -84,13 +84,13 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       return NextResponse.json({
-        error: `AI-СЃРµСЂРІРµСЂ СЂР°СЃС€РёСЂРµРЅРёСЏ РІРµСЂРЅСѓР» РѕС€РёР±РєСѓ (${response.status})`,
+        error: `AI-сервер расширения вернул ошибку (${response.status})`,
       }, { status: 502 })
     }
 
     const rawText = await response.text()
     if (rawText.length > 50_000) {
-      return NextResponse.json({ error: 'РћС‚РІРµС‚ AI-СЃРµСЂРІРµСЂР° СЂР°СЃС€РёСЂРµРЅРёСЏ РїСЂРµРІС‹С€Р°РµС‚ РґРѕРїСѓСЃС‚РёРјС‹Р№ СЂР°Р·РјРµСЂ (50 РљР‘)' }, { status: 502 })
+      return NextResponse.json({ error: 'Ответ AI-сервера расширения превышает допустимый размер (50 КБ)' }, { status: 502 })
     }
 
     // Increment daily AI counter for extensions

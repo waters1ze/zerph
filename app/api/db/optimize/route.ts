@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
 
     let cleanedConfigs = 0
-    let cleanedOldSessions = 0
+    const cleanedOldSessions = 0
 
     // 1. Clean expired / orphan temporary config entries
     const allConfigs = await prisma.config.findMany({

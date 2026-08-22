@@ -126,28 +126,70 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
 export async function runReminderCheck() {
   try {
     const now = new Date()
-    const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/Moscow',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    })
-    const parts = formatter.formatToParts(now)
-    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
 
-    const currentHour = parseInt(getPart('hour'), 10)
-    const currentMin = parseInt(getPart('minute'), 10)
-    const currentTotalMin = currentHour * 60 + currentMin
-    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+    /** Local calendar date (YYYY-MM-DD) and minutes-since-midnight in a given IANA timezone. */
+    const getLocalNow = (tz: string | null | undefined, at: Date): { todayStr: string; totalMin: number } => {
+      const zone = tz && tz.trim() ? tz.trim() : 'Europe/Moscow'
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: zone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(at)
+      const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00'
+      const hour = parseInt(getPart('hour'), 10) % 24
+      const minute = parseInt(getPart('minute'), 10)
+      return {
+        todayStr: `${getPart('year')}-${getPart('month')}-${getPart('day')}`,
+        totalMin: hour * 60 + minute,
+      }
+    }
 
     const allTasks = await getAllTasks()
     if (!allTasks.length) return
 
+    // Batch-load per-user timezones so reminders fire at the user's LOCAL time
+    // (TelegramChat.timezone is validated on save; invalid/absent → Europe/Moscow).
+    const ownerIds = Array.from(new Set(
+      allTasks
+        .map(t => Number((t as any).ownerChatId))
+        .filter(id => Number.isFinite(id) && id > 0)
+    ))
+    const tzMap = new Map<number, string>()
+    if (ownerIds.length) {
+      try {
+        const chats = await prisma.telegramChat.findMany({
+          where: { chatId: { in: ownerIds.map(id => BigInt(id)) } },
+          select: { chatId: true, timezone: true },
+        })
+        for (const c of chats) {
+          if (c.timezone) tzMap.set(Number(c.chatId), c.timezone)
+        }
+      } catch {}
+    }
+    const localNowCache = new Map<string, { todayStr: string; totalMin: number }>()
+    const localNowFor = (chatId: number | null) => {
+      const zone = (chatId != null && tzMap.get(chatId)) || 'Europe/Moscow'
+      let cached = localNowCache.get(zone)
+      if (!cached) {
+        try {
+          cached = getLocalNow(zone, now)
+        } catch {
+          cached = getLocalNow('Europe/Moscow', now)
+        }
+        localNowCache.set(zone, cached)
+      }
+      return cached
+    }
+
     for (const task of allTasks) {
       if (task.status === 'done' || task.status === 'draft') continue
       if (task.reminderSent) continue
-      
-      const taskDate = task.dueDate || todayStr
-      if (taskDate !== todayStr) continue
+
+      const taskOwnerChatIdNum = (task as any).ownerChatId ? Number((task as any).ownerChatId) : null
+      const { todayStr: userTodayStr, totalMin: currentTotalMin } = localNowFor(taskOwnerChatIdNum)
+
+      const taskDate = task.dueDate || userTodayStr
+      if (taskDate !== userTodayStr) continue
       if (!task.dueTime) continue
 
       const [dueHStr, dueMStr] = task.dueTime.split(':')
@@ -158,7 +200,7 @@ export async function runReminderCheck() {
       const taskDueTotalMin = dueH * 60 + dueM
       const actualDiffMin = taskDueTotalMin - currentTotalMin
 
-      const ownerChatId = (task as any).ownerChatId ? Number((task as any).ownerChatId) : null
+      const ownerChatId = taskOwnerChatIdNum
       let intervalMin = (task as any).reminderIntervalMinutes ?? 5
       let repeatCount = (task as any).reminderRepeatCount ?? 0
 
@@ -212,7 +254,19 @@ export async function runReminderCheck() {
       }
 
       if (shouldFire) {
-        // Strict cooldown per task and distinct stageKey
+        // Atomic cross-process claim BEFORE delivery: only the instance whose
+        // compare-and-set flips remindersSentCount from sentCount delivers this
+        // stage. Prevents duplicate notifications when Vercel cron and browser
+        // pings hit different serverless instances in the same minute.
+        if (targetSentCount !== sentCount) {
+          const claim = await prisma.task.updateMany({
+            where: { id: task.id, remindersSentCount: sentCount },
+            data: { remindersSentCount: targetSentCount },
+          }).catch(() => ({ count: 0 }))
+          if (!claim.count) continue // another instance already claimed this stage
+        }
+
+        // Strict cooldown per task and distinct stageKey (same-process layer)
         markReminderSent(task.id, stageKey as any)
 
         const isGroupTask = (task as any).source?.startsWith('group:')
@@ -282,16 +336,14 @@ export async function runReminderCheck() {
         }
 
         const isFinal = targetSentCount >= totalQuota
-
-        try {
-          await prisma.task.update({
-            where: { id: task.id },
-            data: {
-              remindersSentCount: targetSentCount,
-              reminderSent: isFinal,
-            }
-          })
-        } catch {}
+        if (isFinal) {
+          try {
+            await prisma.task.update({
+              where: { id: task.id },
+              data: { reminderSent: true }
+            })
+          } catch {}
+        }
       }
     }
   } catch (err) {

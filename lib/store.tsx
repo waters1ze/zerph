@@ -16,6 +16,11 @@ import {
   type OfflineItemType,
 } from './offline-queue'
 
+/** Transient failures are worth retrying via the outbox; definitive 4xx are not. */
+function isTransientStatus(status: number): boolean {
+  return status >= 500 || status === 429 || status === 408
+}
+
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10)
 
@@ -468,7 +473,7 @@ export function getTgChatId(): string | null {
 
 export function getAuthHeaders(): Record<string, string> {
   const chatId = getTgChatId()
-  let token = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')) : null
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')) : null
 
   // Sync cookie token → localStorage so future requests are consistent
   if (typeof window !== 'undefined' && token && !localStorage.getItem('zerf_auth_token')) {
@@ -630,6 +635,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return
       }
       fetch(`/api/tasks?id=${encodeURIComponent(id)}&type=${itemType}`, { method: 'DELETE', headers: { ...getAuthHeaders() } })
+        .then(res => {
+          if (res.ok || res.status === 404 || res.status === 410) return // gone either way
+          if (isTransientStatus(res.status)) {
+            // Server hiccup — park for replay instead of silently losing the delete
+            if (!queueHasCreate(tempId || '')) enqueueOp(op)
+          }
+          // Definitive 4xx (401/403/…): local deletion stands, nothing to retry
+        })
         .catch(() => enqueueOp(op))
     }
 
@@ -644,7 +657,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ id, itemType, ...payload }),
-      }).catch(() => enqueueOp(op))
+      })
+        .then(res => {
+          if (res.ok) return
+          if (isTransientStatus(res.status)) {
+            // Previously a 500 here silently DROPPED the mutation — park it instead
+            if (!queueHasCreate(tempId || '')) enqueueOp(op)
+          }
+        })
+        .catch(() => enqueueOp(op))
     }
 
     const queueOrSendCreate = (itemType: OfflineItemType, tempId: string, payload: any) => {
@@ -669,11 +690,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             else if (itemType === 'note') dispatch({ type: 'REPLACE_NOTE', tempId, note: created })
             else if (itemType === 'goal') dispatch({ type: 'REPLACE_GOAL', tempId, goal: created })
             else dispatch({ type: 'REPLACE_HABIT', tempId, habit: created })
-          } else if (!r.ok) {
+          } else if (r.ok) {
+            // 2xx without a parseable body — park for replay so the item
+            // is not stranded as a local-only placeholder forever.
+            if (!queueHasCreate(tempId)) enqueueOp(op)
+          } else if (!isTransientStatus(r.status)) {
+            // Definitive server rejection (plan limit, validation, auth):
+            // remove the placeholder — retrying would never succeed.
             if (itemType === 'task') dispatch({ type: 'DELETE_TASK', id: tempId })
             else if (itemType === 'note') dispatch({ type: 'DELETE_NOTE', id: tempId })
             else if (itemType === 'goal') dispatch({ type: 'DELETE_GOAL', id: tempId })
             else dispatch({ type: 'DELETE_HABIT', id: tempId })
+          } else {
+            // Transient failure (5xx/429/408): keep the item on screen and
+            // park the create for outbox replay instead of silently losing it.
+            if (!queueHasCreate(tempId)) enqueueOp(op)
           }
         })
         .catch(() => {
@@ -1089,11 +1120,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Offline outbox replay: pushes queued mutations to the DB when the
   // network returns (or at mount if the app was closed with a pending queue).
-  const flushOfflineOutbox = useCallback(async () => {
+  const runOutboxReplay = useCallback(async () => {
     if (isFlushInProgress() || isOffline() || loadQueue().length === 0) return
     setFlushInProgress(true)
     try {
       const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
+      // Re-snapshot inside the loop: ops may be added/removed while we replay.
       for (const op of loadQueue()) {
         try {
           if (op.kind === 'create') {
@@ -1111,7 +1143,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 else if (op.itemType === 'goal') dispatch({ type: 'REPLACE_GOAL', tempId: op.tempId, goal: created })
                 else dispatch({ type: 'REPLACE_HABIT', tempId: op.tempId, habit: created })
               }
-            } else if (op.tempId) {
+              // 2xx without parseable body: fall through to removeOp — the
+              // create landed server-side and a follow-up sync will hydrate it.
+            } else if (op.tempId && !isTransientStatus(res.status)) {
               // Definitive server rejection (e.g. plan limit): remove the
               // local placeholder and surface the failure to the user.
               if (op.itemType === 'task') dispatch({ type: 'DELETE_TASK', id: op.tempId })
@@ -1123,25 +1157,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   detail: { itemType: op.itemType, title: op.payload?.title || '' },
                 }))
               } catch {}
+            } else {
+              // Transient failure (5xx/429/408): keep BOTH the placeholder and
+              // the queued op for the next connectivity window.
+              continue
             }
           } else if (op.kind === 'update') {
             const idMap = loadIdMap()
             const realId = (op.tempId && idMap[op.tempId]) || op.serverId
             if (realId) {
-              await fetch('/api/tasks', {
+              const res = await fetch('/api/tasks', {
                 method: 'PATCH',
                 headers,
                 body: JSON.stringify({ id: realId, itemType: op.itemType, ...op.payload }),
               })
+              // Transient → keep queued; definitive 4xx (404 gone / 401 auth /
+              // 403 plan) → drop, local state is already correct and will be
+              // reconciled by the next full sync.
+              if (!res.ok && isTransientStatus(res.status)) continue
             }
           } else if (op.kind === 'delete') {
             const idMap = loadIdMap()
             const realId = (op.tempId && idMap[op.tempId]) || op.serverId
             if (realId) {
-              await fetch(`/api/tasks?id=${encodeURIComponent(realId)}&type=${op.itemType}`, {
+              const res = await fetch(`/api/tasks?id=${encodeURIComponent(realId)}&type=${op.itemType}`, {
                 method: 'DELETE',
                 headers: { ...getAuthHeaders() },
               })
+              if (!res.ok && res.status !== 404 && res.status !== 410 && isTransientStatus(res.status)) continue
             }
           }
           removeOp(op.opId)
@@ -1158,6 +1201,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     await syncBackendData(true)
   }, [syncBackendData])
+
+  const flushOfflineOutbox = useCallback(async () => {
+    if (isOffline() || loadQueue().length === 0) return
+    // Cross-tab guard: two tabs share the same localStorage queue, so a bare
+    // module-level flag lets both replay it and DOUBLE-CREATE items. The
+    // Web Locks API grants the replay to exactly one tab; others skip.
+    const locks: LockManager | undefined = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
+    if (locks?.request) {
+      try {
+        await locks.request('zerf_offline_flush', { ifAvailable: true }, async (lock: unknown) => {
+          if (!lock) return // another tab is already flushing this queue
+          await runOutboxReplay()
+        })
+        return
+      } catch {
+        // Lock API errored — fall back to single-tab behavior below
+      }
+    }
+    await runOutboxReplay()
+  }, [runOutboxReplay])
 
   useEffect(() => {
     flushOfflineOutbox()

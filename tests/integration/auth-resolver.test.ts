@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 
@@ -123,21 +123,21 @@ describe('priority 2: Telegram WebApp initData HMAC', () => {
   it('authenticates a properly signed payload and extracts the real user id', async () => {
     const initData = buildSignedInitData({
       user: JSON.stringify({ id: 555000111, first_name: 'Tg' }),
-      auth_date: '1700000000',
+      auth_date: String(Math.floor(Date.now() / 1000)),
     })
     const res = await getAuthenticatedUser(req({ headers: { 'x-tg-init-data': initData } }))
     expect(res).toEqual({ chatId: '555000111', isRoot: false })
   })
 
   it('rejects a tampered payload instead of trusting client user field', async () => {
-    const legit = buildSignedInitData({ user: JSON.stringify({ id: 555000111 }), auth_date: '1700000000' })
+    const legit = buildSignedInitData({ user: JSON.stringify({ id: 555000111 }), auth_date: String(Math.floor(Date.now() / 1000)) })
     const forged = legit.replace('555000111', '999') // re-signed payload mismatch
     const res = await getAuthenticatedUser(req({ headers: { 'x-tg-init-data': forged } }))
     expect(res).toBeNull()
   })
 
   it('rejects signed payload that lacks the user field', async () => {
-    const initData = buildSignedInitData({ auth_date: '1700000000' })
+    const initData = buildSignedInitData({ auth_date: String(Math.floor(Date.now() / 1000)) })
     const res = await getAuthenticatedUser(req({ headers: { 'x-tg-init-data': initData } }))
     expect(res).toBeNull()
   })
@@ -171,10 +171,10 @@ describe('priority 3: DB session token (identity comes ONLY from the session row
     expect(res).toBeNull()
   })
 
-  it('rejects sessions older than SESSION_MAX_AGE (100 days)', async () => {
+  it('rejects sessions older than SESSION_MAX_AGE (365 days)', async () => {
     prismaMock.userSession.findUnique.mockResolvedValue({
       ...freshSession(BigInt(777)),
-      createdAt: new Date(Date.now() - 101 * 24 * 3600 * 1000),
+      createdAt: new Date(Date.now() - 366 * 24 * 3600 * 1000),
     })
     const res = await getAuthenticatedUser(req({ headers: { 'x-auth-token': 'a'.repeat(32) } }))
     expect(res).toBeNull()

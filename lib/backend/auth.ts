@@ -88,10 +88,14 @@ export function secretsMatch(a: string | null | undefined, b: string | null | un
 }
 
 /** Session lifetime: tokens older than this are rejected. */
-const SESSION_MAX_AGE_MS = 100 * 24 * 60 * 60 * 1000 // 100 days
+const SESSION_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000 // 365 days — matches cookie maxAge (auth/email, login-token) and "permanent" CLI tokens
 
 /**
- * Verify cryptographic hash from Telegram WebApp initData
+ * Verify cryptographic hash from Telegram WebApp initData.
+ * Also enforces freshness of `auth_date`: Telegram re-issues initData on every
+ * Mini App open, so anything older than 24h is treated as a replay of leaked
+ * data and rejected (fail-closed when auth_date is absent or in the future
+ * beyond a small clock-skew tolerance).
  */
 export function verifyTelegramWebAppData(initDataStr: string): boolean {
   if (!process.env.TELEGRAM_BOT_TOKEN) return false
@@ -99,6 +103,12 @@ export function verifyTelegramWebAppData(initDataStr: string): boolean {
   const urlParams = new URLSearchParams(initDataStr)
   const hash = urlParams.get('hash')
   if (!hash) return false
+
+  const TG_INITDATA_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24h
+  const authDateSec = Number(urlParams.get('auth_date'))
+  if (!Number.isFinite(authDateSec) || authDateSec <= 0) return false
+  const ageMs = Date.now() - authDateSec * 1000
+  if (ageMs > TG_INITDATA_MAX_AGE_MS || ageMs < -60_000) return false
 
   urlParams.delete('hash')
   const params: string[] = []

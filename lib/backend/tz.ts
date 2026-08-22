@@ -110,3 +110,13 @@ export function yearPeriod(year: number, timeZone: string): { start: Date; end: 
     end: zonedToUtc(year + 1, 1, 1, 0, 0, timeZone),
   }
 }
+
+/** Canonical "today" (YYYY-MM-DD) in Europe/Moscow — default dueDate for bot-created tasks. */
+export function mskToday(): string {
+  return localDateStr(new Date(), 'Europe/Moscow')
+}
+
+/** Canonical "tomorrow" (YYYY-MM-DD) in Europe/Moscow. */
+export function mskTomorrow(): string {
+  return localDateStr(new Date(Date.now() + 86_400_000), 'Europe/Moscow')
+}

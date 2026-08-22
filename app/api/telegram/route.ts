@@ -28,6 +28,7 @@ import { GROQ_API_KEY } from '@/lib/config'
 import { sendVoiceResponse, createSpokenSummary } from '@/lib/backend/tts'
 import { recordChannelComment } from '@/lib/backend/comment-analyzer'
 import { getSiriUserKey } from '@/app/api/shortcuts/route'
+import { mskToday, mskTomorrow, localDateStr } from '@/lib/backend/tz'
 import { getUserExtensionsAIContext } from '@/lib/backend/extensions'
 import { NAME_TO_CLUSTER_MAP, tokenMatchesCandidateName, namesAreRelated } from '@/lib/backend/name-aliases'
 import { notifyDataChanged } from '@/lib/backend/sse'
@@ -180,7 +181,7 @@ async function ensureBotCommandsRegistered() {
 
 async function handleToday(chatId: number) {
   const tasks = await getAllTasks(chatId)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = mskToday()
   const now = new Date()
   const dayName = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -583,7 +584,7 @@ async function handleFocus(chatId: number, minutesStr?: string) {
   const endH = String(endDate.getUTCHours()).padStart(2, '0')
   const endM = String(endDate.getUTCMinutes()).padStart(2, '0')
 
-  let msg = `🔥 *Режим глубокого фокуса запущен!*\n\n` +
+  const msg = `🔥 *Режим глубокого фокуса запущен!*\n\n` +
     `⏱️ *Длительность:* ${validMins} минут (до *${endH}:${endM} МСК*)\n\n` +
     `🧘 Отключите лишние вкладки, включите беззвучный режим и сосредоточьтесь на одной задаче.\n` +
     `Когда время выйдет, бот пришлет звуковое уведомление с перерывом!`
@@ -608,7 +609,7 @@ async function handleSiriSetup(chatId: number) {
   const personalUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=`
   const testUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=Купить+молоко+в+19:00`
 
-  let msg = `🍏 *Интеграция с Siri, Action Button, жестами и виджетами*\n\n` +
+  const msg = `🍏 *Интеграция с Siri, Action Button, жестами и виджетами*\n\n` +
     `Превратите Zerf AI в ультрабыстрого личного голосового ассистента на вашем iPhone или Android! Задачи, заметки и напоминания создаются за 1 секунду голосом или по касанию кнопки.\n\n` +
     `🔑 *Ваша персональная защищённая ссылка для шлюза:*\n` +
     `\`${personalUrl}\`\n\n` +
@@ -1169,7 +1170,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
     return tags.includes('школа') || tags.includes('расписание') || tags.includes('учеба')
   })
   if (isSchoolBatch && items.length >= 2) {
-    const datesToClean = Array.from(new Set(items.map(it => it.dueDate || new Date().toISOString().slice(0, 10))))
+    const datesToClean = Array.from(new Set(items.map(it => it.dueDate || mskToday())))
     for (const d of datesToClean) {
       await cancelScheduleForDate(chatId, d)
     }
@@ -1210,7 +1211,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             description: item.summary || '',
             priority: item.priority || 'medium',
             status: 'todo',
-            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueDate: item.dueDate || mskToday(),
             dueTime: item.dueTime || null,
             tags: item.tags || [],
             ownerChatId: BigInt(chatId),
@@ -1235,7 +1236,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             description: item.summary || '',
             priority: item.priority || 'medium',
             status: 'todo',
-            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueDate: item.dueDate || mskToday(),
             dueTime: item.dueTime || null,
             tags: item.tags || [],
             ownerChatId: BigInt(chatId),
@@ -1261,7 +1262,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
           }
         })
 
-        let amMsg = `🤔 Найдено несколько человек по запросу *«${escMd(item.recipientName)}»*. Уточни, кому именно поручаешь задачу:\n`
+        const amMsg = `🤔 Найдено несколько человек по запросу *«${escMd(item.recipientName)}»*. Уточни, кому именно поручаешь задачу:\n`
         
         const inlineKeyboard = []
         for (const m of allowedMatches) {
@@ -1307,7 +1308,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
             const conflict = await prisma.task.findFirst({
               where: {
                 ownerChatId: friend.chatId,
-                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                dueDate: item.dueDate || mskToday(),
                 dueTime: item.dueTime,
                 status: { notIn: ['done', 'draft'] }
               }
@@ -1331,7 +1332,7 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
               description: item.summary || '',
               priority: item.priority || 'medium',
               status: 'todo',
-              dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+              dueDate: item.dueDate || mskToday(),
               dueTime: item.dueTime || null,
               repeat: item.repeat || null,
               tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
@@ -1708,7 +1709,7 @@ async function processPhoto(chatId: number, photoArray: any[]) {
     })
 
     if (isSchoolSchedule) {
-      const datesToClean = Array.from(new Set(extractedTasks.map(t => t.dueDate || new Date().toISOString().slice(0, 10))))
+      const datesToClean = Array.from(new Set(extractedTasks.map(t => t.dueDate || mskToday())))
       for (const d of datesToClean) {
         await cancelScheduleForDate(chatId, d)
       }
@@ -1721,7 +1722,7 @@ async function processPhoto(chatId: number, photoArray: any[]) {
         title: t.title,
         description: t.description || 'Распознано из фото через Vision AI',
         priority: t.priority || 'medium',
-        dueDate: t.dueDate || new Date().toISOString().slice(0, 10),
+        dueDate: t.dueDate || mskToday(),
         dueTime: t.dueTime || undefined,
         tags: taskTags,
         aiGenerated: true,
@@ -2027,7 +2028,7 @@ async function handleGroupAddCommand(msg: any) {
           title: targetText.trim().slice(0, 100),
           summary: targetText.trim(),
           priority: 'medium',
-          dueDate: new Date().toISOString().slice(0, 10),
+          dueDate: mskToday(),
           tags: ['группа'],
           rawText: targetText,
         }]
@@ -2245,7 +2246,7 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
     title: taskText.slice(0, 80),
     summary: taskText,
     priority: 'medium',
-    dueDate: new Date().toISOString().slice(0, 10),
+    dueDate: mskToday(),
     tags: [],
   }
 
@@ -2256,7 +2257,7 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
     const conflict = await prisma.task.findFirst({
       where: {
         ownerChatId: BigInt(targetId),
-        dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+        dueDate: item.dueDate || mskToday(),
         dueTime: item.dueTime,
         status: { notIn: ['done', 'draft'] }
       }
@@ -2275,7 +2276,7 @@ async function handleSendCommand(senderChatId: number, senderName: string, targe
       description: item.summary || taskText,
       priority: item.priority || 'medium',
       status: 'todo',
-      dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+      dueDate: item.dueDate || mskToday(),
       dueTime: item.dueTime || null,
       tags: item.tags || [],
       ownerChatId: BigInt(targetId),
@@ -2410,7 +2411,7 @@ function parseScheduleQueryArgs(queryStr: string): { targetName: string; dateStr
   if (afterTomRegex.test(text)) {
     const afterTom = new Date()
     afterTom.setDate(afterTom.getDate() + 2)
-    dateStr = afterTom.toISOString().slice(0, 10)
+    dateStr = localDateStr(afterTom, 'Europe/Moscow')
     text = text.replace(afterTomRegex, ' ').trim()
   }
 
@@ -2418,14 +2419,14 @@ function parseScheduleQueryArgs(queryStr: string): { targetName: string; dateStr
   if (tomRegex.test(text)) {
     const tom = new Date()
     tom.setDate(tom.getDate() + 1)
-    dateStr = tom.toISOString().slice(0, 10)
+    dateStr = localDateStr(tom, 'Europe/Moscow')
     text = text.replace(tomRegex, ' ').trim()
   }
 
   // 4. Today
   const todayRegex = /(?:^|\s)(?:на\s+)?(?:сегодня|сейчас|today)(?:$|\s|[.,!?])/i
   if (todayRegex.test(text)) {
-    dateStr = new Date().toISOString().slice(0, 10)
+    dateStr = mskToday()
     text = text.replace(todayRegex, ' ').trim()
   }
 
@@ -2438,7 +2439,7 @@ function parseScheduleQueryArgs(queryStr: string): { targetName: string; dateStr
     const year = dateMatch[3] ? (dateMatch[3].length === 2 ? 2000 + parseInt(dateMatch[3], 10) : parseInt(dateMatch[3], 10)) : new Date().getFullYear()
     const d = new Date(year, month, day)
     if (!isNaN(d.getTime())) {
-      dateStr = d.toISOString().slice(0, 10)
+      dateStr = localDateStr(d, 'Europe/Moscow')
     }
     text = text.replace(dateRegex, ' ').trim()
   }
@@ -2768,7 +2769,7 @@ async function handleMatrixCommand(chatId: number) {
     orderBy: [{ priority: 'asc' }, { dueDate: 'asc' }],
   })
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = mskToday()
 
   const q1 = tasks.filter(t => t.priority === 'urgent' || (t.priority === 'high' && (!t.dueDate || t.dueDate <= todayStr)))
   const q2 = tasks.filter(t => (t.priority === 'high' && t.dueDate && t.dueDate > todayStr) || (t.priority === 'medium' && (!t.dueDate || t.dueDate > todayStr)))
@@ -2819,7 +2820,7 @@ async function handleCleanupCommand(chatId: number) {
     return
   }
 
-  const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const tomorrowStr = mskTomorrow()
 
   await send(chatId,
     `🌙 *ВЕЧЕРНИЙ SMART CLEAN-UP*\n\n` +
@@ -2992,7 +2993,7 @@ export async function POST(req: NextRequest) {
                 description: item.summary || '',
                 priority: item.priority || 'medium',
                 status: 'todo',
-                dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                dueDate: item.dueDate || mskToday(),
                 dueTime: item.dueTime || null,
                 repeat: item.repeat || null,
                 tags: item.tags || [],
@@ -3021,7 +3022,7 @@ export async function POST(req: NextRequest) {
                     description: item.summary || '',
                     priority: item.priority || 'medium',
                     status: 'todo',
-                    dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+                    dueDate: item.dueDate || mskToday(),
                     dueTime: item.dueTime || null,
                     repeat: item.repeat || null,
                     tags: item.tags || [],
@@ -3121,22 +3122,41 @@ export async function POST(req: NextRequest) {
 
         const task = await prisma.task.findUnique({ where: { id: taskId } })
         if (task) {
-          const now = new Date()
-          const mskTime = new Date(now.getTime() + (3 * 60 + mins) * 60 * 1000)
-          const newDueH = String(mskTime.getUTCHours()).padStart(2, '0')
-          const newDueM = String(mskTime.getUTCMinutes()).padStart(2, '0')
-          const newDueTime = `${newDueH}:${newDueM}`
+          // Only someone the task is visible to (owner/author/assignee) may snooze it
+          const cidStr = String(chatId)
+          const visible = String(task.ownerChatId ?? '') === cidStr
+            || String(task.authorChatId ?? '') === cidStr
+            || (Array.isArray(task.assignees) && task.assignees.some(a => String(a) === cidStr))
+          if (visible) {
+            // Compute the snoozed time in MSK and roll dueDate forward if we
+            // cross midnight — otherwise a late-evening snooze would produce a
+            // dueTime past midnight while dueDate stays "yesterday" and the
+            // reminder engine would silently skip the task forever.
+            const shifted = new Date(Date.now() + mins * 60 * 1000)
+            const msk = new Intl.DateTimeFormat('en-GB', {
+              timeZone: 'Europe/Moscow',
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', hour12: false,
+            }).formatToParts(shifted)
+            const gp = (t: string) => msk.find(p => p.type === t)?.value || '00'
+            const newDueH = String(parseInt(gp('hour'), 10) % 24).padStart(2, '0')
+            const newDueTime = `${newDueH}:${gp('minute')}`
+            const newDueDate = `${gp('year')}-${gp('month')}-${gp('day')}`
 
-          await prisma.task.update({
-            where: { id: taskId },
-            data: {
-              dueTime: newDueTime,
-              reminderSent: false,
-              remindersSentCount: 0
-            }
-          })
-          await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: `⏳ Отложено на ${mins} мин` })
-          await safeEditOrSend(chatId, cb.message.message_id, `⏳ *Напоминание отложено на ${mins} мин (до ${newDueTime}):*\n📌 ${escMd(task.title)}`)
+            await prisma.task.update({
+              where: { id: taskId },
+              data: {
+                dueDate: newDueDate,
+                dueTime: newDueTime,
+                reminderSent: false,
+                remindersSentCount: 0
+              }
+            })
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: `⏳ Отложено на ${mins} мин` })
+            await safeEditOrSend(chatId, cb.message.message_id, `⏳ *Напоминание отложено на ${mins} мин (до ${newDueTime}):*\n📌 ${escMd(task.title)}`)
+          } else {
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Нет доступа к задаче' })
+          }
         } else {
           await tgApi('answerCallbackQuery', { callback_query_id: cb.id, text: 'Задача не найдена' })
         }
@@ -3294,8 +3314,8 @@ export async function POST(req: NextRequest) {
           await prisma.task.delete({ where: { id: draftId } }).catch(() => {})
           const plan: any[] = JSON.parse(draft.rawText)
           const now = new Date()
-          const todayStr = now.toISOString().slice(0, 10)
-          const tomorrowStr = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          const todayStr = localDateStr(now, 'Europe/Moscow')
+          const tomorrowStr = localDateStr(new Date(now.getTime() + 86_400_000), 'Europe/Moscow')
 
           for (const item of plan) {
             await prisma.task.update({

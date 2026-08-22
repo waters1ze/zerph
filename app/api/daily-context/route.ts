@@ -196,7 +196,7 @@ async function getPersonalizedDailyTip(chatId: string | null, todayISO: string):
       max_tokens: 250,
     })
 
-    let generated = stripThinkingTags(result.content || '')
+    const generated = stripThinkingTags(result.content || '')
       .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
       .replace(/<\/think>/gi, '')
       .replace(/<[^>]+>/g, '')

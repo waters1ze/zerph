@@ -401,7 +401,7 @@ export function calculateStreakInfo(
   const hasDoneYesterday = completedDates.has(yesterdayStr)
 
   if (hasDoneToday || hasDoneYesterday) {
-    let checkDate = new Date(hasDoneToday ? now : yesterdayDate)
+    const checkDate = new Date(hasDoneToday ? now : yesterdayDate)
     while (true) {
       const dateStr = toLocalYMD(checkDate)
       if (completedDates.has(dateStr)) {

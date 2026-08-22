@@ -37,7 +37,7 @@ export {
  * Normalizes any GitHub URL to raw manifest URLs (zerf-extension.json or manifest.json)
  */
 export function getGithubRawUrls(repoUrl: string): string[] {
-  let clean = repoUrl.trim().replace(/\/$/, '')
+  const clean = repoUrl.trim().replace(/\/$/, '')
   
   if (clean.includes('raw.githubusercontent.com')) {
     return [clean]
@@ -453,7 +453,7 @@ export async function POST(req: NextRequest) {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
-      let liked = await getUserLikedExtensions(chatId)
+      const liked = await getUserLikedExtensions(chatId)
       const isCurrentlyLiked = liked.includes(extensionId)
       const nextLiked = isCurrentlyLiked
         ? liked.filter(id => id !== extensionId)
@@ -909,7 +909,7 @@ export async function POST(req: NextRequest) {
       const planLimits = (PLANS as any)[userPlan] || PLANS.free
       const maxAllowed = planLimits.maxExtensions ?? 5
 
-      let installed = await getUserInstalledExtensions(chatId)
+      const installed = await getUserInstalledExtensions(chatId)
       if (!installed.includes(extensionId) && maxAllowed !== UNLIMITED && installed.length >= maxAllowed) {
         return NextResponse.json({
           error: `🔒 Превышен лимит расширений для вашего тарифа (${installed.length}/${maxAllowed} шт.). Для установки до 10 расширений подключите Plus, до 50 — Pro, или безлимит на тарифе Corp!`,
@@ -977,7 +977,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Auto-enable on install
-      let enabled = await getUserEnabledExtensions(chatId)
+      const enabled = await getUserEnabledExtensions(chatId)
       if (!enabled.includes(extensionId)) {
         enabled.push(extensionId)
         await prisma.config.upsert({
@@ -995,7 +995,7 @@ export async function POST(req: NextRequest) {
       const { extensionId } = body
       if (!extensionId) return NextResponse.json({ error: 'extensionId is required' }, { status: 400 })
 
-      let enabled = await getUserEnabledExtensions(chatId)
+      const enabled = await getUserEnabledExtensions(chatId)
       const isEnabled = enabled.includes(extensionId)
       const nextEnabled = isEnabled
         ? enabled.filter(id => id !== extensionId)
@@ -1044,7 +1044,7 @@ export async function POST(req: NextRequest) {
       const authorName = [userRec?.firstName, userRec?.lastName].filter(Boolean).join(' ') || (userRec?.username ? `@${userRec.username}` : 'Пользователь')
 
       const reviewsRow = await prisma.config.findUnique({ where: { key: `ext_reviews_${extensionId}` } })
-      let reviews: any[] = reviewsRow?.value ? JSON.parse(reviewsRow.value) : []
+      const reviews: any[] = reviewsRow?.value ? JSON.parse(reviewsRow.value) : []
 
       const existingIdx = reviews.findIndex(r => String(r.chatId) === String(chatId))
       const newReview = {
@@ -1164,7 +1164,7 @@ export async function POST(req: NextRequest) {
 
       // Free extensions can be installed directly
       if (ext.price <= 0) {
-        let installed = await getUserInstalledExtensions(chatId)
+        const installed = await getUserInstalledExtensions(chatId)
         if (!installed.includes(extensionId)) {
           installed.push(extensionId)
           await prisma.config.upsert({

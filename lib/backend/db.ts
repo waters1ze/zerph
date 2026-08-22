@@ -4,6 +4,7 @@
  */
 
 import { prisma } from './prisma'
+import { mskToday } from './tz'
 import { ParsedItem, stringSimilarity, generateReminderContext, extractCleanRecipientAndSharing } from './groq'
 import { ROOT_ADMIN_IDS } from './admin'
 import { tokenMatchesCandidateName } from './name-aliases'
@@ -323,8 +324,8 @@ function processBirthdayTaskData<T extends { title: string; dueTime?: string | n
     }
   } else {
     // If not a birthday, remove accidental 🎂 and "день рождения" tag
-    let title = sanitizeTaskTitle(data.title.replace(/^🎂\s*/, '')).trim()
-    let tags = data.tags ? data.tags.filter(t => t.toLowerCase() !== 'день рождения') : data.tags
+    const title = sanitizeTaskTitle(data.title.replace(/^🎂\s*/, '')).trim()
+    const tags = data.tags ? data.tags.filter(t => t.toLowerCase() !== 'день рождения') : data.tags
     return {
       ...data,
       title,
@@ -2057,7 +2058,7 @@ export async function saveParsedItemToDb(
     }
 
     const cid = ownerChatId ? BigInt(ownerChatId) : null
-    let memberIds: bigint[] = cid ? [cid] : []
+    const memberIds: bigint[] = cid ? [cid] : []
 
     for (const name of rawMembers) {
       const clean = name.replace(/^@/, '').trim()
@@ -3725,47 +3726,32 @@ export async function processParsedItemWithDelegation(
         const friendChatId = BigInt(friend.chatId)
         const isBothShared = cleanIsBothShared
 
-        // Create task for Friend
+        // Single record for both delegation and isBothShared (mirrors the
+        // Telegram bot): owner = author for shared tasks, assignees carries the
+        // recipient — one row stays status-synchronized for both users.
+        const taskOwnerChatId = isBothShared ? cid : friendChatId
+        const taskAssignees = isBothShared
+          ? [String(cid), String(friendChatId)]
+          : [String(friendChatId)]
+
         const newTask = await prisma.task.create({
           data: {
             title: item.title,
             description: item.summary || '',
             priority: item.priority || 'medium',
             status: 'todo',
-            dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
+            dueDate: item.dueDate || mskToday(),
             dueTime: item.dueTime || null,
             repeat: item.repeat || null,
             tags: isBothShared ? ['общая', ...(item.tags || [])] : ['поручение', ...(item.tags || [])],
-            ownerChatId: friendChatId,
+            ownerChatId: taskOwnerChatId,
             authorChatId: cid,
-            assignees: [String(cid)],
+            assignees: taskAssignees,
             isShared: true,
             aiGenerated: true,
             source: item.rawText,
           } as any
         })
-
-        // If shared for both, also create linked copy for author
-        if (isBothShared) {
-          await prisma.task.create({
-            data: {
-              title: item.title,
-              description: item.summary || '',
-              priority: item.priority || 'medium',
-              status: 'todo',
-              dueDate: item.dueDate || new Date().toISOString().slice(0, 10),
-              dueTime: item.dueTime || null,
-              repeat: item.repeat || null,
-              tags: ['общая', ...(item.tags || [])],
-              ownerChatId: cid,
-              authorChatId: cid,
-              assignees: [String(friendChatId)],
-              isShared: true,
-              aiGenerated: true,
-              source: item.rawText,
-            } as any
-          })
-        }
 
         // Send Telegram notification to friend if bot token is present
         const botToken = process.env.TELEGRAM_BOT_TOKEN

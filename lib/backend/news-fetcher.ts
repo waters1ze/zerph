@@ -33,7 +33,7 @@ export interface NewsDigestContext {
 
 export function cleanNewsUrl(rawUrl?: string): string {
   if (!rawUrl) return ''
-  let cleaned = rawUrl.replace(/&amp;/g, '&').trim()
+  const cleaned = rawUrl.replace(/&amp;/g, '&').trim()
   try {
     const u = new URL(cleaned)
     const searchParams = new URLSearchParams(u.search)

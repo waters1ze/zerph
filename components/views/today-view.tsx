@@ -21,7 +21,7 @@ interface DailyContext {
 
 export function cleanTipText(tip?: string | null): string {
   if (!tip) return 'Фокусируйтесь на 1–2 ключевых задачах дня — это залог высокой продуктивности.'
-  let cleaned = tip
+  const cleaned = tip
     .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
     .replace(/<\/think>/gi, '')
     .replace(/<[^>]+>/g, '')
