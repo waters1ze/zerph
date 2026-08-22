@@ -1852,14 +1852,14 @@ export function SettingsView() {
 
                   {profileData.githubUsername || userGithub ? (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={openGithubModal}
+                      <a
+                        href="/api/auth/github"
                         className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                        title="Сменить привязанный GitHub аккаунт через OAuth"
                       >
                         <GithubIcon className="w-3.5 h-3.5" />
-                        <span>Изменить @{profileData.githubUsername || userGithub}</span>
-                      </button>
+                        <span>Сменить @{profileData.githubUsername || userGithub}</span>
+                      </a>
 
                       <button
                         type="button"
@@ -1897,19 +1897,11 @@ export function SettingsView() {
                     <div className="flex items-center gap-1.5">
                       <a
                         href="/api/auth/github"
-                        className="flex-1 py-2 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        className="w-full py-2 px-3 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                       >
-                        <GithubIcon className="w-3.5 h-3.5" />
+                        <GithubIcon className="w-4 h-4" />
                         <span>⚡ Привязать через GitHub OAuth</span>
                       </a>
-                      <button
-                        type="button"
-                        onClick={openGithubModal}
-                        className="py-2 px-2.5 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs font-medium border border-border transition-colors cursor-pointer"
-                        title="Ввести GitHub Username вручную"
-                      >
-                        Вручную
-                      </button>
                     </div>
                   )}
                 </div>
@@ -2030,98 +2022,7 @@ export function SettingsView() {
                 )}
               </AnimatePresence>
 
-              {/* Inline Modal/Form for GitHub Linking */}
-              <AnimatePresence>
-                {showGithubLinkModal && (
-                  <motion.form
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    onSubmit={handleGithubSubmit}
-                    className="p-4 rounded-2xl bg-muted/40 border border-primary/30 space-y-3 mt-3 overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-foreground text-background flex items-center justify-center font-bold text-[10px]">
-                          <GithubIcon className="w-3.5 h-3.5" />
-                        </div>
-                        <p className="text-xs font-bold text-foreground">
-                          {profileData.githubUsername || userGithub ? 'Изменение привязки GitHub' : 'Привязка GitHub аккаунта'}
-                        </p>
-                      </div>
-                      {(profileData.githubUsername || userGithub) && (
-                        <a
-                          href={`https://github.com/${profileData.githubUsername || userGithub}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] text-primary hover:underline flex items-center gap-1 font-mono"
-                        >
-                          <span>github.com/{profileData.githubUsername || userGithub}</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
 
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Привязка GitHub аккаунта автоматически указывает ваш логин <b>@{profileData.githubUsername || userGithub || 'username'}</b> как автора во всех опубликованных вами расширениях, темах и пресетах в Магазине Zerf Note.
-                    </p>
-
-                    <div>
-                      <label className="text-[11px] text-muted-foreground font-semibold block mb-1">GitHub Username или ссылка на профиль</label>
-                      <input
-                        type="text"
-                        required
-                        value={githubInput}
-                        onChange={e => setGithubInput(e.target.value)}
-                        placeholder="например, waters1ze или https://github.com/waters1ze"
-                        className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-primary font-mono"
-                      />
-                    </div>
-
-                    {authError && (
-                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
-                        {authError}
-                      </p>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
-                      <a
-                        href="/api/auth/github"
-                        className="px-4 py-2 rounded-xl bg-foreground text-background text-xs font-bold hover:opacity-90 active:scale-95 transition-all shadow-sm cursor-pointer text-center flex items-center justify-center gap-2"
-                      >
-                        <GithubIcon className="w-4 h-4" />
-                        <span>Войти через GitHub OAuth</span>
-                      </a>
-                      <div className="flex items-center gap-2 flex-1">
-                        <button
-                          type="submit"
-                          disabled={githubLoading || !githubInput.trim()}
-                          className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                        >
-                          {githubLoading ? 'Сохранение...' : (profileData.githubUsername || userGithub ? 'Обновить логин' : 'Привязать логин')}
-                        </button>
-                        {(profileData.githubUsername || userGithub) && (
-                          <button
-                            type="button"
-                            onClick={handleUnlinkGithub}
-                            disabled={githubLoading}
-                            className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
-                          >
-                            Отвязать
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setShowGithubLinkModal(false)}
-                          className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                          Отмена
-                        </button>
-                      </div>
-                    </div>
-                  </motion.form>
-                )}
-              </AnimatePresence>
 
               {/* Inline Modal/Form for VK Linking */}
               <AnimatePresence>
