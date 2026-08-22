@@ -91,7 +91,7 @@ export function TasksView() {
     return t.tags?.some(tag => tag.toLowerCase().includes(selectedTag))
   }
 
-  const visibleTasks = state.tasks.filter(t => isTaskVisibleInMainList(t, 7))
+  const visibleTasks = state.tasks.filter(t => isTaskVisibleInMainList(t, 7, filterStatus === 'done'))
 
   const filtered = visibleTasks
     .filter(t => {

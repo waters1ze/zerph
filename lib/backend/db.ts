@@ -860,7 +860,7 @@ export async function completeTaskByTitle(targetTitle: string, ownerChatId?: num
   let best: { task: DbTask; score: number } | null = null
   for (const task of tasks) {
     const score = stringSimilarity(targetTitle, task.title)
-    if (score > 0.3 && (!best || score > best.score)) {
+    if (score >= 0.7 && (!best || score > best.score)) {
       best = { task: task as DbTask, score }
     }
   }

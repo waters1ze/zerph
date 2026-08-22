@@ -172,10 +172,16 @@ export function isHolidayVisible(task: { title?: string; dueDate?: string | null
 }
 
 export function isTaskVisibleInMainList(
-  task: { title?: string; dueDate?: string | null; repeat?: string | null; tags?: string[] },
-  maxDays = 7
+  task: { title?: string; dueDate?: string | null; repeat?: string | null; tags?: string[]; status?: string },
+  maxDays = 7,
+  includePastDone = false
 ): boolean {
   if (!task) return false
+  const today = getLocalTodayDateString()
+  // Completed tasks from past days are completely hidden from the main active task list
+  if (!includePastDone && task.status === 'done' && task.dueDate && task.dueDate < today) {
+    return false
+  }
   if (isYearlyEventTask(task)) {
     return isBirthdayVisible(task, maxDays)
   }
@@ -219,9 +225,14 @@ export function groupTasksByDate<T extends { dueDate?: string | null; dueTime?: 
     groupsMap.get(key)!.push(task)
   }
 
-  // Sort tasks within each date group by dueTime (earliest time first)
+  // Sort tasks within each date group:
+  // Active/todo tasks FIRST by dueTime, then completed tasks at the bottom
   for (const [, groupTaskList] of groupsMap.entries()) {
     groupTaskList.sort((a, b) => {
+      const aDone = a.status === 'done' ? 1 : 0
+      const bDone = b.status === 'done' ? 1 : 0
+      if (aDone !== bDone) return aDone - bDone
+
       if (a.dueTime && b.dueTime) return a.dueTime.localeCompare(b.dueTime)
       if (a.dueTime && !b.dueTime) return -1
       if (!a.dueTime && b.dueTime) return 1
@@ -231,52 +242,35 @@ export function groupTasksByDate<T extends { dueDate?: string | null; dueTime?: 
 
   // Sort keys:
   // 1. TODAY (key === today) -> ALWAYS FIRST at the very top!
-  // 2. TOMORROW (key === tomorrow)
-  // 3. YESTERDAY (key === yesterday)
-  // 4. Upcoming near days (within next 7 days, closest first)
-  // 5. Recent past days (within last 7 days, closest first)
-  // 6. Far future (> 7 days)
-  // 7. Far past (> 7 days ago)
-  // 8. NO-DATE ('no-date') -> at the very bottom
+  // 2. TOMORROW (key === tomorrow) -> SECOND
+  // 3. FUTURE DAYS (key > today) -> Chronologically DOWNWARDS (closest future to far future)
+  // 4. NO-DATE ('no-date')
+  // 5. PAST DAYS (key < today) -> Overdue (yesterday, then older past days)
   const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) => {
     if (a === b) return 0
     if (a === today) return -1
     if (b === today) return 1
 
-    if (a === 'no-date') return 1
-    if (b === 'no-date') return -1
-
     if (a === tomorrow) return -1
     if (b === tomorrow) return 1
 
-    if (a === yesterday) return -1
-    if (b === yesterday) return 1
+    const aIsFuture = a > today && a !== 'no-date'
+    const bIsFuture = b > today && b !== 'no-date'
 
-    const aIsFuture = a > today
-    const bIsFuture = b > today
-
-    // If both are future dates: closest future first
+    // Both are future dates: closest date first (e.g. 24 Aug before 25 Aug)
     if (aIsFuture && bIsFuture) {
       return a.localeCompare(b)
     }
 
+    // Future dates always come before no-date and past days
+    if (aIsFuture && !bIsFuture) return -1
+    if (!aIsFuture && bIsFuture) return 1
+
+    if (a === 'no-date') return -1
+    if (b === 'no-date') return 1
+
     // If both are past dates: closest past first (yesterday before last week)
-    if (!aIsFuture && !bIsFuture) {
-      return b.localeCompare(a)
-    }
-
-    // Compare distance in days to today
-    const todayMs = new Date(today + 'T00:00:00').getTime()
-    const aMs = new Date(a + 'T00:00:00').getTime()
-    const bMs = new Date(b + 'T00:00:00').getTime()
-    const aDist = Math.abs(aMs - todayMs)
-    const bDist = Math.abs(bMs - todayMs)
-
-    if (aDist !== bDist) {
-      return aDist - bDist
-    }
-
-    return aIsFuture ? -1 : 1
+    return b.localeCompare(a)
   })
 
   return sortedKeys.map(key => {

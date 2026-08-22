@@ -71,8 +71,8 @@ CRITICAL TIME RULES:
 - Calculate all relative dates/times strictly relative to ${mskDate} ${mskTime}.
 - EXACT TIME: If user specifies format with minutes or exact time (e.g. "в 10:00", "в 11:30", "в 09:15"), STRICTLY keep that exact time ("10:00", "11:30", "09:15")!
 - FUTURE DAYS: If scheduled for tomorrow or a future date ("завтра в 10:00", "завтра в 10", "в пятницу в 9"), keep the morning hour ("10:00", "09:00").
-- TODAY'S BARE NUMBERS: Only for TODAY if user says a bare number without minutes ("в 6", "в 7 часов") and morning hour passed today (${mskTime} > 06:00), use evening ("18:00", "19:00").
-- Time ranges ("с 8 до 15", "с 18:00 до 20:00"): set "dueTime": "08:00 - 15:00".
+- Time ranges ("с 8 до 15", "с 18:00 до 20:00", "с 22:00 до 02:00", "22:00-02:00"): set "dueTime": "22:00 - 02:00". For overnight ranges crossing midnight (e.g. 22:00 - 02:00), the start time is 22:00 on dueDate; this is an active upcoming task, NEVER mark as completed!
+- COMPLETION vs CREATION: ONLY set "action": "completion" / "type": "completion" when the user EXPLICITLY says that a task is already done/completed/finished ("я сделал X", "выполнил задачу X", "отметь X как сделанную"). When user plans, schedules, dictates a plan or gives time ranges, ALWAYS use "action": "create", "type": "task"!
 
 OUTPUT STRICT VALID PURE JSON ONLY without markdown fences:
 {
