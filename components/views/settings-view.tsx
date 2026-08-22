@@ -356,6 +356,24 @@ export function SettingsView() {
   const effectiveChatId = currentChatId && !currentChatId.startsWith('guest_') ? currentChatId : 'ВАШ_CHAT_ID'
   const siriKeyParam = profileData.siriKey ? `&key=${profileData.siriKey}` : ''
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
+
+  const getGithubAuthUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+    let state = ''
+    try {
+      state = btoa(JSON.stringify({ chatId: currentChatId || '', origin }))
+    } catch {}
+    return `https://github.com/login/oauth/authorize?client_id=Ov23li5itN8nX8pNVJsy&redirect_uri=${encodeURIComponent(`${origin}/api/auth/github/callback`)}&scope=read:user%20user:email&state=${state}`
+  }
+
+  const getVkAuthUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+    let state = ''
+    try {
+      state = btoa(JSON.stringify({ chatId: currentChatId || '', origin }))
+    } catch {}
+    return `https://oauth.vk.com/authorize?client_id=51824701&display=page&redirect_uri=${encodeURIComponent(`${origin}/api/auth/vk/callback`)}&scope=email,offline&response_type=code&v=5.131&state=${state}`
+  }
   const [nameSavedStatus, setNameSavedStatus] = useState<boolean>(false)
   const [settingsSavedBadge, setSettingsSavedBadge] = useState<boolean>(false)
   const nameSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -1659,7 +1677,7 @@ export function SettingsView() {
                   {profileData.vkId ? (
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <a
-                        href={currentChatId ? `/api/auth/vk?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/vk'}
+                        href={getVkAuthUrl()}
                         className="flex-1 py-1.5 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         title="Сменить привязанный аккаунт VK через OAuth"
                       >
@@ -1688,7 +1706,7 @@ export function SettingsView() {
                   ) : (
                     <div className="flex items-center gap-1.5">
                       <a
-                        href={currentChatId ? `/api/auth/vk?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/vk'}
+                        href={getVkAuthUrl()}
                         className="w-full py-2 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] border border-[#0077FF]/30 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                       >
                         <span>⚡ Привязать через VK ID</span>
@@ -1791,7 +1809,7 @@ export function SettingsView() {
                   {profileData.githubUsername || userGithub ? (
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <a
-                        href={currentChatId ? `/api/auth/github?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/github'}
+                        href={getGithubAuthUrl()}
                         className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         title="Сменить привязанный GitHub аккаунт через OAuth"
                       >
@@ -1834,7 +1852,7 @@ export function SettingsView() {
                   ) : (
                     <div className="flex items-center gap-1.5">
                       <a
-                        href={currentChatId ? `/api/auth/github?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/github'}
+                        href={getGithubAuthUrl()}
                         className="w-full py-2 px-3 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                       >
                         <GithubIcon className="w-4 h-4" />
