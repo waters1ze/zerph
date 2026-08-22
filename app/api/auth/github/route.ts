@@ -18,8 +18,12 @@ export async function GET(req: NextRequest) {
   const cookieCid = req.cookies.get('zerf_chat_id')?.value
   const paramCid = req.nextUrl.searchParams.get('chatId')
   const targetChatId = authUser?.chatId ? String(authUser.chatId) : (cookieCid || paramCid || '')
+  const clientId = process.env.GITHUB_CLIENT_ID
 
-  const clientId = process.env.GITHUB_CLIENT_ID || 'Ov23li34b9d1469e88aa'
+  // If no registered OAuth app is configured in Vercel environment variables yet
+  if (!clientId || clientId.startsWith('Ov23li34b9d1469e88aa')) {
+    return NextResponse.redirect(`${origin}/?github_oauth_setup_needed=1#settings`)
+  }
 
   const state = Buffer.from(JSON.stringify({
     chatId: targetChatId,

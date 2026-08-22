@@ -243,9 +243,18 @@ export function SettingsView() {
   const [googleInput, setGoogleInput] = useState('')
   const [googleEmailInput, setGoogleEmailInput] = useState('')
   const [googleLoading, setGoogleLoading] = useState(false)
-  const [showGithubLinkModal, setShowGithubLinkModal] = useState(false)
-  const [githubInput, setGithubInput] = useState('')
-  const [githubLoading, setGithubLoading] = useState(false)
+  const [showGithubSetupModal, setShowGithubSetupModal] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('github_oauth_setup_needed') === '1') {
+        setShowGithubSetupModal(true)
+        window.history.replaceState({}, '', window.location.pathname + '#settings')
+      }
+    }
+  }, [])
+
   const [showPinCodeModal, setShowPinCodeModal] = useState(false)
   const [pinCodeInput, setPinCodeInput] = useState('')
   const [pinLoading, setPinLoading] = useState(false)
@@ -716,7 +725,7 @@ export function SettingsView() {
         setTimeout(() => setAuthError(null), 5000)
         window.history.replaceState({}, '', window.location.pathname)
       } else if (params.get('open_github_modal') === '1') {
-        openGithubModal()
+        setShowGithubSetupModal(true)
         window.history.replaceState({}, '', window.location.pathname)
       }
 
@@ -1027,50 +1036,7 @@ export function SettingsView() {
     }
   }
 
-  const openGithubModal = () => {
-    setGithubInput(profileData.githubUsername || userGithub || '')
-    setAuthError(null)
-    setShowGithubLinkModal(true)
-    setShowGoogleLinkModal(false)
-    setShowVkLinkModal(false)
-    setShowEmailLinkModal(false)
-  }
-
-  const handleGithubSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    let clean = githubInput.trim().replace(/^@/, '').replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').trim()
-    if (!clean) return
-
-    setGithubLoading(true)
-    setAuthError(null)
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('zerf_github_username', clean)
-      }
-      setUserGithub(clean)
-      setProfileData(prev => ({ ...prev, githubUsername: clean }))
-
-      // Optional backend profile update
-      try {
-        await fetch('/api/telegram/user', {
-          method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ githubUsername: clean }),
-        })
-      } catch {}
-
-      setShowGithubLinkModal(false)
-      setAuthSuccess('✓ GitHub аккаунт успешно привязан к профилю!')
-      setTimeout(() => setAuthSuccess(null), 3500)
-    } catch (err: any) {
-      setAuthError(err.message || 'Ошибка привязки GitHub')
-    } finally {
-      setGithubLoading(false)
-    }
-  }
-
   const handleUnlinkGithub = async () => {
-    setGithubLoading(true)
     setAuthError(null)
     try {
       if (typeof window !== 'undefined') {
@@ -1087,13 +1053,10 @@ export function SettingsView() {
         })
       } catch {}
 
-      setShowGithubLinkModal(false)
       setAuthSuccess('✓ GitHub аккаунт успешно отвязан!')
       setTimeout(() => setAuthSuccess(null), 3000)
     } catch (err: any) {
       setAuthError(err.message || 'Ошибка отвязки GitHub')
-    } finally {
-      setGithubLoading(false)
     }
   }
 
@@ -2019,6 +1982,73 @@ export function SettingsView() {
                       </button>
                     </div>
                   </motion.form>
+                )}
+              </AnimatePresence>
+
+              {/* Modal for GitHub OAuth App Setup Instructions */}
+              <AnimatePresence>
+                {showGithubSetupModal && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="p-4 rounded-2xl bg-card border-2 border-primary/40 space-y-3 mt-3 overflow-hidden shadow-lg"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-xl bg-foreground text-background flex items-center justify-center font-bold text-xs">
+                          <GithubIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">
+                            Настройка GitHub OAuth App (1 минута)
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Для работы официального входа через GitHub необходимо создать OAuth App
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowGithubSetupModal(false)}
+                        className="p-1 rounded-lg hover:bg-muted text-muted-foreground text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-muted/40 border border-border text-xs space-y-2 text-foreground/90">
+                      <p className="font-semibold text-primary">Инструкция по созданию приложения:</p>
+                      <ol className="list-decimal list-inside space-y-1 text-[11px] text-muted-foreground">
+                        <li>Перейдите в <a href="https://github.com/settings/developers" target="_blank" rel="noreferrer" className="text-primary font-bold underline inline-flex items-center gap-0.5">GitHub Developer Settings <ExternalLink className="w-2.5 h-2.5" /></a></li>
+                        <li>Нажмите кнопку <b>«New OAuth App»</b></li>
+                        <li>Укажите <b>Application name:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">Zerf Note</code></li>
+                        <li>Укажите <b>Homepage URL:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{typeof window !== 'undefined' ? window.location.origin : 'https://zerph.vercel.app'}</code></li>
+                        <li>Укажите <b>Authorization callback URL:</b> <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{typeof window !== 'undefined' ? `${window.location.origin}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'}</code></li>
+                        <li>Нажмите <b>«Register application»</b>, скопируйте <b>Client ID</b> и сгенерируйте <b>Client Secret</b></li>
+                        <li>Добавьте переменные <b>GITHUB_CLIENT_ID</b> и <b>GITHUB_CLIENT_SECRET</b> в Vercel Settings → Environment Variables</li>
+                      </ol>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <a
+                        href="https://github.com/settings/developers"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>Открыть GitHub Developers</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setShowGithubSetupModal(false)}
+                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Закрыть
+                      </button>
+                    </div>
+                  </motion.div>
                 )}
               </AnimatePresence>
 
