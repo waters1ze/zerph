@@ -8,7 +8,7 @@ import { ParsedItem, stringSimilarity, generateReminderContext, extractCleanReci
 import { ROOT_ADMIN_IDS } from './admin'
 import { tokenMatchesCandidateName } from './name-aliases'
 import { createServerSession } from './auth'
-import { PLANS, normalizePlan, planAtLeast, getDailyCount, getLifetimeCount, COUNTERS } from './plans'
+import { PLANS, PLAN_RANK, normalizePlan, planAtLeast, getDailyCount, getLifetimeCount, COUNTERS } from './plans'
 import { notifyDataChanged } from './sse'
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
@@ -3354,12 +3354,28 @@ export async function activateUserSubscription(
     if (!/^\d{3,20}$/.test(String(ownerChatId))) return false
     const cid = BigInt(ownerChatId)
 
-    // Never downgrade an active corp subscription
+    // Never downgrade an ACTIVE subscription to a lower tier (e.g. a Pro
+    // user receiving a 7-day Plus referral bonus, or accidentally paying for
+    // Plus while Pro is still running): keep the current plan and only
+    // extend the expiry by the granted days.
     const existing = await prisma.telegramChat.findUnique({
       where: { chatId: cid },
       select: { plan: true, subscriptionExpiry: true },
     })
-    if (existing && normalizePlan(existing.plan) === 'corp' && plan !== 'corp') return true
+    const activePlan = existing && existing.subscriptionExpiry && new Date(existing.subscriptionExpiry) > new Date()
+      ? normalizePlan(existing.plan)
+      : 'free'
+    const activeRank = (PLAN_RANK[activePlan as keyof typeof PLAN_RANK] as number) || 0
+    const newRank = (PLAN_RANK[plan as keyof typeof PLAN_RANK] as number) || 0
+    if (activePlan !== 'free' && activeRank >= newRank) {
+      const base = new Date(existing!.subscriptionExpiry!)
+      const expiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000)
+      await prisma.telegramChat.update({
+        where: { chatId: cid },
+        data: { subscriptionExpiry: expiry },
+      })
+      return true
+    }
 
     // Extend from the current expiry when the subscription is still active,
     // so repeat payments stack instead of replacing remaining time.

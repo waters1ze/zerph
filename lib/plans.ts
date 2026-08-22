@@ -261,16 +261,20 @@ export interface PaymentProduct {
 }
 
 export const PAYMENT_PRODUCTS: PaymentProduct[] = [
-  { plan: 'plus', days: 30, minAmount: 95, labelSuffix: 'plus30' },
-  { plan: 'plus', days: 365, minAmount: 950, labelSuffix: 'plus365' },
-  { plan: 'pro', days: 30, minAmount: 285, labelSuffix: 'pro30' },
-  { plan: 'pro', days: 365, minAmount: 2900, labelSuffix: 'pro365' },
+  // minAmount equals the catalog price: the webhook accepts exactly what the
+  // server-generated checkout charges. (Older values were ~5% below catalog,
+  // letting anyone hand-craft a QuickPay link with a discounted sum.)
+  // Promo-discounted checkouts are handled explicitly by the webhook.
+  { plan: 'plus', days: 30, minAmount: 99, labelSuffix: 'plus30' },
+  { plan: 'plus', days: 365, minAmount: 1009, labelSuffix: 'plus365' },
+  { plan: 'pro', days: 30, minAmount: 299, labelSuffix: 'pro30' },
+  { plan: 'pro', days: 365, minAmount: 3049, labelSuffix: 'pro365' },
 ]
 
 /** Legacy labels kept working after the tariff migration. */
 const LEGACY_LABEL_MAP: Record<string, PaymentProduct> = {
-  '30': { plan: 'plus', days: 30, minAmount: 95, labelSuffix: '30' },
-  '365': { plan: 'plus', days: 365, minAmount: 950, labelSuffix: '365' },
+  '30': { plan: 'plus', days: 30, minAmount: 99, labelSuffix: '30' },
+  '365': { plan: 'plus', days: 365, minAmount: 1009, labelSuffix: '365' },
 }
 
 export function findPaymentProduct(label: string): (PaymentProduct & { isGift?: boolean; buyerChatId?: string }) | null {

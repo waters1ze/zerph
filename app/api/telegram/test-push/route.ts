@@ -6,8 +6,13 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    }
     const body = await req.json().catch(() => ({}))
-    const chatId = authUser?.chatId || body?.chatId
+    // Test pushes go only to the authenticated caller — a client-supplied
+    // chatId would allow sending arbitrary Telegram messages to any user.
+    const chatId = authUser.chatId
 
     if (!chatId || String(chatId).startsWith('guest_') || !/^\d+$/.test(String(chatId))) {
       return NextResponse.json({

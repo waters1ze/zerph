@@ -372,7 +372,7 @@ export function ZerficLiveProvider({ children }: { children: React.ReactNode }) 
     // Primary Neural Voice Engine: HTML5 MP3 Audio via /api/extensions/zerfic-live/tts (works seamlessly on iOS Safari, Android, and Desktop)
     fetch('/api/extensions/zerfic-live/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ text: currentSentence, voiceId: activeVoice.id }),
     })
       .then(r => {

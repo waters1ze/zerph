@@ -644,16 +644,13 @@ class GroqKeyPool {
   public getOrderedHealthyKeys(providedKey?: string): string[] {
     this.ensureFresh()
 
-    const customKeys: string[] = []
-    if (providedKey) {
-      const parsedProvided = cleanTokenString(providedKey)
-      if (parsedProvided.length > 0) {
-        this.refreshKeys(parsedProvided)
-        customKeys.push(...parsedProvided)
-      }
-    }
+    // Per-call custom keys (BYOK): they are prioritized for THIS request only
+    // and must never be merged into the shared pool — otherwise one user's
+    // personal key would start serving everyone else's traffic (and burning
+    // that user's quota). The env-based multi-key pool stays untouched.
+    const customKeys = providedKey ? cleanTokenString(providedKey) : []
 
-    if (this.keys.length === 0) return []
+    if (this.keys.length === 0 && customKeys.length === 0) return []
 
     const now = Date.now()
     // Sort keys: healthy ones first (rotated from currentIndex), then keys in cooldown by shortest remaining time
@@ -675,7 +672,9 @@ class GroqKeyPool {
     cooling.sort((a, b) => a.cooldownUntil - b.cooldownUntil)
 
     // Advance round-robin index for next call
-    this.currentIndex = (this.currentIndex + 1) % total
+    if (total > 0) {
+      this.currentIndex = (this.currentIndex + 1) % total
+    }
 
     // If custom keys were explicitly provided by the user, prioritize them first
     const resultOrder: string[] = []
@@ -839,6 +838,26 @@ export async function* streamGroqChatCompletionText(options: {
       })
 
       if (!res.ok || !res.body) {
+        // Classify the failure: rotate keys only when the KEY is the problem
+        // (429 rate limit / 401-403 auth / 5xx provider). Model-level errors
+        // (400/404) must not punish the key — mark the model instead.
+        if (res.status === 429) {
+          groqPool.markKeyRateLimited(key, 30)
+          continue
+        }
+        if (res.status === 401 || res.status === 403) {
+          const errText = await res.text().catch(() => '')
+          groqPool.markKeyInvalid(key, `HTTP ${res.status}: ${errText}`)
+          continue
+        }
+        if (res.status >= 500) {
+          groqPool.markKeyRateLimited(key, 15)
+          continue
+        }
+        if (res.status === 400 || res.status === 404) {
+          markModelFailed(options.model || 'unknown', `stream HTTP ${res.status}`, 15)
+          break
+        }
         groqPool.markKeyRateLimited(key, 30)
         continue
       }

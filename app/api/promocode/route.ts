@@ -98,6 +98,27 @@ export async function POST(req: NextRequest) {
 
     if (isFullFree) {
       // ── 100% FREE ACTIVATION: Instantly grant/extend subscription ──
+
+      // Atomically consume one activation slot BEFORE granting anything.
+      // updateMany enforces maxActivations and per-user reuse in a single
+      // conditional write, closing the check-then-act race that previously
+      // let two parallel requests exceed maxActivations.
+      const consumed = await prisma.promoCode.updateMany({
+        where: {
+          id: promo.id,
+          isActive: true,
+          usedCount: { lt: promo.maxActivations },
+          NOT: { usedByChatIds: { has: strChatId } },
+        },
+        data: {
+          usedCount: { increment: 1 },
+          usedByChatIds: { push: strChatId },
+        },
+      })
+      if (consumed.count === 0) {
+        return NextResponse.json({ error: 'Лимит активаций этого промокода исчерпан' }, { status: 400 })
+      }
+
       let newExpiry = new Date()
       if (user?.subscriptionExpiry && user.subscriptionExpiry > new Date()) {
         newExpiry = new Date(user.subscriptionExpiry.getTime() + daysToAdd * 86400000)
@@ -105,26 +126,18 @@ export async function POST(req: NextRequest) {
         newExpiry = new Date(Date.now() + daysToAdd * 86400000)
       }
 
-      // Update user subscription & plan
+      // Update user subscription & plan (activateUserSubscription-grade
+      // anti-downgrade: keep a higher active tier, only extend the expiry)
       await prisma.telegramChat.upsert({
         where: { chatId: numericChatId },
         update: {
-          plan: targetPlan,
+          plan: userPlanRank > (PLAN_RANK[targetPlan] || 0) && isUserSubActive ? userCurrentPlan : targetPlan,
           subscriptionExpiry: newExpiry,
         },
         create: {
           chatId: numericChatId,
           plan: targetPlan,
           subscriptionExpiry: newExpiry,
-        },
-      })
-
-      // Record promo code activation
-      await prisma.promoCode.update({
-        where: { id: promo.id },
-        data: {
-          usedCount: { increment: 1 },
-          usedByChatIds: { push: strChatId },
         },
       })
 
@@ -138,6 +151,26 @@ export async function POST(req: NextRequest) {
       })
     } else {
       // ── PARTIAL DISCOUNT (e.g. 30%, 50% off): Save discount for checkout ──
+
+      // Discount codes must be consumed exactly like free codes — otherwise
+      // maxActivations is never reached and the same code can arm a discount
+      // for an unlimited number of accounts.
+      const consumedDiscount = await prisma.promoCode.updateMany({
+        where: {
+          id: promo.id,
+          isActive: true,
+          usedCount: { lt: promo.maxActivations },
+          NOT: { usedByChatIds: { has: strChatId } },
+        },
+        data: {
+          usedCount: { increment: 1 },
+          usedByChatIds: { push: strChatId },
+        },
+      })
+      if (consumedDiscount.count === 0) {
+        return NextResponse.json({ error: 'Лимит активаций этого промокода исчерпан' }, { status: 400 })
+      }
+
       const discountKey = `user_promo_discount_${strChatId}`
       const discountPayload = {
         code: cleanCode,

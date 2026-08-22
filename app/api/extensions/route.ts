@@ -123,12 +123,24 @@ async function getUserLikedExtensions(chatId: string): Promise<string[]> {
   }
 }
 
-async function getAuthorPayoutCard(chatId: string): Promise<any | null> {
+/** Payout numbers are only needed server-side to send money; API responses
+ *  must never echo full card/wallet numbers back to the browser. */
+export function maskPayoutNumber(num: unknown): string {
+  const s = String(num || '').trim()
+  if (!s) return ''
+  return s.length <= 4 ? s : s.slice(-4)
+}
+
+async function getAuthorPayoutCard(chatId: string, masked = true): Promise<any | null> {
   try {
     const row = await prisma.config.findUnique({
       where: { key: `author_payout_card_${chatId}` },
     })
-    return row?.value ? JSON.parse(row.value) : null
+    const card = row?.value ? JSON.parse(row.value) : null
+    if (card && masked && card.cardNumber) {
+      return { ...card, cardNumber: maskPayoutNumber(card.cardNumber) }
+    }
+    return card
   } catch {
     return null
   }
@@ -1359,7 +1371,12 @@ export async function POST(req: NextRequest) {
         }),
       ])
 
-      return NextResponse.json({ success: true, boundCard: cardData, autoRenewEnabled: isAutoRenew })
+      return NextResponse.json({
+        success: true,
+        // Never echo the full card/wallet number back to the client
+        boundCard: { ...cardData, cardNumber: maskPayoutNumber(cardData.cardNumber) },
+        autoRenewEnabled: isAutoRenew,
+      })
     }
 
     // ── ACTION: UNBIND PAYOUT CARD ──

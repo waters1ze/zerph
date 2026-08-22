@@ -37,13 +37,27 @@ export async function incrementDailyCount(
   by = 1
 ): Promise<number> {
   const key = counterKey(kind, chatId)
+  return atomicIncrementConfigCounter(key, by)
+}
+
+/**
+ * Atomic upsert-and-increment for Config-backed numeric counters.
+ * The old read-then-upsert pattern lost increments under concurrent
+ * requests, letting users exceed daily quotas with parallel calls.
+ */
+async function atomicIncrementConfigCounter(key: string, by: number): Promise<number> {
   try {
-    const row = await prisma.config.upsert({
-      where: { key },
-      update: { value: String((parseInt((await prisma.config.findUnique({ where: { key } }))?.value || '0', 10) || 0) + by) },
-      create: { key, value: String(by) },
-    })
-    return parseInt(row.value, 10) || 0
+    const rows = await prisma.$queryRaw<Array<{ value: string }>>`
+      INSERT INTO "Config" ("key", "value", "updatedAt")
+      VALUES (${key}, ${String(by)}, now())
+      ON CONFLICT ("key")
+      DO UPDATE SET
+        "value" = ((COALESCE(NULLIF("Config"."value", ''), '0')::bigint + ${by}::bigint)::text),
+        "updatedAt" = now()
+      RETURNING "value"
+    `
+    const first = Array.isArray(rows) ? rows[0] : undefined
+    return parseInt(first?.value || '0', 10) || 0
   } catch {
     return 0
   }
@@ -70,18 +84,7 @@ export async function incrementLifetimeCount(
   by = 1
 ): Promise<number> {
   const key = lifetimeCounterKey(kind, chatId)
-  try {
-    const existing = await prisma.config.findUnique({ where: { key } })
-    const nextVal = (parseInt(existing?.value || '0', 10) || 0) + by
-    const row = await prisma.config.upsert({
-      where: { key },
-      update: { value: String(nextVal) },
-      create: { key, value: String(by) },
-    })
-    return parseInt(row.value, 10) || 0
-  } catch {
-    return 0
-  }
+  return atomicIncrementConfigCounter(key, by)
 }
 
 // Counter kinds used across the app

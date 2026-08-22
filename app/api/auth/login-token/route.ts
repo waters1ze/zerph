@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { generateOnetimeToken, getAdminSecret, secretsMatch } from '@/lib/backend/auth'
+import { checkInMemoryRateLimit, getClientIp } from '@/lib/backend/rate-limit'
 import crypto from 'crypto'
 
 // POST /api/auth/login-token — generate a one-time web login token for a chatId
@@ -50,6 +51,11 @@ export async function POST(req: NextRequest) {
 // Returns chatId + a long-lived session token, or sets cookies and redirects directly to /
 export async function GET(req: NextRequest) {
   try {
+    // The 6-digit PIN form has only 10^6 combinations — throttle guessing per IP
+    if (!checkInMemoryRateLimit(`logintoken:${getClientIp(req)}`, 40, 10 * 60 * 1000)) {
+      return NextResponse.json({ valid: false, error: 'Too many attempts' }, { status: 429 })
+    }
+
     const { searchParams } = new URL(req.url)
     const rawParam = searchParams.get('token') || searchParams.get('code')
     const token = (rawParam || '').trim().replace(/\s+/g, '')

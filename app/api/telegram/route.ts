@@ -601,6 +601,10 @@ async function handleSiriSetup(chatId: number) {
   const appUrl = APP_URL || 'https://zeprh.vercel.app'
   const endpointUrl = `${appUrl}/api/shortcuts`
   const siriKey = getSiriUserKey(chatId)
+  if (!siriKey) {
+    await send(chatId, '⚠️ Siri-шлюз временно недоступен: на сервере не настроен секрет подписи (TELEGRAM_BOT_TOKEN). Сообщите администратору.')
+    return
+  }
   const personalUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=`
   const testUrl = `${endpointUrl}?chatId=${chatId}&key=${siriKey}&text=Купить+молоко+в+19:00`
 

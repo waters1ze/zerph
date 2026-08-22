@@ -45,3 +45,18 @@ export function checkInMemoryRateLimit(key: string, maxReqs: number, windowMs: n
   entry.count++
   return true
 }
+
+/**
+ * Best-effort client IP extraction for rate limiting (first hop of
+ * x-forwarded-for, falling back to x-real-ip). On serverless platforms the
+ * proxy sets these headers, so they are usable for throttling even though
+ * they must never be trusted for authorization decisions.
+ */
+export function getClientIp(req: Request): string {
+  const fwd = req.headers.get('x-forwarded-for')
+  if (fwd) {
+    const first = fwd.split(',')[0]?.trim()
+    if (first) return first
+  }
+  return req.headers.get('x-real-ip')?.trim() || 'unknown'
+}

@@ -5,9 +5,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { generateTtsAudio } from '@/lib/backend/tts'
+import { getAuthenticatedUser } from '@/lib/backend/auth'
 
 export async function POST(req: NextRequest) {
   try {
+    // Speech synthesis hits an external provider; anonymous access would let
+    // anyone burn the provider quota (and eventually get the server IP banned).
+    const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    }
+
     const { text, voiceId = 'zerfik_original', rate = '1.0' } = await req.json()
 
     if (!text || typeof text !== 'string' || !text.trim()) {

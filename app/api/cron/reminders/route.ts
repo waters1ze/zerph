@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runAllCronTasks, runMorningGreeting, runForceMorningGreeting, runEveningReview, runReminderCheck } from '@/lib/backend/cron-runner'
 import { postDailyMorningPostToChannel, postDailyPollToChannel, postDailyEveningPostToChannel, closeDailyPollAndNotifyAdmins } from '@/lib/backend/channel-poster'
 import { getAdminSecret, secretsMatch } from '@/lib/backend/auth'
+import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -64,7 +65,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Standard automated cron trigger (Vercel Cron / Internal Scheduler)
+    // Standard automated cron trigger (Vercel Cron / Internal Scheduler).
+    // When CRON_SECRET is configured, every trigger must present it (Vercel
+    // Cron sends it as `Authorization: Bearer $CRON_SECRET`). Without the
+    // env the request may arrive unauthenticated, so anonymous triggers are
+    // heavily throttled to prevent abuse-driven DB/CPU load.
+    if (process.env.CRON_SECRET) {
+      if (!isAuthorizedCronCall(req, searchParams)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    } else if (!isAuthorizedCronCall(req, searchParams)) {
+      if (!checkInMemoryRateLimit('cron:anonymous', 2, 60 * 1000)) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+      }
+    }
+
     await runAllCronTasks()
     return NextResponse.json({ ok: true, timestamp: new Date().toISOString() })
   } catch (err: unknown) {

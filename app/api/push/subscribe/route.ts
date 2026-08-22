@@ -16,13 +16,16 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
-    const body = await req.json()
-    const { subscription, endpoint, action, chatId: bodyChatId } = body
-
-    const targetChatId = authUser?.chatId || bodyChatId
-    if (!targetChatId) {
-      return NextResponse.json({ error: 'Chat ID required' }, { status: 400 })
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
     }
+    const body = await req.json()
+    const { subscription, endpoint, action } = body
+
+    // Identity comes strictly from the verified session: accepting a
+    // client-supplied chatId here would let anyone overwrite another
+    // user's push subscription or hijack their notification stream.
+    const targetChatId = authUser.chatId
 
     if (action === 'unsubscribe' && (endpoint || subscription?.endpoint)) {
       const ep = endpoint || subscription.endpoint

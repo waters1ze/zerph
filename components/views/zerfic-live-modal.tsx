@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X, Mic, Volume2, Sparkles, MessageSquare, Play, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getAuthHeaders } from '@/lib/store'
 
 export type ZerfikMood = 'normal' | 'thinking' | 'happy' | 'wink' | 'celebrate'
 export type ZerfikGesture = 'none' | 'chair_sit' | 'waving_arms' | 'jump_and_float' | 'spread'
@@ -135,7 +136,7 @@ export function ZerficLiveModal({ isOpen, onClose }: ZerficLiveModalProps) {
         // Synthesize and play voice
         const ttsRes = await fetch('/api/extensions/zerfic-live/tts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ text: data.reply, voiceId: selectedVoice }),
         })
 

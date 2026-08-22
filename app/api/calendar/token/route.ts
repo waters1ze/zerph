@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
-import { createServerSession } from '@/lib/backend/auth'
+import { createServerSession, getAuthenticatedUser } from '@/lib/backend/auth'
 import { generateEmailChatId } from '@/lib/backend/passwords'
 import { exchangeCodeForTokens, getRedirectUri, syncGoogleCalendar } from '@/lib/backend/google-calendar'
 
@@ -68,7 +68,18 @@ export async function GET(req: NextRequest) {
         },
       })
 
-      const isExplicitLink = targetChatId && !targetChatId.startsWith('guest_') && targetChatId !== 'web' && targetChatId !== 'web_oauth_login'
+      // `state` is client-controlled, so an explicit link to an existing
+      // account is only honored when the browser's verified session belongs
+      // to the same chatId — otherwise an attacker could link their own
+      // Google email to a victim's account and later log into it via OAuth.
+      const sessionUser = await getAuthenticatedUser(req).catch(() => null)
+      const isExplicitLink =
+        targetChatId &&
+        !targetChatId.startsWith('guest_') &&
+        targetChatId !== 'web' &&
+        targetChatId !== 'web_oauth_login' &&
+        sessionUser &&
+        String(sessionUser.chatId) === String(targetChatId)
 
       if (isExplicitLink) {
         // Active user is linking Google to their existing account

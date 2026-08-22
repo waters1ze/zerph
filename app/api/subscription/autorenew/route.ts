@@ -14,7 +14,12 @@ export async function GET(req: NextRequest) {
       prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } }),
     ])
 
-    const cardData = cardRow?.value ? JSON.parse(cardRow.value) : null
+    let cardData = cardRow?.value ? JSON.parse(cardRow.value) : null
+    // Never echo the full card/wallet number back to the client
+    if (cardData?.cardNumber) {
+      const n = String(cardData.cardNumber)
+      cardData = { ...cardData, cardNumber: n.length <= 4 ? n : n.slice(-4) }
+    }
     // Auto-renew defaults to false (OFF) as requested
     const autoRenew = arRow?.value ? arRow.value === 'true' : false
     const currentPlan = (chatRow?.plan || 'free').toLowerCase()
@@ -67,7 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       autoRenew: isAutoRenew,
-      cardData: cardPayload,
+      cardData: { ...cardPayload, cardNumber: cardPayload.cardNumber.length <= 4 ? cardPayload.cardNumber : cardPayload.cardNumber.slice(-4) },
     })
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

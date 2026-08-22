@@ -16,7 +16,7 @@ import crypto from 'crypto'
 import { prisma } from '@/lib/backend/prisma'
 import { activateUserSubscription } from '@/lib/backend/db'
 import { secretsMatch } from '@/lib/backend/auth'
-import { findPaymentProduct, PLAN_NAMES_RU, PlanId } from '@/lib/backend/plans'
+import { findPaymentProduct, PLAN_NAMES_RU, PLAN_CATALOG, PlanId } from '@/lib/backend/plans'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const YOOMONEY_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || process.env.YOOMONEY_CLIENT_SECRET || ''
@@ -44,9 +44,12 @@ async function consumeOperation(operationId: string): Promise<boolean> {
       data: { key: `yoomoney_op_${operationId}`, value: new Date().toISOString() },
     })
     return true
-  } catch {
-    // Unique key violation -> already processed
-    return false
+  } catch (err: any) {
+    // Only a unique-key violation means "already processed"; any other DB
+    // error must NOT swallow the payment (previously it silently did).
+    if (err?.code === 'P2002') return false
+    console.error('[YooMoney] consumeOperation DB error (allowing retry):', err)
+    return true
   }
 }
 
@@ -276,8 +279,33 @@ export async function POST(req: NextRequest) {
     const buyerChatId = product.buyerChatId || label.split('_')[0]
     const amtNum = parseFloat(amount)
 
-    if (isNaN(amtNum) || amtNum < product.minAmount) {
-      console.warn('[YooMoney] Amount below plan price', { label, amount, product: product.labelSuffix })
+    // Promo-discounted checkouts legitimately pay below the catalog price.
+    // Recompute the expected minimum from the buyer's ACTIVATED discount
+    // (re-validating that the promo is still active) instead of rejecting.
+    let expectedMin = product.minAmount
+    let appliedDiscountKey: string | null = null
+    const discountKey = `user_promo_discount_${buyerChatId}`
+    const discountRow = await prisma.config.findUnique({ where: { key: discountKey } }).catch(() => null)
+    if (!product.isGift && discountRow?.value) {
+      try {
+        const dInfo = JSON.parse(discountRow.value)
+        const promoRow = dInfo.code
+          ? await prisma.promoCode.findUnique({ where: { code: String(dInfo.code).toUpperCase() } })
+          : null
+        const promoStillValid = promoRow?.isActive && (!promoRow.expiresAt || new Date(promoRow.expiresAt) > new Date())
+        if (dInfo.discountPercent && promoStillValid && (dInfo.targetPlan === 'all' || dInfo.targetPlan === product.plan)) {
+          const catalogEntry = PLAN_CATALOG.find(c => c.id === product.plan)
+          const basePrice = (product.days === 365 ? catalogEntry?.priceYearly : catalogEntry?.priceMonthly)
+          if (basePrice) {
+            expectedMin = Math.max(1, Math.round(basePrice * (1 - Number(dInfo.discountPercent) / 100)))
+            appliedDiscountKey = discountKey
+          }
+        }
+      } catch {}
+    }
+
+    if (isNaN(amtNum) || amtNum < expectedMin) {
+      console.warn('[YooMoney] Amount below plan price', { label, amount, product: product.labelSuffix, expectedMin })
       return new Response('OK', { status: 200 })
     }
 
@@ -286,7 +314,7 @@ export async function POST(req: NextRequest) {
 
     if (product.isGift) {
       // ── Gift purchase: generate a unique promo code and send to buyer ──
-      const giftCode = `GIFT-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+      const giftCode = `GIFT-${crypto.randomBytes(5).toString('hex').toUpperCase()}`
       await prisma.promoCode.create({
         data: {
           code: giftCode,
@@ -341,6 +369,11 @@ export async function POST(req: NextRequest) {
     const success = await activateUserSubscription(actualChatId, product.days, product.plan as 'plus' | 'pro' | 'corp')
 
     if (success) {
+      // A discount is single-use: burn it once the paid subscription is live
+      if (appliedDiscountKey) {
+        await prisma.config.delete({ where: { key: appliedDiscountKey } }).catch(() => {})
+      }
+
       // Store payment record for analytics
       await prisma.config.create({
         data: {

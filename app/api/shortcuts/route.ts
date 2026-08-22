@@ -64,8 +64,12 @@ export function cleanShortcutsInput(raw: string): string {
   return cleaned.trim()
 }
 
-export function getSiriUserKey(chatId: number | string | bigint): string {
-  const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.JWT_SECRET || 'zerf_siri_secret_key_salt_2026'
+export function getSiriUserKey(chatId: number | string | bigint): string | null {
+  // The signing secret must be a real server-side secret. The old hardcoded
+  // fallback ('zerf_siri_secret_key_salt_2026') made every user's key
+  // publicly computable when env vars were missing — fail closed instead.
+  const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.JWT_SECRET || process.env.ADMIN_SECRET
+  if (!secret) return null
   return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
 }
 

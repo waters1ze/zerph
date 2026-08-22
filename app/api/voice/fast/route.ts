@@ -14,6 +14,11 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
+    if (!authUser) {
+      // This endpoint spends Groq tokens and writes tasks — anonymous access
+      // must be refused (previously a client-supplied chatId was trusted).
+      return NextResponse.json({ ok: false, error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    }
     const body = await req.json().catch(() => ({}))
     const text = (body?.text || body?.transcript || body?.query || '').trim()
 
@@ -91,8 +96,8 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
-    // 3. Save to database if user is authenticated or chatId is provided
-    const targetChatId = authUser?.chatId || body.chatId
+    // 3. Save to the authenticated user's database
+    const targetChatId = authUser.chatId
     let savedItem = null
     if (targetChatId) {
       try {

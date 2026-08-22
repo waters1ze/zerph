@@ -288,27 +288,35 @@ export async function getAuthenticatedUser(req: NextRequest): Promise<{ chatId: 
     }
   }
 
-  // 5. Registered Telegram Chat fallback
-  const clientChatId =
-    req.headers.get('x-chat-id') ||
-    new URL(req.url).searchParams.get('chatId') ||
-    new URL(req.url).searchParams.get('chat_id') ||
-    req.cookies.get('zerf_chat_id')?.value
+  // 5. Registered Telegram Chat fallback (LEGACY, disabled by default).
+  //    A bare `x-chat-id` is NOT a proof of identity: Telegram chat IDs are
+  //    semi-public, so trusting them alone lets anyone impersonate any user.
+  //    All current clients send a verifiable credential (Telegram initData
+  //    HMAC, DB session token, VK sign or the bot-issued HMAC token).
+  //    Set ALLOW_UNVERIFIED_CHATID_AUTH=true only if you must support
+  //    pre-token legacy browsers that logged in long ago.
+  if (process.env.ALLOW_UNVERIFIED_CHATID_AUTH === 'true') {
+    const clientChatId =
+      req.headers.get('x-chat-id') ||
+      new URL(req.url).searchParams.get('chatId') ||
+      new URL(req.url).searchParams.get('chat_id') ||
+      req.cookies.get('zerf_chat_id')?.value
 
-  if (clientChatId && /^\d+$/.test(clientChatId.trim())) {
-    const strId = clientChatId.trim()
-    try {
-      const user = await prisma.telegramChat.findUnique({
-        where: { chatId: BigInt(strId) },
-        select: { chatId: true },
-      })
-      if (user) {
-        return {
-          chatId: strId,
-          isRoot: ROOT_ADMIN_IDS.includes(strId),
+    if (clientChatId && /^\d+$/.test(clientChatId.trim())) {
+      const strId = clientChatId.trim()
+      try {
+        const user = await prisma.telegramChat.findUnique({
+          where: { chatId: BigInt(strId) },
+          select: { chatId: true },
+        })
+        if (user) {
+          return {
+            chatId: strId,
+            isRoot: ROOT_ADMIN_IDS.includes(strId),
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
   }
 
   return null

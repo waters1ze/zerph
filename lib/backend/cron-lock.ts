@@ -109,26 +109,36 @@ export async function markCronDoneToday(taskKey: string, todayStr: string): Prom
  */
 export async function tryAcquireCronLock(taskKey: string, todayStr: string): Promise<boolean> {
   const fullKey = `${taskKey}:${todayStr}`
+  const dbKey = `cron_last_${taskKey}_date`
 
   // In-memory quick check
   if (sentKeys.has(fullKey)) return false
   sentKeys.add(fullKey)
 
   try {
-    // Check DB first
-    const existing = await prisma.config.findUnique({
-      where: { key: `cron_last_${taskKey}_date` },
-    })
-    if (existing && existing.value === todayStr) {
-      return false
+    // Atomic acquisition: INSERT wins only for the very first caller today.
+    // A unique-key violation means another instance already holds the lock.
+    // (The previous find-then-upsert had a race window in which two
+    // concurrent lambdas could both acquire the lock and double-send.)
+    try {
+      await prisma.config.create({ data: { key: dbKey, value: todayStr } })
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        // Key exists: lock is already held for some date
+        const existing = await prisma.config.findUnique({ where: { key: dbKey } })
+        if (existing && existing.value === todayStr) {
+          return false
+        }
+        // Stale lock from a previous day — claim it, but only if untouched
+        const claimed = await prisma.config.updateMany({
+          where: { key: dbKey, value: { not: todayStr } },
+          data: { value: todayStr },
+        })
+        if (claimed.count === 0) return false
+      } else {
+        throw err
+      }
     }
-
-    // Persist lock immediately to prevent other concurrent serverless lambdas from running
-    await prisma.config.upsert({
-      where: { key: `cron_last_${taskKey}_date` },
-      update: { value: todayStr },
-      create: { key: `cron_last_${taskKey}_date`, value: todayStr },
-    })
 
     try {
       const fileLock = loadFileLock()

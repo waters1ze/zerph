@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser, createServerSession } from '@/lib/backend/auth'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
+import { checkInMemoryRateLimit, getClientIp } from '@/lib/backend/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -61,6 +62,11 @@ async function deleteAuthEntry(code: string): Promise<void> {
 // POST /api/cli/auth — Generate new pairing code for CLI
 export async function POST(req: NextRequest) {
   try {
+    // Each request persists a Config row — cap pairing-code generation per IP
+    if (!checkInMemoryRateLimit(`cliauth:start:${getClientIp(req)}`, 10, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Слишком много запросов кодов. Попробуйте позже.' }, { status: 429 })
+    }
+
     const { deviceName = 'Terminal Client' } = await req.json().catch(() => ({}))
 
     // Generate random 8-character human-friendly pairing code
@@ -94,6 +100,12 @@ export async function POST(req: NextRequest) {
 // GET /api/cli/auth?code=XXXX-XXXX — Poll pairing status from CLI
 export async function GET(req: NextRequest) {
   try {
+    // The CLI polls every 2s for up to 10 minutes (~300 requests) — the cap
+    // only kicks in for abusive loops, not for a normal pairing session.
+    if (!checkInMemoryRateLimit(`cliauth:poll:${getClientIp(req)}`, 400, 10 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many polling requests' }, { status: 429 })
+    }
+
     const { searchParams } = new URL(req.url)
     const code = searchParams.get('code')?.trim().toUpperCase()
 

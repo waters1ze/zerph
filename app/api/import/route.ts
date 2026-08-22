@@ -83,6 +83,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Не удалось распознать задачи в файле. Проверьте формат.' }, { status: 400 })
     }
 
+    // Cap the batch so a giant pasted file cannot hammer the DB row-by-row
+    if (parsedTasks.length > 500) {
+      parsedTasks = parsedTasks.slice(0, 500)
+    }
+
     // Insert parsed tasks into Prisma DB (batch insert)
     let createdCount = 0
     for (const t of parsedTasks) {

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
-import { PAYMENT_PRODUCTS, PlanId } from '@/lib/plans'
+import { PAYMENT_PRODUCTS, PLAN_CATALOG, PlanId } from '@/lib/plans'
 
-const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || process.env.NEXT_PUBLIC_YOOMONEY_WALLET || '4100118872584144'
+// Same wallet default as /api/subscription — a divergent fallback wallet
+// would silently send gift payments to an account whose webhook never fires
+// (paid gifts would be lost).
+const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || process.env.NEXT_PUBLIC_YOOMONEY_WALLET || '4100119573095433'
 
 export async function GET(req: NextRequest) {
   try {
@@ -75,8 +78,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Неверный тариф или период' }, { status: 400 })
     }
 
+    // Charge the full catalog price: gifts must never be cheaper than buying
+    // for yourself (minAmount previously undercut the catalog by ~5%).
+    const catalogEntry = PLAN_CATALOG.find(c => c.id === plan)
+    const amount = (days === 365 ? catalogEntry?.priceYearly : catalogEntry?.priceMonthly) ?? product.minAmount
+
     const label = `gift_${authUser.chatId}_${product.labelSuffix}`
-    const amount = product.minAmount
 
     // Form direct YooMoney payment URL
     const params = new URLSearchParams({
