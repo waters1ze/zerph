@@ -12,7 +12,9 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
  */
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin || 'https://zerph.vercel.app'
-  const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
+  const isLocal = origin.includes('localhost')
+  // Use registered canonical callback on production, or local callback on localhost
+  const redirectUri = isLocal ? `${origin.replace(/\/$/, '')}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'
   
   const authUser = await getAuthenticatedUser(req)
   const cookieCid = req.cookies.get('zerf_chat_id')?.value

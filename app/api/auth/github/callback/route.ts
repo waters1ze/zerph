@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
-    const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
+    const isLocal = origin.includes('localhost')
+    const redirectUri = isLocal ? `${origin.replace(/\/$/, '')}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'
 
     // Exchange code for access token
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
@@ -114,13 +115,15 @@ export async function GET(req: NextRequest) {
         req.headers.get('user-agent') || undefined
       )
 
-      const res = NextResponse.redirect(`${origin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+      const returnOrigin = decodedState?.origin || origin
+      const res = NextResponse.redirect(`${returnOrigin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
       res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
       res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
       return res
     }
 
-    return NextResponse.redirect(`${origin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+    const returnOrigin = decodedState?.origin || origin
+    return NextResponse.redirect(`${returnOrigin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
   } catch (err: any) {
     console.error('GitHub OAuth error:', err)
     return NextResponse.redirect(`${origin}/?github_auth_error=${encodeURIComponent(err.message || 'unknown')}#settings`)
