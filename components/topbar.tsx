@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn, calculateStreakInfo } from '@/lib/utils'
-import { useApp, isUserAuthenticated } from '@/lib/store'
+import { useApp, isUserAuthenticated, getAuthHeaders } from '@/lib/store'
 import { NotificationsPanel } from '@/components/notifications-panel'
 import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw, Lock } from 'lucide-react'
 import { format } from 'date-fns'
@@ -190,6 +190,8 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
                 dispatch({ type: 'SELECT_TASK', id: t.id })
               }
             })
+            // Immediately trigger backend reminder dispatcher to deliver Telegram bot push and WebPush!
+            fetch('/api/reminders/check', { headers: getAuthHeaders() }).catch(() => {})
           }
         }
       })

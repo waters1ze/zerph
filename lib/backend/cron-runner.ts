@@ -51,6 +51,12 @@ function isGoalForUser(g: any, chatId: number): boolean {
 }
 
 async function sendTelegramMessage(chatId: number | string | bigint, text: string, replyMarkup?: any): Promise<boolean> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN
+  if (!botToken) {
+    console.warn('[Cron] TELEGRAM_BOT_TOKEN is not configured, skipping Telegram message')
+    return false
+  }
+
   let delivered = false
   try {
     const payload: Record<string, any> = {
@@ -60,7 +66,7 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
     }
     if (replyMarkup) payload.reply_markup = replyMarkup
 
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -71,7 +77,7 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
     } else {
       // Retry without Markdown formatting in case entity parsing failed
       payload.parse_mode = undefined
-      const retryRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      const retryRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -130,28 +136,12 @@ export async function runReminderCheck() {
     const allTasks = await getAllTasks()
     if (!allTasks.length) return
 
-    // Per-run cache of daily reminder quota per owner (free plan: 5/day)
-    const reminderQuota = new Map<string, { used: number; max: number }>()
-    const getQuota = async (chatId: number): Promise<{ used: number; max: number } | null> => {
-      if (!chatId) return null
-      const key = String(chatId)
-      let q = reminderQuota.get(key)
-      if (!q) {
-        try {
-          const limits = await getUserUsageAndLimits(chatId)
-          q = { used: await getDailyCount(COUNTERS.reminder, key), max: PLANS[limits.plan].maxActiveReminders }
-        } catch {
-          q = { used: 0, max: PLANS.free.maxActiveReminders }
-        }
-        reminderQuota.set(key, q)
-      }
-      return q
-    }
-
     for (const task of allTasks) {
       if (task.status === 'done' || task.status === 'draft') continue
       if (task.reminderSent) continue
-      if (!task.dueDate || task.dueDate !== todayStr) continue
+      
+      const taskDate = task.dueDate || todayStr
+      if (taskDate !== todayStr) continue
       if (!task.dueTime) continue
 
       const [dueHStr, dueMStr] = task.dueTime.split(':')
@@ -188,7 +178,7 @@ export async function runReminderCheck() {
           targetSentCount = 0 // Does not count towards repeat quota
         }
       }
-      // STAGE 2: Exact due time reminder (at 00:00 / 0 min remaining or within -1 min)
+      // STAGE 2: Exact due time reminder (at 00:00 / 0 min remaining or within -2 min)
       else if (actualDiffMin <= 0 && actualDiffMin >= -2) {
         if (sentCount === 0 && !isReminderInCooldown(task.id, 'due', 10 * 60 * 1000)) {
           stageKey = 'due'
@@ -216,14 +206,6 @@ export async function runReminderCheck() {
       }
 
       if (shouldFire) {
-        // Daily reminder cap for the task owner (free tier)
-        if (ownerChatId) {
-          const quota = await getQuota(ownerChatId)
-          if (quota && quota.used >= quota.max) {
-            continue
-          }
-        }
-
         // Strict cooldown per task and distinct stageKey
         markReminderSent(task.id, stageKey as any)
 
@@ -284,13 +266,9 @@ export async function runReminderCheck() {
             timestamp: Date.now(),
           })
 
-          // Count the pushed reminder against the daily quota
+          // Count the pushed reminder against the daily counter
           if (ownerChatId) {
-            const quota = await getQuota(ownerChatId)
-            if (quota) {
-              quota.used += 1
-              incrementDailyCount(COUNTERS.reminder, String(ownerChatId)).catch(() => {})
-            }
+            incrementDailyCount(COUNTERS.reminder, String(ownerChatId)).catch(() => {})
           }
         }
 

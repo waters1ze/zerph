@@ -1135,10 +1135,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     connectSse()
 
-    // 15s Background Live Sync Interval (Ensures phone and PC sync even if SSE is sleeping on mobile)
+    // 15s Background Live Sync & Reminder Interval (Ensures Telegram push and sync arrive even on mobile)
     const liveSyncInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         syncBackendData(false)
+        fetch('/api/reminders/check', { headers: getAuthHeaders() }).catch(() => {})
       }
     }, 15000)
 
