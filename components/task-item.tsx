@@ -7,7 +7,7 @@ import { TaskCheckbox } from './task-checkbox'
 import { PriorityBadge } from './priority-badge'
 import { useApp } from '@/lib/store'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
-import type { Task } from '@/lib/types'
+import type { Task, Friend } from '@/lib/types'
 import { CalendarDays, Users, Sparkles, ChevronRight, Trash2, Clock } from 'lucide-react'
 import { format, isToday, isPast, parseISO } from 'date-fns'
 
@@ -202,15 +202,58 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
               </span>
             )}
 
-            {task.isShared && (
-              <span className={cn(
-                "inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md",
-                "bg-muted/60 text-foreground/80 border border-border/60"
-              )}>
-                <Users className="w-3 h-3 text-muted-foreground" />
-                {(task.tags?.includes('общая') || task.tags?.includes('совместная')) ? '▪ Общая задача' : '▫ Порученная задача'}
-              </span>
-            )}
+            {/* Friend or Group Badge */}
+            {(() => {
+              const authorFriend = task.authorChatId && String(task.authorChatId) !== String(task.ownerChatId)
+                ? state.friends.find(f => f.chatId === String(task.authorChatId) || f.id === String(task.authorChatId))
+                : null
+              const assigneeFriends = (task.assignees || [])
+                .map(aId => state.friends.find(f => f.id === aId || f.chatId === aId))
+                .filter((f): f is Friend => Boolean(f))
+              const group = (state.friendGroups || []).find(g =>
+                (g.memberIds || []).some(mId => (task.assignees || []).includes(mId)) ||
+                (task.tags || []).some(tag => tag.toLowerCase() === g.name.toLowerCase())
+              )
+
+              if (group) {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-primary">
+                    <span>{group.emoji || '👥'}</span>
+                    <span>{group.name}</span>
+                  </span>
+                )
+              }
+
+              if (authorFriend) {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-muted/60 text-foreground/80 border border-border/60">
+                    <Users className="w-3 h-3 text-primary" />
+                    <span>От: {authorFriend.name}</span>
+                  </span>
+                )
+              }
+
+              if (assigneeFriends.length > 0) {
+                const names = assigneeFriends.map(f => f.name).join(', ')
+                return (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-muted/60 text-foreground/80 border border-border/60">
+                    <Users className="w-3 h-3 text-primary" />
+                    <span>С: {names}</span>
+                  </span>
+                )
+              }
+
+              if (task.isShared) {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-muted/60 text-foreground/80 border border-border/60">
+                    <Users className="w-3 h-3 text-muted-foreground" />
+                    <span>Общая задача</span>
+                  </span>
+                )
+              }
+
+              return null
+            })()}
 
             {task.aiGenerated && (
               <span className="inline-flex items-center gap-1 text-[11px] text-primary/70">

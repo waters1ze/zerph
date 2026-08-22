@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react'
 import type {
-  Task, Goal, Project, Note, Friend, ChatMessage,
+  Task, Goal, Project, Note, Friend, FriendGroup, ChatMessage,
   UserSettings, View, Priority, TaskStatus, GoalStatus, Habit, ScheduleGroup
 } from './types'
 import {
@@ -19,6 +19,7 @@ const SEED_GOALS: Goal[] = []
 const SEED_PROJECTS: Project[] = []
 const SEED_NOTES: Note[] = []
 const SEED_FRIENDS: Friend[] = []
+const SEED_FRIEND_GROUPS: FriendGroup[] = []
 const SEED_HABITS: Habit[] = []
 
 const SEED_CHAT: ChatMessage[] = [
@@ -57,6 +58,7 @@ interface AppState {
   projects: Project[]
   notes: Note[]
   friends: Friend[]
+  friendGroups: FriendGroup[]
   habits: Habit[]
   scheduleGroups: ScheduleGroup[]
   chat: ChatMessage[]
@@ -102,6 +104,10 @@ type Action =
   | { type: 'UPDATE_SCHEDULE_GROUP'; id: string; updates: Partial<ScheduleGroup> }
   | { type: 'DELETE_SCHEDULE_GROUP'; id: string }
   | { type: 'SET_SCHEDULE_GROUPS'; groups: ScheduleGroup[] }
+  | { type: 'ADD_FRIEND_GROUP'; group: FriendGroup }
+  | { type: 'UPDATE_FRIEND_GROUP'; id: string; updates: Partial<FriendGroup> }
+  | { type: 'DELETE_FRIEND_GROUP'; id: string }
+  | { type: 'SET_FRIEND_GROUPS'; groups: FriendGroup[] }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
   | { type: 'UPDATE_SETTINGS'; updates: Partial<UserSettings> }
   | { type: 'ADD_FRIEND'; friend: Friend }
@@ -220,6 +226,25 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, scheduleGroups: state.scheduleGroups.filter(g => g.id !== action.id) }
     case 'SET_SCHEDULE_GROUPS':
       return { ...state, scheduleGroups: action.groups }
+    case 'ADD_FRIEND_GROUP':
+      return {
+        ...state,
+        friendGroups: [action.group, ...(state.friendGroups || []).filter(g => g.id !== action.group.id)]
+      }
+    case 'UPDATE_FRIEND_GROUP':
+      return {
+        ...state,
+        friendGroups: (state.friendGroups || []).map(g =>
+          g.id === action.id ? { ...g, ...action.updates, updatedAt: new Date().toISOString() } : g
+        )
+      }
+    case 'DELETE_FRIEND_GROUP':
+      return {
+        ...state,
+        friendGroups: (state.friendGroups || []).filter(g => g.id !== action.id)
+      }
+    case 'SET_FRIEND_GROUPS':
+      return { ...state, friendGroups: action.groups }
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chat: [...state.chat, action.message] }
     case 'UPDATE_SETTINGS': {
@@ -243,6 +268,7 @@ const INITIAL_STATE: AppState = {
   projects: SEED_PROJECTS,
   notes: SEED_NOTES,
   friends: SEED_FRIENDS,
+  friendGroups: [],
   habits: SEED_HABITS,
   scheduleGroups: [],
   chat: SEED_CHAT,
@@ -573,6 +599,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       recentlyDeletedIdsRef.current.set(action.id, Date.now())
       // Persist friend removal server-side so background sync doesn't resurrect them
       fetch(`/api/friends?id=${encodeURIComponent(action.id)}`, { method: 'DELETE', headers }).catch(() => {})
+    } else if (action.type === 'ADD_FRIEND_GROUP' || action.type === 'UPDATE_FRIEND_GROUP') {
+      const groupData = action.type === 'ADD_FRIEND_GROUP' ? action.group : { id: action.id, ...action.updates }
+      fetch('/api/friends/groups', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ group: groupData }),
+      }).catch(() => {})
+    } else if (action.type === 'DELETE_FRIEND_GROUP') {
+      fetch(`/api/friends/groups?id=${encodeURIComponent(action.id)}`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'TOGGLE_TASK') {
       const target = stateRef.current.tasks.find(t => t.id === action.id)
       const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
@@ -863,6 +898,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(data.scheduleGroups) && data.scheduleGroups.length > 0) {
             loadStateUpdates.scheduleGroups = data.scheduleGroups
             try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(data.scheduleGroups)) } catch {}
+          }
+          if (Array.isArray(data.friendGroups)) {
+            loadStateUpdates.friendGroups = data.friendGroups
+            try { localStorage.setItem('zerf_friend_groups', JSON.stringify(data.friendGroups)) } catch {}
           }
           if (Array.isArray(data.chat) && data.chat.length > 0) {
             loadStateUpdates.chat = data.chat

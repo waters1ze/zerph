@@ -10,6 +10,7 @@ import {
   Clock, Calendar, CalendarDays, Lock, ShieldCheck, Plus, Flame, CheckCircle2, Cake, Shield
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FriendGroupsSection } from '@/components/friends/friend-groups-section'
 import type { Friend } from '@/lib/types'
 
 const STATUS_CONFIG = {
@@ -576,6 +577,11 @@ export function FriendsView() {
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
               <span>{copied ? 'Скопировано!' : 'Копировать'}</span>
             </button>
+          </div>
+
+          {/* GROUPS WITH FRIENDS SECTION */}
+          <div className="p-4 rounded-2xl bg-card border border-border space-y-3 shadow-xs">
+            <FriendGroupsSection />
           </div>
 
           {/* PENDING INCOMING FRIEND REQUESTS SECTION */}

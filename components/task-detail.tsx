@@ -10,9 +10,9 @@ import { format, parseISO } from 'date-fns'
 import {
   X, Tag, FolderKanban, Sparkles,
   Trash2, ChevronDown, Target, Edit3, Check,
-  Clock, Bell, Mic, Flame, Users
+  Clock, Bell, Mic, Flame, Users, ArrowRight, Layers, UserCheck
 } from 'lucide-react'
-import type { Priority, TaskStatus } from '@/lib/types'
+import type { Priority, TaskStatus, Friend, FriendGroup } from '@/lib/types'
 import { CustomSelect, type SelectOption } from '@/components/ui/custom-select'
 import { DatePicker } from '@/components/ui/date-picker'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -173,22 +173,151 @@ export function TaskDetail() {
             </div>
           </div>
 
-          {/* Author */}
-          {task.authorChatId && String(task.authorChatId) !== String(task.ownerChatId) && (
-            <div className="flex flex-col gap-1.5 col-span-2">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">АВТОР (ПОРУЧИЛ ЗАДАЧУ)</p>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border border-border">
-                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                  <span className="text-[9px] font-bold text-primary">
-                    {(state.friends.find(f => f.chatId === String(task.authorChatId))?.name || 'Вы')[0].toUpperCase()}
-                  </span>
+          {/* Author / Assigned Friend */}
+          {task.authorChatId && String(task.authorChatId) !== String(task.ownerChatId) && (() => {
+            const authorFriend = state.friends.find(f => f.chatId === String(task.authorChatId) || f.id === String(task.authorChatId))
+            const authorName = authorFriend?.name || (authorFriend?.username ? `@${authorFriend.username.replace(/^@/, '')}` : 'Пользователь')
+            return (
+              <div className="flex flex-col gap-1.5 col-span-2">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">АВТОР (ПОРУЧИЛ ЗАДАЧУ)</p>
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-muted/40 border border-border">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold text-primary">
+                        {authorName[0]?.toUpperCase() || 'U'}
+                      </span>
+                    </div>
+                    <span className="text-xs text-foreground font-semibold truncate">
+                      {authorName}
+                    </span>
+                  </div>
+                  {authorFriend && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          localStorage.setItem('zerf_task_filter_friend', authorFriend.chatId || authorFriend.id)
+                          localStorage.setItem('zerf_task_filter_group', 'all')
+                          window.dispatchEvent(new CustomEvent('zerf_filter_tasks', { detail: { friendId: authorFriend.chatId || authorFriend.id, groupId: 'all' } }))
+                        } catch {}
+                        dispatch({ type: 'SELECT_TASK', id: null })
+                        dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-primary-foreground text-primary text-[11px] font-semibold transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <span>Все задачи</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
-                <span className="text-xs text-foreground font-medium">
-                  {state.friends.find(f => f.chatId === String(task.authorChatId))?.name || 'Вы'}
-                </span>
               </div>
-            </div>
-          )}
+            )
+          })()}
+
+          {/* Assigned Friends (Исполнители) */}
+          {task.assignees && task.assignees.length > 0 && (() => {
+            const assignedFriends = task.assignees
+              .map(aId => state.friends.find(f => f.id === aId || f.chatId === aId))
+              .filter(Boolean) as Friend[]
+
+            if (assignedFriends.length === 0) return null
+
+            return (
+              <div className="flex flex-col gap-1.5 col-span-2">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">УЧАСТНИКИ И ИСПОЛНИТЕЛИ</p>
+                <div className="space-y-1.5">
+                  {assignedFriends.map(friend => (
+                    <div
+                      key={friend.id}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-muted/40 border border-border"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-primary">
+                            {(friend.name || 'U')[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs text-foreground font-semibold truncate block">
+                            {friend.name}
+                          </span>
+                          {friend.username && (
+                            <span className="text-[10px] text-muted-foreground truncate block">
+                              @{friend.username.replace(/^@/, '')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            localStorage.setItem('zerf_task_filter_friend', friend.chatId || friend.id)
+                            localStorage.setItem('zerf_task_filter_group', 'all')
+                            window.dispatchEvent(new CustomEvent('zerf_filter_tasks', { detail: { friendId: friend.chatId || friend.id, groupId: 'all' } }))
+                          } catch {}
+                          dispatch({ type: 'SELECT_TASK', id: null })
+                          dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-muted hover:bg-primary hover:text-primary-foreground text-foreground text-[11px] font-semibold transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <span>Задачи с ним</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Related Friend Group */}
+          {(() => {
+            const relatedGroup = (state.friendGroups || []).find(g =>
+              (g.memberIds || []).some(mId => (task.assignees || []).includes(mId)) ||
+              (task.tags || []).some(t => t.toLowerCase() === g.name.toLowerCase()) ||
+              task.title.toLowerCase().includes(g.name.toLowerCase())
+            )
+
+            if (!relatedGroup) return null
+
+            return (
+              <div className="flex flex-col gap-1.5 col-span-2">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ГРУППА ДРУЗЕЙ</p>
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-card border border-border">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base shrink-0">{relatedGroup.emoji || '👥'}</span>
+                    <div className="min-w-0">
+                      <span className="text-xs text-foreground font-semibold truncate block">
+                        {relatedGroup.name}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground truncate block">
+                        {(relatedGroup.memberIds || []).length} участников
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        localStorage.setItem('zerf_task_filter_group', relatedGroup.id)
+                        localStorage.setItem('zerf_task_filter_friend', 'all')
+                        window.dispatchEvent(new CustomEvent('zerf_filter_tasks', { detail: { groupId: relatedGroup.id, friendId: 'all' } }))
+                      } catch {}
+                      dispatch({ type: 'SELECT_TASK', id: null })
+                      dispatch({ type: 'SET_VIEW', view: 'tasks' })
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                  >
+                    <span>Задачи группы</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Due date */}
           <div className="flex flex-col gap-1.5">

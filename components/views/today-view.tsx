@@ -6,6 +6,7 @@ import { TaskItem } from '@/components/task-item'
 import { HabitsWidget } from '@/components/habits-widget'
 import { ScheduleWidget } from '@/components/schedule-widget'
 import { ScheduleGroupModal } from '@/components/schedule-group-modal'
+import { FocusTimerWidget } from '@/components/focus-timer-widget'
 import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X, Settings2 } from 'lucide-react'
 import { format, parseISO, isToday } from 'date-fns'
@@ -632,38 +633,7 @@ export function TodayView() {
       {/* ── Right Sidebar Desktop Dashboard Panel ── */}
       <div className="hidden lg:flex lg:col-span-5 xl:col-span-4 flex-col gap-5 sticky top-2">
         {/* Quick Pomodoro Focus Widget */}
-        <div className="p-5 rounded-2xl bg-card border border-border flex flex-col gap-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center text-primary">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[13px] font-bold text-foreground leading-tight">Фокус-сессия</p>
-                <p className="text-[11px] text-muted-foreground">Таймер глубокой работы</p>
-              </div>
-            </div>
-            <button
-              onClick={() => dispatch({ type: 'SET_VIEW', view: 'clock' })}
-              className="text-[11px] font-semibold text-primary hover:underline"
-            >
-              Все таймеры →
-            </button>
-          </div>
-
-          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted/40 border border-border/60">
-            <p className="text-3xl font-mono font-extrabold text-foreground tracking-wider mb-1">25:00</p>
-            <p className="text-[11px] text-muted-foreground">Интервал продуктивности Помодоро</p>
-            <div className="flex items-center gap-2 mt-3 w-full">
-              <button
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'clock' })}
-                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity text-center"
-              >
-                ▶ Запустить фокус
-              </button>
-            </div>
-          </div>
-        </div>
+        <FocusTimerWidget />
 
         {/* Active Goals Snapshot */}
         {state.goals.length > 0 && (

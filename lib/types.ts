@@ -166,6 +166,17 @@ export interface Friend {
   birthday?: string | null
 }
 
+export interface FriendGroup {
+  id: string
+  name: string
+  emoji?: string
+  color?: string
+  description?: string
+  memberIds: string[]
+  createdAt: string
+  updatedAt?: string
+}
+
 export interface SharedTask extends Task {
   createdBy: string
   collaborators: string[]

@@ -1,14 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { cn, isTaskVisibleInMainList, groupTasksByDate } from '@/lib/utils'
-import type { Priority, TaskStatus, ScheduleGroup } from '@/lib/types'
+import type { Priority, TaskStatus, ScheduleGroup, Friend, FriendGroup } from '@/lib/types'
 import { 
   CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, 
-  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock
+  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock, Layers, X
 } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { ScheduleWidget } from '@/components/schedule-widget'
@@ -24,8 +24,28 @@ export function TasksView() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [sortKey, setSortKey] = useState<SortKey>('dueDate')
   const [filterProject, setFilterProject] = useState<string>('all')
+  const [filterFriend, setFilterFriend] = useState<string>('all')
+  const [filterGroup, setFilterGroup] = useState<string>('all')
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
+
+  // Listen to navigation events from task details / friend groups
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedFriend = localStorage.getItem('zerf_task_filter_friend')
+      const savedGroup = localStorage.getItem('zerf_task_filter_group')
+      if (savedFriend) setFilterFriend(savedFriend)
+      if (savedGroup) setFilterGroup(savedGroup)
+
+      const handleFilterEvent = (e: any) => {
+        if (e.detail?.friendId !== undefined) setFilterFriend(e.detail.friendId)
+        if (e.detail?.groupId !== undefined) setFilterGroup(e.detail.groupId)
+      }
+
+      window.addEventListener('zerf_filter_tasks', handleFilterEvent)
+      return () => window.removeEventListener('zerf_filter_tasks', handleFilterEvent)
+    }
+  }, [])
 
   const FIXED_TAGS = [
     { id: 'all', label: 'Все' },
@@ -68,6 +88,34 @@ export function TasksView() {
       return t.status === filterStatus
     })
     .filter(t => filterProject === 'all' || t.projectId === filterProject)
+    .filter(t => {
+      if (filterFriend === 'all') return true
+      const friend = state.friends.find(f => f.id === filterFriend || f.chatId === filterFriend)
+      const friendId = friend?.id || filterFriend
+      const friendCid = friend?.chatId || filterFriend
+      const uname = friend?.username ? friend.username.replace(/^@/, '').toLowerCase() : ''
+      const fname = friend?.name ? friend.name.toLowerCase() : ''
+
+      const isAssignee = (t.assignees || []).some(a => a === friendId || a === friendCid)
+      const isAuthor = String(t.authorChatId) === friendCid || String(t.authorChatId) === friendId
+      const isTarget = Boolean(uname && t.targetContact && t.targetContact.replace(/^@/, '').toLowerCase() === uname)
+      const isRecip = Boolean(fname && t.recipientName && t.recipientName.toLowerCase() === fname)
+
+      return isAssignee || isAuthor || isTarget || isRecip
+    })
+    .filter(t => {
+      if (filterGroup === 'all') return true
+      const group = (state.friendGroups || []).find(g => g.id === filterGroup)
+      if (!group) return true
+
+      const memberIds = group.memberIds || []
+      const hasMemberAssignee = (t.assignees || []).some(a => memberIds.includes(a))
+      const hasGroupTag = (t.tags || []).some(tag => tag.toLowerCase() === group.name.toLowerCase())
+      const inTitle = t.title.toLowerCase().includes(group.name.toLowerCase())
+      const isProjectGroup = t.projectId === group.id
+
+      return hasMemberAssignee || hasGroupTag || inTitle || isProjectGroup
+    })
     .filter(matchesTag)
     .filter(t => {
       if (!state.searchQuery) return true
@@ -175,6 +223,7 @@ export function TasksView() {
 
         {/* Filters row */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Project selector */}
           <CustomSelect
             value={filterProject}
             onChange={setFilterProject}
@@ -183,8 +232,49 @@ export function TasksView() {
               ...state.projects.map(p => ({ value: p.id, label: p.title, color: p.color })),
             ]}
             placeholder="Все проекты"
-            className="w-40"
+            className="w-36 sm:w-40"
           />
+
+          {/* Friend selector */}
+          <CustomSelect
+            value={filterFriend}
+            onChange={v => {
+              setFilterFriend(v)
+              if (v !== 'all') setFilterGroup('all')
+              try { localStorage.setItem('zerf_task_filter_friend', v) } catch {}
+            }}
+            options={[
+              { value: 'all', label: '👤 Все друзья' },
+              ...state.friends.map(f => ({
+                value: f.chatId || f.id,
+                label: f.name || f.username || `Друг #${f.id.slice(-4)}`,
+              })),
+            ]}
+            placeholder="Фильтр по другу"
+            className="w-36 sm:w-40"
+          />
+
+          {/* Group selector */}
+          <CustomSelect
+            value={filterGroup}
+            onChange={v => {
+              setFilterGroup(v)
+              if (v !== 'all') setFilterFriend('all')
+              try { localStorage.setItem('zerf_task_filter_group', v) } catch {}
+            }}
+            options={[
+              { value: 'all', label: '👥 Все группы' },
+              ...(state.friendGroups || []).map(g => ({
+                value: g.id,
+                label: `${g.emoji || '👥'} ${g.name}`,
+                color: g.color,
+              })),
+            ]}
+            placeholder="Фильтр по группе"
+            className="w-36 sm:w-40"
+          />
+
+          {/* Sort selector */}
           <CustomSelect
             value={sortKey}
             onChange={v => setSortKey(v as SortKey)}
@@ -194,9 +284,40 @@ export function TasksView() {
               { value: 'createdAt', label: 'По созданию' },
             ]}
             placeholder="Сортировка"
-            className="w-36 ml-auto"
+            className="w-32 sm:w-36 ml-auto"
           />
         </div>
+
+        {/* Active Friend / Group Filter Indicator Banner */}
+        {(filterFriend !== 'all' || filterGroup !== 'all') && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-semibold text-primary truncate">
+                {filterFriend !== 'all'
+                  ? `Показаны задачи с: ${state.friends.find(f => f.id === filterFriend || f.chatId === filterFriend)?.name || 'другом'}`
+                  : `Показаны задачи группы: ${(state.friendGroups || []).find(g => g.id === filterGroup)?.name || 'группы'}`
+                }
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setFilterFriend('all')
+                setFilterGroup('all')
+                try {
+                  localStorage.setItem('zerf_task_filter_friend', 'all')
+                  localStorage.setItem('zerf_task_filter_group', 'all')
+                } catch {}
+              }}
+              className="text-[11px] font-bold text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 ml-2"
+            >
+              Сбросить фильтр ✕
+            </button>
+          </motion.div>
+        )}
 
         {/* Task list grouped by dates */}
         <AnimatePresence mode="popLayout">

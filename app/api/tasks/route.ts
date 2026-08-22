@@ -62,13 +62,14 @@ export async function GET(req: NextRequest) {
       runAllCronTasks().catch(e => console.error('[Background Cron Error]:', e))
 
       const cid = String(ownerChatId)
-      const [tasks, goals, notes, friends, habits, groupsRow, chatRow, zerficRow, instExts, enExts] = await Promise.all([
+      const [tasks, goals, notes, friends, habits, groupsRow, friendGroupsRow, chatRow, zerficRow, instExts, enExts] = await Promise.all([
         getAllTasks(ownerChatId),
         getAllGoals(ownerChatId),
         getAllNotes(ownerChatId),
         getFriends(ownerChatId),
         getAllHabits(ownerChatId),
         prisma.config.findUnique({ where: { key: `user_schedule_groups_${cid}` } }),
+        prisma.config.findUnique({ where: { key: `friend_groups_${cid}` } }),
         prisma.config.findUnique({ where: { key: `user_chat_history_${cid}` } }),
         prisma.config.findUnique({ where: { key: `user_zerfic_live_history_${cid}` } }),
         getUserInstalledExtensions(cid),
@@ -76,9 +77,11 @@ export async function GET(req: NextRequest) {
       ])
 
       let scheduleGroups: any[] = []
+      let friendGroups: any[] = []
       let chat: any[] = []
       let zerficHistory: any[] = []
       try { if (groupsRow?.value) scheduleGroups = JSON.parse(groupsRow.value) } catch {}
+      try { if (friendGroupsRow?.value) friendGroups = JSON.parse(friendGroupsRow.value) } catch {}
       try { if (chatRow?.value) chat = JSON.parse(chatRow.value) } catch {}
       try { if (zerficRow?.value) zerficHistory = JSON.parse(zerficRow.value) } catch {}
 
@@ -89,6 +92,7 @@ export async function GET(req: NextRequest) {
         friends,
         habits,
         scheduleGroups,
+        friendGroups,
         chat,
         zerficHistory,
         installedExtensions: instExts,
