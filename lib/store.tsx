@@ -81,7 +81,7 @@ type Action =
   | { type: 'TOGGLE_CHAT' }
   | { type: 'TOGGLE_DETAIL'; open?: boolean }
   | { type: 'SET_SEARCH'; query: string }
-  | { type: 'TOGGLE_TASK'; id: string }
+  | { type: 'TOGGLE_TASK'; id: string; status?: 'todo' | 'done' | 'inprogress' }
   | { type: 'ADD_TASK'; task: Task; skipSync?: boolean }
   | { type: 'UPDATE_TASK'; id: string; updates: Partial<Task> }
   | { type: 'DELETE_TASK'; id: string }
@@ -137,16 +137,16 @@ function reducer(state: AppState, action: Action): AppState {
       const now = new Date().toISOString()
       return {
         ...state,
-        tasks: state.tasks.map(t =>
-          t.id === action.id
-            ? {
-                ...t,
-                status: t.status === 'done' ? 'todo' : 'done',
-                completedAt: t.status !== 'done' ? now : undefined,
-                updatedAt: now,
-              }
-            : t
-        ),
+        tasks: state.tasks.map(t => {
+          if (t.id !== action.id) return t
+          const nextStatus = action.status || (t.status === 'done' ? 'todo' : 'done')
+          return {
+            ...t,
+            status: nextStatus,
+            completedAt: nextStatus === 'done' ? now : undefined,
+            updatedAt: now,
+          }
+        }),
       }
     }
     case 'ADD_TASK': {
@@ -165,7 +165,14 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         tasks: state.tasks.map(t =>
-          t.id === action.id ? { ...t, ...action.updates, updatedAt: new Date().toISOString() } : t
+          t.id === action.id ? {
+            ...t,
+            ...action.updates,
+            completedAt: action.updates.status !== undefined
+              ? (action.updates.status === 'done' ? (action.updates.completedAt || new Date().toISOString()) : undefined)
+              : (action.updates.completedAt !== undefined ? action.updates.completedAt : t.completedAt),
+            updatedAt: new Date().toISOString(),
+          } : t
         ),
       }
     case 'DELETE_TASK':
@@ -612,12 +619,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else if (action.type === 'DELETE_FRIEND_GROUP') {
       fetch(`/api/friends/groups?id=${encodeURIComponent(action.id)}`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'TOGGLE_TASK') {
-      const target = stateRef.current.tasks.find(t => t.id === action.id)
-      const nextStatus = target ? (target.status === 'done' ? 'todo' : 'done') : 'done'
+      const target = state.tasks.find(t => t.id === action.id)
+      const nextStatus = action.status || (target ? (target.status === 'done' ? 'todo' : 'done') : 'done')
       fetch('/api/tasks', {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ id: action.id, status: nextStatus }),
+        body: JSON.stringify({
+          id: action.id,
+          status: nextStatus,
+          completedAt: nextStatus === 'done' ? new Date().toISOString() : null,
+        }),
       }).catch(() => {})
     } else if (action.type === 'UPDATE_TASK') {
       fetch('/api/tasks', {
