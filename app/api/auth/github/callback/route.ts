@@ -11,8 +11,8 @@ const COOKIE_OPTS = {
   secure: process.env.NODE_ENV === 'production',
 }
 
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li34b9d1469e88aa'
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'a1b2c3d4e5f678901234567890abcdef12345678'
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'acb04b9e1b10d79b208603feebce151f203d0e8e'
 
 export async function GET(req: NextRequest) {
   const host = req.headers.get('host') || 'zerph.vercel.app'
