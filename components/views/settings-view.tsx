@@ -112,6 +112,12 @@ const TEXT_STEPS: { value: TextScaleStep; label: string }[] = [
 
 type SettingsTab = 'account' | 'integrations' | 'subscription' | 'ai' | 'apikeys' | 'teams' | 'notifications' | 'focus' | 'automation' | 'cli' | 'appearance' | 'sidebar' | 'extensions' | 'pwa' | 'data'
 
+const VALID_SETTINGS_TABS: readonly SettingsTab[] = [
+  'account', 'subscription', 'ai', 'apikeys', 'teams',
+  'integrations', 'notifications', 'focus', 'automation', 'cli',
+  'appearance', 'sidebar', 'extensions', 'pwa', 'data'
+]
+
 export function SettingsView() {
   const { state, dispatch, syncData } = useApp()
   const { settings, update } = useSettings()
@@ -122,11 +128,11 @@ export function SettingsView() {
       try {
         const params = new URLSearchParams(window.location.search)
         const tabParam = params.get('tab') || params.get('section')
-        if (tabParam && SECTIONS.some(s => s.items.some(i => i.id === tabParam))) {
+        if (tabParam && (VALID_SETTINGS_TABS as readonly string[]).includes(tabParam)) {
           return tabParam as SettingsTab
         }
         const saved = localStorage.getItem('zerf_settings_active_tab')
-        if (saved && SECTIONS.some(s => s.items.some(i => i.id === saved))) {
+        if (saved && (VALID_SETTINGS_TABS as readonly string[]).includes(saved)) {
           return saved as SettingsTab
         }
       } catch {}
@@ -142,6 +148,15 @@ export function SettingsView() {
       } catch {}
     }
   }
+
+  // Ensure active tab is continuously preserved in localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && activeTab) {
+      try {
+        localStorage.setItem('zerf_settings_active_tab', activeTab)
+      } catch {}
+    }
+  }, [activeTab])
 
   const [liveAiModels, setLiveAiModels] = useState<any[]>([])
 
@@ -1835,30 +1850,30 @@ export function SettingsView() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={openGithubModal}
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                    >
-                      <GithubIcon className="w-3.5 h-3.5" />
-                      <span>{profileData.githubUsername || userGithub ? `Изменить @${profileData.githubUsername || userGithub}` : 'Привязать GitHub'}</span>
-                    </button>
+                  {profileData.githubUsername || userGithub ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={openGithubModal}
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                      >
+                        <GithubIcon className="w-3.5 h-3.5" />
+                        <span>Изменить @{profileData.githubUsername || userGithub}</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        dispatch({ type: 'SET_VIEW', view: 'extensions' })
-                        window.dispatchEvent(new CustomEvent('zerf_open_extensions_tab', { detail: { tab: 'my' } }))
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                      title="Открыть мои проекты и GitHub плагины"
-                    >
-                      <span>Мои проекты</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                          window.dispatchEvent(new CustomEvent('zerf_open_extensions_tab', { detail: { tab: 'my' } }))
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        title="Открыть мои проекты и GitHub плагины"
+                      >
+                        <span>Мои проекты</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
 
-                    {(profileData.githubUsername || userGithub) && (
                       <a
                         href={`https://github.com/${profileData.githubUsername || userGithub}`}
                         target="_blank"
@@ -1868,8 +1883,35 @@ export function SettingsView() {
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
-                    )}
-                  </div>
+
+                      <button
+                        type="button"
+                        onClick={handleUnlinkGithub}
+                        className="py-1.5 px-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Отвязать GitHub"
+                      >
+                        Отвязать
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href="/api/auth/github"
+                        className="flex-1 py-2 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <GithubIcon className="w-3.5 h-3.5" />
+                        <span>⚡ Привязать через GitHub OAuth</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={openGithubModal}
+                        className="py-2 px-2.5 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs font-medium border border-border transition-colors cursor-pointer"
+                        title="Ввести GitHub Username вручную"
+                      >
+                        Вручную
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 6. YooMoney Author Payouts Card (80/20) */}

@@ -136,14 +136,25 @@ export function AppShell({ forceMobileLayout }: { forceMobileLayout?: boolean } 
         setTimeout(() => handleOpenVoice(), 300)
       }
 
-      if (view && ['today', 'inbox', 'tasks', 'goals', 'notes', 'calendar', 'stats', 'friends', 'teams', 'projects', 'extensions', 'entropy', 'settings'].includes(view)) {
+      if (view && ['today', 'inbox', 'tasks', 'clock', 'goals', 'notes', 'graph', 'calendar', 'stats', 'friends', 'teams', 'projects', 'extensions', 'entropy', 'settings', 'live', 'admin'].includes(view)) {
         dispatch({ type: 'SET_VIEW', view: view as any })
+      } else {
+        const savedView = localStorage.getItem('zerf_current_view') || localStorage.getItem('zerf_active_view')
+        if (savedView && ['today', 'inbox', 'tasks', 'clock', 'goals', 'notes', 'graph', 'calendar', 'stats', 'friends', 'teams', 'projects', 'extensions', 'entropy', 'settings', 'live', 'admin'].includes(savedView)) {
+          dispatch({ type: 'SET_VIEW', view: savedView as any })
+        }
       }
     }
   }, [])
 
-  // Close mobile sidebar when view changes
+  // Persist current view on view switch & close mobile sidebar
   useEffect(() => {
+    if (typeof window !== 'undefined' && state.currentView) {
+      try {
+        localStorage.setItem('zerf_current_view', state.currentView)
+        localStorage.setItem('zerf_active_view', state.currentView)
+      } catch {}
+    }
     setMobileSidebarOpen(false)
   }, [state.currentView])
 
