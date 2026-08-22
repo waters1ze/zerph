@@ -123,10 +123,10 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
       )}
     >
       {/* checkbox */}
-      <div className="mt-0.5">
+      <div className="mt-0.5" onClick={e => e.stopPropagation()}>
         <TaskCheckbox
           checked={isDone}
-          onChange={() => dispatch({ type: 'TOGGLE_TASK', id: task.id })}
+          onChange={() => dispatch({ type: 'TOGGLE_TASK', id: task.id, status: isDone ? 'todo' : 'done' })}
           priority={task.priority}
           size={compact ? 16 : 18}
         />

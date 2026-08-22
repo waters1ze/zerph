@@ -632,8 +632,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else if (action.type === 'DELETE_FRIEND_GROUP') {
       fetch(`/api/friends/groups?id=${encodeURIComponent(action.id)}`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'TOGGLE_TASK') {
-      const target = state.tasks.find(t => t.id === action.id)
-      const nextStatus = action.status || (target ? (target.status === 'done' ? 'todo' : 'done') : 'done')
+      const currentTask = stateRef.current.tasks.find(t => t.id === action.id)
+      const nextStatus = action.status || (currentTask ? currentTask.status : 'todo')
       fetch('/api/tasks', {
         method: 'PATCH',
         headers,

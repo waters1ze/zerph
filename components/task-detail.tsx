@@ -87,10 +87,10 @@ export function TaskDetail() {
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {/* Title + checkbox */}
         <div className="flex items-start gap-3">
-          <div className="mt-1">
+          <div className="mt-1" onClick={e => e.stopPropagation()}>
             <TaskCheckbox
               checked={isDone}
-              onChange={() => dispatch({ type: 'TOGGLE_TASK', id: task.id })}
+              onChange={() => dispatch({ type: 'TOGGLE_TASK', id: task.id, status: isDone ? 'todo' : 'done' })}
               priority={task.priority}
               size={20}
             />
