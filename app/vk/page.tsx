@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AppProvider } from '@/lib/store'
 import { AppShell } from '@/app/page'
+import { ZerficLiveProvider } from '@/lib/zerfic-live-context'
 
 export default function VkPage() {
   const [mounted, setMounted] = useState(false)
@@ -76,7 +77,12 @@ export default function VkPage() {
 
   return (
     <AppProvider>
-      <AppShell />
+      {/* AppShell renders the Zerfic Live floating pill, which requires the
+          provider context — without it the /vk page crashed with
+          "useZerficLive must be used within a ZerficLiveProvider". */}
+      <ZerficLiveProvider>
+        <AppShell />
+      </ZerficLiveProvider>
     </AppProvider>
   )
 }
