@@ -109,6 +109,7 @@ type Action =
   | { type: 'DELETE_FRIEND_GROUP'; id: string }
   | { type: 'SET_FRIEND_GROUPS'; groups: FriendGroup[] }
   | { type: 'ADD_CHAT_MESSAGE'; message: ChatMessage }
+  | { type: 'CLEAR_CHAT' }
   | { type: 'UPDATE_SETTINGS'; updates: Partial<UserSettings> }
   | { type: 'ADD_FRIEND'; friend: Friend }
   | { type: 'REMOVE_FRIEND'; id: string }
@@ -254,6 +255,18 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, friendGroups: action.groups }
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chat: [...state.chat, action.message] }
+    case 'CLEAR_CHAT':
+      return {
+        ...state,
+        chat: [
+          {
+            id: 'm-init',
+            role: 'assistant',
+            content: 'Привет! Я твой ассистент Zerf Note. Помогу расставить задачи, записать заметки, спланировать день и ответить на любые вопросы. Чем займёмся сегодня?',
+            createdAt: new Date().toISOString(),
+          }
+        ]
+      }
     case 'UPDATE_SETTINGS': {
       const newSettings = { ...state.settings, ...action.updates }
       return { ...state, settings: newSettings }
