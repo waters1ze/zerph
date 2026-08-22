@@ -395,7 +395,7 @@ export async function GET(req: NextRequest) {
       userPlan,
       maxExtensions: maxExtensions === UNLIMITED ? -1 : maxExtensions,
       canUseExtensions: true, // All users can install up to their plan limit (Free: 5, Plus: 10, Pro: 50, Corp: ∞)
-      canCreateExtensions: planAtLeast(userPlan, 'plus'),
+      canCreateExtensions: true, // Available to all users (Free, Plus, Pro, Corp)
       authorStats,
       boundCard: boundCard ? { ...boundCard, autoRenewEnabled } : null,
       autoRenewEnabled,

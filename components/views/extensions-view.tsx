@@ -325,7 +325,7 @@ const getInitialExtensionsData = () => {
             installedIds: parsed.installedIds || [],
             likedIds: parsed.likedIds || [],
             userPlan: parsed.userPlan || 'free',
-            canCreate: Boolean(parsed.canCreate),
+            canCreate: true,
             authorStats: parsed.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 },
             hasCache: true
           }
@@ -338,7 +338,7 @@ const getInitialExtensionsData = () => {
     installedIds: [],
     likedIds: [],
     userPlan: 'free',
-    canCreate: false,
+    canCreate: true,
     authorStats: { balance: 0, totalEarned: 0, salesCount: 0 },
     hasCache: true
   }
@@ -1604,32 +1604,22 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
             <span>Спецификация GitHub</span>
           </button>
 
-          {canCreateFinal ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowSpecModal(true)}
-                className="px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Создать расширение</span>
-              </button>
-              <button
-                onClick={() => setShowGithubModal(true)}
-                className="px-3.5 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-all cursor-pointer"
-              >
-                <GithubIcon className="w-3.5 h-3.5" />
-                <span>Из GitHub</span>
-              </button>
-            </div>
-          ) : (
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSpecModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-[11px] text-amber-400 font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
             >
-              <Crown className="w-3.5 h-3.5" />
-              <span>Публикация (Тариф Plus)</span>
+              <Plus className="w-4 h-4" />
+              <span>Создать расширение</span>
             </button>
-          )}
+            <button
+              onClick={() => setShowGithubModal(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-xs flex items-center gap-1.5 border border-border transition-all cursor-pointer"
+            >
+              <GithubIcon className="w-3.5 h-3.5" />
+              <span>Из GitHub</span>
+            </button>
+          </div>
 
           {onClose && (
             <button
@@ -2219,38 +2209,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       {/* ── TAB 3: MY GITHUB EXTENSIONS / CREATOR STUDIO ── */}
       {activeTab === 'my' && (
         <div className="space-y-4">
-          {!canCreate ? (
-            <div className="p-8 rounded-3xl bg-card border border-border text-center space-y-4 max-w-xl mx-auto shadow-sm">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
-                <Crown className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-foreground">Публикация расширений доступна на тарифе Plus</h3>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Создавайте репозитории на GitHub, парсите манифесты и публикуйте плагины для сообщества с получением <b>80% авторских выплат</b>!
-                </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-                <button
-                  onClick={() => setShowSpecModal(true)}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <GithubIcon className="w-4 h-4" />
-                  <span>Спецификация манифеста</span>
-                </button>
-                <button
-                  onClick={() => dispatch({ type: 'SET_VIEW', view: 'settings' })}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
-                >
-                  <span>Оформить Zerf Plus (99 ₽)</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border border-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border border-border">
                 <div>
                   <h3 className="text-sm font-bold text-foreground">Ваши GitHub репозитории и расширения</h3>
                   <p className="text-[11px] text-muted-foreground">
@@ -2443,8 +2402,6 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                   })}
                 </div>
               )}
-            </div>
-          )}
         </div>
       )}
 
