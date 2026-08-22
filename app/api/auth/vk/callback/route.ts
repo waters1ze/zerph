@@ -4,7 +4,7 @@ import { createServerSession, getAuthenticatedUser } from '@/lib/backend/auth'
 
 export const dynamic = 'force-dynamic'
 
-const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824701'
+const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '54722068'
 // The protected key must come from env only — it was previously hardcoded
 // here and leaked into git history (rotate it in the VK app settings).
 const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || null
