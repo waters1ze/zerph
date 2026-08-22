@@ -105,6 +105,22 @@ export async function GET(req: NextRequest) {
             } catch {}
           }
 
+          // Resolve vkId from all sources
+          let finalVkId = chat.vkId || null
+          if (!finalVkId) {
+            try {
+              const vkConf = await prisma.config.findFirst({
+                where: {
+                  OR: [
+                    { key: `user_vk_${cid}` },
+                    { key: `user_vk_${chat.chatId}` },
+                  ]
+                }
+              })
+              if (vkConf?.value) finalVkId = vkConf.value
+            } catch {}
+          }
+
           const siriKey = getSiriUserKey(chat.chatId)
 
           return NextResponse.json({
@@ -117,7 +133,7 @@ export async function GET(req: NextRequest) {
             email: chat.email || null,
             avatarEmoji,
             hasPassword: Boolean(chat.passwordHash),
-            vkId: chat.vkId || null,
+            vkId: finalVkId,
             googleEmail: finalGoogleEmail,
             githubUsername,
             authProvider: chat.authProvider || 'telegram',

@@ -741,24 +741,33 @@ export function SettingsView() {
         shouldClean = true
       }
 
-      // 3. VK OAuth Linking
+      // 3. VK OAuth Linking / Login
       if (params.get('vk_auth_success') === '1') {
         const vkId = params.get('vk_id')
         const returnedCid = params.get('chatId')
+        const returnedName = params.get('name')
         if (returnedCid && typeof window !== 'undefined') {
           try { localStorage.setItem('zerf_chat_id', returnedCid) } catch {}
+        }
+        if (returnedName && typeof window !== 'undefined') {
+          setName(returnedName)
+          try {
+            localStorage.setItem('zerf_user_name', returnedName)
+            window.dispatchEvent(new CustomEvent('zerf_user_name_changed', { detail: returnedName }))
+          } catch {}
         }
         if (vkId) {
           setProfileData(prev => ({ ...prev, vkId }))
           try { localStorage.setItem('zerf_vk_id', vkId) } catch {}
         }
-        setAuthSuccess(`✅ ВКонтакте (ID: ${vkId || ''}) успешно привязан!`)
+        setAuthSuccess(`✅ ВКонтакте ${returnedName ? `(${returnedName})` : `(ID: ${vkId || ''})`} успешно подключен!`)
         setTimeout(() => setAuthSuccess(null), 5000)
+        window.dispatchEvent(new CustomEvent('zerf:auth_changed'))
         fetchProfile()
         shouldClean = true
       } else if (params.get('vk_auth_error')) {
         const err = params.get('vk_auth_error')
-        setAuthError(`Ошибка привязки VK: ${err}`)
+        setAuthError(`Ошибка авторизации VK: ${err}`)
         setTimeout(() => setAuthError(null), 5000)
         shouldClean = true
       }

@@ -42,11 +42,36 @@ export async function GET(req: NextRequest) {
     const tokenUrl = `https://oauth.vk.com/access_token?client_id=${VK_CLIENT_ID}&client_secret=${VK_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(CALLBACK_URL)}&code=${code}`
     const tokenRes = await fetch(tokenUrl)
     const tokenData = await tokenRes.json()
+
+    const accessToken = tokenData.access_token
     const vkUserId = tokenData.user_id ? String(tokenData.user_id) : null
+    const vkEmail = tokenData.email ? String(tokenData.email) : null
 
     if (!vkUserId) {
       console.error('VK token exchange failed:', tokenData)
       return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=token_failed#settings`)
+    }
+
+    // Fetch user details from VK API
+    let vkFirstName = `VK ID ${vkUserId}`
+    let vkLastName = ''
+    let vkScreenName = ''
+
+    if (accessToken && vkUserId) {
+      try {
+        const profileRes = await fetch(
+          `https://api.vk.com/method/users.get?user_ids=${vkUserId}&fields=first_name,last_name,photo_200,screen_name&access_token=${accessToken}&v=5.131`
+        )
+        const profileData = await profileRes.json()
+        const userObj = profileData.response?.[0]
+        if (userObj) {
+          if (userObj.first_name) vkFirstName = userObj.first_name
+          if (userObj.last_name) vkLastName = userObj.last_name
+          if (userObj.screen_name) vkScreenName = userObj.screen_name
+        }
+      } catch (err) {
+        console.warn('Failed to fetch VK user profile details:', err)
+      }
     }
 
     // Find or create user
@@ -76,10 +101,24 @@ export async function GET(req: NextRequest) {
       }
 
       if (!finalChatId) {
-        // Create new user
-        const newId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
+        // Create new user with real VK name
+        let newId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
+        for (let i = 0; i < 5; i++) {
+          const clash = await prisma.telegramChat.findUnique({ where: { chatId: newId } })
+          if (!clash) break
+          newId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
+        }
         await prisma.telegramChat.create({
-          data: { chatId: newId, vkId: vkUserId, authProvider: 'vk', firstName: `VK ID ${vkUserId}`, lastActiveAt: new Date() }
+          data: {
+            chatId: newId,
+            vkId: vkUserId,
+            authProvider: 'vk',
+            firstName: vkFirstName,
+            lastName: vkLastName || null,
+            username: vkScreenName || null,
+            email: vkEmail || null,
+            lastActiveAt: new Date(),
+          }
         }).catch(() => {})
         finalChatId = newId
       }
@@ -103,7 +142,7 @@ export async function GET(req: NextRequest) {
       req.headers.get('user-agent') || undefined
     )
 
-    const res = NextResponse.redirect(`${ORIGIN}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}&chatId=${encodeURIComponent(String(cid))}#settings`)
+    const res = NextResponse.redirect(`${ORIGIN}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}&name=${encodeURIComponent(vkFirstName)}&chatId=${encodeURIComponent(String(cid))}#settings`)
     res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
     res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
     return res
