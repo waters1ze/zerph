@@ -766,9 +766,19 @@ export function SettingsView() {
         fetchProfile()
         shouldClean = true
       } else if (params.get('vk_auth_error')) {
-        const err = params.get('vk_auth_error')
-        setAuthError(`Ошибка авторизации VK: ${err}`)
-        setTimeout(() => setAuthError(null), 5000)
+        const err = params.get('vk_auth_error') || ''
+        // Human-readable hints for the most common VK failure reasons
+        const hints: Record<string, string> = {
+          token_failed: 'VK не вернул токен. Проверьте, что приложение включено.',
+          invalid_client: 'Ключ не совпадает: в Vercel в VK_CLIENT_SECRET должен стоять защищённый ключ именно того приложения, чей ID в VK_CLIENT_ID.',
+          invalid_grant: 'Код авторизации истёк или redirect_uri не совпадает с доверенным в настройках приложения VK.',
+          invalid_redirect_uri: 'Добавьте https://zeprh.vercel.app/api/auth/vk/callback в «Доверенные redirect URI» приложения VK.',
+          server_not_configured: 'На сервере не задан VK_CLIENT_SECRET (Vercel → Environment Variables).',
+        }
+        const base = err.split(':')[0]
+        const hint = hints[base] || hints[err] || ''
+        setAuthError(`Ошибка авторизации VK: ${err}${hint ? ` — ${hint}` : ''}`)
+        setTimeout(() => setAuthError(null), 12000)
         shouldClean = true
       }
 

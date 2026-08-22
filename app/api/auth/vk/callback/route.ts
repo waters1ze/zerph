@@ -56,7 +56,13 @@ export async function GET(req: NextRequest) {
 
     if (!vkUserId) {
       console.error('VK token exchange failed:', tokenData)
-      return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=token_failed#settings`)
+      // Surface VK's own reason (error / error_description, e.g.
+      // invalid_grant, invalid_client) so the user sees the real cause
+      // instead of a generic "token_failed".
+      const vkReason = String(tokenData.error || 'token_failed')
+      const vkDesc = String(tokenData.error_description || '').slice(0, 200)
+      const detail = vkDesc ? `${vkReason}:${vkDesc}` : vkReason
+      return NextResponse.redirect(`${ORIGIN}/?vk_auth_error=${encodeURIComponent(detail)}#settings`)
     }
 
     // Fetch user details from VK API
