@@ -571,7 +571,7 @@ function TaskCountdownTab() {
   const handleComplete = () => {
     if (!activeItem) return
     playAlarmChime('complete')
-    dispatch({ type: 'TOGGLE_TASK', id: activeItem.task.id })
+    dispatch({ type: 'TOGGLE_TASK', id: activeItem.task.id, status: 'done' })
   }
 
   return (
