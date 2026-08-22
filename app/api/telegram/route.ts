@@ -1543,25 +1543,6 @@ async function saveAndRespondParsedItems(chatId: number, items: ParsedItem[], tr
         }
       } catch {}
     }
-
-    if (
-      item.type === 'task' &&
-      item.dueTime &&
-      item.dueTime !== '00:00' &&
-      item.action !== 'delete' &&
-      item.action !== 'completion'
-    ) {
-      await send(chatId, `⏰ Поставить будильник на ${item.dueTime}?`, {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '✓ Да (Android)', callback_data: `alarm_android_${item.dueTime}` },
-              { text: 'Да (iOS инструкция)', callback_data: `alarm_ios_${item.dueTime}` }
-            ]
-          ]
-        }
-      })
-    }
   }
 }
 
