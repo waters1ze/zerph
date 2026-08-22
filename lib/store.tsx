@@ -387,12 +387,17 @@ export function getTgChatId(): string | null {
       const hasSign = Boolean(urlParams.get('sign') || hashParams.get('sign'))
       if (hasSign) {
         const vkId = String(vkUserId)
+        // The launch string MUST include the `sign` parameter itself and
+        // URL-encoded values — exactly what VK signed and what the server's
+        // verifyVkLaunchParams() expects. (A previous version saved only the
+        // vk_* pairs raw, which overwrote the correct value saved by /vk
+        // page and made every server verification fail with 401.)
         const vkLaunch = [
           ...Array.from(urlParams.entries()),
           ...Array.from(hashParams.entries()),
         ]
-          .filter(([k]) => k.startsWith('vk_'))
-          .map(([k, v]) => `${k}=${v}`)
+          .filter(([k]) => k.startsWith('vk_') || k === 'sign')
+          .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
           .join('&')
         try {
           localStorage.setItem('zerf_chat_id', vkId)
