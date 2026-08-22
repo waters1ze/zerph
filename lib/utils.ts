@@ -427,4 +427,22 @@ export function calculateRealStreak(tasks: any[] = [], habits: any[] = [], notes
   return calculateStreakInfo(tasks, habits, notes).streak
 }
 
+/**
+ * Strips accidental baked-in relative time expressions from task titles
+ * e.g. "Лечь спать (через 30 минут)" -> "Лечь спать"
+ */
+export function sanitizeTaskTitle(rawTitle: string): string {
+  if (!rawTitle) return ''
+  let clean = rawTitle.trim()
+
+  // Remove parenthesized relative time phrases
+  clean = clean.replace(/\s*\(\s*(?:через\s+\d+\s*(?:мин(?:ут[а-я]*)?|ч(?:ас[а-я]*)?)|через\s+полчаса|в\s+\d{1,2}:\d{2}|на\s+\d{1,2}:\d{2})\s*\)/gi, '')
+
+  // Remove trailing unparenthesized relative time phrases
+  clean = clean.replace(/\s+(?:через\s+\d+\s*(?:мин(?:ут[а-я]*)?|ч(?:ас[а-я]*)?)|через\s+полчаса)$/gi, '')
+
+  return clean.trim() || rawTitle
+}
+
+
 

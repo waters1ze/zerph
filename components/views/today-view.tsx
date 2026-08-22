@@ -7,7 +7,7 @@ import { HabitsWidget } from '@/components/habits-widget'
 import { ScheduleWidget } from '@/components/schedule-widget'
 import { ScheduleGroupModal } from '@/components/schedule-group-modal'
 import { FocusTimerWidget } from '@/components/focus-timer-widget'
-import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate } from '@/lib/utils'
+import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate, sanitizeTaskTitle } from '@/lib/utils'
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X, Settings2 } from 'lucide-react'
 import { format, parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
@@ -327,7 +327,7 @@ export function TodayView() {
                     Следующее дело в {nextTimedTask.dueTime}:
                   </p>
                   <p className="text-[13px] font-semibold text-foreground truncate max-w-[240px] sm:max-w-md">
-                    {nextTimedTask.title}
+                    {sanitizeTaskTitle(nextTimedTask.title)}
                   </p>
                 </div>
               </div>

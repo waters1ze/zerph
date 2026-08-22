@@ -292,11 +292,21 @@ export function extractNaturalTime(text: string): string | null {
   return null
 }
 
+export function sanitizeTaskTitle(rawTitle: string): string {
+  if (!rawTitle) return ''
+  let clean = rawTitle.trim()
+  // Remove parenthesized relative time phrases
+  clean = clean.replace(/\s*\(\s*(?:через\s+\d+\s*(?:мин(?:ут[а-я]*)?|ч(?:ас[а-я]*)?)|через\s+полчаса|в\s+\d{1,2}:\d{2}|на\s+\d{1,2}:\d{2})\s*\)/gi, '')
+  // Remove trailing unparenthesized relative time phrases
+  clean = clean.replace(/\s+(?:через\s+\d+\s*(?:мин(?:ут[а-я]*)?|ч(?:ас[а-я]*)?)|через\s+полчаса)$/gi, '')
+  return clean.trim() || rawTitle
+}
+
 function processBirthdayTaskData<T extends { title: string; dueTime?: string | null; repeat?: string | null; tags?: string[] }>(data: T): T {
   const isBirthday = isBirthdayTitle(data.title)
 
   if (isBirthday) {
-    let title = data.title.trim()
+    let title = sanitizeTaskTitle(data.title).trim()
     if (!title.startsWith('🎂')) {
       title = `🎂 ${title}`
     }
@@ -313,7 +323,7 @@ function processBirthdayTaskData<T extends { title: string; dueTime?: string | n
     }
   } else {
     // If not a birthday, remove accidental 🎂 and "день рождения" tag
-    let title = data.title.replace(/^🎂\s*/, '').trim()
+    let title = sanitizeTaskTitle(data.title.replace(/^🎂\s*/, '')).trim()
     let tags = data.tags ? data.tags.filter(t => t.toLowerCase() !== 'день рождения') : data.tags
     return {
       ...data,
@@ -541,7 +551,7 @@ export async function updateTask(
 
   // Sanitize and whitelist only valid Prisma Task fields
   const cleanData: any = {}
-  if (incomingData.title !== undefined) cleanData.title = String(incomingData.title)
+  if (incomingData.title !== undefined) cleanData.title = sanitizeTaskTitle(String(incomingData.title))
   if (incomingData.description !== undefined) cleanData.description = incomingData.description || null
   if (incomingData.status !== undefined) cleanData.status = String(incomingData.status)
   if (incomingData.priority !== undefined) cleanData.priority = String(incomingData.priority)

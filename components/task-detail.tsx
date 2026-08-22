@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '@/lib/store'
 import { TaskCheckbox } from './task-checkbox'
 import { PriorityBadge } from './priority-badge'
-import { cn } from '@/lib/utils'
+import { cn, sanitizeTaskTitle } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import {
   X, Tag, FolderKanban, Sparkles,
@@ -116,7 +116,7 @@ export function TaskDetail() {
                 onClick={startEditTitle}
               >
                 <h2 className={cn('text-base font-semibold text-foreground leading-snug', isDone && 'line-through text-muted-foreground')}>
-                  {task.title}
+                  {sanitizeTaskTitle(task.title)}
                 </h2>
                 <Edit3 className="w-3.5 h-3.5 mt-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </div>

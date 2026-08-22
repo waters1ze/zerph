@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { cn } from '@/lib/utils'
+import { cn, sanitizeTaskTitle } from '@/lib/utils'
 import { TaskCheckbox } from './task-checkbox'
 import { PriorityBadge } from './priority-badge'
 import { useApp } from '@/lib/store'
@@ -140,7 +140,7 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
             isDone && 'line-through text-muted-foreground',
             isPassed && !isDone && 'text-foreground'
           )}>
-            {task.title}
+            {sanitizeTaskTitle(task.title)}
           </span>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button

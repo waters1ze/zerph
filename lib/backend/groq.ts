@@ -107,7 +107,8 @@ FEATURE INSTRUCTIONS & INTENT ROUTING:
    - If input is a greeting ("привет", "как дела"), question ("сколько будет 145*18?", "что такое интеграл?"), advice request ("как составить план?"), or explanation:
      Set "type": "answer", "action": "reply", "title": "...", "summary": "Full, polite, helpful and direct answer in Russian". DO NOT create tasks or notes!
 2. TASKS & REMINDERS ("type": "task", "action": "create"):
-   - Default for actions, todos, voice dictation ("купить молоко", "напомни в 17:00", "созвон в 11:00").
+   - Default for actions, todos, voice dictation ("купить молоко", "напомни в 17:00", "созвон в 11:00", "напомни лечь спать через 30 минут").
+   - CRITICAL TITLE RULE: "title" must contain the action ONLY (e.g. "Лечь спать", "Купить молоко", "Позвонить маме"). NEVER include relative or baked-in time strings in the title such as "(через 30 минут)", "через час", "(в 15:00)"! All times belong strictly in "dueTime" and "dueDate"!
    - "subtasks": [] for normal simple tasks. Generate subtasks ONLY for complex projects or if explicitly requested ("разбей на шаги", "4 этапа").
    - If subtasks have individual times/dates, specify array of objects: [{"title": "1 этап: ...", "dueTime": "10:00", "dueDate": "YYYY-MM-DD"}].
 3. NOTES ("type": "note", "action": "create"):
