@@ -6,9 +6,10 @@ import { useApp } from '@/lib/store'
 import { TaskItem } from '@/components/task-item'
 import { cn, isTaskVisibleInMainList, groupTasksByDate } from '@/lib/utils'
 import type { Priority, TaskStatus, ScheduleGroup, Friend, FriendGroup } from '@/lib/types'
-import { 
-  CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, 
-  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock, Layers, X, Inbox
+import {
+  CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap,
+  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock, Layers, X, Inbox,
+  ChevronDown, ChevronUp, CheckCircle2
 } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { ScheduleWidget } from '@/components/schedule-widget'
@@ -23,6 +24,20 @@ export function TasksView() {
   const { state, dispatch } = useApp()
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [sortKey, setSortKey] = useState<SortKey>('dueDate')
+  // Completed tasks live in a separate collapsible section at the bottom of
+  // each group ( Things/Todoist style): active work stays on top, done items
+  // are one click away without cluttering the list. Choice is remembered.
+  const [showDone, setShowDone] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try { return localStorage.getItem('zerf_show_done_tasks') === 'true' } catch { return false }
+  })
+  const toggleShowDone = () => {
+    setShowDone(prev => {
+      const next = !prev
+      try { localStorage.setItem('zerf_show_done_tasks', String(next)) } catch {}
+      return next
+    })
+  }
   const [filterProject, setFilterProject] = useState<string>('all')
   const [filterFriend, setFilterFriend] = useState<string>('all')
   const [filterGroup, setFilterGroup] = useState<string>('all')
@@ -382,34 +397,98 @@ export function TasksView() {
             </motion.div>
           ) : sortKey === 'dueDate' ? (
             <motion.div key="grouped-list" className="space-y-4">
-              {dateGroups.map(group => (
-                <div key={group.dateKey} className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2 px-1 py-1 select-none">
-                    <div className={cn(
-                      'flex items-center gap-1.5 text-[12px] font-bold tracking-tight uppercase',
-                      group.isToday ? 'text-primary' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
-                    )}>
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>{group.label}</span>
+              {dateGroups.map(group => {
+                // Active first; completed sink into a collapsible sub-section.
+                // On the «Готово» tab everything is done — no split needed.
+                const separateDone = filterStatus !== 'done'
+                const active = separateDone ? group.tasks.filter(t => t.status !== 'done') : group.tasks
+                const done = separateDone ? group.tasks.filter(t => t.status === 'done') : []
+                return (
+                  <div key={group.dateKey} className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 px-1 py-1 select-none">
+                      <div className={cn(
+                        'flex items-center gap-1.5 text-[12px] font-bold tracking-tight uppercase',
+                        group.isToday ? 'text-primary' : group.isOverdue ? 'text-[var(--status-overdue)]' : 'text-muted-foreground'
+                      )}>
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{group.label}</span>
+                      </div>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">
+                        {active.length}
+                      </span>
+                      <div className="flex-1 h-[1px] bg-border/40 ml-2" />
                     </div>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">
-                      {group.tasks.length}
-                    </span>
-                    <div className="flex-1 h-[1px] bg-border/40 ml-2" />
+                    <div className="space-y-1">
+                      {active.map((t, i) => (
+                        <TaskItem key={t.id} task={t} index={i} />
+                      ))}
+                    </div>
+                    {done.length > 0 && (
+                      <div className="mt-0.5">
+                        <button
+                          onClick={toggleShowDone}
+                          className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-done)]/70 shrink-0" />
+                          <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                            Выполнено · {done.length}
+                          </span>
+                          {showDone
+                            ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                          <div className="flex-1 h-[1px] bg-border/25" />
+                        </button>
+                        {showDone && (
+                          <div className="space-y-1 opacity-75 pt-0.5">
+                            {done.map((t, i) => (
+                              <TaskItem key={t.id} task={t} index={i} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    {group.tasks.map((t, i) => (
-                      <TaskItem key={t.id} task={t} index={i} />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </motion.div>
           ) : (
             <motion.div key="flat-list" className="space-y-1">
-              {filtered.map((t, i) => (
-                <TaskItem key={t.id} task={t} index={i} />
-              ))}
+              {(() => {
+                const separateDone = filterStatus !== 'done'
+                const activeFlat = separateDone ? filtered.filter(t => t.status !== 'done') : filtered
+                const doneFlat = separateDone ? filtered.filter(t => t.status === 'done') : []
+                return (
+                  <>
+                    {activeFlat.map((t, i) => (
+                      <TaskItem key={t.id} task={t} index={i} />
+                    ))}
+                    {doneFlat.length > 0 && (
+                      <div className="pt-2">
+                        <button
+                          onClick={toggleShowDone}
+                          className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-done)]/70 shrink-0" />
+                          <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                            Выполнено · {doneFlat.length}
+                          </span>
+                          {showDone
+                            ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                          <div className="flex-1 h-[1px] bg-border/25" />
+                        </button>
+                        {showDone && (
+                          <div className="space-y-1 opacity-75 pt-1">
+                            {doneFlat.map((t, i) => (
+                              <TaskItem key={t.id} task={t} index={i} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </motion.div>
           )}
         </AnimatePresence>
