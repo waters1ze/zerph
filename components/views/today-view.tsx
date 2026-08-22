@@ -8,7 +8,7 @@ import { ScheduleWidget } from '@/components/schedule-widget'
 import { ScheduleGroupModal } from '@/components/schedule-group-modal'
 import { FocusTimerWidget } from '@/components/focus-timer-widget'
 import { cn, isYearlyEventTask, isSchoolTask, isTaskOnDate, sanitizeTaskTitle } from '@/lib/utils'
-import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X, Settings2 } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, TrendingUp, Flame, Target, Cloud, Lightbulb, Sparkles, Briefcase, User, Zap, GraduationCap, Activity, X, Settings2, ChevronDown, ChevronUp } from 'lucide-react'
 import { format, parseISO, isToday } from 'date-fns'
 import { useState, useEffect } from 'react'
 import type { ScheduleGroup } from '@/lib/types'
@@ -131,6 +131,17 @@ export function TodayView() {
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null)
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
   const [showAllLessons, setShowAllLessons] = useState(false)
+  const [showDone, setShowDone] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try { return localStorage.getItem('zerf_today_show_done') === 'true' } catch { return false }
+  })
+  const toggleShowDone = () => {
+    setShowDone(prev => {
+      const next = !prev
+      try { localStorage.setItem('zerf_today_show_done', String(next)) } catch {}
+      return next
+    })
+  }
   const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
   const [plannerLoading, setPlannerLoading] = useState(false)
@@ -614,18 +625,27 @@ export function TodayView() {
           )}
         </div>
 
-        {/* Completed tasks */}
+        {/* Completed tasks (Collapsible, hidden by default) */}
         {doneTasks.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
-              <h2 className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Завершено сегодня ({doneTasks.length})
-              </h2>
-            </div>
-            <div className="space-y-0.5">
-              {doneTasks.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}
-            </div>
+          <div className="mt-2 pt-2 border-t border-border/40">
+            <button
+              onClick={toggleShowDone}
+              className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-done)]/70 shrink-0" />
+              <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                Выполнено сегодня · {doneTasks.length}
+              </span>
+              {showDone
+                ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+              <div className="flex-1 h-[1px] bg-border/25" />
+            </button>
+            {showDone && (
+              <div className="space-y-0.5 opacity-75 pt-1">
+                {doneTasks.map((t, i) => <TaskItem key={t.id} task={t} index={i} />)}
+              </div>
+            )}
           </div>
         )}
       </div>
