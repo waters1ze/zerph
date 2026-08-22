@@ -60,15 +60,26 @@ export async function GET(req: NextRequest) {
         data: { vkId: vkUserId },
       }).catch(() => {})
     } else {
-      // Find by vkId
+      // Find by vkId in telegramChat
       const existing = await prisma.telegramChat.findFirst({ where: { vkId: vkUserId } })
       if (existing) {
         finalChatId = existing.chatId
       } else {
+        // Also check config table
+        const existingConf = await prisma.config.findFirst({
+          where: { key: { startsWith: 'user_vk_' }, value: vkUserId }
+        })
+        if (existingConf) {
+          const id = existingConf.key.replace('user_vk_', '')
+          if (/^-?\d+$/.test(id)) finalChatId = BigInt(id)
+        }
+      }
+
+      if (!finalChatId) {
         // Create new user
         const newId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
         await prisma.telegramChat.create({
-          data: { chatId: newId, vkId: vkUserId, authProvider: 'vk', firstName: `VK ${vkUserId}`, lastActiveAt: new Date() }
+          data: { chatId: newId, vkId: vkUserId, authProvider: 'vk', firstName: `VK ID ${vkUserId}`, lastActiveAt: new Date() }
         }).catch(() => {})
         finalChatId = newId
       }
@@ -80,7 +91,12 @@ export async function GET(req: NextRequest) {
       where: { key: `user_vk_${cid}` },
       update: { value: vkUserId },
       create: { key: `user_vk_${cid}`, value: vkUserId },
-    }).catch(() => {})
+    }).catch(async () => {
+      try {
+        await prisma.config.delete({ where: { key: `user_vk_${cid}` } })
+        await prisma.config.create({ data: { key: `user_vk_${cid}`, value: vkUserId } })
+      } catch {}
+    })
 
     const sessionToken = await createServerSession(cid, 'VK OAuth', 'web',
       req.headers.get('x-forwarded-for') || undefined,

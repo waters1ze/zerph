@@ -70,10 +70,21 @@ export async function GET(req: NextRequest) {
     }
 
     if (!finalChatId) {
+      // 1. Look for existing config link
       const existing = await prisma.config.findFirst({ where: { key: { startsWith: 'user_github_' }, value: ghUsername } })
       if (existing) {
         const id = existing.key.replace('user_github_', '')
         if (/^-?\d+$/.test(id)) finalChatId = BigInt(id)
+      }
+    }
+
+    if (!finalChatId) {
+      // 2. Look for existing user created via GitHub registration
+      const existingChat = await prisma.telegramChat.findFirst({
+        where: { authProvider: 'github', username: ghUsername }
+      })
+      if (existingChat) {
+        finalChatId = existingChat.chatId
       }
     }
 
