@@ -10,6 +10,11 @@ import {
   type TextScaleStep, type DensityMode, type RadiusMode,
 } from './theme-presets'
 import { showWebNotification, playAlarmChime, ensurePushSubscribedOnBoot } from './notifications'
+import {
+  isOffline, enqueueOp, notifyQueueChanged, queueHasCreate,
+  isFlushInProgress, loadQueue, removeOp, loadIdMap, saveIdMapEntry, clearIdMap, setFlushInProgress,
+  type OfflineItemType,
+} from './offline-queue'
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10)
@@ -605,18 +610,82 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Sync deletion / updates to cloud DB via API
     const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
 
+    // ── Offline outbox helpers ─────────────────────────────────────────────
+    // An id is "temporary" while its server-side create hasn't landed yet
+    // (created moments ago, or its create op is still parked in the queue).
+    const isTempItemId = (id: string) =>
+      recentlyAddedIdsRef.current.has(id) || queueHasCreate(id)
+
+    const queueOrSendDelete = (itemType: OfflineItemType, id: string) => {
+      recentlyDeletedIdsRef.current.set(id, Date.now())
+      const tempId = isTempItemId(id) ? id : undefined
+      const op = { kind: 'delete' as const, itemType, tempId, serverId: tempId ? undefined : id, payload: null }
+      if (isOffline()) {
+        enqueueOp(op)
+        return
+      }
+      fetch(`/api/tasks?id=${encodeURIComponent(id)}&type=${itemType}`, { method: 'DELETE', headers: { ...getAuthHeaders() } })
+        .catch(() => enqueueOp(op))
+    }
+
+    const queueOrSendUpdate = (itemType: OfflineItemType, id: string, payload: Record<string, unknown>) => {
+      const tempId = isTempItemId(id) ? id : undefined
+      const op = { kind: 'update' as const, itemType, tempId, serverId: tempId ? undefined : id, payload }
+      if (isOffline()) {
+        enqueueOp(op)
+        return
+      }
+      fetch('/api/tasks', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id, itemType, ...payload }),
+      }).catch(() => enqueueOp(op))
+    }
+
+    const queueOrSendCreate = (itemType: OfflineItemType, tempId: string, payload: any) => {
+      recentlyAddedIdsRef.current.set(tempId, Date.now())
+      const op = { kind: 'create' as const, itemType, tempId, payload }
+      if (isOffline()) {
+        enqueueOp(op)
+        return
+      }
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(itemType === 'task' ? payload : { ...payload, itemType }),
+      })
+        .then(async r => {
+          const data = await r.json().catch(() => null)
+          const created = r.ok ? (data?.task || data?.note || data?.goal || data?.habit) : null
+          if (created?.id && created.id !== tempId) {
+            recentlyAddedIdsRef.current.delete(tempId)
+            recentlyAddedIdsRef.current.set(created.id, Date.now())
+            if (itemType === 'task') dispatch({ type: 'REPLACE_TASK', tempId, task: created })
+            else if (itemType === 'note') dispatch({ type: 'REPLACE_NOTE', tempId, note: created })
+            else if (itemType === 'goal') dispatch({ type: 'REPLACE_GOAL', tempId, goal: created })
+            else dispatch({ type: 'REPLACE_HABIT', tempId, habit: created })
+          } else if (!r.ok) {
+            if (itemType === 'task') dispatch({ type: 'DELETE_TASK', id: tempId })
+            else if (itemType === 'note') dispatch({ type: 'DELETE_NOTE', id: tempId })
+            else if (itemType === 'goal') dispatch({ type: 'DELETE_GOAL', id: tempId })
+            else dispatch({ type: 'DELETE_HABIT', id: tempId })
+          }
+        })
+        .catch(() => {
+          // Network died mid-flight — park the create for outbox replay
+          if (!queueHasCreate(tempId)) enqueueOp(op)
+        })
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     if (action.type === 'DELETE_TASK') {
-      recentlyDeletedIdsRef.current.set(action.id, Date.now())
-      fetch(`/api/tasks?id=${action.id}&type=task`, { method: 'DELETE', headers }).catch(() => {})
+      queueOrSendDelete('task', action.id)
     } else if (action.type === 'DELETE_NOTE') {
-      recentlyDeletedIdsRef.current.set(action.id, Date.now())
-      fetch(`/api/tasks?id=${action.id}&type=note`, { method: 'DELETE', headers }).catch(() => {})
+      queueOrSendDelete('note', action.id)
     } else if (action.type === 'DELETE_GOAL') {
-      recentlyDeletedIdsRef.current.set(action.id, Date.now())
-      fetch(`/api/tasks?id=${action.id}&type=goal`, { method: 'DELETE', headers }).catch(() => {})
+      queueOrSendDelete('goal', action.id)
     } else if (action.type === 'DELETE_HABIT') {
-      recentlyDeletedIdsRef.current.set(action.id, Date.now())
-      fetch(`/api/tasks?id=${action.id}&type=habit`, { method: 'DELETE', headers }).catch(() => {})
+      queueOrSendDelete('habit', action.id)
     } else if (action.type === 'REMOVE_FRIEND') {
       recentlyDeletedIdsRef.current.set(action.id, Date.now())
       // Persist friend removal server-side so background sync doesn't resurrect them
@@ -640,115 +709,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updates: { status: nextStatus, completedAt: nextStatus === 'done' ? new Date().toISOString() : undefined },
         timestamp: Date.now(),
       })
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          id: action.id,
-          status: nextStatus,
-          completedAt: nextStatus === 'done' ? new Date().toISOString() : null,
-        }),
-      }).catch(() => {})
+      queueOrSendUpdate('task', action.id, {
+        status: nextStatus,
+        completedAt: nextStatus === 'done' ? new Date().toISOString() : null,
+      })
     } else if (action.type === 'UPDATE_TASK') {
       pendingTaskMutationsRef.current.set(action.id, {
         updates: action.updates,
         timestamp: Date.now(),
       })
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: action.id, ...action.updates }),
-      }).catch(() => {})
+      queueOrSendUpdate('task', action.id, action.updates)
     } else if (action.type === 'UPDATE_NOTE') {
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: action.id, itemType: 'note', ...action.updates }),
-      }).catch(() => {})
+      queueOrSendUpdate('note', action.id, action.updates)
     } else if (action.type === 'UPDATE_GOAL') {
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: action.id, itemType: 'goal', ...action.updates }),
-      }).catch(() => {})
+      queueOrSendUpdate('goal', action.id, action.updates)
     } else if (action.type === 'ADD_TASK') {
-      if (!action.skipSync) {
-        recentlyAddedIdsRef.current.set(action.task.id, Date.now())
-        fetch('/api/tasks', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(action.task),
-        })
-          .then(async r => {
-            const data = await r.json().catch(() => null)
-            if (r.ok && data?.task?.id) {
-              dispatch({ type: 'REPLACE_TASK', tempId: action.task.id, task: data.task })
-            } else if (!r.ok) {
-              dispatch({ type: 'DELETE_TASK', id: action.task.id })
-            }
-          })
-          .catch(() => {})
-      }
+      if (!action.skipSync) queueOrSendCreate('task', action.task.id, action.task)
     } else if (action.type === 'ADD_NOTE') {
-      if (!action.skipSync) {
-        recentlyAddedIdsRef.current.set(action.note.id, Date.now())
-        fetch('/api/tasks', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ ...action.note, itemType: 'note' }),
-        })
-          .then(async r => {
-            const data = await r.json().catch(() => null)
-            if (r.ok && data?.note?.id) {
-              dispatch({ type: 'REPLACE_NOTE', tempId: action.note.id, note: data.note })
-            } else if (!r.ok) {
-              dispatch({ type: 'DELETE_NOTE', id: action.note.id })
-            }
-          })
-          .catch(() => {})
-      }
+      if (!action.skipSync) queueOrSendCreate('note', action.note.id, { ...action.note, itemType: 'note' })
     } else if (action.type === 'ADD_GOAL') {
-      if (!action.skipSync) {
-        recentlyAddedIdsRef.current.set(action.goal.id, Date.now())
-        fetch('/api/tasks', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ ...action.goal, itemType: 'goal' }),
-        })
-          .then(async r => {
-            const data = await r.json().catch(() => null)
-            if (r.ok && data?.goal?.id) {
-              dispatch({ type: 'REPLACE_GOAL', tempId: action.goal.id, goal: data.goal })
-            } else if (!r.ok) {
-              dispatch({ type: 'DELETE_GOAL', id: action.goal.id })
-            }
-          })
-          .catch(() => {})
-      }
+      if (!action.skipSync) queueOrSendCreate('goal', action.goal.id, { ...action.goal, itemType: 'goal' })
     } else if (action.type === 'ADD_HABIT') {
-      if (!action.skipSync) {
-        recentlyAddedIdsRef.current.set(action.habit.id, Date.now())
-        fetch('/api/tasks', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ ...action.habit, itemType: 'habit' }),
-        })
-          .then(async r => {
-            const data = await r.json().catch(() => null)
-            if (r.ok && data?.habit?.id) {
-              dispatch({ type: 'REPLACE_HABIT', tempId: action.habit.id, habit: data.habit })
-            } else if (!r.ok) {
-              dispatch({ type: 'DELETE_HABIT', id: action.habit.id })
-            }
-          })
-          .catch(() => {})
-      }
+      if (!action.skipSync) queueOrSendCreate('habit', action.habit.id, { ...action.habit, itemType: 'habit' })
     } else if (action.type === 'UPDATE_HABIT') {
-      fetch('/api/tasks', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ id: action.id, itemType: 'habit', ...action.updates }),
-      }).catch(() => {})
+      queueOrSendUpdate('habit', action.id, action.updates)
     } else if (action.type === 'ADD_PROJECT') {
       recentlyAddedIdsRef.current.set(action.project.id, Date.now())
       fetch('/api/projects', {
@@ -860,6 +844,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Core Sync Function with strict throttling to prevent function invocation burnout
   const syncBackendData = useCallback(async (force = false) => {
     if (syncInFlightRef.current) return
+    // While the offline outbox is replaying its queued mutations, a
+    // parallel sync could fetch pre-replay server state and clobber the
+    // just-reconciled local items — wait for the next cycle instead.
+    if (isFlushInProgress()) return
     const now = Date.now()
     if (!force && (now - lastSyncTimeRef.current < 2_000)) {
       return
@@ -923,7 +911,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           const keepFresh = <T extends { id: string }>(serverList: T[], localList: T[]): T[] => {
             const fresh = localList.filter(
-              l => recentlyAddedIdsRef.current.has(l.id) && !serverList.some(srv => srv.id === l.id)
+              l =>
+                (recentlyAddedIdsRef.current.has(l.id) || queueHasCreate(l.id)) &&
+                !serverList.some(srv => srv.id === l.id)
             )
             return [...serverList, ...fresh]
           }
@@ -1088,6 +1078,89 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [])
+
+  // ── Offline outbox replay: pushes queued mutations to the DB when the
+  // network returns (or at mount if the app was closed with a pending queue).
+  const flushOfflineOutbox = useCallback(async () => {
+    if (isFlushInProgress() || isOffline() || loadQueue().length === 0) return
+    setFlushInProgress(true)
+    try {
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
+      for (const op of loadQueue()) {
+        try {
+          if (op.kind === 'create') {
+            const body = op.itemType === 'task' ? op.payload : { ...op.payload, itemType: op.itemType }
+            const res = await fetch('/api/tasks', { method: 'POST', headers, body: JSON.stringify(body) })
+            if (res.ok) {
+              const data = await res.json().catch(() => null)
+              const created = data?.task || data?.note || data?.goal || data?.habit
+              if (created?.id && op.tempId) {
+                saveIdMapEntry(op.tempId, created.id)
+                recentlyAddedIdsRef.current.delete(op.tempId)
+                recentlyAddedIdsRef.current.set(created.id, Date.now())
+                if (op.itemType === 'task') dispatch({ type: 'REPLACE_TASK', tempId: op.tempId, task: created })
+                else if (op.itemType === 'note') dispatch({ type: 'REPLACE_NOTE', tempId: op.tempId, note: created })
+                else if (op.itemType === 'goal') dispatch({ type: 'REPLACE_GOAL', tempId: op.tempId, goal: created })
+                else dispatch({ type: 'REPLACE_HABIT', tempId: op.tempId, habit: created })
+              }
+            } else if (op.tempId) {
+              // Definitive server rejection (e.g. plan limit): remove the
+              // local placeholder and surface the failure to the user.
+              if (op.itemType === 'task') dispatch({ type: 'DELETE_TASK', id: op.tempId })
+              else if (op.itemType === 'note') dispatch({ type: 'DELETE_NOTE', id: op.tempId })
+              else if (op.itemType === 'goal') dispatch({ type: 'DELETE_GOAL', id: op.tempId })
+              else dispatch({ type: 'DELETE_HABIT', id: op.tempId })
+              try {
+                window.dispatchEvent(new CustomEvent('zerf_offline_item_rejected', {
+                  detail: { itemType: op.itemType, title: op.payload?.title || '' },
+                }))
+              } catch {}
+            }
+          } else if (op.kind === 'update') {
+            const idMap = loadIdMap()
+            const realId = (op.tempId && idMap[op.tempId]) || op.serverId
+            if (realId) {
+              await fetch('/api/tasks', {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({ id: realId, itemType: op.itemType, ...op.payload }),
+              })
+            }
+          } else if (op.kind === 'delete') {
+            const idMap = loadIdMap()
+            const realId = (op.tempId && idMap[op.tempId]) || op.serverId
+            if (realId) {
+              await fetch(`/api/tasks?id=${encodeURIComponent(realId)}&type=${op.itemType}`, {
+                method: 'DELETE',
+                headers: { ...getAuthHeaders() },
+              })
+            }
+          }
+          removeOp(op.opId)
+        } catch {
+          // Network dropped again mid-replay — keep the remaining ops for
+          // the next connectivity window.
+          break
+        }
+      }
+    } finally {
+      setFlushInProgress(false)
+      if (loadQueue().length === 0) clearIdMap()
+      notifyQueueChanged()
+    }
+    await syncBackendData(true)
+  }, [syncBackendData])
+
+  useEffect(() => {
+    flushOfflineOutbox()
+    const onConnectivity = () => flushOfflineOutbox()
+    window.addEventListener('online', onConnectivity)
+    window.addEventListener('zerf_offline_flush_request', onConnectivity)
+    return () => {
+      window.removeEventListener('online', onConnectivity)
+      window.removeEventListener('zerf_offline_flush_request', onConnectivity)
+    }
+  }, [flushOfflineOutbox])
 
   // Event-driven real-time updates via Server-Sent Events (SSE) + Lifecycle events
   useEffect(() => {

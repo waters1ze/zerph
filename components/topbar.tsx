@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn, calculateStreakInfo } from '@/lib/utils'
 import { useApp, isUserAuthenticated, getAuthHeaders } from '@/lib/store'
+import { loadQueue } from '@/lib/offline-queue'
 import { NotificationsPanel } from '@/components/notifications-panel'
-import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw, Lock } from 'lucide-react'
+import { Search, Plus, MessageSquare, Bell, X, Command, Mic, Menu, RefreshCw, Lock, CloudOff, RefreshCcw } from 'lucide-react'
 import { format } from 'date-fns'
 import { VoiceRecorder } from './voice-recorder'
 import { Clock } from 'lucide-react'
@@ -108,6 +109,25 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
   const [nextTaskCountdown, setNextTaskCountdown] = useState<{ title: string; timeStr: string } | null>(null)
   const [inAppToast, setInAppToast] = useState<{ title: string; body: string; id: number } | null>(null)
   const notifiedTasksRef = useRef<Set<string>>(new Set())
+
+  // Offline mode status: connection state + pending outbox operations count
+  const [netOnline, setNetOnline] = useState(true)
+  const [pendingOps, setPendingOps] = useState(0)
+  useEffect(() => {
+    const updateNet = () => {
+      setNetOnline(typeof navigator === 'undefined' ? true : navigator.onLine)
+      setPendingOps(loadQueue().length)
+    }
+    updateNet()
+    window.addEventListener('online', updateNet)
+    window.addEventListener('offline', updateNet)
+    window.addEventListener('zerf_offline_queue_changed', updateNet)
+    return () => {
+      window.removeEventListener('online', updateNet)
+      window.removeEventListener('offline', updateNet)
+      window.removeEventListener('zerf_offline_queue_changed', updateNet)
+    }
+  }, [])
 
   // In-app visual floating push banner listener
   useEffect(() => {
@@ -344,6 +364,35 @@ export function TopBar({ onNewTask, onMenuOpen, isMobileLayout }: Props) {
         >
           <Mic className="w-4 h-4" />
         </motion.button>
+
+        {/* Offline / pending sync indicator */}
+        {(!netOnline || pendingOps > 0) && (
+          <div
+            title={
+              !netOnline
+                ? `Офлайн-режим: изменения сохраняются локально${pendingOps ? ` (в очереди: ${pendingOps})` : ''} и отправятся при подключении`
+                : `Синхронизация: отправляется ${pendingOps} офлайн-изменени${pendingOps === 1 ? 'е' : 'й'}…`
+            }
+            className={
+              'h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-[11px] font-semibold shrink-0 border ' +
+              (!netOnline
+                ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                : 'bg-primary/10 text-primary border-primary/30')
+            }
+          >
+            {!netOnline ? (
+              <>
+                <CloudOff className="w-3.5 h-3.5 shrink-0" />
+                <span>Офлайн{pendingOps > 0 ? ` · ${pendingOps}` : ''}</span>
+              </>
+            ) : (
+              <>
+                <RefreshCcw className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                <span>{pendingOps}</span>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Live Refresh / Sync */}
         <motion.button
