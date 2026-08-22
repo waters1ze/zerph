@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
     const targetChatId = decodedState.chatId || req.cookies.get('zerf_chat_id')?.value
     let finalChatId: bigint | null = null
 
-    if (targetChatId && /^\d+$/.test(targetChatId) && !targetChatId.startsWith('guest_')) {
+    if (targetChatId && /^-?\d+$/.test(targetChatId) && !targetChatId.startsWith('guest_')) {
       finalChatId = BigInt(targetChatId)
     } else {
       // Find existing user with this GitHub username
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
       })
       if (existingGhConfig) {
         const parsed = existingGhConfig.key.replace(/^user_github_/, '')
-        if (/^\d+$/.test(parsed)) {
+        if (/^-?\d+$/.test(parsed)) {
           finalChatId = BigInt(parsed)
         }
       }

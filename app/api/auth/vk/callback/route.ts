@@ -17,7 +17,7 @@ const VK_CLIENT_ID = process.env.VK_CLIENT_ID || process.env.VK_APP_ID || '51824
 const VK_CLIENT_SECRET = process.env.VK_CLIENT_SECRET || process.env.VK_SECRET_KEY || 'aaQ13axAPQEcczQa'
 
 export async function GET(req: NextRequest) {
-  const host = req.headers.get('host') || 'zerph.vercel.app'
+  const host = req.headers.get('host') || 'zeprh.vercel.app'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const origin = `${protocol}://${host}`
 
@@ -88,6 +88,13 @@ export async function GET(req: NextRequest) {
       finalChatId = user.chatId
     }
 
+    // Also persist in config for cross-check
+    await prisma.config.upsert({
+      where: { key: `user_vk_${finalChatId}` },
+      update: { value: vkUserId },
+      create: { key: `user_vk_${finalChatId}`, value: vkUserId },
+    }).catch(() => {})
+
     const sessionToken = await createServerSession(
       finalChatId,
       'VK OAuth Session',
@@ -96,7 +103,8 @@ export async function GET(req: NextRequest) {
       req.headers.get('user-agent') || undefined
     )
 
-    const res = NextResponse.redirect(`${origin}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}#settings`)
+    const returnOrigin = decodedState?.origin || origin
+    const res = NextResponse.redirect(`${returnOrigin}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}#settings`)
     res.cookies.set('zerf_chat_id', String(finalChatId), COOKIE_OPTS)
     res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
     return res

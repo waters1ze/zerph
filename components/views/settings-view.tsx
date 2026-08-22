@@ -235,10 +235,6 @@ export function SettingsView() {
   const [showEmailLinkModal, setShowEmailLinkModal] = useState(false)
   const [linkEmail, setLinkEmail] = useState('')
   const [linkPassword, setLinkPassword] = useState('')
-  const [showVkLinkModal, setShowVkLinkModal] = useState(false)
-  const [vkInput, setVkInput] = useState('')
-  const [vkInputPhone, setVkInputPhone] = useState('')
-  const [vkLoading, setVkLoading] = useState(false)
   const [showGoogleLinkModal, setShowGoogleLinkModal] = useState(false)
   const [googleInput, setGoogleInput] = useState('')
   const [googleEmailInput, setGoogleEmailInput] = useState('')
@@ -907,52 +903,11 @@ export function SettingsView() {
     }
   }
 
-  const openVkModal = () => {
-    setVkInput(profileData.vkId || '')
-    setAuthError(null)
-    setShowVkLinkModal(true)
-    setShowGoogleLinkModal(false)
-    setShowEmailLinkModal(false)
-  }
-
   const openGoogleModal = () => {
     setGoogleInput(profileData.googleEmail || '')
     setAuthError(null)
     setShowGoogleLinkModal(true)
-    setShowVkLinkModal(false)
     setShowEmailLinkModal(false)
-  }
-
-  const handleVkSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    let clean = vkInput.trim()
-    const idMatch = clean.match(/(?:vk\.com\/)?(?:id)?(\d+)/i)
-    if (idMatch && idMatch[1]) {
-      clean = idMatch[1]
-    } else {
-      clean = clean.replace(/^(?:https?:\/\/)?(?:www\.)?vk\.com\//i, '').replace(/^@/, '')
-    }
-    if (!clean) return
-
-    setAuthLoading(true)
-    setAuthError(null)
-    try {
-      const res = await fetch('/api/telegram/user', {
-        method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vkId: clean })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка привязки VK')
-      setProfileData(prev => ({ ...prev, vkId: clean }))
-      setShowVkLinkModal(false)
-      setAuthSuccess('ВКонтакте успешно привязан к профилю!')
-      setTimeout(() => setAuthSuccess(null), 3000)
-    } catch (err: any) {
-      setAuthError(err.message || 'Ошибка привязки VK')
-    } finally {
-      setAuthLoading(false)
-    }
   }
 
   const handleUnlinkVk = async () => {
@@ -967,7 +922,6 @@ export function SettingsView() {
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Ошибка отвязки VK')
       setProfileData(prev => ({ ...prev, vkId: null }))
-      setShowVkLinkModal(false)
       setAuthSuccess('ВКонтакте успешно отвязан!')
       setTimeout(() => setAuthSuccess(null), 3000)
     } catch (err: any) {
@@ -1678,7 +1632,7 @@ export function SettingsView() {
                 </div>
 
                 {/* 3. VK Card */}
-                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3">
+                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-xl bg-[#0077FF]/15 text-[#0077FF] flex items-center justify-center font-bold text-xs">
@@ -1686,45 +1640,61 @@ export function SettingsView() {
                       </div>
                       <div>
                         <p className="text-xs font-bold text-foreground">ВКонтакте</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {profileData.vkId ? `VK ID: ${profileData.vkId}` : 'Сообщество / Mini App / OAuth'}
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {profileData.vkId ? `id${profileData.vkId}` : 'Официальный вход & Сообщество'}
                         </p>
                       </div>
                     </div>
                     {profileData.vkId ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
                         Привязан
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border">
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
                         Доступен
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <a
-                      href="/api/auth/vk"
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                    >
-                      <span>⚡ {profileData.vkId ? 'VK OAuth' : 'Привязать через VK ID'}</span>
-                    </a>
-                    <button
-                      onClick={openVkModal}
-                      className="py-1.5 px-2.5 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground text-xs font-medium border border-border transition-colors cursor-pointer"
-                      title="Указать VK ID вручную"
-                    >
-                      Вручную
-                    </button>
-                    <a
-                      href="https://vk.com/im?sel=-240878278"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-1.5 rounded-xl bg-muted hover:bg-[#0077FF]/20 text-muted-foreground hover:text-[#0077FF] text-xs transition-colors flex items-center justify-center"
-                      title="Открыть чат VK"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
+
+                  {profileData.vkId ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <a
+                        href={currentChatId ? `/api/auth/vk?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/vk'}
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                        title="Сменить привязанный аккаунт VK через OAuth"
+                      >
+                        <span>Сменить ID: {profileData.vkId}</span>
+                      </a>
+
+                      <a
+                        href={`https://vk.com/id${profileData.vkId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center"
+                        title="Открыть VK профиль"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={handleUnlinkVk}
+                        className="py-1.5 px-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
+                        title="Отвязать VK"
+                      >
+                        Отвязать
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={currentChatId ? `/api/auth/vk?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/vk'}
+                        className="w-full py-2 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] border border-[#0077FF]/30 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                      >
+                        <span>⚡ Привязать через VK ID</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. Google Card */}
@@ -2059,88 +2029,7 @@ export function SettingsView() {
 
 
 
-              {/* Inline Modal/Form for VK Linking */}
-              <AnimatePresence>
-                {showVkLinkModal && (
-                  <motion.form
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    onSubmit={handleVkSubmit}
-                    className="p-4 rounded-2xl bg-[#0077FF]/5 border border-[#0077FF]/30 space-y-3 mt-3 overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-[#0077FF] text-white flex items-center justify-center font-bold text-[10px]">
-                          VK
-                        </div>
-                        <p className="text-xs font-bold text-foreground">
-                          {profileData.vkId ? 'Изменение привязки ВКонтакте' : 'Привязка аккаунта ВКонтакте'}
-                        </p>
-                      </div>
-                      <a
-                        href="https://vk.com/id0"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] font-semibold text-[#0077FF] hover:underline flex items-center gap-1"
-                      >
-                        <span>Моя страница VK</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] text-muted-foreground font-semibold block">
-                        Ваш цифровой ID или адрес страницы ВКонтакте:
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={vkInput}
-                        onChange={e => setVkInput(e.target.value)}
-                        placeholder="240878278 или id240878278 или vk.com/id240878278"
-                        className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground outline-none focus:border-[#0077FF]"
-                      />
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        💡 Чтобы узнать свой ID, откройте <a href="https://vk.com/id0" target="_blank" rel="noreferrer" className="text-[#0077FF] underline font-semibold">свою страницу ВКонтакте</a> и скопируйте цифры из ссылки, либо откройте <a href="https://vk.com/im?sel=-240878278" target="_blank" rel="noreferrer" className="text-[#0077FF] underline font-semibold">чат с ботом Zerf</a>.
-                      </p>
-                    </div>
-
-                    {authError && (
-                      <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
-                        {authError}
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="submit"
-                        disabled={authLoading || !vkInput.trim()}
-                        className="px-4 py-2 rounded-xl bg-[#0077FF] text-white text-xs font-semibold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                      >
-                        {authLoading ? 'Сохранение...' : 'Привязать ВКонтакте'}
-                      </button>
-                      {profileData.vkId && (
-                        <button
-                          type="button"
-                          onClick={handleUnlinkVk}
-                          disabled={authLoading}
-                          className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                          Отвязать VK
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setShowVkLinkModal(false)}
-                        className="px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-semibold transition-colors cursor-pointer"
-                      >
-                        Отмена
-                      </button>
-                    </div>
-                  </motion.form>
-                )}
-              </AnimatePresence>
 
               {/* Inline Modal/Form for Google Linking */}
               <AnimatePresence>

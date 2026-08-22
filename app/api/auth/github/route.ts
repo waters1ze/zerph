@@ -21,29 +21,39 @@ function getCanonicalOrigin(rawOrigin: string): string {
  * 1-Click GitHub OAuth Entry point
  */
 export async function GET(req: NextRequest) {
-  const rawOrigin = req.nextUrl.origin || 'https://zeprh.vercel.app'
-  const origin = getCanonicalOrigin(rawOrigin)
-  const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
-  
-  const authUser = await getAuthenticatedUser(req)
-  const cookieCid = req.cookies.get('zerf_chat_id')?.value
-  const paramCid = req.nextUrl.searchParams.get('chatId')
-  const targetChatId = authUser?.chatId ? String(authUser.chatId) : (cookieCid || paramCid || '')
-  const clientId = process.env.GITHUB_CLIENT_ID || GITHUB_CLIENT_ID
+  try {
+    const rawOrigin = req.nextUrl.origin || 'https://zeprh.vercel.app'
+    const origin = getCanonicalOrigin(rawOrigin)
+    const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
+    
+    let targetChatId = ''
+    try {
+      const authUser = await getAuthenticatedUser(req)
+      if (authUser?.chatId) {
+        targetChatId = String(authUser.chatId)
+      }
+    } catch {}
 
-  // If no registered OAuth app is configured in Vercel environment variables yet
-  if (!clientId || clientId.startsWith('Ov23li34b9d1469e88aa')) {
-    return NextResponse.redirect(`${origin}/?github_oauth_setup_needed=1#settings`)
+    if (!targetChatId) {
+      const cookieCid = req.cookies.get('zerf_chat_id')?.value
+      const paramCid = req.nextUrl.searchParams.get('chatId')
+      targetChatId = cookieCid || paramCid || ''
+    }
+
+    const clientId = process.env.GITHUB_CLIENT_ID || GITHUB_CLIENT_ID
+
+    const state = Buffer.from(JSON.stringify({
+      chatId: targetChatId,
+      origin,
+    })).toString('base64url')
+
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user%20user:email&state=${state}`
+    
+    return NextResponse.redirect(githubAuthUrl)
+  } catch (err: any) {
+    console.error('GitHub OAuth start error:', err)
+    return NextResponse.redirect('https://github.com/login/oauth/authorize?client_id=Ov23li5itN8nX8pNVJsy&redirect_uri=https%3A%2F%2Fzeprh.vercel.app%2Fapi%2Fauth%2Fgithub%2Fcallback&scope=read:user%20user:email')
   }
-
-  const state = Buffer.from(JSON.stringify({
-    chatId: targetChatId,
-    origin,
-  })).toString('base64url')
-
-  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user%20user:email&state=${state}`
-  
-  return NextResponse.redirect(githubAuthUrl)
 }
 
 /**
