@@ -21,11 +21,8 @@ function getCanonicalOrigin(rawOrigin: string): string {
  * 1-Click GitHub OAuth Entry point
  */
 export async function GET(req: NextRequest) {
-  const rawOrigin = req.nextUrl.origin || 'https://zerph.vercel.app'
-  const origin = getCanonicalOrigin(rawOrigin)
-  const isLocal = rawOrigin.includes('localhost')
-  // Use registered canonical callback on production, or local callback on localhost
-  const redirectUri = isLocal ? `${rawOrigin.replace(/\/$/, '')}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'
+  const origin = req.nextUrl.origin || 'https://zeprh.vercel.app'
+  const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
   
   const authUser = await getAuthenticatedUser(req)
   const cookieCid = req.cookies.get('zerf_chat_id')?.value

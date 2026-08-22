@@ -47,8 +47,7 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
-    const isLocal = origin.includes('localhost')
-    const redirectUri = isLocal ? `${origin.replace(/\/$/, '')}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'
+    const redirectUri = `${origin.replace(/\/$/, '')}/api/auth/github/callback`
 
     // Exchange code for access token
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
