@@ -18,6 +18,14 @@ import { getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { ExtensionItem } from '@/lib/backend/extensions'
 
+export function GithubIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+    </svg>
+  )
+}
+
 type NavSection =
   | 'manifest_builder'
   | 'universal_template'
@@ -152,6 +160,22 @@ async function runAction(promptText) {
   // GitHub Publish & Validation State
   const [publishRepoUrl, setPublishRepoUrl] = useState('')
   const [publishValidating, setPublishValidating] = useState(false)
+  const [userRepos, setUserRepos] = useState<Array<{
+    name: string
+    fullName: string
+    description: string
+    htmlUrl: string
+    isPrivate: boolean
+    stars: number
+    forks: number
+    language: string
+    updatedAt: string
+    defaultBranch: string
+  }>>([])
+  const [loadingUserRepos, setLoadingUserRepos] = useState(false)
+  const [repoSearchFilter, setRepoSearchFilter] = useState('')
+  const [repoTypeFilter, setRepoTypeFilter] = useState<'all' | 'public' | 'private'>('all')
+  const [publishMode, setPublishMode] = useState<'picker' | 'manual'>('picker')
   const [publishValidation, setPublishValidation] = useState<{
     tested: boolean
     valid: boolean
@@ -207,6 +231,24 @@ async function runAction(promptText) {
     setTimeout(() => setCopiedId(null), 2200)
   }
 
+  // Fetch GitHub repos for picker
+  const fetchUserRepos = async (uname?: string) => {
+    const target = (uname || userGh || '').trim().replace(/^@/, '')
+    if (!target) return
+    setLoadingUserRepos(true)
+    try {
+      const res = await fetch(`/api/extensions?action=user_repos&username=${encodeURIComponent(target)}`, {
+        headers: getAuthHeaders(),
+      })
+      const data = await res.json()
+      if (data.success && Array.isArray(data.repos)) {
+        setUserRepos(data.repos)
+      }
+    } catch {} finally {
+      setLoadingUserRepos(false)
+    }
+  }
+
   // Load Initial Developer Stats
   const fetchDevData = async () => {
     try {
@@ -215,6 +257,16 @@ async function runAction(promptText) {
       const data = await res.json()
       if (data.success) {
         setAuthorStats(data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 })
+        if (data.githubUsername) {
+          const cleanGh = data.githubUsername.replace(/^@/, '').trim()
+          setUserGh(cleanGh)
+          setMAuthor(cleanGh)
+          try {
+            localStorage.setItem('zerf_github_username', cleanGh)
+            localStorage.setItem('zerf_user_github', cleanGh)
+          } catch {}
+          fetchUserRepos(cleanGh)
+        }
         if (data.boundCard) {
           setBoundCard(data.boundCard)
           setDevCardPayoutType(data.boundCard.payoutType === 'card' ? 'card' : 'yoomoney')
@@ -244,10 +296,15 @@ async function runAction(promptText) {
         else if (tabParam === 'publish') setNavSection('publish_github')
         else if (tabParam === 'prompts') setNavSection('ai_prompts')
       }
-      const gh = localStorage.getItem('zerf_user_github')
+      const gh = (
+        localStorage.getItem('zerf_github_username') ||
+        localStorage.getItem('zerf_user_github') ||
+        ''
+      ).replace(/^@/, '').trim()
       if (gh) {
         setUserGh(gh)
         setMAuthor(gh)
+        fetchUserRepos(gh)
       }
     }
     fetchDevData()
@@ -283,12 +340,13 @@ async function runAction(promptText) {
   }
 
   // Handle Strict GitHub Validation
-  const handleValidateGithubRepo = async () => {
-    const raw = publishRepoUrl.trim()
+  const handleValidateGithubRepo = async (overrideUrl?: string) => {
+    const raw = (overrideUrl || publishRepoUrl || '').trim()
     if (!raw) {
-      alert('Введите ссылку на GitHub репозиторий')
+      alert('Введите ссылку на GitHub репозиторий или выберите проект из списка')
       return
     }
+    if (overrideUrl) setPublishRepoUrl(overrideUrl)
     setPublishValidating(true)
     setPublishValidation(null)
 
@@ -2185,29 +2243,212 @@ When processing user instructions and extension triggers, ALWAYS output your fin
                   )}
                 </div>
 
-                {/* Input Repo URL */}
-                <div className="space-y-2 pt-2">
-                  <label className="font-semibold text-foreground text-xs block">
-                    Ссылка на публичный репозиторий GitHub:
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="text"
-                      value={publishRepoUrl}
-                      onChange={e => setPublishRepoUrl(e.target.value)}
-                      placeholder="https://github.com/waters1ze/zerf-deep-research"
-                      className="flex-1 h-10 px-3.5 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-primary"
-                    />
-                    <button
-                      onClick={handleValidateGithubRepo}
-                      disabled={publishValidating || !publishRepoUrl.trim()}
-                      className="h-10 px-5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                    >
-                      {publishValidating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                      <span>Проверить и спарсить</span>
-                    </button>
-                  </div>
+                {/* Mode Switcher */}
+                <div className="flex items-center gap-2 border-b border-border pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setPublishMode('picker')}
+                    className={cn(
+                      'px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer',
+                      publishMode === 'picker'
+                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                        : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <GithubIcon className="w-3.5 h-3.5" />
+                    <span>Выбрать из моих репозиториев {userGh ? `(@${userGh})` : ''}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPublishMode('manual')}
+                    className={cn(
+                      'px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer',
+                      publishMode === 'manual'
+                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                        : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Вставить ссылку вручную</span>
+                  </button>
                 </div>
+
+                {publishMode === 'picker' ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      {/* Search & Privacy Filters */}
+                      <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                        <div className="relative flex-1">
+                          <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={repoSearchFilter}
+                            onChange={e => setRepoSearchFilter(e.target.value)}
+                            placeholder="Поиск по проектам на GitHub..."
+                            className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary placeholder:text-muted-foreground/70"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setRepoTypeFilter('all')}
+                          className={cn(
+                            'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
+                            repoTypeFilter === 'all' ? 'bg-card text-foreground border border-border shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          Все ({userRepos.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRepoTypeFilter('public')}
+                          className={cn(
+                            'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
+                            repoTypeFilter === 'public' ? 'bg-card text-foreground border border-border shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          🌐 Публичные ({userRepos.filter(r => !r.isPrivate).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRepoTypeFilter('private')}
+                          className={cn(
+                            'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
+                            repoTypeFilter === 'private' ? 'bg-card text-foreground border border-border shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          🔒 Приватные ({userRepos.filter(r => r.isPrivate).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => fetchUserRepos()}
+                          disabled={loadingUserRepos}
+                          className="p-1.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          title="Обновить список репозиториев"
+                        >
+                          <RefreshCw className={cn('w-3.5 h-3.5', loadingUserRepos && 'animate-spin')} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Repository cards list */}
+                    {loadingUserRepos ? (
+                      <div className="p-8 rounded-2xl bg-muted/20 border border-border text-center space-y-2">
+                        <RefreshCw className="w-5 h-5 text-primary animate-spin mx-auto" />
+                        <p className="text-xs text-muted-foreground">Загрузка репозиториев с GitHub...</p>
+                      </div>
+                    ) : userRepos.length === 0 ? (
+                      <div className="p-6 rounded-2xl bg-muted/20 border border-border text-center space-y-2">
+                        <p className="text-xs font-bold text-foreground">Репозитории не найдены</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {userGh
+                            ? `В аккаунте @${userGh} не найдено репозиториев, либо переключитесь на ручной ввод ссылки.`
+                            : 'Привяжите GitHub аккаунт в Настройках, чтобы видеть список ваших репозиториев.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => fetchUserRepos()}
+                          className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold cursor-pointer"
+                        >
+                          Обновить
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                        {userRepos
+                          .filter(r => {
+                            if (repoTypeFilter === 'public' && r.isPrivate) return false
+                            if (repoTypeFilter === 'private' && !r.isPrivate) return false
+                            if (!repoSearchFilter) return true
+                            return (
+                              r.name.toLowerCase().includes(repoSearchFilter.toLowerCase()) ||
+                              r.description.toLowerCase().includes(repoSearchFilter.toLowerCase()) ||
+                              r.language.toLowerCase().includes(repoSearchFilter.toLowerCase())
+                            )
+                          })
+                          .map(repo => {
+                            const isSelected = publishRepoUrl === repo.htmlUrl
+                            return (
+                              <div
+                                key={repo.fullName}
+                                className={cn(
+                                  'p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2.5 group',
+                                  isSelected
+                                    ? 'bg-primary/10 border-primary/50 shadow-xs'
+                                    : 'bg-card border-border hover:border-primary/40'
+                                )}
+                              >
+                                <div>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <h4 className="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+                                      {repo.name}
+                                    </h4>
+                                    <span className={cn(
+                                      'px-1.5 py-0.5 rounded text-[9px] font-mono shrink-0',
+                                      repo.isPrivate
+                                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                                    )}>
+                                      {repo.isPrivate ? '🔒 Private' : '🌐 Public'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground line-clamp-2 mt-1">
+                                    {repo.description || 'Репозиторий проекта GitHub'}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[10px] text-muted-foreground">
+                                  <div className="flex items-center gap-2">
+                                    {repo.language && (
+                                      <span className="font-mono">{repo.language}</span>
+                                    )}
+                                    {repo.stars > 0 && (
+                                      <span className="text-amber-400 font-mono">★ {repo.stars}</span>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleValidateGithubRepo(repo.htmlUrl)}
+                                    disabled={publishValidating}
+                                    className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all hover:bg-primary/90 shadow-2xs"
+                                  >
+                                    <span>Выбрать</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Manual URL Input */
+                  <div className="space-y-2 pt-2">
+                    <label className="font-semibold text-foreground text-xs block">
+                      Ссылка на публичный репозиторий GitHub:
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={publishRepoUrl}
+                        onChange={e => setPublishRepoUrl(e.target.value)}
+                        placeholder="https://github.com/waters1ze/zerf-deep-research"
+                        className="flex-1 h-10 px-3.5 rounded-xl bg-muted/40 border border-border text-xs text-foreground font-mono outline-none focus:border-primary"
+                      />
+                      <button
+                        onClick={() => handleValidateGithubRepo()}
+                        disabled={publishValidating || !publishRepoUrl.trim()}
+                        className="h-10 px-5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {publishValidating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        <span>Проверить и спарсить</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Validation Result Box */}
                 {publishValidation && (

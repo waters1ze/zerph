@@ -13,6 +13,7 @@ import {
   CreditCard, Wallet, Banknote, CheckCircle2, X, Loader2
 } from 'lucide-react'
 import { useApp, getAuthHeaders, getTgChatId } from '@/lib/store'
+import { planAtLeast } from '@/lib/plans'
 import { cn } from '@/lib/utils'
 import { useConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { ExtensionItem } from '@/app/api/extensions/route'
@@ -349,7 +350,7 @@ export interface ExtensionsViewProps {
 }
 
 export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
-  const { dispatch, syncData } = useApp()
+  const { state, dispatch, syncData } = useApp()
   const confirmDialog = useConfirmDialog()
   const initialCache = getInitialExtensionsData()
 
@@ -471,7 +472,11 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   const [isParsing, setIsParsing] = useState<boolean>(false)
   const [userGithubUsername, setUserGithubUsername] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('zerf_github_username') || ''
+      return (
+        localStorage.getItem('zerf_github_username') ||
+        localStorage.getItem('zerf_user_github') ||
+        ''
+      ).replace(/^@/, '').trim()
     }
     return ''
   })
@@ -489,6 +494,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
   }>>([])
   const [loadingGithubRepos, setLoadingGithubRepos] = useState<boolean>(false)
   const [githubRepoSearch, setGithubRepoSearch] = useState<string>('')
+  const [githubRepoPrivacyFilter, setGithubRepoPrivacyFilter] = useState<'all' | 'public' | 'private'>('all')
   const [githubModalTab, setGithubModalTab] = useState<'repos' | 'url'>('repos')
   const [customGithubInput, setCustomGithubInput] = useState<string>('')
 
@@ -504,8 +510,12 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
       if (data.success && Array.isArray(data.repos)) {
         setUserGithubRepos(data.repos)
         if (data.username) {
-          setUserGithubUsername(data.username)
-          try { localStorage.setItem('zerf_github_username', data.username) } catch {}
+          const cleanUname = data.username.replace(/^@/, '').trim()
+          setUserGithubUsername(cleanUname)
+          try {
+            localStorage.setItem('zerf_github_username', cleanUname)
+            localStorage.setItem('zerf_user_github', cleanUname)
+          } catch {}
         }
       }
     } catch {}
@@ -534,6 +544,15 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
         setAuthorStats(data.authorStats || { balance: 0, totalEarned: 0, salesCount: 0 })
         if (data.boundCard) setBoundCard(data.boundCard)
         if (data.payoutConfig) setPayoutConfig(data.payoutConfig)
+        if (data.githubUsername) {
+          const cleanUname = data.githubUsername.replace(/^@/, '').trim()
+          setUserGithubUsername(cleanUname)
+          try {
+            localStorage.setItem('zerf_github_username', cleanUname)
+            localStorage.setItem('zerf_user_github', cleanUname)
+          } catch {}
+          fetchUserGithubRepos(cleanUname)
+        }
 
         try {
           localStorage.setItem('zerf_ext_catalog_cache', JSON.stringify({
@@ -557,7 +576,18 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
 
   useEffect(() => {
     fetchExtensions()
+
     if (typeof window !== 'undefined') {
+      const gh = (
+        localStorage.getItem('zerf_github_username') ||
+        localStorage.getItem('zerf_user_github') ||
+        ''
+      ).replace(/^@/, '').trim()
+      if (gh) {
+        setUserGithubUsername(gh)
+        fetchUserGithubRepos(gh)
+      }
+
       const urlParams = new URLSearchParams(window.location.search)
       const purchasedExtId = urlParams.get('ext_purchased')
       if (purchasedExtId) {
@@ -586,7 +616,15 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
     }
   }, [])
 
-  const isPlusOrHigher = userPlan === 'plus' || userPlan === 'pro' || userPlan === 'corp'
+  const rawPlan = (
+    userPlan ||
+    state.settings.userPlan ||
+    (typeof window !== 'undefined' ? localStorage.getItem('zerf_user_plan') : '') ||
+    'free'
+  ).toLowerCase().trim()
+
+  const isPlusOrHigher = planAtLeast(rawPlan, 'plus') || ['plus', 'pro', 'premium', 'unlimited', 'corp', 'corporate', 'enterprise', 'admin'].includes(rawPlan) || Boolean((state as any).user?.isAdmin)
+  const canCreateFinal = canCreate || isPlusOrHigher
 
   const promptUpgradeToPlus = async (actionLabel = 'использования расширений') => {
     const ok = await confirmDialog({
@@ -1541,10 +1579,10 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
             <span>Спецификация GitHub</span>
           </button>
 
-          {canCreate ? (
+          {canCreateFinal ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={handleOpenCreate}
+                onClick={() => setShowSpecModal(true)}
                 className="px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
@@ -2785,17 +2823,58 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                         </div>
                       </div>
 
-                      {/* Repositories Search Filter */}
+                      {/* Repositories Filter Pills & Search */}
                       {userGithubRepos.length > 0 && (
-                        <div className="relative">
-                          <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={githubRepoSearch}
-                            onChange={e => setGithubRepoSearch(e.target.value)}
-                            placeholder="Поиск по вашим репозиториям..."
-                            className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary placeholder:text-muted-foreground/70"
-                          />
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setGithubRepoPrivacyFilter('all')}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
+                                githubRepoPrivacyFilter === 'all'
+                                  ? 'bg-card text-foreground border border-border shadow-xs font-bold'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              Все ({userGithubRepos.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setGithubRepoPrivacyFilter('public')}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
+                                githubRepoPrivacyFilter === 'public'
+                                  ? 'bg-card text-foreground border border-border shadow-xs font-bold'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              🌐 Публичные ({userGithubRepos.filter(r => !r.isPrivate).length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setGithubRepoPrivacyFilter('private')}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
+                                githubRepoPrivacyFilter === 'private'
+                                  ? 'bg-card text-foreground border border-border shadow-xs font-bold'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              🔒 Приватные ({userGithubRepos.filter(r => r.isPrivate).length})
+                            </button>
+                          </div>
+
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={githubRepoSearch}
+                              onChange={e => setGithubRepoSearch(e.target.value)}
+                              placeholder="Поиск по вашим репозиториям..."
+                              className="w-full h-8 pl-8 pr-3 rounded-xl bg-muted/40 border border-border text-xs text-foreground outline-none focus:border-primary placeholder:text-muted-foreground/70"
+                            />
+                          </div>
                         </div>
                       )}
 
@@ -2807,7 +2886,7 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                         </div>
                       ) : userGithubRepos.length === 0 ? (
                         <div className="p-6 rounded-2xl bg-muted/30 border border-border text-center space-y-2">
-                          <p className="text-xs font-bold text-foreground">Публичные репозитории не найдены</p>
+                          <p className="text-xs font-bold text-foreground">Репозитории не найдены</p>
                           <p className="text-[11px] text-muted-foreground">
                             Создайте новый репозиторий на GitHub или вставьте ссылку на репозиторий вручную.
                           </p>
@@ -2822,12 +2901,16 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                       ) : (
                         <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                           {userGithubRepos
-                            .filter(r =>
-                              !githubRepoSearch ||
-                              r.name.toLowerCase().includes(githubRepoSearch.toLowerCase()) ||
-                              r.description.toLowerCase().includes(githubRepoSearch.toLowerCase()) ||
-                              r.language.toLowerCase().includes(githubRepoSearch.toLowerCase())
-                            )
+                            .filter(r => {
+                              if (githubRepoPrivacyFilter === 'public' && r.isPrivate) return false
+                              if (githubRepoPrivacyFilter === 'private' && !r.isPrivate) return false
+                              if (!githubRepoSearch) return true
+                              return (
+                                r.name.toLowerCase().includes(githubRepoSearch.toLowerCase()) ||
+                                r.description.toLowerCase().includes(githubRepoSearch.toLowerCase()) ||
+                                r.language.toLowerCase().includes(githubRepoSearch.toLowerCase())
+                              )
+                            })
                             .map(repo => {
                               const isThisParsing = isParsing && githubUrl === repo.htmlUrl
                               return (
@@ -2840,6 +2923,14 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                                       <h5 className="font-bold text-foreground text-xs truncate group-hover:text-primary transition-colors">
                                         {repo.name}
                                       </h5>
+                                      <span className={cn(
+                                        'px-1.5 py-0.2 rounded text-[9px] font-mono shrink-0',
+                                        repo.isPrivate
+                                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                                          : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                                      )}>
+                                        {repo.isPrivate ? '🔒 Private' : '🌐 Public'}
+                                      </span>
                                       {repo.language && (
                                         <span className="px-1.5 py-0.2 rounded bg-muted text-muted-foreground text-[9px] font-mono shrink-0">
                                           {repo.language}
@@ -3072,16 +3163,26 @@ export function ExtensionsView({ isModal, onClose }: ExtensionsViewProps = {}) {
                 </div>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={() => {
                     setShowSpecModal(false)
-                    if (canCreate) setShowGithubModal(true)
+                    setShowGithubModal(true)
                   }}
-                  className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer hover:bg-primary/90"
                 >
-                  <span>{canCreate ? 'Перейти к импорту репозитория' : 'Закрыть'}</span>
+                  <GithubIcon className="w-3.5 h-3.5" />
+                  <span>Выбрать мой репозиторий GitHub</span>
                 </button>
+                <a
+                  href="/developer?tab=publish"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2.5 rounded-xl bg-muted text-foreground font-semibold text-xs flex items-center justify-center gap-1.5 border border-border cursor-pointer hover:bg-muted/80"
+                >
+                  <Code2 className="w-3.5 h-3.5" />
+                  <span>Студия разработки</span>
+                </a>
               </div>
             </motion.div>
           </div>
