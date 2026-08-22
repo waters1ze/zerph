@@ -6,15 +6,26 @@ export const dynamic = 'force-dynamic'
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
 
+function getCanonicalOrigin(rawOrigin: string): string {
+  if (!rawOrigin || rawOrigin.includes('zerph') || rawOrigin.includes('zcrph') || rawOrigin.includes('zeprh')) {
+    return 'https://zerph.vercel.app'
+  }
+  if (rawOrigin.includes('localhost')) {
+    return rawOrigin
+  }
+  return rawOrigin.replace(/\/$/, '')
+}
+
 /**
  * GET /api/auth/github
  * 1-Click GitHub OAuth Entry point
  */
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin || 'https://zerph.vercel.app'
-  const isLocal = origin.includes('localhost')
+  const rawOrigin = req.nextUrl.origin || 'https://zerph.vercel.app'
+  const origin = getCanonicalOrigin(rawOrigin)
+  const isLocal = rawOrigin.includes('localhost')
   // Use registered canonical callback on production, or local callback on localhost
-  const redirectUri = isLocal ? `${origin.replace(/\/$/, '')}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'
+  const redirectUri = isLocal ? `${rawOrigin.replace(/\/$/, '')}/api/auth/github/callback` : 'https://zerph.vercel.app/api/auth/github/callback'
   
   const authUser = await getAuthenticatedUser(req)
   const cookieCid = req.cookies.get('zerf_chat_id')?.value

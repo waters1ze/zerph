@@ -14,10 +14,21 @@ const COOKIE_OPTS = {
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'acb04b9e1b10d79b208603feebce151f203d0e8e'
 
+function getCanonicalOrigin(rawOrigin: string): string {
+  if (!rawOrigin || rawOrigin.includes('zerph') || rawOrigin.includes('zcrph') || rawOrigin.includes('zeprh')) {
+    return 'https://zerph.vercel.app'
+  }
+  if (rawOrigin.includes('localhost')) {
+    return rawOrigin
+  }
+  return rawOrigin.replace(/\/$/, '')
+}
+
 export async function GET(req: NextRequest) {
   const host = req.headers.get('host') || 'zerph.vercel.app'
   const protocol = host.includes('localhost') ? 'http' : 'https'
-  const origin = `${protocol}://${host}`
+  const rawOrigin = `${protocol}://${host}`
+  const origin = getCanonicalOrigin(rawOrigin)
 
   try {
     const { searchParams } = new URL(req.url)
