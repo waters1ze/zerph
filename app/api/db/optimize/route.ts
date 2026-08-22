@@ -8,14 +8,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { isCallerAdmin } from '@/lib/backend/admin'
 import { prisma } from '@/lib/backend/prisma'
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = await getAuthenticatedUser(req)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // SECURITY (audit H-5): this routine performs GLOBAL destructive
+    // maintenance (wipes temp_/draft_/cache_ configs for ALL users and can
+    // trigger account cleanup sweeps). It previously required only "any
+    // authenticated user". Admin/root only now.
+    const admin = await isCallerAdmin(req)
+    if (!admin.isAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
     let cleanedConfigs = 0
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest) {
     const inactiveCleanup = await cleanupInactiveAccounts().catch(() => ({ deletedCount: 0, checkedCount: 0 }))
 
     // 4. Maximize compaction of completed tasks older than 7 days without deleting history/graphs
-    const taskCompaction = await compactOldCompletedTasks(authUser.chatId).catch(() => ({ compactedCount: 0 }))
+    const taskCompaction = await compactOldCompletedTasks(admin.callerChatId || '0').catch(() => ({ compactedCount: 0 }))
 
     return NextResponse.json({
       success: true,
@@ -83,6 +87,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (err: unknown) {
     console.error('DB optimize error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

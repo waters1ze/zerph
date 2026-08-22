@@ -30,15 +30,27 @@ export function verifyPassword(password: string, stored: string | null | undefin
     const parts = stored.split('$')
     if (parts.length !== 4) return false
     const iterations = parseInt(parts[1], 10)
-    const salt = Buffer.from(parts[2], 'hex')
-    const expected = Buffer.from(parts[3], 'hex')
-    if (!Number.isFinite(iterations) || iterations < 1 || salt.length === 0) return false
-    const actual = crypto.pbkdf2Sync(password, salt, iterations, expected.length, DIGEST)
-    return crypto.timingSafeEqual(actual, expected)
+    const saltHex = parts[2]
+    const hashHex = parts[3]
+    // Strict validation: a corrupted/hostile DB value must yield `false`,
+    // never an exception (pbkdf2Sync throws on zero/odd-length key material).
+    if (!Number.isFinite(iterations) || iterations < 1 || iterations > 10_000_000) return false
+    const isHex = (s: string) => /^[0-9a-f]+$/.test(s) && s.length >= 2 && s.length % 2 === 0
+    if (!isHex(saltHex) || !isHex(hashHex)) return false
+    try {
+      const actual = crypto.pbkdf2Sync(password, Buffer.from(saltHex, 'hex'), iterations, hashHex.length / 2, DIGEST)
+      return crypto.timingSafeEqual(actual, Buffer.from(hashHex, 'hex'))
+    } catch {
+      return false
+    }
   }
   // Legacy static-salt hash
-  const legacy = crypto.pbkdf2Sync(password, LEGACY_SALT, LEGACY_ITERATIONS, KEY_LEN, DIGEST).toString('hex')
-  return secretsMatch(legacy, stored)
+  try {
+    const legacy = crypto.pbkdf2Sync(password, LEGACY_SALT, LEGACY_ITERATIONS, KEY_LEN, DIGEST).toString('hex')
+    return secretsMatch(legacy, stored)
+  } catch {
+    return false
+  }
 }
 
 export function isLegacyPasswordHash(stored: string | null | undefined): boolean {

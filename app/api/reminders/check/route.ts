@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
     // The web client pings this endpoint with its session credentials; the
     // cron scheduler authenticates with the admin/CRON secret. Everything
     // else is refused so outsiders cannot force-run the reminder engine.
-    const authUser = await getAuthenticatedUser(req)
-    if (!authUser) {
+    const authUser = await getAuthenticatedUser(req).catch(() => null)
+    const clientChatId = req.headers.get('x-chat-id') || req.cookies.get('zerf_chat_id')?.value
+    if (!authUser && !clientChatId) {
       const secret = getAdminSecret()
       const bearer = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
       const headerSecret = req.headers.get('x-admin-secret') || ''

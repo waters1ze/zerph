@@ -915,10 +915,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
 
           const keepFresh = <T extends { id: string }>(serverList: T[], localList: T[]): T[] => {
+            // PERFORMANCE (audit B4): filter+some was O(N×M) on every 15s
+            // sync for tasks/goals/notes/habits alike. A Set makes it O(N+M).
+            const serverIds = new Set(serverList.map(srv => srv.id))
             const fresh = localList.filter(
               l =>
                 (recentlyAddedIdsRef.current.has(l.id) || queueHasCreate(l.id)) &&
-                !serverList.some(srv => srv.id === l.id)
+                !serverIds.has(l.id)
             )
             return [...serverList, ...fresh]
           }

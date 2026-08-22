@@ -12,13 +12,29 @@ interface VapidKeys {
   privateKey: string
 }
 
-const DEFAULT_VAPID_PUBLIC_KEY = 'BCrELgMn65bAWDnsnFk28O3v-JEtpBhJCOo8daLvAg15I0azzSCjZc-MDCndR3AJ9H3y3FCpfZtZ3tIZoNXd_fU'
-const DEFAULT_VAPID_PRIVATE_KEY = 'k9j28Oxa5yCUQaEadBqExJoHLTAEo5XQlj5VCtlhGAU'
-
+// SECURITY (audit C-5): VAPID keypair was previously hardcoded as a "stable
+// default" and leaked into git history, letting anyone with repo access send
+// pushes impersonating the app. Keys now come from env or DB only; when
+// neither is configured, a fresh keypair is generated once and persisted.
+// NOTE: rotating to env/DB keys invalidates existing push subscriptions —
+// clients re-subscribe automatically on next visit via getVapidPublicKey().
 let cachedVapidKeys: VapidKeys | null = null
 
+const VAPID_CONFIG_KEY = 'system_vapid_keys'
+
+async function readVapidKeysFromDb(): Promise<VapidKeys | null> {
+  try {
+    const row = await prisma.config.findUnique({ where: { key: VAPID_CONFIG_KEY } })
+    if (row?.value) {
+      const parsed = JSON.parse(row.value) as VapidKeys
+      if (parsed.publicKey && parsed.privateKey) return parsed
+    }
+  } catch {}
+  return null
+}
+
 /**
- * Retrieves VAPID keys (from Env vars, DB, or stable system defaults).
+ * Retrieves VAPID keys (from Env vars, DB, or generates+persists a fresh pair).
  */
 export async function getVapidKeys(): Promise<VapidKeys> {
   if (cachedVapidKeys) return cachedVapidKeys
@@ -33,35 +49,32 @@ export async function getVapidKeys(): Promise<VapidKeys> {
   }
 
   // 2. Check Database config
-  try {
-    const row = await prisma.config.findUnique({ where: { key: 'system_vapid_keys' } })
-    if (row?.value) {
-      const parsed = JSON.parse(row.value) as VapidKeys
-      if (parsed.publicKey && parsed.privateKey) {
-        cachedVapidKeys = parsed
-        webpush.setVapidDetails('mailto:admin@zerf.app', parsed.publicKey, parsed.privateKey)
-        return cachedVapidKeys
-      }
-    }
-  } catch {}
-
-  // 3. Fallback to stable system VAPID keys
-  const stableKeys: VapidKeys = {
-    publicKey: DEFAULT_VAPID_PUBLIC_KEY,
-    privateKey: DEFAULT_VAPID_PRIVATE_KEY,
+  const fromDb = await readVapidKeysFromDb()
+  if (fromDb) {
+    cachedVapidKeys = fromDb
+    webpush.setVapidDetails('mailto:admin@zerf.app', fromDb.publicKey, fromDb.privateKey)
+    return cachedVapidKeys
   }
-  cachedVapidKeys = stableKeys
+
+  // 3. Self-healing: generate a fresh keypair and persist it for other instances
+  const generated = webpush.generateVAPIDKeys()
+  const freshKeys: VapidKeys = { publicKey: generated.publicKey, privateKey: generated.privateKey }
 
   try {
     await prisma.config.upsert({
-      where: { key: 'system_vapid_keys' },
-      update: { value: JSON.stringify(stableKeys) },
-      create: { key: 'system_vapid_keys', value: JSON.stringify(stableKeys) },
+      where: { key: VAPID_CONFIG_KEY },
+      update: { value: JSON.stringify(freshKeys) },
+      create: { key: VAPID_CONFIG_KEY, value: JSON.stringify(freshKeys) },
     })
   } catch {}
 
-  webpush.setVapidDetails('mailto:admin@zerf.app', stableKeys.publicKey, stableKeys.privateKey)
-  return stableKeys
+  // Converge in case another instance persisted its own pair concurrently:
+  // prefer whichever key actually landed in the DB so all instances agree.
+  const stored = await readVapidKeysFromDb()
+  cachedVapidKeys = stored || freshKeys
+
+  webpush.setVapidDetails('mailto:admin@zerf.app', cachedVapidKeys.publicKey, cachedVapidKeys.privateKey)
+  return cachedVapidKeys
 }
 
 /**

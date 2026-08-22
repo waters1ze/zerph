@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/backend/prisma'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
+import { parseStoredCard } from '@/lib/backend/crypto-box'
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,7 +15,8 @@ export async function GET(req: NextRequest) {
       prisma.telegramChat.findUnique({ where: { chatId: BigInt(chatId) } }),
     ])
 
-    let cardData = cardRow?.value ? JSON.parse(cardRow.value) : null
+    // Supports legacy plaintext rows and new encrypted envelopes (audit M-5)
+    let cardData = parseStoredCard<any>(cardRow?.value)
     // Never echo the full card/wallet number back to the client
     if (cardData?.cardNumber) {
       const n = String(cardData.cardNumber)
@@ -56,10 +58,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (cardPayload.cardNumber || cardPayload.phone) {
+      // SECURITY (audit M-5): payout details are encrypted at rest
+      // (AES-256-GCM envelope) so a DB dump no longer exposes card numbers.
+      const { encryptJson } = await import('@/lib/backend/crypto-box')
+      const sealed = encryptJson(cardPayload)
+      const storedValue = sealed || JSON.stringify(cardPayload) // fail-open only if keying is broken
       await prisma.config.upsert({
         where: { key: `user_payment_card_${chatId}` },
-        update: { value: JSON.stringify(cardPayload) },
-        create: { key: `user_payment_card_${chatId}`, value: JSON.stringify(cardPayload) },
+        update: { value: storedValue },
+        create: { key: `user_payment_card_${chatId}`, value: storedValue },
       })
     }
 

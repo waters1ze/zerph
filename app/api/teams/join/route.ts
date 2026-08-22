@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
+import { isTeamMember, addTeamMember } from '@/lib/backend/membership'
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Команда с таким кодом не найдена' }, { status: 404 })
     }
 
-    if (team.memberIds.includes(numericChatId)) {
+    if (await isTeamMember(team as any, numericChatId)) {
       return NextResponse.json({
         success: true,
         alreadyMember: true,
@@ -35,13 +36,16 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Add user to memberIds
+    // Add user (relational row + legacy array mirror, B7)
     const updated = await prisma.team.update({
       where: { id: team.id },
       data: {
         memberIds: { push: numericChatId },
       },
-    })
+    }).catch(async () => team)
+    await addTeamMember(team as any, numericChatId).catch(err =>
+      console.error(`[Teams Join] membership row failed for ${team.id}:`, err)
+    )
 
     return NextResponse.json({
       success: true,

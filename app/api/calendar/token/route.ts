@@ -52,12 +52,21 @@ export async function GET(req: NextRequest) {
       const userInfo = await userInfoRes.json()
       if (userInfo.email) googleEmail = String(userInfo.email).trim().toLowerCase()
       if (userInfo.name) googleName = userInfo.name
-    } catch {}
+    } catch (err) {
+      console.warn('[GoogleOAuth] userinfo lookup failed:', err)
+    }
 
     const isCalendarRequested = Boolean(decodedState.includeCalendar)
     let targetChatId = decodedState.chatId
+    // SECURITY (audit M-1): a DB session may only be minted when the visitor's
+    // identity was established through a GOOGLE-VERIFIED email or a
+    // session-bound explicit link. If userinfo failed, decodedState.chatId
+    // (client-controlled!) must never become an authenticated chatId.
+    let identityVerified = false
 
     if (googleEmail) {
+      identityVerified = true
+
       // Find if this Google Email is already attached to any existing account
       const existingUserWithEmail = await prisma.telegramChat.findFirst({
         where: {
@@ -150,7 +159,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (targetChatId && !targetChatId.startsWith('guest_') && targetChatId !== 'web') {
+    if (identityVerified && targetChatId && !targetChatId.startsWith('guest_') && targetChatId !== 'web' && targetChatId !== 'web_oauth_login') {
       const cid = BigInt(targetChatId)
       if (isCalendarRequested) {
         syncGoogleCalendar(targetChatId).catch(() => {})

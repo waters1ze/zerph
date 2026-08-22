@@ -47,6 +47,10 @@ model Task {
   @@index([status])
   @@index([dueDate, reminderSent])
   @@index([createdAt])
+  // PERFORMANCE (audit B6): hot-path membership checks
+  // (`assignees: { has }` / `tags: { has }`) previously seq-scanned.
+  @@index([assignees], type: Gin)
+  @@index([tags], type: Gin)
 }
 
 model Goal {
@@ -122,6 +126,7 @@ model TelegramChat {
   isAdmin                Boolean   @default(false) // Admin privilege
   streakDays             Int       @default(0)     // Consecutive days completed tasks
   lastStreakDate         String?   // YYYY-MM-DD
+  streakVisible          Boolean   @default(true)  // Show my streak to friends (social layer opt-out)
   ttsEnabled             Boolean   @default(false) // TTS Voice replies disabled by default
   trialActivatedAt       DateTime? // Timestamp when 1-day trial was granted (new user)
   googleCalendarToken    String?   // JSON: { access_token, refresh_token, expiry_date }
@@ -157,7 +162,7 @@ model LoginToken {
   createdAt DateTime @default(now())
 
   @@index([chatId])
-  @@index([token])
+  // (audit B6) removed redundant @@index([token]) — @unique already indexes it
 }
 
 // Active browser sessions — one per device/browser login
@@ -174,7 +179,7 @@ model UserSession {
   isRevoked    Boolean  @default(false)
 
   @@index([chatId])
-  @@index([sessionToken])
+  // (audit B6) removed redundant @@index([sessionToken]) — @unique already indexes it
 }
 
 // Full collaborative project model
@@ -285,8 +290,10 @@ model Team {
   id                 String    @id @default(cuid())
   name               String
   ownerChatId        BigInt
-  memberIds          BigInt[]  // All member chatIds
-  adminIds           BigInt[]  // Members with admin role (subset of memberIds)
+  // DEPRECATED (audit B7): legacy denormalized membership arrays. Kept during
+  // the expand-contract transition — authoritative source is TeamMember.
+  memberIds          BigInt[]
+  adminIds           BigInt[]
   plan               String    @default("corp")
   subscriptionExpiry DateTime?
   inviteCode         String    @unique @default(cuid()) // Join link token
@@ -294,4 +301,28 @@ model Team {
   updatedAt          DateTime  @updatedAt
 
   @@index([ownerChatId])
+}
+
+// RELATIONAL MEMBERSHIP (audit B7): replaces Team.memberIds/adminIds arrays.
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  chatId    BigInt
+  role      String   @default("member") // owner | admin | member
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, chatId])
+  @@index([chatId])
+}
+
+// RELATIONAL MEMBERSHIP (audit B7): replaces ProjectDB.memberIds array.
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  chatId    BigInt
+  role      String   @default("member") // owner | member
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, chatId])
+  @@index([chatId])
 }

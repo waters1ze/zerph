@@ -9,7 +9,10 @@ export interface GoogleTokens {
 }
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '140430721803-o7nopfthipkvknp92lkaegsjsa1l0os2.apps.googleusercontent.com'
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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'
+// SECURITY (audit C-3): the client secret previously had a hardcoded fallback
+// that leaked into git history. It now comes from env ONLY — token exchange
+// fails closed with a clear error when the variable is not configured.
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || null
 
 export function getRedirectUri(requestOrigin?: string): string {
   if (requestOrigin) {
@@ -67,6 +70,9 @@ export function getGoogleAuthUrl(
  * Exchange authorization code for tokens
  */
 export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<GoogleTokens> {
+  if (!GOOGLE_CLIENT_SECRET) {
+    throw new Error('Google OAuth is not configured: GOOGLE_CLIENT_SECRET env var is missing')
+  }
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -124,6 +130,11 @@ export async function getValidAccessToken(chatId: string | number | bigint): Pro
 
   // Token expired, refresh using refresh_token
   if (!tokens.refresh_token) {
+    return tokens.access_token
+  }
+
+  if (!GOOGLE_CLIENT_SECRET) {
+    console.error('[GoogleCalendar] Cannot refresh token: GOOGLE_CLIENT_SECRET is not configured')
     return tokens.access_token
   }
 

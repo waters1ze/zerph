@@ -12,14 +12,29 @@ import { prisma } from '@/lib/backend/prisma'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// Hard cap on reschedulable tasks per request: bounds prompt size and
+// protects the platform Groq quota from abuse (audit finding H-4).
+const MAX_TASKS_PER_REQUEST = 50
+
 export async function POST(req: NextRequest) {
   try {
+    // Auth FIRST — the expensive LLM call must never run for anonymous callers.
     const authUser = await getAuthenticatedUser(req)
+    if (!authUser?.chatId) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    }
+
     const body = await req.json().catch(() => ({}))
     const tasks = Array.isArray(body?.tasks) ? body.tasks : []
 
     if (tasks.length === 0) {
       return NextResponse.json({ ok: false, error: 'Нет задач для перепланирования' }, { status: 400 })
+    }
+    if (tasks.length > MAX_TASKS_PER_REQUEST) {
+      return NextResponse.json(
+        { ok: false, error: `Слишком много задач за один запрос (максимум ${MAX_TASKS_PER_REQUEST})` },
+        { status: 413 }
+      )
     }
 
     const now = new Date()

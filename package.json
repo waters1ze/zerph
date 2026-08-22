@@ -40,11 +40,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "@vitest/coverage-istanbul": "^3.2.7",
+    "@vitest/coverage-v8": "^3.2.7",
     "postcss": "^8.5",
     "prisma": "^5.22.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.19.2",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "vitest": "^3.2.7"
   },
   "pnpm": {
     "overrides": {

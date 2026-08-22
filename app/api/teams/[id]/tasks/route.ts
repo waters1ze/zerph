@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
+import { isTeamMember } from '@/lib/backend/membership'
 
 export async function GET(
   req: NextRequest,
@@ -19,7 +20,8 @@ export async function GET(
       where: { id: teamId },
     })
 
-    if (!team || (!team.memberIds.includes(numericChatId) && team.ownerChatId !== numericChatId && !authUser.isRoot)) {
+    const allowed = authUser.isRoot || (team !== null && (await isTeamMember(team as any, numericChatId)))
+    if (!team || !allowed) {
       return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 })
     }
 

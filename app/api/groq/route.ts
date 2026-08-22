@@ -27,6 +27,21 @@ export async function POST(req: NextRequest) {
     }
 
     const limits = ownerChatId ? await getUserUsageAndLimits(ownerChatId) : null
+
+    // COST CONTROL (audit M-6): the quota was fetched but never enforced —
+    // free accounts could burn platform Groq tokens without limit. Each
+    // parser call consumes one chat-message from the daily plan budget.
+    if (limits && !limits.canSendChatMessage) {
+      return NextResponse.json(
+        {
+          error: 'Дневной лимит AI-обработки исчерпан — обновите план',
+          code: 'quota_exceeded',
+          plan: limits.plan,
+          upgrade: true,
+        },
+        { status: 429 }
+      )
+    }
     const effectiveModel = getModelForUserPlan(limits?.plan, model, 'parser')
 
     const context = ownerChatId ? await getExistingItemsContext(ownerChatId) : undefined
@@ -38,6 +53,11 @@ export async function POST(req: NextRequest) {
     for (const item of parsedItems) {
       const res = await processParsedItemWithDelegation(item, ownerChatId)
       results.push(res)
+    }
+
+    // Count the consumed AI interaction against the daily budget (M-6)
+    if (ownerChatId) {
+      await import('@/lib/backend/db').then(m => m.incrementUserUsage(ownerChatId, 'chat').catch(() => {}))
     }
 
     if (ownerChatId) {

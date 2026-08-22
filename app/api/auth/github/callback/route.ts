@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { prisma } from '@/lib/backend/prisma'
-import { createServerSession } from '@/lib/backend/auth'
+import { createServerSession, getAuthenticatedUser } from '@/lib/backend/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,44 @@ const COOKIE_OPTS = {
   maxAge: 60 * 60 * 24 * 365,
   sameSite: 'lax' as const,
   secure: true,
+}
+
+const STATE_TTL_MS = 15 * 60 * 1000
+
+/**
+ * SECURITY (audit C-1): verifies the HMAC-protected state issued by
+ * /api/auth/github. Returns the trusted payload or null.
+ *
+ * The old implementation accepted an arbitrary base64 JSON `{chatId}` —
+ * anyone could complete OAuth with their own GitHub account and mint a
+ * session cookie for a VICTIM's chatId (full account takeover).
+ */
+function verifySignedState(state: string | null): { mode: string; chatId: string | null; iat: number } | null {
+  if (!state) return null
+  try {
+    let raw = state
+    try { raw = decodeURIComponent(state) } catch {}
+    const dot = raw.lastIndexOf('.')
+    if (dot <= 0) return null
+    const payloadB64 = raw.slice(0, dot)
+    const sig = raw.slice(dot + 1)
+
+    const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.ADMIN_SECRET || ''
+    if (!secret) return null
+    const expected = crypto.createHmac('sha256', `gh-oauth-state:${secret}`).update(payloadB64).digest('base64url')
+
+    // timing-safe comparison over equal-length digests
+    const a = Buffer.from(sig)
+    const b = Buffer.from(expected)
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
+
+    const parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'))
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.iat !== 'number') return null
+    if (Date.now() - parsed.iat > STATE_TTL_MS) return null // expired link
+    return parsed
+  } catch {
+    return null
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -34,15 +73,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Decode state to get chatId
-    let chatId = req.cookies.get('zerf_chat_id')?.value || ''
-    if (state) {
-      try {
-        let raw = state
-        try { raw = decodeURIComponent(state) } catch {}
-        const parsed = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'))
-        if (parsed?.chatId) chatId = parsed.chatId
-      } catch {}
+    // ── Identity resolution ──────────────────────────────────────────────
+    // LINK MODE requires BOTH a validly signed state AND a verified session
+    // whose chatId matches the state. A bare zerf_chat_id cookie is NOT
+    // proof of identity and is never used for linking.
+    const statePayload = verifySignedState(state)
+    let chatId = ''
+    let linkMode = false
+
+    if (statePayload?.mode === 'link' && statePayload.chatId && /^-?\d+$/.test(String(statePayload.chatId))) {
+      const verified = await getAuthenticatedUser(req).catch(() => null)
+      if (verified && verified.chatId === String(statePayload.chatId)) {
+        chatId = verified.chatId
+        linkMode = true
+      }
     }
 
     // Exchange code for access token

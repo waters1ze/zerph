@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
+import {
+  listTeamMembers,
+  getTeamRole,
+  isTeamMember,
+  setTeamRole,
+  removeTeamMember,
+  deleteTeamMembers,
+} from '@/lib/backend/membership'
 
 export async function GET(
   req: NextRequest,
@@ -23,34 +31,35 @@ export async function GET(
       return NextResponse.json({ error: 'Команда не найдена' }, { status: 404 })
     }
 
-    const isMember = team.ownerChatId === numericChatId || team.memberIds.includes(numericChatId)
+    const isMember = await isTeamMember(team as any, numericChatId)
     if (!isMember && !authUser.isRoot) {
       return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 })
     }
 
-    // Fetch user profiles for all memberIds
-    const memberUsers = await prisma.telegramChat.findMany({
-      where: {
-        chatId: { in: team.memberIds },
-      },
-      select: {
-        chatId: true,
-        firstName: true,
-        lastName: true,
-        username: true,
-        plan: true,
-        lastActiveAt: true,
-      },
-    })
+    // Membership listing from the relational table (audit B7)
+    const membership = await listTeamMembers(team as any)
+    const memberUsers = membership.length > 0
+      ? await prisma.telegramChat.findMany({
+          where: {
+            chatId: { in: membership.map(m => m.chatId) },
+          },
+          select: {
+            chatId: true,
+            firstName: true,
+            lastName: true,
+            username: true,
+            plan: true,
+            lastActiveAt: true,
+          },
+        })
+      : []
 
+    const myRole = await getTeamRole(team as any, numericChatId)
     const isOwner = team.ownerChatId === numericChatId
-    const isAdmin = isOwner || team.adminIds.includes(numericChatId)
+    const isAdmin = myRole === 'owner' || myRole === 'admin'
 
-    const members = team.memberIds.map(mId => {
+    const members = membership.map(({ chatId: mId, role }) => {
       const u = memberUsers.find(user => user.chatId === mId)
-      const isMemOwner = team.ownerChatId === mId
-      const isMemAdmin = isMemOwner || team.adminIds.includes(mId)
-      const role = isMemOwner ? 'owner' : isMemAdmin ? 'admin' : 'member'
 
       return {
         chatId: mId.toString(),
@@ -107,7 +116,8 @@ export async function PATCH(
     }
 
     const isOwner = team.ownerChatId === numericChatId
-    const isAdmin = isOwner || team.adminIds.includes(numericChatId)
+    const myRole = await getTeamRole(team as any, numericChatId)
+    const isAdmin = isOwner || myRole === 'admin'
 
     if (!isAdmin && !authUser.isRoot) {
       return NextResponse.json({ error: 'Требуются права администратора команды' }, { status: 403 })
@@ -134,17 +144,8 @@ export async function PATCH(
         return NextResponse.json({ error: 'Нельзя изменить роль владельца' }, { status: 400 })
       }
 
-      let nextAdmins = [...team.adminIds]
-      if (body.role === 'admin' && !nextAdmins.includes(targetId)) {
-        nextAdmins.push(targetId)
-      } else if (body.role === 'member') {
-        nextAdmins = nextAdmins.filter(aId => aId !== targetId)
-      }
-
-      await prisma.team.update({
-        where: { id },
-        data: { adminIds: nextAdmins },
-      })
+      // Relational row is authoritative; legacy arrays mirrored (B7)
+      await setTeamRole(team as any, targetId, body.role === 'admin' ? 'admin' : 'member')
 
       return NextResponse.json({ success: true, message: 'Роль участника обновлена' })
     }
@@ -156,16 +157,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'Нельзя исключить владельца' }, { status: 400 })
       }
 
-      const nextMembers = team.memberIds.filter(mId => mId !== kickId)
-      const nextAdmins = team.adminIds.filter(mId => mId !== kickId)
-
-      await prisma.team.update({
-        where: { id },
-        data: {
-          memberIds: nextMembers,
-          adminIds: nextAdmins,
-        },
-      })
+      await removeTeamMember(team as any, kickId)
 
       return NextResponse.json({ success: true, message: 'Участник исключен из команды' })
     }
@@ -202,19 +194,12 @@ export async function DELETE(
 
     if (isOwner || authUser.isRoot) {
       // Owner deletes whole team
+      await deleteTeamMembers(id)
       await prisma.team.delete({ where: { id } })
       return NextResponse.json({ success: true, message: 'Команда удалена' })
     } else {
       // Member leaves team
-      const nextMembers = team.memberIds.filter(mId => mId !== numericChatId)
-      const nextAdmins = team.adminIds.filter(mId => mId !== numericChatId)
-      await prisma.team.update({
-        where: { id },
-        data: {
-          memberIds: nextMembers,
-          adminIds: nextAdmins,
-        },
-      })
+      await removeTeamMember(team as any, numericChatId)
       return NextResponse.json({ success: true, message: 'Вы покинули команду' })
     }
   } catch (error: any) {

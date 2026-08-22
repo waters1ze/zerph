@@ -2486,6 +2486,7 @@ export async function getFriends(ownerChatId?: number | bigint | string | null) 
               isAdmin: false,
               streakDays: 0,
               lastStreakDate: null,
+              streakVisible: true,
               ttsEnabled: false,
               referralRewarded: false,
               trialActivatedAt: null,
@@ -3866,10 +3867,13 @@ export async function deleteUserAccountPermanently(chatId: bigint | string | num
 
     // 5. Delete projects owned by user; remove user from memberIds in other projects
     try {
+      // Relational membership cleanup (audit B7)
+      await prisma.projectMember.deleteMany({ where: { chatId: cid } }).catch(() => {})
       const ownedProjects = await (prisma as any).projectDB.findMany({ where: { ownerChatId: cid }, select: { id: true } })
       if (ownedProjects.length > 0) {
         const pIds = ownedProjects.map((p: any) => p.id)
         await prisma.task.deleteMany({ where: { projectDbId: { in: pIds } } }).catch(() => {})
+        await prisma.projectMember.deleteMany({ where: { projectId: { in: pIds } } }).catch(() => {})
         await (prisma as any).projectDB.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
       }
       const memberProjects = await (prisma as any).projectDB.findMany({
@@ -3886,6 +3890,12 @@ export async function deleteUserAccountPermanently(chatId: bigint | string | num
 
     // 6. Delete teams owned by user; remove from teams where user is member/admin
     try {
+      // Relational membership cleanup (audit B7)
+      await prisma.teamMember.deleteMany({ where: { chatId: cid } }).catch(() => {})
+      const ownedTeams = await prisma.team.findMany({ where: { ownerChatId: cid }, select: { id: true } }).catch(() => [])
+      if (ownedTeams.length > 0) {
+        await prisma.teamMember.deleteMany({ where: { teamId: { in: ownedTeams.map((t: any) => t.id) } } }).catch(() => {})
+      }
       await prisma.team.deleteMany({ where: { ownerChatId: cid } }).catch(() => {})
       const memberTeams = await prisma.team.findMany({
         where: { memberIds: { has: cid } }
@@ -3944,50 +3954,64 @@ export async function cleanupInactiveAccounts(): Promise<{ deletedCount: number;
     const { ROOT_ADMIN_IDS } = await import('./admin')
     const now = new Date()
 
-    const users = await prisma.telegramChat.findMany({
-      where: {
-        chatId: { notIn: [BigInt(777000), BigInt(1087968824)] },
-      },
-      select: {
-        chatId: true,
-        lastActiveAt: true,
-        addedAt: true,
-        plan: true,
-      }
-    })
-
+    // PERFORMANCE (audit M-9/B3c): the full user table was materialized in
+    // one findMany and could not finish inside the 60s serverless budget.
+    // Cursor-paginated batches bound memory per pass; each cron invocation
+    // processes a bounded prefix, converging over successive runs.
+    const BATCH_SIZE = 500
     let deletedCount = 0
     let checkedCount = 0
 
-    for (const user of users) {
-      checkedCount++
-      const cidStr = user.chatId.toString()
-      // Never delete Root Admins or system accounts
-      if (ROOT_ADMIN_IDS.includes(cidStr)) continue
+    let lastChatId: bigint | undefined
+    for (let batch = 0; batch < 10; batch++) { // hard cap ~5000 users per run
+      const users = await prisma.telegramChat.findMany({
+        where: {
+          chatId: { notIn: [BigInt(777000), BigInt(1087968824)] },
+        },
+        select: {
+          chatId: true,
+          lastActiveAt: true,
+          addedAt: true,
+          plan: true,
+        },
+        take: BATCH_SIZE,
+        ...(lastChatId !== undefined ? { skip: 1, cursor: { chatId: lastChatId } } : {}),
+        orderBy: { chatId: 'asc' },
+      })
+      if (users.length === 0) break
+      const page = users as Array<{ chatId: bigint; lastActiveAt: Date | null; addedAt: Date | null; plan: string | null }>
+      lastChatId = page[page.length - 1].chatId
 
-      // Look up user's configured auto-delete retention period (in months: 1, 3, 6, 12 or 0 for never)
-      let retentionMonths = 6 // Default: 6 months
-      try {
-        const conf = await prisma.config.findUnique({ where: { key: `user_auto_delete_${cidStr}` } })
-        if (conf?.value !== undefined && conf.value !== null) {
-          const parsed = Number(conf.value)
-          if (!isNaN(parsed)) retentionMonths = parsed
+      for (const user of users) {
+        checkedCount++
+        const cidStr = user.chatId.toString()
+        // Never delete Root Admins or system accounts
+        if (ROOT_ADMIN_IDS.includes(cidStr)) continue
+
+        // Look up user's configured auto-delete retention period (in months: 1, 3, 6, 12 or 0 for never)
+        let retentionMonths = 6 // Default: 6 months
+        try {
+          const conf = await prisma.config.findUnique({ where: { key: `user_auto_delete_${cidStr}` } })
+          if (conf?.value !== undefined && conf.value !== null) {
+            const parsed = Number(conf.value)
+            if (!isNaN(parsed)) retentionMonths = parsed
+          }
+        } catch {}
+
+        // 0 means disabled / never delete
+        if (retentionMonths <= 0) continue
+
+        const retentionDays = retentionMonths === 1 ? 30 : retentionMonths === 3 ? 90 : retentionMonths === 6 ? 180 : retentionMonths * 30
+        const cutoffTime = now.getTime() - retentionDays * 24 * 60 * 60 * 1000
+
+        const lastActivity = user.lastActiveAt ? new Date(user.lastActiveAt).getTime() : user.addedAt ? new Date(user.addedAt).getTime() : 0
+
+        // If user has not been active since before the cutoff date -> delete account completely
+        if (lastActivity > 0 && lastActivity < cutoffTime) {
+          console.log(`[AutoDelete] Account ${cidStr} inactive for > ${retentionMonths} month(s) (last active: ${new Date(lastActivity).toISOString()}). Deleting permanently...`)
+          const deleted = await deleteUserAccountPermanently(user.chatId)
+          if (deleted) deletedCount++
         }
-      } catch {}
-
-      // 0 means disabled / never delete
-      if (retentionMonths <= 0) continue
-
-      const retentionDays = retentionMonths === 1 ? 30 : retentionMonths === 3 ? 90 : retentionMonths === 6 ? 180 : retentionMonths * 30
-      const cutoffTime = now.getTime() - retentionDays * 24 * 60 * 60 * 1000
-
-      const lastActivity = user.lastActiveAt ? new Date(user.lastActiveAt).getTime() : user.addedAt ? new Date(user.addedAt).getTime() : 0
-
-      // If user has not been active since before the cutoff date -> delete account completely
-      if (lastActivity > 0 && lastActivity < cutoffTime) {
-        console.log(`[AutoDelete] Account ${cidStr} inactive for > ${retentionMonths} month(s) (last active: ${new Date(lastActivity).toISOString()}). Deleting permanently...`)
-        const deleted = await deleteUserAccountPermanently(user.chatId)
-        if (deleted) deletedCount++
       }
     }
 
@@ -4038,28 +4062,33 @@ export async function compactOldCompletedTasks(chatId?: number | bigint | string
       },
     })
 
-    let compactedCount = 0
+    // PERFORMANCE (audit B3d): the per-task updates were SEQUENTIAL
+    // (one blocking round trip per completed task every 60s). They now run
+    // in parallel, preserving the exact per-row compaction semantics.
+    const bulky = oldDoneTasks.filter(
+      (task: any) =>
+        (task.description && task.description.length > 60) ||
+        Boolean(task.rawText) ||
+        (Array.isArray(task.subtasks) && task.subtasks.length > 0)
+    )
 
-    for (const task of oldDoneTasks) {
-      const hasBulkyDesc = task.description && task.description.length > 60
-      const hasRawText = Boolean(task.rawText)
-      const hasBulkySubtasks = Array.isArray(task.subtasks) && task.subtasks.length > 0
+    await Promise.all(
+      bulky.map((task: any) =>
+        prisma.task
+          .update({
+            where: { id: task.id },
+            data: {
+              description: task.description ? task.description.slice(0, 60) : '',
+              rawText: null,
+              subtasks: [],
+              reminderOffsetMinutes: 0,
+            },
+          })
+          .catch(() => {})
+      )
+    )
 
-      if (hasBulkyDesc || hasRawText || hasBulkySubtasks) {
-        await prisma.task.update({
-          where: { id: task.id },
-          data: {
-            description: task.description ? task.description.slice(0, 60) : '',
-            rawText: null,
-            subtasks: [],
-            reminderOffsetMinutes: 0,
-          },
-        }).catch(() => {})
-        compactedCount++
-      }
-    }
-
-    return { compactedCount }
+    return { compactedCount: bulky.length }
   } catch (err) {
     console.error('[compactOldCompletedTasks] Error:', err)
     return { compactedCount: 0 }

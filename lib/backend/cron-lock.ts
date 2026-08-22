@@ -1,4 +1,4 @@
-import fs from 'fs'
+﻿import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { prisma } from './prisma'
@@ -28,7 +28,11 @@ function loadFileLock(): Record<string, number> {
       const data = fs.readFileSync(LOCK_FILE_PATH, 'utf8')
       return JSON.parse(data) || {}
     }
-  } catch {}
+  } catch (err) {
+    // A corrupted lock file silently treated as "nothing done" caused
+    // duplicate sends after restarts with zero log evidence (audit M-7).
+    console.warn('[cron-lock] Failed to load lock file:', err)
+  }
   return {}
 }
 
@@ -43,7 +47,9 @@ function saveFileLock(lockData: Record<string, number>) {
       }
     }
     fs.writeFileSync(LOCK_FILE_PATH, JSON.stringify(cleaned), 'utf8')
-  } catch {}
+  } catch (err) {
+    console.warn('[cron-lock] Failed to persist lock file:', err)
+  }
 }
 
 /**
@@ -99,7 +105,11 @@ export async function markCronDoneToday(taskKey: string, todayStr: string): Prom
       update: { value: todayStr },
       create: { key: `cron_last_${taskKey}_date`, value: todayStr },
     })
-  } catch {}
+  } catch (err) {
+    // Silent DB-persist failure = the task re-sends after restart/deploy
+    // with no trace in logs (audit M-7). At minimum it must be visible.
+    console.error(`[cron-lock] Failed to persist cron lock for ${taskKey}:`, err)
+  }
 }
 
 /**
@@ -113,13 +123,10 @@ export async function tryAcquireCronLock(taskKey: string, todayStr: string): Pro
 
   // In-memory quick check
   if (sentKeys.has(fullKey)) return false
-  sentKeys.add(fullKey)
 
   try {
     // Atomic acquisition: INSERT wins only for the very first caller today.
     // A unique-key violation means another instance already holds the lock.
-    // (The previous find-then-upsert had a race window in which two
-    // concurrent lambdas could both acquire the lock and double-send.)
     try {
       await prisma.config.create({ data: { key: dbKey, value: todayStr } })
     } catch (err: any) {
@@ -140,6 +147,12 @@ export async function tryAcquireCronLock(taskKey: string, todayStr: string): Pro
       }
     }
 
+    // Memory guard is set ONLY after the distributed lock was successfully
+    // acquired. Marking it earlier meant that a transient DB error would
+    // permanently suppress the task for this instance while reporting a
+    // false "already done" (audit finding C-7).
+    sentKeys.add(fullKey)
+
     try {
       const fileLock = loadFileLock()
       fileLock[fullKey] = Date.now()
@@ -148,6 +161,8 @@ export async function tryAcquireCronLock(taskKey: string, todayStr: string): Pro
 
     return true
   } catch (err) {
+    // Transient failure: the lock was NOT acquired anywhere, so the memory
+    // guard must stay unset — a retry within this process must be possible.
     console.error(`[tryAcquireCronLock] Error acquiring lock for ${fullKey}:`, err)
     return false
   }
@@ -206,7 +221,9 @@ export async function markUserCronDoneToday(taskKey: string, userId: string | nu
       update: { value: todayStr },
       create: { key: `cron_${taskKey}_u_${String(userId)}`, value: todayStr },
     })
-  } catch {}
+  } catch (err) {
+    console.error(`[cron-lock] Failed to persist user cron lock for ${fullKey}:`, err)
+  }
 }
 
 /**

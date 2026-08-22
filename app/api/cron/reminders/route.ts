@@ -66,17 +66,24 @@ export async function GET(req: NextRequest) {
     }
 
     // Standard automated cron trigger (Vercel Cron / Internal Scheduler).
-    // When CRON_SECRET is configured, every trigger must present it (Vercel
-    // Cron sends it as `Authorization: Bearer $CRON_SECRET`). Without the
-    // env the request may arrive unauthenticated, so anonymous triggers are
-    // heavily throttled to prevent abuse-driven DB/CPU load.
+    // SECURITY (audit H-7): without CRON_SECRET this endpoint previously ran
+    // the full cron suite for ANY anonymous caller (2/min per instance).
+    // It is now fail-closed: configure CRON_SECRET, or explicitly opt in to
+    // open triggering with ALLOW_ANONYMOUS_CRON=true for legacy setups.
     if (process.env.CRON_SECRET) {
       if (!isAuthorizedCronCall(req, searchParams)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     } else if (!isAuthorizedCronCall(req, searchParams)) {
-      if (!checkInMemoryRateLimit('cron:anonymous', 2, 60 * 1000)) {
-        return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+      if (
+        process.env.ALLOW_ANONYMOUS_CRON !== 'true' ||
+        !checkInMemoryRateLimit('cron:anonymous', 2, 60 * 1000)
+      ) {
+        console.error('[Cron] CRON_SECRET is not configured — refusing unauthenticated runAllCronTasks()')
+        return NextResponse.json(
+          { error: 'Forbidden', hint: 'Set CRON_SECRET (recommended) or ALLOW_ANONYMOUS_CRON=true' },
+          { status: 403 }
+        )
       }
     }
 

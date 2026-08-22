@@ -21,7 +21,9 @@ export async function POST(req: NextRequest) {
     }
 
     const token = generateOnetimeToken()
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    // SECURITY (audit M-3): the login PIN previously came from Math.random()
+// (predictable). CSPRNG via randomInt; still 6 digits for UX.
+const code = crypto.randomInt(100000, 1000000).toString()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
     await Promise.all([

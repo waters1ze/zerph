@@ -60,6 +60,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // COST CONTROL (audit M-6, variant A): schedule AI generation consumes
+    // the daily chat-message quota of the caller's plan.
+    const { getUserUsageAndLimits, incrementUserUsage } = await import('@/lib/backend/db')
+    const limits = await getUserUsageAndLimits(authUser.chatId)
+    if (!limits.canSendChatMessage) {
+      return NextResponse.json(
+        { error: 'Дневной лимит AI-обработки исчерпан — обновите план', code: 'quota_exceeded', plan: limits.plan, upgrade: true },
+        { status: 429 }
+      )
+    }
+
     const body = await req.json().catch(() => ({}))
     const prompt = (body.prompt || '').trim()
 
@@ -140,6 +151,9 @@ export async function POST(req: NextRequest) {
         }
       })
     }
+
+    // Consume one message from the daily AI budget (variant A)
+    await incrementUserUsage(authUser.chatId, 'chat').catch(() => {})
 
     return NextResponse.json({
       success: true,

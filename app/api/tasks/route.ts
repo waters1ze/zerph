@@ -11,11 +11,10 @@ import {
   createTask, updateTask, deleteTask,
   completeTaskByTitle, markReminderSent,
   deleteNote, deleteGoal, createNote, updateNote,
-  createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage, syncFriendBirthdays,
+  createGoal, updateGoal, getUserUsageAndLimits, incrementUserUsage,
   touchUserLastActive, createHabit, updateHabit, deleteHabit, isBirthdayOrHolidayTask,
 } from '@/lib/backend/db'
 import { startReminderScheduler } from '@/lib/backend/reminder-scheduler'
-import { runAllCronTasks } from '@/lib/backend/cron-runner'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { incrementDailyCount, COUNTERS } from '@/lib/backend/plans'
 import { notifyDataChanged } from '@/lib/backend/sse'
@@ -56,10 +55,15 @@ export async function GET(req: NextRequest) {
     }
     
     try {
-      // Run background maintenance asynchronously without blocking the user query
+      // SECURITY/RELIABILITY (audit C-6/C-9): the read path previously
+      // fire-and-forget `runAllCronTasks()` (full cron suite: greetings,
+      // reviews, channel posts) AND `syncFriendBirthdays()` (N+1 storm:
+      // per-friend external HTTP + 4 DB round trips) on EVERY client sync.
+      // On serverless this work is killed mid-flight after the response and
+      // multiplied by sync frequency; it also races with the scheduled cron.
+      // Maintenance belongs exclusively to the scheduled entrypoint
+      // (/api/cron/reminders) — it is no longer triggered here.
       touchUserLastActive(ownerChatId).catch(() => {})
-      syncFriendBirthdays(ownerChatId).catch(() => {})
-      runAllCronTasks().catch(e => console.error('[Background Cron Error]:', e))
 
       const cid = String(ownerChatId)
       const [tasks, goals, notes, friends, habits, groupsRow, friendGroupsRow, chatRow, zerficRow, instExts, enExts] = await Promise.all([

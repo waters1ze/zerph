@@ -131,17 +131,7 @@ export function TodayView() {
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null)
   const [eisenhowerSort, setEisenhowerSort] = useState(false)
   const [showAllLessons, setShowAllLessons] = useState(false)
-  const [showDone, setShowDone] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try { return localStorage.getItem('zerf_today_show_done') === 'true' } catch { return false }
-  })
-  const toggleShowDone = () => {
-    setShowDone(prev => {
-      const next = !prev
-      try { localStorage.setItem('zerf_today_show_done', String(next)) } catch {}
-      return next
-    })
-  }
+  const [showDone, setShowDone] = useState<boolean>(false)
   const [context, setContext] = useState<DailyContext>(getInitialDailyContext)
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
   const [plannerLoading, setPlannerLoading] = useState(false)
@@ -629,12 +619,12 @@ export function TodayView() {
         {doneTasks.length > 0 && (
           <div className="mt-2 pt-2 border-t border-border/40">
             <button
-              onClick={toggleShowDone}
-              className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer"
+              onClick={() => setShowDone(prev => !prev)}
+              className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer hover:bg-muted/30 rounded-xl transition-colors"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-done)]/70 shrink-0" />
-              <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                Выполнено сегодня · {doneTasks.length}
+              <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+                Выполненные ({doneTasks.length})
               </span>
               {showDone
                 ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />

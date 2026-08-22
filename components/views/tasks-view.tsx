@@ -24,19 +24,16 @@ export function TasksView() {
   const { state, dispatch } = useApp()
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [sortKey, setSortKey] = useState<SortKey>('dueDate')
-  // Completed tasks live in a separate collapsible section at the bottom of
-  // each group ( Things/Todoist style): active work stays on top, done items
-  // are one click away without cluttering the list. Choice is remembered.
-  const [showDone, setShowDone] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try { return localStorage.getItem('zerf_show_done_tasks') === 'true' } catch { return false }
-  })
-  const toggleShowDone = () => {
-    setShowDone(prev => {
-      const next = !prev
-      try { localStorage.setItem('zerf_show_done_tasks', String(next)) } catch {}
-      return next
-    })
+  // Completed tasks are grouped into a clean collapsible section per date group,
+  // hidden by default so only active tasks are in focus.
+  const [openDoneGroups, setOpenDoneGroups] = useState<Record<string, boolean>>({})
+  const [showFlatDone, setShowFlatDone] = useState<boolean>(false)
+
+  const toggleGroupDone = (dateKey: string) => {
+    setOpenDoneGroups(prev => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }))
   }
   const [filterProject, setFilterProject] = useState<string>('all')
   const [filterFriend, setFilterFriend] = useState<string>('all')
@@ -426,19 +423,19 @@ export function TasksView() {
                     {done.length > 0 && (
                       <div className="mt-0.5">
                         <button
-                          onClick={toggleShowDone}
-                          className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer"
+                          onClick={() => toggleGroupDone(group.dateKey)}
+                          className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer hover:bg-muted/30 rounded-xl transition-colors"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-done)]/70 shrink-0" />
-                          <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                            Выполнено · {done.length}
+                          <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+                            Выполненные ({done.length})
                           </span>
-                          {showDone
+                          {openDoneGroups[group.dateKey]
                             ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
                             : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
                           <div className="flex-1 h-[1px] bg-border/25" />
                         </button>
-                        {showDone && (
+                        {openDoneGroups[group.dateKey] && (
                           <div className="space-y-1 opacity-75 pt-0.5">
                             {done.map((t, i) => (
                               <TaskItem key={t.id} task={t} index={i} />
@@ -465,19 +462,19 @@ export function TasksView() {
                     {doneFlat.length > 0 && (
                       <div className="pt-2">
                         <button
-                          onClick={toggleShowDone}
-                          className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer"
+                          onClick={() => setShowFlatDone(prev => !prev)}
+                          className="w-full flex items-center gap-2 px-1 py-1.5 group select-none cursor-pointer hover:bg-muted/30 rounded-xl transition-colors"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-done)]/70 shrink-0" />
-                          <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                            Выполнено · {doneFlat.length}
+                          <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+                            Выполненные ({doneFlat.length})
                           </span>
-                          {showDone
+                          {showFlatDone
                             ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
                             : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
                           <div className="flex-1 h-[1px] bg-border/25" />
                         </button>
-                        {showDone && (
+                        {showFlatDone && (
                           <div className="space-y-1 opacity-75 pt-1">
                             {doneFlat.map((t, i) => (
                               <TaskItem key={t.id} task={t} index={i} />

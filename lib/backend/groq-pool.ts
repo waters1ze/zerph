@@ -835,6 +835,9 @@ export async function* streamGroqChatCompletionText(options: {
           max_tokens: options.max_tokens ?? 2000,
           stream: true,
         }),
+        // RELIABILITY (audit M-8): the streaming fetch previously had no
+        // timeout — a stalled SSE body hung this generator forever.
+        signal: AbortSignal.timeout(120_000),
       })
 
       if (!res.ok || !res.body) {
@@ -975,7 +978,9 @@ export async function callGroqChatCompletion(options: {
           }
 
           if (res.status === 429) {
-            groqPool.markKeyRateLimited(key, 20)
+            // Groq TPM windows last ~60s: a 20s cooldown made us hammer the
+            // same key right after the window reset (audit M/L — pool churn).
+            groqPool.markKeyRateLimited(key, 60)
             console.warn(`[GroqChat] 429 Rate Limit on key ${key.slice(0, 7)}..., immediately switching to next pool key...`)
             continue
           }

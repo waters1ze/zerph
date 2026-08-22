@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
         username: true,
         birthday: true,
         streakDays: true,
+        streakVisible: true,
         addedAt: true,
         lastActiveAt: true,
       }
@@ -114,7 +115,10 @@ export async function GET(req: NextRequest) {
         lastName: targetUser.lastName,
         username: targetUser.username ? `@${targetUser.username.replace(/^@/, '')}` : null,
         birthday: targetUser.birthday,
-        streakDays: targetUser.streakDays || 0,
+        // SOCIAL LAYER PRIVACY (feature: friend streaks): a user may hide
+        // their streak from friends; self-view is always allowed.
+        streakDays: isSelf || targetUser.streakVisible ? (targetUser.streakDays || 0) : null,
+        streakVisible: targetUser.streakVisible,
         createdAt: targetUser.addedAt,
         totalCompletedTasks,
       },

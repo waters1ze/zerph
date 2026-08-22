@@ -10,7 +10,11 @@ function tunedDatabaseUrl(url: string | undefined): string | undefined {
   if (!url) return url
   try {
     const u = new URL(url)
-    const limit = process.env.PRISMA_CONNECTION_LIMIT || '15'
+    // Serverless-safe default: N lambdas × this limit hit the Supabase
+    // pooler. 5 keeps a healthy headroom under Vercel concurrency
+    // (audit H-7/B8: the previous default of 15 contradicted the
+    // "tiny pool" requirement). Override with PRISMA_CONNECTION_LIMIT.
+    const limit = process.env.PRISMA_CONNECTION_LIMIT || '5'
     u.searchParams.set('connection_limit', limit)
     u.searchParams.set('pool_timeout', '15')
     u.searchParams.set('connect_timeout', '15')

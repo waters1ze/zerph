@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { planAtLeast } from '@/lib/backend/plans'
+import { listTeamMembers, getTeamRole, addTeamMember } from '@/lib/backend/membership'
 import crypto from 'crypto'
 
 export async function GET(req: NextRequest) {
@@ -14,36 +15,42 @@ export async function GET(req: NextRequest) {
     const numericChatId = BigInt(authUser.chatId)
 
     // Find all teams where user is owner OR in memberIds
+    // Membership via relational table (audit B7)
+    const myTeamMemberships = await prisma.teamMember.findMany({
+      where: { chatId: numericChatId },
+      select: { teamId: true },
+    })
     const teams = await prisma.team.findMany({
       where: {
         OR: [
           { ownerChatId: numericChatId },
-          { memberIds: { has: numericChatId } },
+          ...(myTeamMemberships.length > 0 ? [{ id: { in: myTeamMemberships.map(r => r.teamId) } }] : [{ memberIds: { has: numericChatId } }]),
         ],
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    const formattedTeams = teams.map(t => {
+    const formattedTeams = await Promise.all(teams.map(async t => {
+      const members = await listTeamMembers(t as any)
+      const myRole = await getTeamRole(t as any, numericChatId)
       const isOwner = t.ownerChatId === numericChatId
-      const isAdmin = isOwner || t.adminIds.includes(numericChatId)
-      const myRole = isOwner ? 'owner' : isAdmin ? 'admin' : 'member'
+      const isAdmin = myRole === 'owner' || myRole === 'admin'
 
       return {
         id: t.id,
         name: t.name,
         ownerChatId: t.ownerChatId.toString(),
-        memberCount: t.memberIds.length,
-        adminCount: t.adminIds.length,
+        memberCount: members.length,
+        adminCount: members.filter(m => m.role === 'admin' || m.role === 'owner').length,
         plan: t.plan,
         inviteCode: t.inviteCode,
         inviteUrl: `https://t.me/zerph_bot?start=team_${t.inviteCode}`,
-        myRole,
+        myRole: isOwner ? 'owner' : (myRole || 'member'),
         isOwner,
         isAdmin,
         createdAt: t.createdAt.toISOString(),
       }
-    })
+    }))
 
     return NextResponse.json({
       success: true,
@@ -97,6 +104,10 @@ export async function POST(req: NextRequest) {
         inviteCode,
       },
     })
+    // Relational membership seed (B7)
+    await addTeamMember(team as any, numericChatId, 'owner').catch(err =>
+      console.error(`[Teams POST] owner row seed failed for ${team.id}:`, err)
+    )
 
     return NextResponse.json({
       success: true,

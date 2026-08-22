@@ -1,80 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { getExtensionById } from '@/lib/backend/extensions'
 import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
 import { getUserUsageAndLimits } from '@/lib/backend/db'
 import { getDailyCount, incrementDailyCount, COUNTERS, EXTENSION_AI_LIMITS } from '@/lib/backend/plans'
-import dns from 'dns/promises'
 import crypto from 'crypto'
 
-function isPrivateIp(ip: string): boolean {
-  // IPv4 private & link-local ranges
-  if (
-    ip.startsWith('10.') ||
-    ip.startsWith('127.') ||
-    ip.startsWith('169.254.') ||
-    ip.startsWith('192.168.') ||
-    ip === '0.0.0.0'
-  ) {
-    return true
-  }
-
-  // 172.16.0.0 - 172.31.255.255
-  const parts = ip.split('.').map(Number)
-  if (parts.length === 4 && parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) {
-    return true
-  }
-
-  // IPv6 loopback & unique local
-  const lower = ip.toLowerCase()
-  if (
-    lower === '::1' ||
-    lower.startsWith('fe80:') ||
-    lower.startsWith('fc00:') ||
-    lower.startsWith('fd00:') ||
-    lower.startsWith('::ffff:127.') ||
-    lower.startsWith('::ffff:10.') ||
-    lower.startsWith('::ffff:192.168.')
-  ) {
-    return true
-  }
-
-  return false
-}
-
-async function validateExtensionEndpoint(urlStr: string): Promise<{ safe: boolean; error?: string }> {
-  let parsed: URL
-  try {
-    parsed = new URL(urlStr)
-  } catch {
-    return { safe: false, error: 'Невалидный URL' }
-  }
-
-  if (parsed.protocol !== 'https:') {
-    return { safe: false, error: 'Разрешены только защищённые HTTPS адреса для AI-эндпоинтов' }
-  }
-
-  const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'metadata.google.internal', 'instance-data']
-  if (BLOCKED_HOSTS.includes(parsed.hostname.toLowerCase())) {
-    return { safe: false, error: 'Локальные и служебные хосты запрещены' }
-  }
-
-  try {
-    const addresses = await dns.lookup(parsed.hostname, { all: true })
-    if (!addresses || addresses.length === 0) {
-      return { safe: false, error: 'Не удалось разрезолвить хост эндпоинта' }
-    }
-    for (const { address } of addresses) {
-      if (isPrivateIp(address)) {
-        return { safe: false, error: 'Обращение к приватным IP-адресам заблокировано системой безопасности (SSRF Protection)' }
-      }
-    }
-  } catch {
-    return { safe: false, error: 'Хост недоступен или не существует' }
-  }
-
-  return { safe: true }
-}
+import { validateOutboundUrl as validateExtensionEndpoint } from '@/lib/backend/ssrf'
 
 export async function POST(req: NextRequest) {
   try {
@@ -92,12 +24,12 @@ export async function POST(req: NextRequest) {
 
     const ext = await getExtensionById(extensionId)
     if (!ext) {
-      return NextResponse.json({ error: 'Расширение не найдено' }, { status: 404 })
+      return NextResponse.json({ error: 'Р Р°СЃС€РёСЂРµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' }, { status: 404 })
     }
 
     const aiEndpoint = ext.content?.aiEndpoint || ext.content?.endpoint
     if (!aiEndpoint) {
-      return NextResponse.json({ error: 'У этого расширения не настроен внешний AI-сервер (aiEndpoint)' }, { status: 400 })
+      return NextResponse.json({ error: 'РЈ СЌС‚РѕРіРѕ СЂР°СЃС€РёСЂРµРЅРёСЏ РЅРµ РЅР°СЃС‚СЂРѕРµРЅ РІРЅРµС€РЅРёР№ AI-СЃРµСЂРІРµСЂ (aiEndpoint)' }, { status: 400 })
     }
 
     // Strict SSRF validation
@@ -114,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     if (dailyLimit !== -1 && dailyUsed >= dailyLimit) {
       return NextResponse.json({
-        error: `Исчерпан дневной лимит запросов к ИИ для расширений (${dailyUsed}/${dailyLimit}). Перейдите на тариф Plus (50/день) или Pro (150/день) для увеличения квоты.`,
+        error: `РСЃС‡РµСЂРїР°РЅ РґРЅРµРІРЅРѕР№ Р»РёРјРёС‚ Р·Р°РїСЂРѕСЃРѕРІ Рє РР РґР»СЏ СЂР°СЃС€РёСЂРµРЅРёР№ (${dailyUsed}/${dailyLimit}). РџРµСЂРµР№РґРёС‚Рµ РЅР° С‚Р°СЂРёС„ Plus (50/РґРµРЅСЊ) РёР»Рё Pro (150/РґРµРЅСЊ) РґР»СЏ СѓРІРµР»РёС‡РµРЅРёСЏ РєРІРѕС‚С‹.`,
         limitReached: true,
         limit: dailyLimit,
         used: dailyUsed,
@@ -123,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     // Rate limiting: max 15 requests per minute per user per extension
     if (!checkInMemoryRateLimit(`ext_ai:${user.chatId}:${extensionId}`, 15, 60 * 1000)) {
-      return NextResponse.json({ error: 'Превышен лимит запросов к ИИ-серверу расширения. Пожалуйста, подождите минуту.' }, { status: 429 })
+      return NextResponse.json({ error: 'РџСЂРµРІС‹С€РµРЅ Р»РёРјРёС‚ Р·Р°РїСЂРѕСЃРѕРІ Рє РР-СЃРµСЂРІРµСЂСѓ СЂР°СЃС€РёСЂРµРЅРёСЏ. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїРѕРґРѕР¶РґРёС‚Рµ РјРёРЅСѓС‚Сѓ.' }, { status: 429 })
     }
 
     const hashedUserId = crypto.createHash('sha256').update(String(user.chatId)).digest('hex').slice(0, 16)
@@ -152,13 +84,13 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       return NextResponse.json({
-        error: `AI-сервер расширения вернул ошибку (${response.status})`,
+        error: `AI-СЃРµСЂРІРµСЂ СЂР°СЃС€РёСЂРµРЅРёСЏ РІРµСЂРЅСѓР» РѕС€РёР±РєСѓ (${response.status})`,
       }, { status: 502 })
     }
 
     const rawText = await response.text()
     if (rawText.length > 50_000) {
-      return NextResponse.json({ error: 'Ответ AI-сервера расширения превышает допустимый размер (50 КБ)' }, { status: 502 })
+      return NextResponse.json({ error: 'РћС‚РІРµС‚ AI-СЃРµСЂРІРµСЂР° СЂР°СЃС€РёСЂРµРЅРёСЏ РїСЂРµРІС‹С€Р°РµС‚ РґРѕРїСѓСЃС‚РёРјС‹Р№ СЂР°Р·РјРµСЂ (50 РљР‘)' }, { status: 502 })
     }
 
     // Increment daily AI counter for extensions

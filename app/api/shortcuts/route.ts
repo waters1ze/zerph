@@ -64,13 +64,42 @@ export function cleanShortcutsInput(raw: string): string {
   return cleaned.trim()
 }
 
-export function getSiriUserKey(chatId: number | string | bigint): string | null {
-  // The signing secret must be a real server-side secret. The old hardcoded
-  // fallback ('zerf_siri_secret_key_salt_2026') made every user's key
-  // publicly computable when env vars were missing — fail closed instead.
+/** Full-length capability signature (128 bits). */
+export function getSiriUserKeyFull(chatId: number | string | bigint): string | null {
   const secret = process.env.TELEGRAM_BOT_TOKEN || process.env.JWT_SECRET || process.env.ADMIN_SECRET
   if (!secret) return null
-  return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex').slice(0, 10)
+  return crypto.createHmac('sha256', secret).update(String(chatId)).digest('hex')
+}
+
+/**
+ * SECURITY (audit M-3/weak-capability): Siri keys were 10 hex chars (40 bits)
+ * and guessable offline. New links carry the full 64-char signature; legacy
+ * 10-char keys remain VALID during a transition window so existing Siri
+ * shortcuts keep working. Set SIRI_LEGACY_KEYS_DISABLED=true to drop them.
+ */
+export function getSiriUserKey(chatId: number | string | bigint): string {
+  const full = getSiriUserKeyFull(chatId) || ''
+  const legacy = full.slice(0, 10)
+  if (process.env.SIRI_LEGACY_KEYS_DISABLED === 'true') return full
+  // Kept for compatibility with previously issued personal URLs:
+  void legacy
+  return full
+}
+
+/** Accepts either the new full key or the legacy truncated one. */
+export function siriKeyMatches(provided: string, chatId: number | string | bigint): boolean {
+  const full = getSiriUserKeyFull(chatId)
+  if (!full) return false
+  if (secretsMatch(String(provided), full)) return true
+  if (
+    process.env.SIRI_LEGACY_KEYS_DISABLED !== 'true' &&
+    provided.length === 10 &&
+    secretsMatch(String(provided), full.slice(0, 10))
+  ) {
+    console.warn(`[Siri] Legacy 10-char key used for chat ${chatId} — ask user to refresh their shortcut URL`)
+    return true
+  }
+  return false
 }
 
 async function sendTgNotification(chatId: number, text: string, replyMarkup?: any) {
@@ -326,8 +355,7 @@ export async function POST(req: NextRequest) {
       }, { status: 403, headers: NO_CACHE_HEADERS })
     }
     {
-      const expectedKey = getSiriUserKey(chatId)
-      if (!secretsMatch(String(providedKey), expectedKey)) {
+      if (!siriKeyMatches(String(providedKey), chatId)) {
         return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403, headers: NO_CACHE_HEADERS })
       }
     }
@@ -545,8 +573,7 @@ export async function GET(req: NextRequest) {
     }, { status: 403, headers: NO_CACHE_HEADERS })
   }
   {
-    const expectedKey = getSiriUserKey(chatId)
-    if (!secretsMatch(String(providedKey), expectedKey)) {
+    if (!siriKeyMatches(String(providedKey), chatId)) {
       return NextResponse.json({ error: 'Invalid security key for this chatId' }, { status: 403, headers: NO_CACHE_HEADERS })
     }
   }

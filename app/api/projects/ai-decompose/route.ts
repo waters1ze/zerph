@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/backend/auth'
 import { prisma } from '@/lib/backend/prisma'
 import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
+import { isProjectMember } from '@/lib/backend/membership'
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,9 +32,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Проект не найден' }, { status: 404 })
     }
 
-    // Verify access
+    // Verify access (relational membership, B7)
     const isOwner = project.ownerChatId === chatId
-    const isMember = (project.memberIds || []).includes(chatId)
+    const isMember = await isProjectMember(chatId, projectId)
     if (!isOwner && !isMember) {
       return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 })
     }

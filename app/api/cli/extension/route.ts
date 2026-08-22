@@ -6,11 +6,51 @@ import { callGroqChatCompletion } from '@/lib/backend/groq-pool'
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
+/**
+ * Extension generation is a CLI-workflow feature: it is available ONLY to
+ * requests authenticated with a session created through the CLI pairing flow
+ * (userSession.deviceType === 'cli'). Web sessions and anonymous callers are
+ * refused; no daily message-quota is consumed for this endpoint.
+ */
+async function requireCliIdentity(
+  req: NextRequest
+): Promise<{ chatId: string } | null> {
+  const authUser = await getAuthenticatedUser(req)
+  if (!authUser) return null
+
+  let token: string | null =
+    req.headers.get('x-auth-token') ||
+    req.cookies.get('zerf_auth_token')?.value ||
+    new URL(req.url).searchParams.get('token') ||
+    (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim() ||
+    null
+
+  if (!token) return null
+  try {
+    const session = await prisma.userSession.findUnique({
+      where: { sessionToken: token },
+      select: { deviceType: true, isRevoked: true },
+    })
+    if (!session || session.isRevoked || session.deviceType !== 'cli') return null
+    return { chatId: authUser.chatId }
+  } catch {
+    return null
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const authUser = await getAuthenticatedUser(req)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized', requiresAuth: true }, { status: 401 })
+    // Gate: paired-CLI only (per product decision — this endpoint serves the
+    // programmatic zerf-extension builder inside the user's own terminal).
+    const identity = await requireCliIdentity(req)
+    if (!identity) {
+      return NextResponse.json(
+        {
+          error: 'Доступно только из подключённого Zerf CLI. Выполните `zerf login` в терминале.',
+          code: 'cli_pairing_required',
+        },
+        { status: 403 }
+      )
     }
 
     const { prompt, name, template = 'widget' } = await req.json().catch(() => ({}))

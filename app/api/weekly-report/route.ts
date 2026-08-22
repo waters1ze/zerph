@@ -78,9 +78,17 @@ export async function GET(req: NextRequest) {
     }
 
     let aiAnalysis = 'Анализ недоступен. Продолжайте в том же духе!'
-    
+
     try {
-      const prompt = `Ты продуктивный ассистент Zerf. Напиши краткий (3-4 предложения) подбадривающий анализ недели пользователя на основе этих данных. 
+      // COST CONTROL (audit M-6, variant A): the AI summary consumes one
+      // chat-message from the daily plan budget; raw stats remain free.
+      const { getUserUsageAndLimits, incrementUserUsage } = await import('@/lib/backend/db')
+      const limits = await getUserUsageAndLimits(authUser.chatId)
+      if (!limits.canSendChatMessage) {
+        aiAnalysis = 'Дневной лимит AI исчерпан — обновите план, чтобы получать умные отчёты.'
+      } else {
+        await incrementUserUsage(authUser.chatId, 'chat').catch(() => {})
+        const prompt = `Ты продуктивный ассистент Zerf. Напиши краткий (3-4 предложения) подбадривающий анализ недели пользователя на основе этих данных.
 Создано задач: ${tasksCreated}
 Завершено задач: ${tasksCompleted}
 Создано заметок: ${notesCreated}
@@ -88,14 +96,15 @@ export async function GET(req: NextRequest) {
 Самый продуктивный день: ${mostProductiveDay}
 Никаких списков, просто текст.`
 
-      const result = await callGroqChatCompletion({
-        model: GROQ_CHAT_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 300
-      })
-      if (result.content?.trim()) {
-        aiAnalysis = result.content.trim()
+        const result = await callGroqChatCompletion({
+          model: GROQ_CHAT_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 300
+        })
+        if (result.content?.trim()) {
+          aiAnalysis = result.content.trim()
+        }
       }
     } catch (e) {
       console.error('Groq weekly report error:', e)

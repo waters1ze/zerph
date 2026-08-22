@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Zerf Telegram Bot — Long-Polling Server
  * Run: npx tsx server/bot.ts
  *
@@ -55,6 +55,32 @@ async function sendAction(chatId: number, action = 'typing') {
   return tg('sendChatAction', { chat_id: chatId, action })
 }
 
+// ── Share-cards (/card) ──────────────────────────────────────────────────────
+// Sends the weekly PNG card. The card endpoint accepts a capability
+// signature (?chatId=&sig=) because Telegram's servers fetch the image
+// without the user's session headers. Signature helper is SHARED with the
+// API route (lib/backend/cards.ts) — never duplicated.
+async function cmdCard(chatId: number, firstName: string, kindArg = 'weekly') {
+  const allowed = ['weekly', 'portrait', 'yearly', 'milestone']
+  const kind = allowed.includes(kindArg) ? kindArg : 'weekly'
+  const sig = cardSignature(kind, String(chatId))
+  const photoUrl = `${APP_URL}/api/cards/${kind}?chatId=${chatId}&sig=${sig}`
+  const res = await tg('sendPhoto', {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption: `🔥 ${firstName}, твоя карточка Zerf готова!`,
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '📲 Поделиться карточкой', switch_inline_query: 'Моя неделя в Zerf Note' }],
+        [{ text: '🚀 Open Zerf App', web_app: { url: MINIAPP_URL } }],
+      ],
+    },
+  })
+  if (!(res as any)?.ok) {
+    await send(chatId, 'Не смог отрисовать карточку 😔 Попробуй позже — она появится в веб-версии: раздел «Статистика».')
+  }
+}
+
 import {
   registerChatId as dbRegisterChatId,
   getAllTasks,
@@ -62,6 +88,7 @@ import {
   getAllNotes,
 } from '@/lib/backend/db'
 import { getAdminSecret } from '@/lib/backend/auth'
+import { cardSignature } from '@/lib/backend/cards'
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
@@ -278,34 +305,71 @@ async function sendAIResult(chatId: number, data: {
 
 function startReminderScheduler() {
   console.log('⏰ Centralized Cron & Reminder scheduler started (checks every 20s)')
-  ;(async () => {
-    try {
-      const { runAllCronTasks } = await import('@/lib/backend/cron-runner')
-      await runAllCronTasks()
-    } catch {}
-  })()
-  // Run every 20 seconds using the deduplicated cron runner
-  setInterval(async () => {
+  // RELIABILITY (audit C-6): a single cron pass (AI greetings, per-user
+  // sleeps) can take minutes — far longer than the 20s tick. Without an
+  // in-flight guard ticks stacked up and doubled sends through check→mark
+  // race windows.
+  let cronInFlight = false
+  const runOnce = async () => {
+    if (cronInFlight) return
+    cronInFlight = true
     try {
       const { runAllCronTasks } = await import('@/lib/backend/cron-runner')
       await runAllCronTasks()
     } catch (err) {
-      console.error('⚠️ Reminder scheduler error:', err)
+      console.error('⏰ Reminder scheduler error:', err)
+    } finally {
+      cronInFlight = false
     }
-  }, 20 * 1000)
+  }
+  runOnce()
+  setInterval(runOnce, 20 * 1000).unref?.()
 }
 
 // ── Main polling loop ─────────────────────────────────────────────────────────
 
 let offset = 0
 
+// RELIABILITY (audit C-6/bot): awaiting processWithAI inside the update loop
+// made one slow voice message (download+STT+parse ≈ 30s+) block every
+// subsequent update AND the next long-poll. Updates now flow into a
+// SERIALIZED background chain: order is preserved, the poll never stalls,
+// concurrency stays bounded at 1 (no provider hammering).
+let aiChain: Promise<void> = Promise.resolve()
+function enqueueAI(task: () => Promise<void>) {
+  aiChain = aiChain.then(task).catch((err) => {
+    console.error('⛓ AI processing chain error:', err)
+  })
+}
+
+// RELIABILITY (audit C-8): the long-poll previously had no client-side
+// timeout — a stalled connection left `await fetch` pending forever and the
+// whole bot froze with no watchdog. Now every request is bounded and the
+// loop self-heals with backoff after consecutive failures.
+const POLL_TIMEOUT_MS = 35_000 // Telegram long-poll hint is 30s
+const MAX_CONSECUTIVE_FAILURES = 5
+
 async function poll() {
+  let consecutiveFailures = 0
   while (true) {
     try {
       const res = await fetch(
-        `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${offset}&timeout=30&allowed_updates=["message","callback_query"]`
+        `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${offset}&timeout=30&allowed_updates=["message","callback_query"]`,
+        { signal: AbortSignal.timeout(POLL_TIMEOUT_MS) }
       )
-      if (!res.ok) { await sleep(3000); continue }
+      if (!res.ok) {
+        consecutiveFailures++
+        console.error(`[Poll] getUpdates HTTP ${res.status} (${consecutiveFailures} consecutive)`)
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.error('[Poll] too many consecutive failures — cooling down 60s')
+          await sleep(60_000)
+          consecutiveFailures = 0
+        } else {
+          await sleep(3000)
+        }
+        continue
+      }
+      consecutiveFailures = 0
 
       const { result: updates = [] } = await res.json()
 
@@ -386,6 +450,7 @@ async function poll() {
         if (text.startsWith('/')) {
           const cmd = text.split(' ')[0].toLowerCase()
           if (cmd === '/start' || cmd === '/help') await cmdStart(chatId, firstName, msg.from?.username, msg.from?.last_name)
+          else if (cmd === '/card') await cmdCard(chatId, firstName, text.split(' ')[1]?.toLowerCase() || 'weekly')
           else if (cmd === '/today') await cmdToday(chatId)
           else if (cmd === '/goals') await cmdGoals(chatId)
           else if (cmd === '/notes') await cmdNotes(chatId)
@@ -395,13 +460,13 @@ async function poll() {
 
         // Voice/audio
         if (voice) {
-          await processWithAI(chatId, undefined, voice.file_id)
+          enqueueAI(() => processWithAI(chatId, undefined, voice.file_id))
           continue
         }
 
         // Text messages — process with AI
         if (text.trim()) {
-          await processWithAI(chatId, text)
+          enqueueAI(() => processWithAI(chatId, text))
         }
       }
     } catch (err) {

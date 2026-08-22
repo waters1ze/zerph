@@ -186,26 +186,26 @@ export async function runReminderCheck() {
           targetSentCount = 0 // Does not count towards repeat quota
         }
       }
-      // STAGE 2: Exact due time reminder (at 00:00 / 0 min remaining or within -2 min)
-      else if (actualDiffMin <= 0 && actualDiffMin >= -2) {
+      // STAGE 2: Due time reminder (at 00:00 or if due time has arrived/passed today and not yet sent)
+      else if (actualDiffMin <= 0) {
         if (sentCount === 0 && !isReminderInCooldown(task.id, 'due', 10 * 60 * 1000)) {
           stageKey = 'due'
-          stageText = 'сейчас'
+          stageText = actualDiffMin < -2 ? `(было запланировано на ${task.dueTime})` : 'сейчас'
           shouldFire = true
           targetSentCount = 1
         }
-      }
-      // STAGE 3: Overdue repeat reminders (opt-in only, repeatCount >= 1)
-      else if (actualDiffMin < -2) {
-        const nextRepeatIndex = Math.max(1, sentCount) + 1
-        if (nextRepeatIndex <= totalQuota) {
-          const expectedPastMin = (nextRepeatIndex - 1) * intervalMin
-          if (actualDiffMin <= -expectedPastMin && actualDiffMin >= -(expectedPastMin + intervalMin)) {
-            stageKey = `repeat_${nextRepeatIndex - 1}`
-            stageText = `просрочено на ${Math.abs(actualDiffMin)} мин`
-            if (!isReminderInCooldown(task.id, stageKey, (intervalMin - 1) * 60 * 1000)) {
-              shouldFire = true
-              targetSentCount = nextRepeatIndex
+        // STAGE 3: Overdue repeat reminders (opt-in only, repeatCount >= 1)
+        else if (sentCount > 0 && repeatCount >= 1) {
+          const nextRepeatIndex = sentCount + 1
+          if (nextRepeatIndex <= totalQuota) {
+            const expectedPastMin = (nextRepeatIndex - 1) * intervalMin
+            if (actualDiffMin <= -expectedPastMin && actualDiffMin >= -(expectedPastMin + intervalMin)) {
+              stageKey = `repeat_${nextRepeatIndex - 1}`
+              stageText = `просрочено на ${Math.abs(actualDiffMin)} мин`
+              if (!isReminderInCooldown(task.id, stageKey, (intervalMin - 1) * 60 * 1000)) {
+                shouldFire = true
+                targetSentCount = nextRepeatIndex
+              }
             }
           }
         }

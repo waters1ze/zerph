@@ -37,12 +37,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req)
-    const body = await req.json()
-    const { email, firstName } = body
+    const body: any = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const email: unknown = body.email
 
-    const cleanEmail = (email || '').trim().toLowerCase()
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return NextResponse.json({ error: 'Пожалуйста, введите корректный Google Email' }, { status: 400 })
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) {
+      return NextResponse.json({ error: 'Укажите корректный Google Email' }, { status: 400 })
     }
 
     // 1. If currently logged in, link Google Email to this active account
@@ -55,21 +58,25 @@ export async function POST(req: NextRequest) {
 
     const cid = BigInt(authUser.chatId)
 
-    // If a separate dummy account was previously created with this email, merge it
+    // SECURITY (audit C-2): the previous implementation "merged" any existing
+    // account that owned the submitted email — transferring ALL of its
+    // tasks/notes/goals/habits to the caller and DELETING the victim's row.
+    // The email here is client-supplied and never verified, so knowing just
+    // someone's email enabled total content theft + account destruction.
+    // Now a conflicting email is simply refused; linking proceeds only when
+    // the email is free.
     const clash = await prisma.telegramChat.findFirst({
       where: {
         chatId: { not: cid },
         OR: [{ googleEmail: cleanEmail }, { email: cleanEmail }],
-      }
+      },
+      select: { chatId: true },
     })
     if (clash) {
-      try {
-        await prisma.task.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-        await prisma.note.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-        await prisma.goal.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-        await prisma.habit.updateMany({ where: { ownerChatId: clash.chatId }, data: { ownerChatId: cid } })
-        await prisma.telegramChat.delete({ where: { chatId: clash.chatId } })
-      } catch {}
+      return NextResponse.json(
+        { error: 'Этот Google Email уже привязан к другому аккаунту', code: 'email_taken' },
+        { status: 409 }
+      )
     }
 
     await prisma.telegramChat.update({

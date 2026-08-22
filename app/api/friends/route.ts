@@ -214,6 +214,25 @@ export async function PUT(req: NextRequest) {
     const senderCid = BigInt(fromChatId)
 
     if (action === 'accept') {
+      // SECURITY (audit H-3): accepting previously CREATED a mutual accepted
+      // friendship from thin air — any user could self-"accept" friendship
+      // with an arbitrary chatId and unlock their schedule/tasks. A pending
+      // request FROM the claimed sender must already exist.
+      const pending = await prisma.friendship.findUnique({
+        where: { userChatId_friendChatId: { userChatId: senderCid, friendChatId: chatId } },
+        select: { status: true },
+      })
+      if (!pending) {
+        return NextResponse.json(
+          { error: 'Нет входящей заявки от этого пользователя' },
+          { status: 404 }
+        )
+      }
+      // Idempotent double-accept: already-friendships succeed without writes.
+      if (pending.status === 'accepted') {
+        return NextResponse.json({ success: true, message: 'Уже в друзьях' })
+      }
+
       // Set status accepted for both directions
       await prisma.friendship.upsert({
         where: { userChatId_friendChatId: { userChatId: senderCid, friendChatId: chatId } },
@@ -280,6 +299,12 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (birthday !== undefined) {
+      // SECURITY (audit M-2): birthdays are writable ONLY for the caller's
+      // own account — the previous code let any authenticated user rewrite
+      // the birthday of an arbitrary chatId and trigger broadcasts.
+      if (targetCid !== chatId) {
+        return NextResponse.json({ error: 'Можно менять только свой день рождения' }, { status: 403 })
+      }
       const { parseBirthday, broadcastMyBirthdayToFriends } = await import('@/lib/backend/db')
       const parsed = parseBirthday(birthday)
       const normalizedBday = parsed ? parsed.iso : (birthday || null)
@@ -288,7 +313,6 @@ export async function PATCH(req: NextRequest) {
         data: { birthday: normalizedBday },
       })
       await broadcastMyBirthdayToFriends(targetCid)
-      await syncFriendBirthdays(chatId)
     }
 
     return NextResponse.json({ ok: true, allowTasks, birthday })

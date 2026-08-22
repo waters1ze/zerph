@@ -5,9 +5,11 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, isUserAdmin, ROOT_ADMIN_IDS } from '@/lib/backend/auth'
+import { parseStoredCard } from '@/lib/backend/crypto-box'
 import { prisma } from '@/lib/backend/prisma'
 import { planAtLeast, normalizePlan, PLANS, UNLIMITED } from '@/lib/backend/plans'
 import { checkInMemoryRateLimit } from '@/lib/backend/rate-limit'
+import { validateOutboundUrl } from '@/lib/backend/ssrf'
 import {
   ExtensionItem,
   STARTER_EXTENSIONS,
@@ -136,7 +138,8 @@ async function getAuthorPayoutCard(chatId: string, masked = true): Promise<any |
     const row = await prisma.config.findUnique({
       where: { key: `author_payout_card_${chatId}` },
     })
-    const card = row?.value ? JSON.parse(row.value) : null
+    // Transparently reads legacy plaintext or encrypted envelopes (audit M-5)
+    const card = parseStoredCard<any>(row?.value)
     if (card && masked && card.cardNumber) {
       return { ...card, cardNumber: maskPayoutNumber(card.cardNumber) }
     }
@@ -204,8 +207,11 @@ export async function GET(req: NextRequest) {
         'Accept': 'application/vnd.github.v3+json',
       }
 
+      // SECURITY (audit C-4): a second live GitHub client secret was
+      // hardcoded here as a fallback and leaked via git history. Env-only now;
+      // unauthenticated public API access is used when not configured.
       const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Ov23li5itN8nX8pNVJsy'
-      const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'acb04b9e1b10d79b208603feebce151f203d0e8e'
+      const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || null
 
       if (token) {
         headers['Authorization'] = `token ${token}`
@@ -1228,8 +1234,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Укажите корректный URL сервера' }, { status: 400 })
       }
       const cleanUrl = hostingUrl.trim()
-      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-        return NextResponse.json({ error: 'URL должен начинаться с https:// или http://' }, { status: 400 })
+      // SECURITY (audit H-6): blind SSRF — the server previously fetched any
+      // URL (incl. private IPs / cloud metadata) and echoed status+latency.
+      const ssrf = await validateOutboundUrl(cleanUrl, { allowHttp: true })
+      if (!ssrf.safe) {
+        return NextResponse.json({ success: false, error: ssrf.error }, { status: 400 })
       }
 
       const start = Date.now()
@@ -1353,16 +1362,22 @@ export async function POST(req: NextRequest) {
         updatedAt: new Date().toISOString(),
       }
 
+      // SECURITY (audit M-5): payout details are encrypted at rest
+      // (AES-256-GCM). Falls back to plaintext only if keying is unavailable.
+      const { encryptJson } = await import('@/lib/backend/crypto-box')
+      const sealedCard = encryptJson(cardData)
+      const cardStoredValue = sealedCard || JSON.stringify(cardData)
+
       await Promise.all([
         prisma.config.upsert({
           where: { key: `author_payout_card_${chatId}` },
-          update: { value: JSON.stringify(cardData) },
-          create: { key: `author_payout_card_${chatId}`, value: JSON.stringify(cardData) },
+          update: { value: cardStoredValue },
+          create: { key: `author_payout_card_${chatId}`, value: cardStoredValue },
         }),
         prisma.config.upsert({
           where: { key: `user_payment_card_${chatId}` },
-          update: { value: JSON.stringify(cardData) },
-          create: { key: `user_payment_card_${chatId}`, value: JSON.stringify(cardData) },
+          update: { value: cardStoredValue },
+          create: { key: `user_payment_card_${chatId}`, value: cardStoredValue },
         }),
         prisma.config.upsert({
           where: { key: `user_autorenew_${chatId}` },

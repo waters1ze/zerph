@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { secretsMatch } from '@/lib/backend/auth'
 import {
   getVkConfirmationCode,
   getVkSecretKey,
@@ -43,14 +44,19 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 2. Secret Key check — REQUIRED when VK_SECRET_KEY is configured.
-    //    Requests without a valid secret are dropped.
+    // 2. Secret Key check — MANDATORY for message processing.
+    // SECURITY (audit M-4): previously the handler processed callbacks with
+    // a non-timing-safe `!==` compare AND, when VK_SECRET_KEY was unset,
+    // accepted forged callbacks attributed to any from_id. Now: fail-closed
+    // without the secret; constant-time comparison when configured.
     const secretKey = getVkSecretKey()
-    if (secretKey) {
-      if (!body.secret || body.secret !== secretKey) {
-        console.warn('[VK Callback] Dropped request: missing or invalid secret')
-        return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
-      }
+    if (!secretKey) {
+      console.error('[VK Callback] VK_SECRET_KEY is not configured — refusing to process callbacks')
+      return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    }
+    if (!body.secret || !secretsMatch(String(body.secret), secretKey)) {
+      console.warn('[VK Callback] Dropped request: missing or invalid secret')
+      return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
     }
 
     // 3. Inline Button Callback (message_event)

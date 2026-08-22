@@ -51,6 +51,8 @@ export async function sendTelegramMessage(
         text,
         parse_mode: 'Markdown',
       }),
+      // RELIABILITY (audit M-8): unbounded external calls stalled workers
+      signal: AbortSignal.timeout(15_000),
     })
   } catch (err) {
     console.error('Telegram sendMessage error:', err)
@@ -79,7 +81,7 @@ export async function downloadTelegramFile(
 ): Promise<Buffer> {
   // 1. Get file path
   const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
-  const fileRes = await fetch(getFileUrl)
+  const fileRes = await fetch(getFileUrl, { signal: AbortSignal.timeout(15_000) })
   if (!fileRes.ok) throw new Error('Failed to get Telegram file path')
   const fileData = await fileRes.json()
   const filePath = fileData.result?.file_path
@@ -87,7 +89,7 @@ export async function downloadTelegramFile(
 
   // 2. Download file content
   const downloadUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`
-  const audioRes = await fetch(downloadUrl)
+  const audioRes = await fetch(downloadUrl, { signal: AbortSignal.timeout(60_000) })
   if (!audioRes.ok) throw new Error('Failed to download Telegram voice file')
 
   const arrayBuffer = await audioRes.arrayBuffer()

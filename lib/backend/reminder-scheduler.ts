@@ -38,15 +38,22 @@ export async function checkAndSendReminders() {
   }
 }
 
-// Start interval if running on dedicated server
+// Start interval if running on a dedicated daemon process.
+// RELIABILITY (audit H-9): the previous gate also accepted the mere presence
+// of TELEGRAM_BOT_TOKEN, which silently turned every warm serverless lambda
+// importing any route that calls startReminderScheduler() into a 20s daemon
+// issuing DB scans and Telegram sends outside request scope. Now the ticker
+// starts ONLY when explicitly opted in via RUN_CRON_DAEMON=true.
 let isRunning = false
 export function startReminderScheduler(force = false) {
   if (isRunning) return
-  if (!force && process.env.RUN_CRON_DAEMON !== 'true' && !process.env.TELEGRAM_BOT_TOKEN) return
+  if (!force && process.env.RUN_CRON_DAEMON !== 'true') return
   isRunning = true
   console.log('⏰ Reminder scheduler interval started (checks every 20s)')
   checkAndSendReminders().catch(() => {})
-  setInterval(() => {
+  const timer = setInterval(() => {
     checkAndSendReminders().catch(() => {})
   }, 20000)
+  // Never keep the event loop alive just for the scheduler (serverless safety).
+  timer.unref?.()
 }
