@@ -283,21 +283,48 @@ export async function POST(req: NextRequest) {
 
     const effectiveModel = getModelForUserPlan(limits.plan, requestedModel, 'chat')
 
-    // Parse user natural language intent using Groq
+    // Fast-path intent classification: only run complex DB mutation parser if text has actionable command intent
+    function isLikelyActionIntent(text: string): boolean {
+      const t = text.toLowerCase().trim()
+      const conversationalKeywords = [
+        'как думаешь', 'что думаешь', 'что посоветуешь', 'посоветуй', 'что лучше',
+        'почему', 'расскажи', 'объясни', 'привет', 'здравствуй', 'как дела',
+        'кто ты', 'как тебя зовут', 'спасибо', 'благодарю', 'какое твое мнение',
+        'мне интересно твое мнение', 'помоги выбрать', 'поделись мнением', 'подскажи как',
+        'что скажешь', 'как лучше', 'в чем разница', 'порекомендуй', 'поболтаем', 'пообщаемся'
+      ]
+      const isConversational = conversationalKeywords.some(kw => t.includes(kw))
+      const explicitActionKeywords = [
+        'создай задачу', 'добавь задачу', 'удали задачу', 'поставь цель', 'запиши заметку',
+        'отметь выполненной', 'выполни задачу', 'удали все задачи', 'создай привычку'
+      ]
+      if (isConversational && !explicitActionKeywords.some(kw => t.includes(kw))) {
+        return false
+      }
+      const actionKeywords = [
+        'добавь', 'создай', 'напомни', 'поставь цель', 'запиши заметку', 'удали', 'выполни',
+        'отметь', 'очисти', 'перенеси', 'запланируй', 'в 10:', 'в 11:', 'в 12:', 'в 13:', 'в 14:', 'в 15:', 'в 16:', 'в 17:', 'в 18:', 'в 19:', 'в 20:', 'в 21:', 'в 22:'
+      ]
+      return actionKeywords.some(kw => t.includes(kw))
+    }
+
+    // Parse user natural language intent using Groq only if needed
     let parsedItems: any[] = []
-    try {
-      parsedItems = await parseIntentWithGroq(
-        userText,
-        groqApiKey,
-        effectiveModel,
-        serverContext,
-        friendsContext,
-        extensionsContext,
-        limits.plan
-      )
-    } catch (parseErr) {
-      console.warn('[Chat API] parseIntentWithGroq soft fallback to conversational model:', parseErr)
-      parsedItems = []
+    if (isLikelyActionIntent(userText)) {
+      try {
+        parsedItems = await parseIntentWithGroq(
+          userText,
+          groqApiKey,
+          effectiveModel,
+          serverContext,
+          friendsContext,
+          extensionsContext,
+          limits.plan
+        )
+      } catch (parseErr) {
+        console.warn('[Chat API] parseIntentWithGroq soft fallback to conversational model:', parseErr)
+        parsedItems = []
+      }
     }
 
     const actionableItems = parsedItems.filter(it => it.type !== 'answer' && it.action !== 'reply')

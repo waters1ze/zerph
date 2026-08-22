@@ -155,6 +155,90 @@ function TypewriterMessage({
   )
 }
 
+/**
+ * Animated Progress & Inspection steps during AI thinking
+ */
+function AiAnalysisProgress({
+  tasksCount,
+  goalsCount,
+  notesCount,
+}: {
+  tasksCount: number
+  goalsCount: number
+  notesCount: number
+}) {
+  const [step, setStep] = useState(0)
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setStep(1), 350)
+    const t2 = setTimeout(() => setStep(2), 850)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+  }, [])
+
+  const steps = [
+    { label: 'Анализирую задачи и расписание...', icon: '📋', progress: 35 },
+    { label: 'Изучаю контекст заметок и целей...', icon: '📝', progress: 75 },
+    { label: 'Генерирую персональный ответ...', icon: '⚡', progress: 95 },
+  ]
+
+  const cur = steps[step] || steps[0]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 6 }}
+      className="flex gap-2.5 items-start max-w-[92%]"
+    >
+      <div className="w-7 h-7 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+        <Sparkles className="w-3.5 h-3.5 text-primary animate-spin" style={{ animationDuration: '3s' }} />
+      </div>
+      <div className="flex-1 p-3 rounded-2xl rounded-tl-xs bg-card border border-border/80 shadow-md flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 truncate">
+            <span>{cur.icon}</span>
+            <span>{cur.label}</span>
+          </span>
+          <span className="text-[10px] font-mono font-bold text-primary shrink-0">
+            {cur.progress}%
+          </span>
+        </div>
+
+        {/* Smooth animated progress bar */}
+        <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-primary via-emerald-400 to-primary rounded-full"
+            initial={{ width: '20%' }}
+            animate={{ width: `${cur.progress}%` }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+          />
+        </div>
+
+        {/* Inspected workspace context tags */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">Контекст:</span>
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted/80 text-foreground border border-border/50">
+            📌 {tasksCount} задач
+          </span>
+          {goalsCount > 0 && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted/80 text-foreground border border-border/50">
+              🎯 {goalsCount} целей
+            </span>
+          )}
+          {notesCount > 0 && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted/80 text-foreground border border-border/50">
+              📝 {notesCount} заметок
+            </span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 export function AiChatPanel() {
   const { state, dispatch, syncData } = useApp()
   const confirm = useConfirmDialog()
@@ -791,29 +875,14 @@ export function AiChatPanel() {
                 )
               })}
 
-              {/* Typing loader indicator */}
+              {/* Animated Analysis & Progress Indicator */}
               <AnimatePresence>
                 {isTyping && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    className="flex gap-2.5 items-center"
-                  >
-                    <div className="w-7 h-7 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center">
-                      <Bot className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-xs bg-background border border-border/80 flex items-center gap-1.5 shadow-xs">
-                      {[0, 1, 2].map(i => (
-                        <motion.span
-                          key={i}
-                          className="w-1.5 h-1.5 rounded-full bg-primary"
-                          animate={{ y: [0, -4, 0] }}
-                          transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
+                  <AiAnalysisProgress
+                    tasksCount={state.tasks.length}
+                    goalsCount={state.goals.length}
+                    notesCount={state.notes.length}
+                  />
                 )}
               </AnimatePresence>
 
