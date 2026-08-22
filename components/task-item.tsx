@@ -109,9 +109,10 @@ export function TaskItem({ task, index = 0, compact = false }: Props) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      layout="position"
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
       onClick={() => dispatch({ type: 'SELECT_TASK', id: task.id })}
       className={cn(
         'group flex items-start gap-3 rounded-xl px-3.5 py-3 cursor-pointer',

@@ -574,6 +574,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Track freshly created optimistic IDs so a racing background sync doesn't wipe them
   // before the server POST completes (same 60s window as deletions)
   const recentlyAddedIdsRef = useRef<Map<string, number>>(new Map())
+  // Track in-flight local mutations so background sync never reverts recent user clicks
+  const pendingTaskMutationsRef = useRef<Map<string, { updates: Partial<Task>; timestamp: number }>>(new Map())
   // Consecutive 401 strikes from the sync endpoint — logout only fires on the
   // second strike so a single transient/racing 401 can't log the user out
   const deadSessionStrikesRef = useRef(0)
@@ -596,7 +598,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const enhancedDispatch: React.Dispatch<Action> = useCallback((action: Action) => {
-    // Perform state change locally immediately
+    // Perform state change locally immediately (0ms latency)
     dispatch(action)
     broadcastSync()
 
@@ -634,6 +636,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else if (action.type === 'TOGGLE_TASK') {
       const currentTask = stateRef.current.tasks.find(t => t.id === action.id)
       const nextStatus = action.status || (currentTask ? currentTask.status : 'todo')
+      pendingTaskMutationsRef.current.set(action.id, {
+        updates: { status: nextStatus, completedAt: nextStatus === 'done' ? new Date().toISOString() : undefined },
+        timestamp: Date.now(),
+      })
       fetch('/api/tasks', {
         method: 'PATCH',
         headers,
@@ -644,6 +650,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       }).catch(() => {})
     } else if (action.type === 'UPDATE_TASK') {
+      pendingTaskMutationsRef.current.set(action.id, {
+        updates: action.updates,
+        timestamp: Date.now(),
+      })
       fetch('/api/tasks', {
         method: 'PATCH',
         headers,
@@ -903,25 +913,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return
           }
 
+          const nowMs = Date.now()
+          // Expire mutations older than 12s
+          for (const [id, m] of pendingTaskMutationsRef.current.entries()) {
+            if (nowMs - m.timestamp > 12000) {
+              pendingTaskMutationsRef.current.delete(id)
+            }
+          }
+
           const keepFresh = <T extends { id: string }>(serverList: T[], localList: T[]): T[] => {
             const fresh = localList.filter(
               l => recentlyAddedIdsRef.current.has(l.id) && !serverList.some(srv => srv.id === l.id)
             )
             return [...serverList, ...fresh]
           }
-          const filteredTasks = keepFresh(data.tasks || [], stateRef.current.tasks).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
+
+          const serverTasks = keepFresh(data.tasks || [], stateRef.current.tasks).filter((t: Task) => !recentlyDeletedIdsRef.current.has(t.id))
+          // Apply pending optimistic mutations over server data
+          const filteredTasks = serverTasks.map((t: Task) => {
+            const pending = pendingTaskMutationsRef.current.get(t.id)
+            if (pending && nowMs - pending.timestamp < 12000) {
+              return { ...t, ...pending.updates }
+            }
+            return t
+          })
+
           const filteredGoals = keepFresh(data.goals || [], stateRef.current.goals).filter((g: Goal) => !recentlyDeletedIdsRef.current.has(g.id))
           const filteredNotes = keepFresh(data.notes || [], stateRef.current.notes).filter((n: Note) => !recentlyDeletedIdsRef.current.has(n.id))
           const filteredFriends = (data.friends || []).filter((f: Friend) => !recentlyDeletedIdsRef.current.has(f.id))
           const filteredHabits = keepFresh(data.habits || [], stateRef.current.habits).filter((h: Habit) => !recentlyDeletedIdsRef.current.has(h.id))
 
-          const loadStateUpdates: Partial<AppState> = {
-            tasks: filteredTasks,
-            goals: filteredGoals,
-            notes: filteredNotes,
-            friends: filteredFriends,
-            habits: filteredHabits,
+          const currentTasks = stateRef.current.tasks
+          const isTasksIdentical =
+            currentTasks.length === filteredTasks.length &&
+            currentTasks.every((ct, idx) => {
+              const ft = filteredTasks[idx]
+              return (
+                ft &&
+                ct.id === ft.id &&
+                ct.status === ft.status &&
+                ct.title === ft.title &&
+                ct.dueDate === ft.dueDate &&
+                ct.dueTime === ft.dueTime
+              )
+            })
+
+          const loadStateUpdates: Partial<AppState> = {}
+
+          if (!isTasksIdentical) {
+            loadStateUpdates.tasks = filteredTasks
           }
+          if (filteredGoals.length !== stateRef.current.goals.length) {
+            loadStateUpdates.goals = filteredGoals
+          }
+          if (filteredNotes.length !== stateRef.current.notes.length) {
+            loadStateUpdates.notes = filteredNotes
+          }
+          if (filteredFriends.length !== stateRef.current.friends.length) {
+            loadStateUpdates.friends = filteredFriends
+          }
+          if (filteredHabits.length !== stateRef.current.habits.length) {
+            loadStateUpdates.habits = filteredHabits
+          }
+
           if (Array.isArray(data.scheduleGroups) && data.scheduleGroups.length > 0) {
             loadStateUpdates.scheduleGroups = data.scheduleGroups
             try { localStorage.setItem('zerf_schedule_groups', JSON.stringify(data.scheduleGroups)) } catch {}
@@ -949,10 +1003,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch {}
           }
 
-          dispatch({
-            type: 'LOAD_STATE',
-            state: loadStateUpdates,
-          })
+          if (Object.keys(loadStateUpdates).length > 0) {
+            dispatch({
+              type: 'LOAD_STATE',
+              state: loadStateUpdates,
+            })
+          }
         }
 
         // Sync profile, plan, avatar and sidebar configuration across devices
