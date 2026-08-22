@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Background Cron Runner — Runs scheduled tasks with strict multi-layer deduplication
  *
  * Features:
@@ -394,10 +394,21 @@ export async function runMorningGreeting() {
           .filter(t => t.status !== 'done' && t.status !== 'draft' && t.dueDate === todayStr && !isBdayTask(t))
           .map(t => `${t.title}${t.dueTime ? ` (в ${t.dueTime})` : ''}`)
 
+        // Memory context (memory feature): portrait + digest one-liners,
+        // READ-ONLY — no lazy generation inside the mass-briefing loop.
+        let memoryHint = ''
+        try {
+          const { buildMemoryContext } = await import('./memory-context')
+          const mem = await buildMemoryContext(BigInt(chatId), { budgetTokens: 250, lazy: false })
+          memoryHint = mem.systemBlock.replace('## Память пользователя Zerf\n', '').slice(0, 1000)
+        } catch {}
+
         const greeting = await generateMorningGreeting(
           firstName,
           userPending,
-          todayBirthdays
+          todayBirthdays,
+          undefined,
+          memoryHint
         ).catch(() => null)
 
         if (greeting) {
@@ -960,11 +971,31 @@ export async function runAllCronTasks() {
     runChannelAndAiCron(),
     runGoogleCalendarPeriodicSync(),
     runInactiveAccountsCleanup(),
+    ensureDigestsHourly(),
     (async () => {
       const { getLiveGroqModels } = await import('./groq-pool')
       await getLiveGroqModels().catch(() => {})
     })(),
   ])
+}
+
+// ── Memory digests: planned trigger (audit feature) ─────────────────────────
+// The minute-ticking scheduler funnels here; ensureDigestsDue() runs at most
+// once per hour (in-memory gate; idempotent anyway).
+let lastDigestsRunAt = 0
+async function ensureDigestsHourly() {
+  const now = Date.now()
+  if (now - lastDigestsRunAt < 60 * 60 * 1000) return
+  lastDigestsRunAt = now
+  try {
+    const { ensureDigestsDue } = await import('./digests')
+    const res = await ensureDigestsDue()
+    if (res.built || res.pending) {
+      console.log(`[Memory] digests built=${res.built} empty=${res.skippedEmpty} pending=${res.pending} rateLeft=${res.rateLimitedLeft}`)
+    }
+  } catch (err) {
+    console.error('[Memory] ensureDigestsDue error:', err)
+  }
 }
 
 // Global daemon for continuous Node.js processes (e.g. server/bot.ts)

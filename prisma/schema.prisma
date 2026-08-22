@@ -246,13 +246,45 @@ model ChannelPoll {
 // Anonymized aggregate action logs for AI feature evolution & analytics
 model AppActionLog {
   id        String   @id @default(cuid())
-  action    String   // 'voice_task' | 'text_task' | 'complete_task' | 'clock_timer' | 'pomodoro' | 'note_created' | 'goal_created'
+  action    String   // 'voice_task' | 'text_task' | 'complete_task' | 'clock_timer' | 'pomodoro' | 'note_created' | 'goal_created' | 'digest_tokens'
   chatId    BigInt?
   details   String?
   createdAt DateTime @default(now())
 
   @@index([chatId])
   @@index([createdAt])
+}
+
+// ── Hierarchical task memory (day -> week -> month -> year digests) ─────────
+
+/// Additive summary layer over raw activity. Raw data is NEVER mutated or
+/// deleted by the memory system. Level N is built ONLY from level N-1 rows;
+/// only "day" reads raw tables. Idempotent via unique key.
+model TimeDigest {
+  id          String   @id @default(cuid())
+  ownerChatId BigInt
+  level       String   // "day" | "week" | "month" | "year"
+  periodStart DateTime
+  periodEnd   DateTime
+  content     Json     // structured: {made[],moved[],missed[],habits{},patterns[],topTags[],oneLiner,stats{}}
+  text        String   // human markdown (<= ~400 tokens)
+  model       String   // Groq model used ("empty-marker" when skipped)
+  inputTokens Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([ownerChatId, level, periodStart])
+  @@index([ownerChatId, level])
+}
+
+/// Long-lived user traits distilled from month digests (<=800 tok core),
+/// refreshed bi-weekly trends (<=300 tok). Consumed by every AI feature
+/// through buildMemoryContext() ONLY.
+model UserPortrait {
+  ownerChatId BigInt  @id
+  core        Json    // stable traits: chronotype, style, pace, frequent failure modes
+  recent      Json    // last ~2 weeks trends
+  version     Int     @default(0)
+  updatedAt   DateTime @updatedAt
 }
 
 // Comments from channel posts & discussion groups analyzed by AI

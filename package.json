@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "start": "next start",
     "bot": "npx tsx server/bot.ts",
+    "backfill-digests": "tsx scripts/backfill-digests.ts",
     "lint": "eslint ."
   },
   "dependencies": {
