@@ -88,9 +88,11 @@ export async function GET(req: NextRequest) {
     }
 
     const targetChatId = decodedState.chatId || req.cookies.get('zerf_chat_id')?.value
-    let finalChatId: string | null = targetChatId && /^\d+$/.test(targetChatId) ? targetChatId : null
+    let finalChatId: bigint | null = null
 
-    if (!finalChatId) {
+    if (targetChatId && /^\d+$/.test(targetChatId) && !targetChatId.startsWith('guest_')) {
+      finalChatId = BigInt(targetChatId)
+    } else {
       // Find existing user with this GitHub username
       const existingGhConfig = await prisma.config.findFirst({
         where: {
@@ -99,41 +101,65 @@ export async function GET(req: NextRequest) {
         }
       })
       if (existingGhConfig) {
-        finalChatId = existingGhConfig.key.replace(/^user_github_/, '')
+        const parsed = existingGhConfig.key.replace(/^user_github_/, '')
+        if (/^\d+$/.test(parsed)) {
+          finalChatId = BigInt(parsed)
+        }
       }
     }
 
-    if (finalChatId && /^\d+$/.test(finalChatId)) {
-      const cid = BigInt(finalChatId)
-      // Save linked GitHub username and token in database
-      await prisma.config.upsert({
-        where: { key: `user_github_${cid}` },
-        update: { value: ghUsername },
-        create: { key: `user_github_${cid}`, value: ghUsername },
-      })
-      await prisma.config.upsert({
-        where: { key: `user_github_token_${cid}` },
-        update: { value: accessToken },
-        create: { key: `user_github_token_${cid}`, value: accessToken },
+    if (!finalChatId) {
+      // Create new user account for GitHub user if none exists
+      let newChatId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
+      for (let i = 0; i < 5; i++) {
+        const clash = await prisma.telegramChat.findUnique({ where: { chatId: newChatId } })
+        if (!clash) break
+        newChatId = BigInt(Math.floor(100000000 + Math.random() * 900000000))
+      }
+
+      const newUser = await prisma.telegramChat.create({
+        data: {
+          chatId: newChatId,
+          username: ghUsername,
+          firstName: githubUser.name || ghUsername,
+          authProvider: 'github',
+          lastActiveAt: new Date(),
+        }
+      }).catch(err => {
+        console.warn('Could not create telegramChat row for GitHub user:', err)
+        return null
       })
 
-      const sessionToken = await createServerSession(
-        cid,
-        'GitHub OAuth Session',
-        'web',
-        req.headers.get('x-forwarded-for') || undefined,
-        req.headers.get('user-agent') || undefined
-      )
-
-      const returnOrigin = decodedState?.origin || origin
-      const res = NextResponse.redirect(`${returnOrigin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
-      res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
-      res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
-      return res
+      finalChatId = newUser ? newUser.chatId : newChatId
     }
 
+    const cid = finalChatId
+
+    // Save linked GitHub username and token in database
+    await prisma.config.upsert({
+      where: { key: `user_github_${cid}` },
+      update: { value: ghUsername },
+      create: { key: `user_github_${cid}`, value: ghUsername },
+    })
+    await prisma.config.upsert({
+      where: { key: `user_github_token_${cid}` },
+      update: { value: accessToken },
+      create: { key: `user_github_token_${cid}`, value: accessToken },
+    })
+
+    const sessionToken = await createServerSession(
+      cid,
+      'GitHub OAuth Session',
+      'web',
+      req.headers.get('x-forwarded-for') || undefined,
+      req.headers.get('user-agent') || undefined
+    )
+
     const returnOrigin = decodedState?.origin || origin
-    return NextResponse.redirect(`${returnOrigin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+    const res = NextResponse.redirect(`${returnOrigin}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+    res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
+    res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
+    return res
   } catch (err: any) {
     console.error('GitHub OAuth error:', err)
     return NextResponse.redirect(`${origin}/?github_auth_error=${encodeURIComponent(err.message || 'unknown')}#settings`)

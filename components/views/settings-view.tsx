@@ -626,6 +626,7 @@ export function SettingsView() {
             vkId: d.vkId,
             googleEmail: d.googleEmail,
             username: d.username,
+            githubUsername: d.githubUsername,
             name: d.name,
             avatarEmoji: d.avatarEmoji,
             plan: d.plan,
@@ -641,6 +642,10 @@ export function SettingsView() {
             googleCalendarSync: Boolean(d.googleCalendarSync),
             autoDeleteMonths: d.autoDeleteMonths !== undefined ? Number(d.autoDeleteMonths) : 6,
           })
+          if (d.githubUsername) {
+            setUserGithub(d.githubUsername)
+            try { localStorage.setItem('zerf_github_username', d.githubUsername) } catch {}
+          }
           if (d.avatarEmoji) {
             setUserAvatarEmoji(d.avatarEmoji)
             try {
@@ -1816,7 +1821,7 @@ export function SettingsView() {
                   {profileData.githubUsername || userGithub ? (
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <a
-                        href="/api/auth/github"
+                        href={currentChatId ? `/api/auth/github?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/github'}
                         className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         title="Сменить привязанный GitHub аккаунт через OAuth"
                       >
@@ -1859,7 +1864,7 @@ export function SettingsView() {
                   ) : (
                     <div className="flex items-center gap-1.5">
                       <a
-                        href="/api/auth/github"
+                        href={currentChatId ? `/api/auth/github?chatId=${encodeURIComponent(currentChatId)}` : '/api/auth/github'}
                         className="w-full py-2 px-3 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                       >
                         <GithubIcon className="w-4 h-4" />
