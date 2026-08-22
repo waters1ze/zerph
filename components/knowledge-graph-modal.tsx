@@ -53,6 +53,7 @@ export function KnowledgeGraphModal({
   const [showTasks, setShowTasks] = useState(true)
   const [showArrows, setShowArrows] = useState(true)
   const [hideOrphanTags, setHideOrphanTags] = useState(true)
+  const [autoClusterTopics, setAutoClusterTopics] = useState(true)
 
   // Color Groups State (Obsidian-Style, persistent in localStorage)
   const [colorGroups, setColorGroups] = useState<ColorGroup[]>(() => {
@@ -121,13 +122,14 @@ export function KnowledgeGraphModal({
       showUnresolved,
       showTasks,
       hideOrphanTags,
+      autoClusterTopics,
       colorGroups,
       localNoteId,
       localDepth,
       searchQuery,
       tasks,
     })
-  }, [notes, folderFilter, showTags, showFolders, showUnresolved, showTasks, hideOrphanTags, colorGroups, localNoteId, localDepth, searchQuery, tasks])
+  }, [notes, folderFilter, showTags, showFolders, showUnresolved, showTasks, hideOrphanTags, autoClusterTopics, colorGroups, localNoteId, localDepth, searchQuery, tasks])
 
   // Simulation node positions
   const simNodesRef = useRef<GraphNode[]>([])
@@ -1067,6 +1069,19 @@ export function KnowledgeGraphModal({
                       type="checkbox"
                       checked={showArrows}
                       onChange={e => setShowArrows(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between cursor-pointer select-none">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Sparkles className="w-3 h-3 text-cyan-400" />
+                      <span>Авто-хэштеги тем (#деревня...)</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={autoClusterTopics}
+                      onChange={e => setAutoClusterTopics(e.target.checked)}
                       className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                     />
                   </label>

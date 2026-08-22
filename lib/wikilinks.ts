@@ -90,11 +90,93 @@ export interface GraphFilterOptions {
   showUnresolved?: boolean
   showTasks?: boolean
   hideOrphanTags?: boolean
+  autoClusterTopics?: boolean
   searchQuery?: string
   colorGroups?: ColorGroup[]
   localNoteId?: string | null
   localDepth?: number // default 1 or 2
-  tasks?: Array<{ id: string; title: string; tags?: string[]; folder?: string; status?: string }>
+  tasks?: Array<{ id: string; title: string; tags?: string[]; folder?: string; status?: string; description?: string }>
+}
+
+const STOP_WORDS = new Set([
+  'и', 'в', 'во', 'не', 'что', 'он', 'на', 'я', 'с', 'со', 'как', 'а', 'то', 'все', 'она',
+  'так', 'его', 'но', 'да', 'ты', 'к', 'у', 'же', 'вы', 'за', 'бы', 'по', 'только', 'ее',
+  'мне', 'было', 'вот', 'от', 'меня', 'еще', 'нет', 'о', 'из', 'ему', 'теперь', 'когда',
+  'даже', 'ну', 'вдруг', 'ли', 'если', 'уже', 'или', 'ни', 'быть', 'был', 'него', 'до',
+  'вас', 'нибудь', 'опять', 'уж', 'вам', 'ведь', 'там', 'потом', 'себя', 'ничего', 'ей',
+  'может', 'они', 'тут', 'где', 'есть', 'надо', 'ней', 'для', 'мы', 'тебя', 'их', 'чем',
+  'была', 'сам', 'чтоб', 'без', 'будто', 'чего', 'раз', 'тоже', 'себе', 'под', 'будет',
+  'ж', 'тогда', 'кто', 'этот', 'того', 'потому', 'этого', 'какой', 'совсем', 'ним', 'здесь',
+  'этом', 'один', 'почти', 'мой', 'тем', 'чтобы', 'нее', 'сейчас', 'были', 'куда', 'зачем',
+  'всех', 'никогда', 'можно', 'при', 'наконец', 'два', 'об', 'другой', 'хоть', 'после',
+  'над', 'больше', 'тот', 'через', 'эти', 'нас', 'про', 'всего', 'них', 'какая', 'много',
+  'разве', 'три', 'эту', 'моя', 'впрочем', 'хорошо', 'свою', 'этой', 'перед', 'иногда',
+  'лучше', 'чуть', 'том', 'нельзя', 'такой', 'им', 'более', 'всегда', 'конечно', 'всю',
+  'между', 'помочь', 'сделать', 'делать', 'поехать', 'ехать', 'купить', 'поставить', 'напомнить',
+  'пойти', 'просто', 'очень', 'время', 'задача', 'заметки', 'личное', 'общие', 'новое'
+])
+
+// Common semantic root mappings to canonical topic tag names
+const ROOT_TOPIC_MAP: Record<string, string> = {
+  'деревн': 'деревня',
+  'огород': 'огород',
+  'песок': 'песок',
+  'песк': 'песок',
+  'костёр': 'костёр',
+  'костер': 'костер',
+  'шашлык': 'пикник',
+  'сосиск': 'пикник',
+  'пикник': 'пикник',
+  'проект': 'проект',
+  'программ': 'разработка',
+  'разработк': 'разработка',
+  'код': 'разработка',
+  'учеб': 'учеба',
+  'урок': 'уроки',
+  'школ': 'школа',
+  'тренировк': 'спорт',
+  'зарядк': 'спорт',
+  'спорт': 'спорт',
+  'покупк': 'покупки',
+  'магазин': 'покупки',
+  'поездк': 'поездка',
+  'дорог': 'поездка',
+  'завтрак': 'питание',
+  'обед': 'питание',
+  'ужин': 'питание',
+  'сон': 'режим',
+  'спать': 'режим',
+  'подъём': 'режим',
+  'подъем': 'режим',
+  'книг': 'чтение',
+  'читать': 'чтение',
+  'музык': 'музыка',
+  'фильм': 'кино',
+  'кино': 'кино',
+  'рождени': 'праздник',
+}
+
+export function extractSemanticTopics(text: string): string[] {
+  if (!text) return []
+  const clean = text.toLowerCase().replace(/[^а-яёa-z0-9\s]/g, ' ')
+  const words = clean.split(/\s+/).filter(w => w.length >= 4 && !STOP_WORDS.has(w))
+  const topics = new Set<string>()
+
+  for (const word of words) {
+    let matched = false
+    for (const [prefix, topicName] of Object.entries(ROOT_TOPIC_MAP)) {
+      if (word.startsWith(prefix)) {
+        topics.add(topicName)
+        matched = true
+        break
+      }
+    }
+    if (!matched && word.length >= 5) {
+      topics.add(word)
+    }
+  }
+
+  return Array.from(topics)
 }
 
 export interface GraphNode {
@@ -197,6 +279,7 @@ export function buildGraphData(
     showUnresolved = true,
     showTasks = true,
     hideOrphanTags = true,
+    autoClusterTopics = true,
     colorGroups = [],
     localNoteId = null,
     localDepth = 1,
@@ -361,8 +444,8 @@ export function buildGraphData(
   })
 
   // 5. Add Tags as Graph Nodes (Only meaningful multi-item tags when hideOrphanTags is enabled)
+  const tagToNodeId = new Map<string, string>()
   if (showTags) {
-    const tagToNodeId = new Map<string, string>()
     const tagSources: Array<{ id: string; tags?: string[] }> = [...candidateNotes]
     if (showTasks && tasks && tasks.length > 0) {
       tagSources.push(
@@ -433,6 +516,72 @@ export function buildGraphData(
           })
         }
       })
+    })
+  }
+
+  // 5b. Smart Semantic Topic Auto-Clustering (#хэштеги тем)
+  if (showTags && autoClusterTopics) {
+    const topicToItems = new Map<string, Set<string>>()
+    const allItemSources: Array<{ id: string; text: string }> = [
+      ...candidateNotes.map(n => ({ id: n.id, text: `${n.title} ${n.content || ''}` })),
+    ]
+    if (showTasks && tasks && tasks.length > 0) {
+      allItemSources.push(
+        ...tasks
+          .filter(t => t && t.id && t.title && t.status !== 'draft' && t.status !== 'done' && !(t as any).deleted)
+          .filter(t => existingNodeIds.has(`task_${t.id}`))
+          .map(t => ({ id: `task_${t.id}`, text: `${t.title} ${t.description || ''}` }))
+      )
+    }
+
+    allItemSources.forEach(item => {
+      const topics = extractSemanticTopics(item.text)
+      topics.forEach(topic => {
+        const set = topicToItems.get(topic) || new Set<string>()
+        set.add(item.id)
+        topicToItems.set(topic, set)
+      })
+    })
+
+    topicToItems.forEach((itemIds, topic) => {
+      // If a topic connects 2 or more distinct tasks/notes:
+      if (itemIds.size >= 2) {
+        const tagNodeId = `autotag_${topic}`
+
+        if (!tagToNodeId.has(topic) && !existingNodeIds.has(tagNodeId)) {
+          tagToNodeId.set(topic, tagNodeId)
+          const customColor = matchColorGroup({
+            id: tagNodeId,
+            title: `#${topic}`,
+            type: 'tag',
+            color: '',
+            connectionCount: 0,
+          }, colorGroups)
+
+          nodes.push({
+            id: tagNodeId,
+            title: `#${topic}`,
+            type: 'tag',
+            color: customColor || '#06b6d4', // Cyan for auto-discovered semantic clusters
+            connectionCount: 0,
+          })
+          existingNodeIds.add(tagNodeId)
+        }
+
+        const actualTagNodeId = tagToNodeId.get(topic) || tagNodeId
+        itemIds.forEach(itemId => {
+          const edgeKey = [itemId, actualTagNodeId].sort().join(':::')
+          if (!edgeSet.has(edgeKey)) {
+            edgeSet.add(edgeKey)
+            edges.push({
+              id: `edge_${itemId}_${actualTagNodeId}`,
+              source: itemId,
+              target: actualTagNodeId,
+              type: 'tag',
+            })
+          }
+        })
+      }
     })
   }
 
