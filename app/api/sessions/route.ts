@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req)
     if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const chatId = authUser.chatId
-    const authToken = req.headers.get('x-auth-token')
+    const authToken = req.headers.get('x-auth-token') || req.cookies.get('zerf_auth_token')?.value
 
     const sessions = await prisma.userSession.findMany({
       where: { chatId: BigInt(chatId), isRevoked: false },
@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req)
     if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const chatId = authUser.chatId
-    const authToken = req.headers.get('x-auth-token')
+    const authToken = req.headers.get('x-auth-token') || req.cookies.get('zerf_auth_token')?.value
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -94,6 +94,14 @@ export async function DELETE(req: NextRequest) {
     }
 
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+    // Can't revoke current session via this endpoint
+    if (authToken) {
+      const target = await prisma.userSession.findFirst({ where: { id, chatId: BigInt(chatId) } })
+      if (target && target.sessionToken === authToken) {
+        return NextResponse.json({ error: 'Нельзя завершить текущую сессию' }, { status: 400 })
+      }
+    }
 
     await prisma.userSession.updateMany({
       where: { id, chatId: BigInt(chatId) },

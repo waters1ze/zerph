@@ -251,7 +251,7 @@ export function SessionsPanel() {
                   <button
                     onClick={() => revokeSession(session.id)}
                     disabled={revoking === session.id}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-all sm:opacity-0 sm:group-hover:opacity-100 disabled:opacity-50 shrink-0"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-all disabled:opacity-50 shrink-0"
                     title="Завершить сессию"
                   >
                     {revoking === session.id

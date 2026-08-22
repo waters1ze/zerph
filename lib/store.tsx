@@ -412,7 +412,13 @@ export function getTgChatId(): string | null {
 
 export function getAuthHeaders(): Record<string, string> {
   const chatId = getTgChatId()
-  const token = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')) : null
+  let token = typeof window !== 'undefined' ? (localStorage.getItem('zerf_auth_token') || getCookie('zerf_auth_token')) : null
+
+  // Sync cookie token → localStorage so future requests are consistent
+  if (typeof window !== 'undefined' && token && !localStorage.getItem('zerf_auth_token')) {
+    try { localStorage.setItem('zerf_auth_token', token) } catch {}
+  }
+
   const initData = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initData : null
   const vkLaunch = typeof window !== 'undefined' ? localStorage.getItem('zerf_vk_launch') : null
 
