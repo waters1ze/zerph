@@ -241,59 +241,6 @@ export function SettingsView() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [showGithubSetupModal, setShowGithubSetupModal] = useState(false)
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      let shouldCleanUrl = false
-
-      if (params.get('github_oauth_setup_needed') === '1') {
-        setShowGithubSetupModal(true)
-        shouldCleanUrl = true
-      }
-
-      if (params.get('github_auth_success') === '1') {
-        const gh = params.get('username')
-        if (gh) {
-          try {
-            localStorage.setItem('zerf_github_username', gh)
-          } catch {}
-          setUserGithub(gh)
-          setProfileData(prev => ({ ...prev, githubUsername: gh }))
-        }
-        setAuthSuccess(gh ? `GitHub аккаунт @${gh} успешно привязан!` : 'GitHub аккаунт успешно привязан!')
-        setTimeout(() => setAuthSuccess(null), 4000)
-        shouldCleanUrl = true
-        fetchProfile()
-      }
-
-      if (params.get('vk_auth_success') === '1') {
-        const vk = params.get('vk_id')
-        if (vk) {
-          setProfileData(prev => ({ ...prev, vkId: vk }))
-        }
-        setAuthSuccess('ВКонтакте успешно привязан!')
-        setTimeout(() => setAuthSuccess(null), 4000)
-        shouldCleanUrl = true
-        fetchProfile()
-      }
-
-      if (params.get('google_auth_success') === '1' || params.get('google_calendar_success') === '1') {
-        const gEmail = params.get('email')
-        if (gEmail) {
-          setProfileData(prev => ({ ...prev, googleEmail: gEmail }))
-        }
-        setAuthSuccess(gEmail ? `Google аккаунт ${gEmail} успешно привязан!` : 'Google аккаунт успешно привязан!')
-        setTimeout(() => setAuthSuccess(null), 4000)
-        shouldCleanUrl = true
-        fetchProfile()
-      }
-
-      if (shouldCleanUrl) {
-        window.history.replaceState({}, '', window.location.pathname + '#settings')
-      }
-    }
-  }, [])
-
   const [showPinCodeModal, setShowPinCodeModal] = useState(false)
   const [pinCodeInput, setPinCodeInput] = useState('')
   const [pinLoading, setPinLoading] = useState(false)
@@ -401,12 +348,12 @@ export function SettingsView() {
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
 
   const getGithubAuthUrl = () => {
-    const cid = currentChatId || ''
+    const cid = currentChatId || getTgChatId() || (profileData as any)?.chatId || ''
     return cid ? `/api/auth/github?chatId=${encodeURIComponent(cid)}` : '/api/auth/github'
   }
 
   const getVkAuthUrl = () => {
-    const cid = currentChatId || ''
+    const cid = currentChatId || getTgChatId() || (profileData as any)?.chatId || ''
     return cid ? `/api/auth/vk?chatId=${encodeURIComponent(cid)}` : '/api/auth/vk'
   }
 
@@ -545,7 +492,6 @@ export function SettingsView() {
         alert('Номер банковской карты должен содержать от 16 до 19 цифр.')
         return
       }
-      // Luhn algorithm verification
       let sum = 0
       let isEven = false
       for (let i = cleanNumber.length - 1; i >= 0; i--) {
@@ -612,19 +558,9 @@ export function SettingsView() {
 
   const saveUserNameToServer = async (newName: string) => {
     const trimmed = newName.trim()
-    if (!trimmed) return
-    update({ name: trimmed })
-    dispatch({ type: 'UPDATE_SETTINGS', updates: { name: trimmed } })
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('zerf_user_name', trimmed)
-        window.dispatchEvent(new CustomEvent('zerf_user_name_changed', { detail: trimmed }))
-      } catch {}
-    }
-    setProfileData(prev => ({ ...prev, name: trimmed }))
+    if (!trimmed || trimmed === 'Kirill Perekatnov' || trimmed === 'Пользователь Zerf') return
     try {
-      const url = currentChatId ? `/api/telegram/user?chatId=${currentChatId}` : '/api/telegram/user'
-      await fetch(url, {
+      await fetch('/api/telegram/user', {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: trimmed })
@@ -670,20 +606,26 @@ export function SettingsView() {
   }
 
   const fetchProfile = () => {
-    const url = currentChatId ? `/api/telegram/user?chatId=${currentChatId}` : '/api/telegram/user'
+    const activeCid = currentChatId || getTgChatId()
+    const url = activeCid ? `/api/telegram/user?chatId=${activeCid}` : '/api/telegram/user'
     fetch(url, {
       headers: getAuthHeaders(),
     })
       .then(r => r.json())
       .then(d => {
         if (d.connected) {
+          const cachedGh = typeof window !== 'undefined' ? localStorage.getItem('zerf_github_username') : null
+          const resolvedGh = d.githubUsername || cachedGh || null
+          const cachedVk = typeof window !== 'undefined' ? localStorage.getItem('zerf_vk_id') : null
+          const resolvedVk = d.vkId || cachedVk || null
+
           setProfileData({
             email: d.email,
             hasPassword: d.hasPassword,
-            vkId: d.vkId,
+            vkId: resolvedVk,
             googleEmail: d.googleEmail,
             username: d.username,
-            githubUsername: d.githubUsername,
+            githubUsername: resolvedGh,
             name: d.name,
             avatarEmoji: d.avatarEmoji,
             plan: d.plan,
@@ -699,9 +641,12 @@ export function SettingsView() {
             googleCalendarSync: Boolean(d.googleCalendarSync),
             autoDeleteMonths: d.autoDeleteMonths !== undefined ? Number(d.autoDeleteMonths) : 6,
           })
-          if (d.githubUsername) {
-            setUserGithub(d.githubUsername)
-            try { localStorage.setItem('zerf_github_username', d.githubUsername) } catch {}
+          if (resolvedGh) {
+            setUserGithub(resolvedGh)
+            try { localStorage.setItem('zerf_github_username', resolvedGh) } catch {}
+          }
+          if (resolvedVk) {
+            try { localStorage.setItem('zerf_vk_id', resolvedVk) } catch {}
           }
           if (d.avatarEmoji) {
             setUserAvatarEmoji(d.avatarEmoji)
@@ -750,6 +695,7 @@ export function SettingsView() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
+      let shouldClean = false
       
       // 1. Google OAuth Account Linking / Login
       if (params.get('google_auth_success') === '1') {
@@ -761,17 +707,21 @@ export function SettingsView() {
         setTimeout(() => setAuthSuccess(null), 5000)
         fetchProfile()
         syncData()
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       } else if (params.get('google_auth_error')) {
         const err = params.get('google_auth_error')
         setAuthError(`Ошибка привязки Google: ${err}`)
         setTimeout(() => setAuthError(null), 5000)
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       }
 
       // 2. GitHub OAuth Linking
       if (params.get('github_auth_success') === '1') {
         const username = params.get('username')
+        const returnedCid = params.get('chatId')
+        if (returnedCid && typeof window !== 'undefined') {
+          try { localStorage.setItem('zerf_chat_id', returnedCid) } catch {}
+        }
         if (username) {
           setProfileData(prev => ({ ...prev, githubUsername: username }))
           try { localStorage.setItem('zerf_github_username', username) } catch {}
@@ -780,32 +730,37 @@ export function SettingsView() {
         setAuthSuccess(`✅ GitHub аккаунт @${username || ''} успешно привязан!`)
         setTimeout(() => setAuthSuccess(null), 5000)
         fetchProfile()
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       } else if (params.get('github_auth_error')) {
         const err = params.get('github_auth_error')
         setAuthError(`Ошибка привязки GitHub: ${err}`)
         setTimeout(() => setAuthError(null), 5000)
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       } else if (params.get('open_github_modal') === '1') {
         setShowGithubSetupModal(true)
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       }
 
       // 3. VK OAuth Linking
       if (params.get('vk_auth_success') === '1') {
         const vkId = params.get('vk_id')
+        const returnedCid = params.get('chatId')
+        if (returnedCid && typeof window !== 'undefined') {
+          try { localStorage.setItem('zerf_chat_id', returnedCid) } catch {}
+        }
         if (vkId) {
           setProfileData(prev => ({ ...prev, vkId }))
+          try { localStorage.setItem('zerf_vk_id', vkId) } catch {}
         }
         setAuthSuccess(`✅ ВКонтакте (ID: ${vkId || ''}) успешно привязан!`)
         setTimeout(() => setAuthSuccess(null), 5000)
         fetchProfile()
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       } else if (params.get('vk_auth_error')) {
         const err = params.get('vk_auth_error')
         setAuthError(`Ошибка привязки VK: ${err}`)
         setTimeout(() => setAuthError(null), 5000)
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       }
 
       // 4. Google Calendar 2-Way Sync
@@ -813,7 +768,7 @@ export function SettingsView() {
         setGcalStatusMsg('✅ Google Календарь успешно подключен и синхронизирован!')
         setProfileData(prev => ({ ...prev, googleCalendarSync: true }))
         setTimeout(() => setGcalStatusMsg(null), 5000)
-        window.history.replaceState({}, '', window.location.pathname)
+        shouldClean = true
       } else if (params.get('google_calendar_error')) {
         const err = params.get('google_calendar_error')
         setGcalStatusMsg(`❌ Ошибка подключения календаря: ${err}`)
@@ -1703,72 +1658,77 @@ export function SettingsView() {
                 </div>
 
                 {/* 3. VK Card */}
-                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-[#0077FF]/15 text-[#0077FF] flex items-center justify-center font-bold text-xs">
-                        VK
+                {(() => {
+                  const effectiveVk = profileData.vkId || (typeof window !== 'undefined' ? localStorage.getItem('zerf_vk_id') : '') || ''
+                  return (
+                    <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-[#0077FF]/15 text-[#0077FF] flex items-center justify-center font-bold text-xs">
+                            VK
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground">ВКонтакте</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {effectiveVk ? `id${effectiveVk}` : 'Официальный вход & Сообщество'}
+                            </p>
+                          </div>
+                        </div>
+                        {effectiveVk ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
+                            Привязан
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
+                            Доступен
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-foreground">ВКонтакте</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {profileData.vkId ? `id${profileData.vkId}` : 'Официальный вход & Сообщество'}
-                        </p>
-                      </div>
-                    </div>
-                    {profileData.vkId ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
-                        Привязан
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
-                        Доступен
-                      </span>
-                    )}
-                  </div>
 
-                  {profileData.vkId ? (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleDirectVkAuth}
-                        className="flex-1 py-1.5 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                        title="Сменить привязанный аккаунт VK через OAuth"
-                      >
-                        <span>Сменить ID: {profileData.vkId}</span>
-                      </button>
+                      {effectiveVk ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleDirectVkAuth}
+                            className="flex-1 py-1.5 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                            title="Сменить привязанный аккаунт VK через OAuth"
+                          >
+                            <span>Сменить ID: {effectiveVk}</span>
+                          </button>
 
-                      <a
-                        href={`https://vk.com/id${profileData.vkId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center"
-                        title="Открыть VK профиль"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                          <a
+                            href={`https://vk.com/id${effectiveVk}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center"
+                            title="Открыть VK профиль"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
 
-                      <button
-                        type="button"
-                        onClick={handleUnlinkVk}
-                        className="py-1.5 px-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
-                        title="Отвязать VK"
-                      >
-                        Отвязать
-                      </button>
+                          <button
+                            type="button"
+                            onClick={handleUnlinkVk}
+                            className="py-1.5 px-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Отвязать VK"
+                          >
+                            Отвязать
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleDirectVkAuth}
+                            className="w-full py-2 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] border border-[#0077FF]/30 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                          >
+                            <span>⚡ Привязать через VK ID</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={handleDirectVkAuth}
-                        className="w-full py-2 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] border border-[#0077FF]/30 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
-                      >
-                        <span>⚡ Привязать через VK ID</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  )
+                })()}
 
                 {/* 4. Google Card */}
                 <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
@@ -1837,87 +1797,92 @@ export function SettingsView() {
                 </div>
 
                 {/* 5. GitHub Card */}
-                <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-muted/80 text-foreground flex items-center justify-center font-bold text-xs border border-border">
-                        <GithubIcon className="w-4 h-4" />
+                {(() => {
+                  const effectiveGithub = profileData.githubUsername || userGithub || (typeof window !== 'undefined' ? localStorage.getItem('zerf_github_username') : '') || ''
+                  return (
+                    <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-muted/80 text-foreground flex items-center justify-center font-bold text-xs border border-border">
+                            <GithubIcon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground">GitHub</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {effectiveGithub ? `@${effectiveGithub}` : 'Магазин & Авторство'}
+                            </p>
+                          </div>
+                        </div>
+                        {effectiveGithub ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
+                            Привязан
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
+                            Доступен
+                          </span>
+                        )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground">GitHub</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {profileData.githubUsername || userGithub ? `@${profileData.githubUsername || userGithub}` : 'Магазин & Авторство'}
-                        </p>
-                      </div>
+
+                      {effectiveGithub ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleDirectGithubAuth}
+                            className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                            title="Сменить привязанный GitHub аккаунт через OAuth"
+                          >
+                            <GithubIcon className="w-3.5 h-3.5" />
+                            <span>Сменить @{effectiveGithub}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              dispatch({ type: 'SET_VIEW', view: 'extensions' })
+                              window.dispatchEvent(new CustomEvent('zerf_open_extensions_tab', { detail: { tab: 'my' } }))
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                            title="Открыть мои проекты и GitHub плагины"
+                          >
+                            <span>Мои проекты</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+
+                          <a
+                            href={`https://github.com/${effectiveGithub}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center"
+                            title="Открыть GitHub профиль"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={handleUnlinkGithub}
+                            className="py-1.5 px-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Отвязать GitHub"
+                          >
+                            Отвязать
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleDirectGithubAuth}
+                            className="w-full py-2 px-3 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                          >
+                            <GithubIcon className="w-4 h-4" />
+                            <span>⚡ Привязать через GitHub OAuth</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {profileData.githubUsername || userGithub ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 shrink-0">
-                        Привязан
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold border border-border shrink-0">
-                        Доступен
-                      </span>
-                    )}
-                  </div>
-
-                  {profileData.githubUsername || userGithub ? (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleDirectGithubAuth}
-                        className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                        title="Сменить привязанный GitHub аккаунт через OAuth"
-                      >
-                        <GithubIcon className="w-3.5 h-3.5" />
-                        <span>Сменить @{profileData.githubUsername || userGithub}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          dispatch({ type: 'SET_VIEW', view: 'extensions' })
-                          window.dispatchEvent(new CustomEvent('zerf_open_extensions_tab', { detail: { tab: 'my' } }))
-                        }}
-                        className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                        title="Открыть мои проекты и GitHub плагины"
-                      >
-                        <span>Мои проекты</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-
-                      <a
-                        href={`https://github.com/${profileData.githubUsername || userGithub}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border transition-colors flex items-center justify-center"
-                        title="Открыть GitHub профиль"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={handleUnlinkGithub}
-                        className="py-1.5 px-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition-colors cursor-pointer"
-                        title="Отвязать GitHub"
-                      >
-                        Отвязать
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={handleDirectGithubAuth}
-                        className="w-full py-2 px-3 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
-                      >
-                        <GithubIcon className="w-4 h-4" />
-                        <span>⚡ Привязать через GitHub OAuth</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  )
+                })()}
 
                 {/* 6. YooMoney Author Payouts Card (80/20) */}
                 <div className="p-4 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 shadow-2xs">

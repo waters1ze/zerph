@@ -62,6 +62,20 @@ export async function GET(req: NextRequest) {
           try { if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value) } catch {}
           const siriMode = siriModeConf?.value || 'fast'
           let githubUsername = githubConf?.value || null
+          if (!githubUsername) {
+            try {
+              const fallbackGh = await prisma.config.findFirst({
+                where: {
+                  OR: [
+                    { key: `user_github_${cid}` },
+                    { key: `user_github_${chat.chatId}` },
+                    { key: 'user_github' },
+                  ]
+                }
+              })
+              if (fallbackGh?.value) githubUsername = fallbackGh.value
+            } catch {}
+          }
           let sidebarConfig: any = null
           try { if (sidebarConf?.value) sidebarConfig = JSON.parse(sidebarConf.value) } catch {}
           const groqApiKey = groqKeyConf?.value || null
@@ -75,6 +89,20 @@ export async function GET(req: NextRequest) {
           let finalGoogleEmail: string | null = chat.googleEmail || (chat.authProvider === 'google' ? chat.email : null)
           if (!finalGoogleEmail && chat.email && chat.email.includes('@gmail.com')) {
             finalGoogleEmail = chat.email
+          }
+          if (!finalGoogleEmail) {
+            try {
+              const googleConf = await prisma.config.findFirst({
+                where: {
+                  OR: [
+                    { key: `user_google_${cid}` },
+                    { key: `user_google_${chat.chatId}` },
+                    { key: 'user_google' },
+                  ]
+                }
+              })
+              if (googleConf?.value) finalGoogleEmail = googleConf.value
+            } catch {}
           }
 
           const siriKey = getSiriUserKey(chat.chatId)

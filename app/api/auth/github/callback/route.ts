@@ -99,11 +99,17 @@ export async function GET(req: NextRequest) {
 
     const cid = finalChatId
 
-    // Save GitHub link
+    // Save GitHub link in Config table
     await prisma.config.upsert({
       where: { key: `user_github_${cid}` },
       update: { value: ghUsername },
       create: { key: `user_github_${cid}`, value: ghUsername },
+    }).catch(async () => {
+      // Fallback
+      try {
+        await prisma.config.delete({ where: { key: `user_github_${cid}` } })
+        await prisma.config.create({ data: { key: `user_github_${cid}`, value: ghUsername } })
+      } catch {}
     })
 
     // Create session
@@ -112,7 +118,7 @@ export async function GET(req: NextRequest) {
       req.headers.get('user-agent') || undefined
     )
 
-    const res = NextResponse.redirect(`${ORIGIN}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}#settings`)
+    const res = NextResponse.redirect(`${ORIGIN}/?github_auth_success=1&username=${encodeURIComponent(ghUsername)}&chatId=${encodeURIComponent(String(cid))}#settings`)
     res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
     res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
     return res

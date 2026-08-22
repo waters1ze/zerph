@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       req.headers.get('user-agent') || undefined
     )
 
-    const res = NextResponse.redirect(`${ORIGIN}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}#settings`)
+    const res = NextResponse.redirect(`${ORIGIN}/?vk_auth_success=1&vk_id=${encodeURIComponent(vkUserId)}&chatId=${encodeURIComponent(String(cid))}#settings`)
     res.cookies.set('zerf_chat_id', String(cid), COOKIE_OPTS)
     res.cookies.set('zerf_auth_token', sessionToken, COOKIE_OPTS)
     return res
