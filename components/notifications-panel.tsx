@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, X, CheckCircle2, AlertCircle, Clock, CalendarDays, Users, Check, UserPlus } from 'lucide-react'
+import { Bell, X, CheckCircle2, AlertCircle, Clock, CalendarDays, Users, Check, UserPlus, Inbox } from 'lucide-react'
 import { useApp, getAuthHeaders } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
@@ -33,7 +33,28 @@ export function NotificationsPanel() {
     return diff > 0 && diff <= 2
   })
 
+  const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
+  const incomingFriendTasks = state.tasks.filter(t => {
+    if (t.status === 'done') return false
+    const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
+    const isFriendTag = tags.includes('входящая') || tags.includes('входящие') || tags.includes('поручено мне') || tags.includes('от друга') || tags.includes('поручение')
+    const isAuthoredByOther = t.authorChatId && currentChatId && String(t.authorChatId) !== String(currentChatId)
+    const isAssignedToMe = (t.assignees || []).some(a => a === currentChatId)
+    return isFriendTag || Boolean(isAuthoredByOther) || isAssignedToMe || Boolean(t.isShared)
+  })
+
   const allTaskNotifs = [
+    ...incomingFriendTasks.map(t => {
+      const authorFriend = t.authorChatId && String(t.authorChatId) !== String(t.ownerChatId)
+        ? state.friends.find(f => f.chatId === String(t.authorChatId) || f.id === String(t.authorChatId))
+        : null
+      return {
+        id: t.id,
+        type: 'incoming' as const,
+        title: t.title,
+        sub: authorFriend ? `Поручено от: ${authorFriend.name}` : 'Входящая задача от друга',
+      }
+    }),
     ...overdue.map(t => ({ id: t.id, type: 'overdue' as const, title: t.title, sub: `Просрочено: ${t.dueDate}` })),
     ...todayTasks.map(t => ({ id: t.id, type: 'today' as const, title: t.title, sub: t.dueTime ? `Сегодня в ${t.dueTime}` : 'На сегодня' })),
     ...upcoming.map(t => ({ id: t.id, type: 'soon' as const, title: t.title, sub: `Завтра: ${t.dueDate}` })),
@@ -42,9 +63,10 @@ export function NotificationsPanel() {
   const totalCount = allTaskNotifs.length + pendingTeamRequests.length
 
   const typeConfig = {
-    overdue: { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500/10', label: 'Просрочено' },
-    today:   { icon: CalendarDays, color: 'text-primary', bg: 'bg-primary/10', label: 'Сегодня' },
-    soon:    { icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Скоро' },
+    incoming: { icon: Inbox, color: 'text-amber-400', bg: 'bg-amber-500/10', label: 'Входящее' },
+    overdue:  { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500/10', label: 'Просрочено' },
+    today:    { icon: CalendarDays, color: 'text-primary', bg: 'bg-primary/10', label: 'Сегодня' },
+    soon:     { icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Скоро' },
   }
 
   // Fetch pending team invites
@@ -213,6 +235,13 @@ export function NotificationsPanel() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: (pendingTeamRequests.length + i) * 0.04 }}
                       onClick={() => {
+                        if (notif.type === 'incoming') {
+                          try {
+                            localStorage.setItem('zerf_task_filter_tag', 'inbox')
+                            localStorage.setItem('zerf_task_filter_friend', 'all')
+                            window.dispatchEvent(new CustomEvent('zerf_filter_tasks', { detail: { tag: 'inbox', friendId: 'all' } }))
+                          } catch {}
+                        }
                         dispatch({ type: 'SET_VIEW', view: 'tasks' })
                         setOpen(false)
                       }}

@@ -83,6 +83,18 @@ async function sendTelegramMessage(chatId: number | string | bigint, text: strin
     console.error('Telegram send error:', err)
   }
 
+  // Mirror as Web Push Notification to user's web browsers and devices
+  try {
+    const clean = text.replace(/[*_`#]/g, '').trim()
+    const firstLine = clean.split('\n')[0] || 'Zerf Note'
+    const body = clean.split('\n').slice(1).join('\n').trim() || firstLine
+    sendWebPushNotification(chatId, {
+      title: firstLine,
+      body: body,
+      url: '/',
+    }).catch(() => {})
+  } catch {}
+
   // If not delivered to Telegram (e.g. VK user), deliver to VK
   if (!delivered) {
     try {

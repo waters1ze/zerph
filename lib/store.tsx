@@ -600,7 +600,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Persist friend removal server-side so background sync doesn't resurrect them
       fetch(`/api/friends?id=${encodeURIComponent(action.id)}`, { method: 'DELETE', headers }).catch(() => {})
     } else if (action.type === 'ADD_FRIEND_GROUP' || action.type === 'UPDATE_FRIEND_GROUP') {
-      const groupData = action.type === 'ADD_FRIEND_GROUP' ? action.group : { id: action.id, ...action.updates }
+      const existingGroup = stateRef.current.friendGroups?.find(g => g.id === (action as any).id)
+      const groupData = action.type === 'ADD_FRIEND_GROUP' 
+        ? action.group 
+        : { ...(existingGroup || {}), id: action.id, ...action.updates }
       fetch('/api/friends/groups', {
         method: 'POST',
         headers,

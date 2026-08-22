@@ -376,6 +376,18 @@ export async function createTask(data: {
     try { notifyDataChanged((processed as any).authorChatId, 'tasks') } catch {}
   }
 
+  // Send Web Push notification to the recipient if assigned by another user
+  if (processed.ownerChatId && (processed as any).authorChatId && String(processed.ownerChatId) !== String((processed as any).authorChatId)) {
+    try {
+      const { sendWebPushNotification } = await import('./web-push')
+      sendWebPushNotification(processed.ownerChatId, {
+        title: '📥 Новая задача от друга',
+        body: `Вам поручена новая задача: «${created.title}»`,
+        url: '/?view=tasks&tag=inbox',
+      }).catch(() => {})
+    } catch {}
+  }
+
   return created
 }
 

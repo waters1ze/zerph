@@ -34,23 +34,40 @@ export interface TelegramUpdate {
 }
 
 /**
- * Send a Markdown message to a Telegram chat
+ * Send a Markdown message to a Telegram chat and mirror as Web Push notification
  */
 export async function sendTelegramMessage(
   botToken: string,
-  chatId: number,
+  chatId: number | string | bigint,
   text: string
 ): Promise<void> {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: 'Markdown',
-    }),
-  })
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: String(chatId),
+        text,
+        parse_mode: 'Markdown',
+      }),
+    })
+  } catch (err) {
+    console.error('Telegram sendMessage error:', err)
+  }
+
+  // Mirror as Web Push Notification to user's web browsers and devices
+  try {
+    const { sendWebPushNotification } = await import('./web-push')
+    const clean = text.replace(/[*_`#]/g, '').trim()
+    const firstLine = clean.split('\n')[0] || 'Zerf Note'
+    const body = clean.split('\n').slice(1).join('\n').trim() || firstLine
+    sendWebPushNotification(chatId, {
+      title: firstLine,
+      body: body,
+      url: '/',
+    }).catch(() => {})
+  } catch {}
 }
 
 /**

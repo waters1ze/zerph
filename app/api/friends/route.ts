@@ -20,21 +20,35 @@ async function getChatId(req: NextRequest): Promise<bigint | null> {
 }
 
 async function sendTgMessage(chatId: string | number | bigint, htmlText: string, replyMarkup?: object) {
-  if (!BOT_TOKEN) return
-  try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: String(chatId),
-        text: htmlText,
-        parse_mode: 'HTML',
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {})
-      }),
-    })
-  } catch (e) {
-    console.error('sendTgMessage error:', e)
+  if (BOT_TOKEN) {
+    try {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: String(chatId),
+          text: htmlText,
+          parse_mode: 'HTML',
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+        }),
+      })
+    } catch (e) {
+      console.error('sendTgMessage error:', e)
+    }
   }
+
+  // Mirror as Web Push Notification to user's web browsers and devices
+  try {
+    const { sendWebPushNotification } = await import('@/lib/backend/web-push')
+    const plainText = htmlText.replace(/<[^>]+>/g, '').trim()
+    const firstLine = plainText.split('\n')[0] || 'Zerf Friends'
+    const body = plainText.split('\n').slice(1).join('\n').trim() || firstLine
+    sendWebPushNotification(chatId, {
+      title: firstLine,
+      body: body,
+      url: '/?view=friends',
+    }).catch(() => {})
+  } catch {}
 }
 
 export async function GET(req: NextRequest) {

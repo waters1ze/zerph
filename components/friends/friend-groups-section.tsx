@@ -35,6 +35,8 @@ export function FriendGroupsSection() {
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  const [friendSearch, setFriendSearch] = useState('')
+
   const openCreateModal = () => {
     setEditingGroup(null)
     setGroupName('')
@@ -42,6 +44,7 @@ export function FriendGroupsSection() {
     setGroupColor('#3b82f6')
     setGroupDesc('')
     setSelectedMemberIds([])
+    setFriendSearch('')
     setErrorMsg(null)
     setModalOpen(true)
   }
@@ -53,14 +56,22 @@ export function FriendGroupsSection() {
     setGroupColor(group.color || '#3b82f6')
     setGroupDesc(group.description || '')
     setSelectedMemberIds(group.memberIds || [])
+    setFriendSearch('')
     setErrorMsg(null)
     setModalOpen(true)
   }
 
-  const toggleMember = (friendId: string) => {
-    setSelectedMemberIds(prev =>
-      prev.includes(friendId) ? prev.filter(id => id !== friendId) : [...prev, friendId]
-    )
+  const toggleMember = (friend: Friend) => {
+    const friendId = friend.id
+    const friendCid = friend.chatId || ''
+    setSelectedMemberIds(prev => {
+      const isSelected = prev.includes(friendId) || (friendCid && prev.includes(friendCid))
+      if (isSelected) {
+        return prev.filter(x => x !== friendId && x !== friendCid)
+      } else {
+        return [...prev, friendCid || friendId]
+      }
+    })
   }
 
   const handleSaveGroup = (e: React.FormEvent) => {
@@ -246,15 +257,26 @@ export function FriendGroupsSection() {
                   </div>
                 </div>
 
-                {/* Bottom Action: View Group Tasks */}
-                <button
-                  type="button"
-                  onClick={() => handleViewTasks(group)}
-                  className="w-full py-2 px-3 rounded-xl bg-muted/60 hover:bg-primary hover:text-primary-foreground text-foreground border border-border/60 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer group/btn"
-                >
-                  <span>Задачи группы</span>
-                  <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
-                </button>
+                {/* Bottom Actions: View Group Tasks & Manage Members */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(group)}
+                    className="py-2 px-3 rounded-xl bg-muted/70 hover:bg-muted text-foreground border border-border/60 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="Добавить или удалить участников из группы"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-primary" />
+                    <span>Участники</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleViewTasks(group)}
+                    className="flex-1 py-2 px-3 rounded-xl bg-muted/60 hover:bg-primary hover:text-primary-foreground text-foreground border border-border/60 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer group/btn"
+                  >
+                    <span>Задачи группы</span>
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+                  </button>
+                </div>
               </motion.div>
             )
           })}
@@ -365,50 +387,82 @@ export function FriendGroupsSection() {
 
                 {/* Members Selector from real friends */}
                 <div>
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">
-                    Выберите участников ({selectedMemberIds.length} выбрано)
-                  </label>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                      Выберите участников ({selectedMemberIds.length} выбрано)
+                    </label>
+                    {selectedMemberIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMemberIds([])}
+                        className="text-[10px] text-muted-foreground hover:text-rose-400 font-semibold cursor-pointer"
+                      >
+                        Сбросить выбор
+                      </button>
+                    )}
+                  </div>
 
                   {state.friends.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic p-3 bg-muted/40 rounded-xl border border-border">
                       В вашем списке друзей пока никого нет. Добавьте друзей во вкладке «Контакты», чтобы включить их в группу.
                     </p>
                   ) : (
-                    <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1 no-scrollbar border border-border/60 rounded-xl p-2 bg-muted/30">
-                      {state.friends.map(friend => {
-                        const isSelected = selectedMemberIds.includes(friend.id) || (friend.chatId && selectedMemberIds.includes(friend.chatId))
-                        return (
-                          <div
-                            key={friend.id}
-                            onClick={() => toggleMember(friend.chatId || friend.id)}
-                            className={cn(
-                              'p-2 rounded-xl flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none border',
-                              isSelected
-                                ? 'bg-primary/10 border-primary/40 text-foreground font-medium'
-                                : 'bg-card/50 border-border/50 hover:bg-card text-muted-foreground'
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                                {friend.name[0] || 'U'}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-foreground truncate">{friend.name}</p>
-                                {friend.username && (
-                                  <p className="text-[10px] text-muted-foreground truncate">@{friend.username.replace(/^@/, '')}</p>
-                                )}
-                              </div>
-                            </div>
+                    <div className="space-y-2">
+                      {state.friends.length > 4 && (
+                        <input
+                          type="text"
+                          value={friendSearch}
+                          onChange={e => setFriendSearch(e.target.value)}
+                          placeholder="Поиск по имени или @username..."
+                          className="w-full h-8 px-3 rounded-xl bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:border-primary placeholder:text-muted-foreground/70"
+                        />
+                      )}
 
-                            <div className={cn(
-                              'w-5 h-5 rounded-md border flex items-center justify-center transition-colors',
-                              isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card'
-                            )}>
-                              {isSelected && <Check className="w-3.5 h-3.5" />}
-                            </div>
-                          </div>
-                        )
-                      })}
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 no-scrollbar border border-border/60 rounded-xl p-2 bg-muted/30">
+                        {state.friends
+                          .filter(f => {
+                            if (!friendSearch) return true
+                            const q = friendSearch.toLowerCase()
+                            return (
+                              f.name.toLowerCase().includes(q) ||
+                              (f.username && f.username.toLowerCase().includes(q))
+                            )
+                          })
+                          .map(friend => {
+                            const isSelected = selectedMemberIds.includes(friend.id) || (friend.chatId && selectedMemberIds.includes(friend.chatId))
+                            return (
+                              <div
+                                key={friend.id}
+                                onClick={() => toggleMember(friend)}
+                                className={cn(
+                                  'p-2 rounded-xl flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none border',
+                                  isSelected
+                                    ? 'bg-primary/10 border-primary/40 text-foreground font-medium'
+                                    : 'bg-card/50 border-border/50 hover:bg-card text-muted-foreground'
+                                )}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                    {friend.name[0] || 'U'}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-foreground truncate">{friend.name}</p>
+                                    {friend.username && (
+                                      <p className="text-[10px] text-muted-foreground truncate">@{friend.username.replace(/^@/, '')}</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className={cn(
+                                  'w-5 h-5 rounded-md border flex items-center justify-center transition-colors',
+                                  isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card'
+                                )}>
+                                  {isSelected && <Check className="w-3.5 h-3.5" />}
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
                     </div>
                   )}
                 </div>

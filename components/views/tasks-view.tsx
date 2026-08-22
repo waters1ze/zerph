@@ -8,7 +8,7 @@ import { cn, isTaskVisibleInMainList, groupTasksByDate } from '@/lib/utils'
 import type { Priority, TaskStatus, ScheduleGroup, Friend, FriendGroup } from '@/lib/types'
 import { 
   CheckSquare, Briefcase, User, Zap, Lightbulb, GraduationCap, 
-  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock, Layers, X
+  Activity, Calendar, Users, UserCheck, Settings2, Plus, Clock, Layers, X, Inbox
 } from 'lucide-react'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { ScheduleWidget } from '@/components/schedule-widget'
@@ -29,17 +29,20 @@ export function TasksView() {
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false)
 
-  // Listen to navigation events from task details / friend groups
+  // Listen to navigation events from task details / friend groups / notifications
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedFriend = localStorage.getItem('zerf_task_filter_friend')
       const savedGroup = localStorage.getItem('zerf_task_filter_group')
+      const savedTag = localStorage.getItem('zerf_task_filter_tag')
       if (savedFriend) setFilterFriend(savedFriend)
       if (savedGroup) setFilterGroup(savedGroup)
+      if (savedTag) setSelectedTag(savedTag)
 
       const handleFilterEvent = (e: any) => {
         if (e.detail?.friendId !== undefined) setFilterFriend(e.detail.friendId)
         if (e.detail?.groupId !== undefined) setFilterGroup(e.detail.groupId)
+        if (e.detail?.tag !== undefined) setSelectedTag(e.detail.tag)
       }
 
       window.addEventListener('zerf_filter_tasks', handleFilterEvent)
@@ -49,6 +52,7 @@ export function TasksView() {
 
   const FIXED_TAGS = [
     { id: 'all', label: 'Все' },
+    { id: 'inbox', label: 'Входящие от друзей', icon: Inbox },
     { id: 'общая', label: 'Общие', icon: Users },
     { id: 'поручение', label: 'Порученные', icon: UserCheck },
     { id: 'работа', label: 'Работа', icon: Briefcase },
@@ -59,8 +63,16 @@ export function TasksView() {
     { id: 'спорт', label: 'Спорт', icon: Activity },
   ]
 
-  const matchesTag = (t: { tags?: string[]; priority?: string; isShared?: boolean }) => {
+  const matchesTag = (t: { tags?: string[]; priority?: string; isShared?: boolean; authorChatId?: string | number | bigint | null; assignees?: string[] }) => {
     if (selectedTag === 'all') return true
+    if (selectedTag === 'inbox') {
+      const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
+      const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
+      const isFriendTag = tags.includes('входящая') || tags.includes('входящие') || tags.includes('поручено мне') || tags.includes('от друга') || tags.includes('поручение')
+      const isAuthoredByOther = t.authorChatId && currentChatId && String(t.authorChatId) !== String(currentChatId)
+      const isAssignedToMe = (t.assignees || []).some(a => a === currentChatId)
+      return isFriendTag || Boolean(isAuthoredByOther) || isAssignedToMe || Boolean(t.isShared)
+    }
     if (selectedTag === 'срочно') {
       return t.priority === 'urgent' || t.tags?.some(tag => tag.toLowerCase().includes('срочн'))
     }
@@ -171,12 +183,40 @@ export function TasksView() {
           {FIXED_TAGS.map(tag => {
             const isActive = selectedTag === tag.id
             const Icon = (tag as any).icon
+            const currentChatId = typeof window !== 'undefined' ? localStorage.getItem('zerf_chat_id') : null
+            const count = visibleTasks.filter(t => {
+              if (tag.id === 'all') return true
+              if (tag.id === 'inbox') {
+                const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
+                const isFriendTag = tags.includes('входящая') || tags.includes('входящие') || tags.includes('поручено мне') || tags.includes('от друга') || tags.includes('поручение')
+                const isAuthoredByOther = t.authorChatId && currentChatId && String(t.authorChatId) !== String(currentChatId)
+                const isAssignedToMe = (t.assignees || []).some(a => a === currentChatId)
+                return isFriendTag || Boolean(isAuthoredByOther) || isAssignedToMe || Boolean(t.isShared)
+              }
+              if (tag.id === 'срочно') return t.priority === 'urgent' || t.tags?.some(x => x.toLowerCase().includes('срочн'))
+              if (tag.id === 'общая') {
+                const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
+                return tags.includes('общая') || tags.includes('совместная') || tags.includes('совместно') || tags.includes('общие')
+              }
+              if (tag.id === 'поручение') {
+                const tags = (t.tags || []).map((x: string) => String(x).toLowerCase())
+                const isCommon = tags.includes('общая') || tags.includes('совместная') || tags.includes('совместно') || tags.includes('общие')
+                const hasDel = tags.includes('поручение') || tags.includes('делегировано') || tags.includes('поручено')
+                return (t.isShared || hasDel) && !isCommon
+              }
+              if (tag.id === 'учеба') return t.tags?.some(x => x.includes('учеб') || x.includes('школ') || x.includes('урок') || x.includes('дз'))
+              return t.tags?.some(x => x.toLowerCase().includes(tag.id))
+            }).length
+
             return (
               <button
                 key={tag.id}
-                onClick={() => setSelectedTag(tag.id)}
+                onClick={() => {
+                  setSelectedTag(tag.id)
+                  try { localStorage.setItem('zerf_task_filter_tag', tag.id) } catch {}
+                }}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border shrink-0',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border shrink-0 cursor-pointer',
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
                     : 'bg-card/70 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -184,6 +224,14 @@ export function TasksView() {
               >
                 {Icon && <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />}
                 <span>{tag.label}</span>
+                {count > 0 && tag.id !== 'all' && (
+                  <span className={cn(
+                    'text-[10px] font-bold px-1.5 py-0.2 rounded-full',
+                    isActive ? 'bg-primary-foreground/20 text-primary-foreground' : (tag.id === 'inbox' ? 'bg-amber-500/15 text-amber-400 font-bold' : 'bg-muted text-muted-foreground')
+                  )}>
+                    {count}
+                  </span>
+                )}
               </button>
             )
           })}
