@@ -1057,26 +1057,36 @@ export function SettingsView() {
   }
 
   const handleUnlinkGithub = async () => {
+    setAuthLoading(true)
     setAuthError(null)
     try {
+      // Optimistic UI
       if (typeof window !== 'undefined') {
         localStorage.removeItem('zerf_github_username')
       }
       setUserGithub('')
       setProfileData(prev => ({ ...prev, githubUsername: null }))
 
-      try {
-        await fetch('/api/telegram/user', {
-          method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ githubUsername: '' }),
-        })
-      } catch {}
+      const res = await fetch('/api/telegram/user', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ githubUsername: '' }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Ошибка отвязки GitHub')
 
-      setAuthSuccess('✓ GitHub аккаунт успешно отвязан!')
+      setAuthSuccess('✓ GitHub аккаунт отвязан!')
       setTimeout(() => setAuthSuccess(null), 3000)
     } catch (err: any) {
+      // Rollback
+      const cached = typeof window !== 'undefined' ? localStorage.getItem('zerf_github_username') || '' : ''
+      if (cached) {
+        setUserGithub(cached)
+        setProfileData(prev => ({ ...prev, githubUsername: cached }))
+      }
       setAuthError(err.message || 'Ошибка отвязки GitHub')
+    } finally {
+      setAuthLoading(false)
     }
   }
 

@@ -35,81 +35,46 @@ export async function GET(req: NextRequest) {
             activePlan = 'free'
           }
           const isPremium = activePlan !== 'free'
-
           const fullName = [chat.firstName, chat.lastName].filter(Boolean).join(' ') || chat.firstName || 'Пользователь Zerf'
 
-          let city = 'Москва'
-          try {
-            const cityConf = await prisma.config.findUnique({ where: { key: `user_city_${cid}` } })
-            if (cityConf?.value) city = cityConf.value
-          } catch {}
+          // Fetch all config in ONE round-trip
+          const [
+            cityConf, emojiConf, modelConf, taskModelsConf, siriModeConf,
+            githubConf, sidebarConf, groqKeyConf, aiKeysConf, autoDelConf, newsConf
+          ] = await Promise.all([
+            prisma.config.findUnique({ where: { key: `user_city_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_emoji_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_ai_model_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_ai_task_models_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_siri_mode_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_github_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_sidebar_config_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_groq_api_key_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_ai_keys_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `user_auto_delete_${cid}` } }),
+            prisma.config.findUnique({ where: { key: `news_disabled_${cid}` } }),
+          ]).catch(() => Array(11).fill(null))
 
-          let avatarEmoji = 'zerfik_spirit'
-          try {
-            const emojiConf = await prisma.config.findUnique({ where: { key: `user_emoji_${cid}` } })
-            if (emojiConf?.value) avatarEmoji = emojiConf.value
-          } catch {}
-
-          let aiModel: string | null = null
+          const city = cityConf?.value || 'Москва'
+          const avatarEmoji = emojiConf?.value || 'zerfik_spirit'
+          const aiModel = modelConf?.value || null
           let aiTaskModels: Record<string, string> = {}
-          let siriMode = 'fast'
-          let githubUsername: string | null = null
+          try { if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value) } catch {}
+          const siriMode = siriModeConf?.value || 'fast'
+          let githubUsername = githubConf?.value || null
           let sidebarConfig: any = null
-          let groqApiKey: string | null = null
+          try { if (sidebarConf?.value) sidebarConfig = JSON.parse(sidebarConf.value) } catch {}
+          const groqApiKey = groqKeyConf?.value || null
           let aiKeys: { openaiKey?: string; anthropicKey?: string; geminiKey?: string } = {}
+          try { if (aiKeysConf?.value) aiKeys = JSON.parse(aiKeysConf.value) } catch {}
           let autoDeleteMonths = 6
-          try {
-            const [modelConf, taskModelsConf, siriModeConf, githubConf, sidebarConf, groqKeyConf, aiKeysConf, autoDelConf] = await Promise.all([
-              prisma.config.findUnique({ where: { key: `user_ai_model_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_ai_task_models_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_siri_mode_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_github_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_sidebar_config_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_groq_api_key_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_ai_keys_${cid}` } }),
-              prisma.config.findUnique({ where: { key: `user_auto_delete_${cid}` } }),
-            ])
-            if (modelConf?.value) aiModel = modelConf.value
-            if (taskModelsConf?.value) aiTaskModels = JSON.parse(taskModelsConf.value)
-            if (siriModeConf?.value) siriMode = siriModeConf.value
-            if (githubConf?.value) githubUsername = githubConf.value
-            if (sidebarConf?.value) {
-              try { sidebarConfig = JSON.parse(sidebarConf.value) } catch {}
-            }
-            if (groqKeyConf?.value) groqApiKey = groqKeyConf.value
-            if (aiKeysConf?.value) {
-              try { aiKeys = JSON.parse(aiKeysConf.value) } catch {}
-            }
-            if (autoDelConf?.value !== undefined && autoDelConf.value !== null) {
-              const parsed = Number(autoDelConf.value)
-              if (!isNaN(parsed)) autoDeleteMonths = parsed
-            }
-          } catch {}
+          if (autoDelConf?.value) { const p = Number(autoDelConf.value); if (!isNaN(p)) autoDeleteMonths = p }
+          const newsDisabled = newsConf?.value === 'true'
 
-          let finalGoogleEmail = chat.googleEmail || (chat.authProvider === 'google' ? chat.email : null)
+          // Resolve googleEmail from all sources
+          let finalGoogleEmail: string | null = chat.googleEmail || (chat.authProvider === 'google' ? chat.email : null)
           if (!finalGoogleEmail && chat.email && chat.email.includes('@gmail.com')) {
             finalGoogleEmail = chat.email
-          }
-          if (!finalGoogleEmail) {
-            try {
-              const googleConf = await prisma.config.findFirst({
-                where: {
-                  key: { in: [`user_google_${cid}`, `user_google_email_${cid}`, `user_google`] },
-                },
-              })
-              if (googleConf?.value) finalGoogleEmail = googleConf.value
-            } catch {}
-          }
-
-          if (!githubUsername) {
-            try {
-              const ghConf = await prisma.config.findFirst({
-                where: {
-                  key: { in: [`user_github_${cid}`, `user_github`] },
-                },
-              })
-              if (ghConf?.value) githubUsername = ghConf.value
-            } catch {}
           }
 
           const siriKey = getSiriUserKey(chat.chatId)
@@ -149,7 +114,7 @@ export async function GET(req: NextRequest) {
             isPremium,
             subscriptionExpiry: chat.subscriptionExpiry?.toISOString() || null,
             isAdmin: Boolean(chat.isAdmin),
-            newsDisabled: await isNewsDisabled(cid),
+            newsDisabled,
           })
         }
       }
