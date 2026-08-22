@@ -67,7 +67,7 @@ export default function DeveloperPage() {
   const [mCategory, setMCategory] = useState('ИИ & Промпты')
   const [mType, setMType] = useState<'widget' | 'template' | 'theme' | 'integration' | 'prompt'>('widget')
   const [mIcon, setMIcon] = useState('🔮')
-  const [mAuthor, setMAuthor] = useState('waters1ze')
+  const [mAuthor, setMAuthor] = useState('')
   const [mPrice, setMPrice] = useState<number>(0)
   const [mMinPlan, setMMinPlan] = useState<'free' | 'plus' | 'pro' | 'corp'>('plus')
   const [mIsRunnable, setMIsRunnable] = useState(true)
@@ -456,7 +456,7 @@ async function runAction(promptText) {
       category: mCategory,
       type: mType,
       icon: mIcon,
-      author: mAuthor || 'waters1ze',
+      author: mAuthor || userGh || 'developer',
       price: mPrice,
       minPlan: mMinPlan,
       permissions: ['tasks:read', 'tasks:write', 'notes:write', 'ui:notify', 'ai:prompt'],
@@ -528,7 +528,7 @@ async function runAction(promptText) {
       category: mCategory,
       type: mType,
       icon: mIcon,
-      author: mAuthor || 'waters1ze',
+      author: mAuthor || userGh || 'developer',
       price: mPrice,
       minPlan: mMinPlan,
       isRunnable: mIsRunnable,
