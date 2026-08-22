@@ -358,21 +358,33 @@ export function SettingsView() {
   const personalShortcutUrl = `${originUrl}/api/shortcuts?chatId=${effectiveChatId}${siriKeyParam}&text=`
 
   const getGithubAuthUrl = () => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+    const origin = typeof window !== 'undefined' && window.location.origin.includes('zeprh')
+      ? window.location.origin
+      : 'https://zeprh.vercel.app'
     let state = ''
     try {
-      state = btoa(JSON.stringify({ chatId: currentChatId || '', origin }))
+      state = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({ chatId: currentChatId || '', origin })))))
     } catch {}
     return `https://github.com/login/oauth/authorize?client_id=Ov23li5itN8nX8pNVJsy&redirect_uri=${encodeURIComponent(`${origin}/api/auth/github/callback`)}&scope=read:user%20user:email&state=${state}`
   }
 
   const getVkAuthUrl = () => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zeprh.vercel.app'
+    const origin = typeof window !== 'undefined' && window.location.origin.includes('zeprh')
+      ? window.location.origin
+      : 'https://zeprh.vercel.app'
     let state = ''
     try {
-      state = btoa(JSON.stringify({ chatId: currentChatId || '', origin }))
+      state = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({ chatId: currentChatId || '', origin })))))
     } catch {}
     return `https://oauth.vk.com/authorize?client_id=51824701&display=page&redirect_uri=${encodeURIComponent(`${origin}/api/auth/vk/callback`)}&scope=email,offline&response_type=code&v=5.131&state=${state}`
+  }
+
+  const handleDirectGithubAuth = () => {
+    window.location.href = getGithubAuthUrl()
+  }
+
+  const handleDirectVkAuth = () => {
+    window.location.href = getVkAuthUrl()
   }
   const [nameSavedStatus, setNameSavedStatus] = useState<boolean>(false)
   const [settingsSavedBadge, setSettingsSavedBadge] = useState<boolean>(false)
@@ -1676,13 +1688,14 @@ export function SettingsView() {
 
                   {profileData.vkId ? (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <a
-                        href={getVkAuthUrl()}
+                      <button
+                        type="button"
+                        onClick={handleDirectVkAuth}
                         className="flex-1 py-1.5 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         title="Сменить привязанный аккаунт VK через OAuth"
                       >
                         <span>Сменить ID: {profileData.vkId}</span>
-                      </a>
+                      </button>
 
                       <a
                         href={`https://vk.com/id${profileData.vkId}`}
@@ -1705,12 +1718,13 @@ export function SettingsView() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <a
-                        href={getVkAuthUrl()}
+                      <button
+                        type="button"
+                        onClick={handleDirectVkAuth}
                         className="w-full py-2 px-3 rounded-xl bg-[#0077FF]/15 hover:bg-[#0077FF]/25 text-[#0077FF] border border-[#0077FF]/30 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                       >
                         <span>⚡ Привязать через VK ID</span>
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1808,14 +1822,15 @@ export function SettingsView() {
 
                   {profileData.githubUsername || userGithub ? (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <a
-                        href={getGithubAuthUrl()}
+                      <button
+                        type="button"
+                        onClick={handleDirectGithubAuth}
                         className="flex-1 py-1.5 px-3 rounded-xl bg-muted hover:bg-primary/10 hover:text-primary text-foreground text-xs font-bold border border-border transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         title="Сменить привязанный GitHub аккаунт через OAuth"
                       >
                         <GithubIcon className="w-3.5 h-3.5" />
                         <span>Сменить @{profileData.githubUsername || userGithub}</span>
-                      </a>
+                      </button>
 
                       <button
                         type="button"
@@ -1851,13 +1866,14 @@ export function SettingsView() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <a
-                        href={getGithubAuthUrl()}
+                      <button
+                        type="button"
+                        onClick={handleDirectGithubAuth}
                         className="w-full py-2 px-3 rounded-xl bg-foreground/15 hover:bg-foreground/25 text-foreground border border-border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                       >
                         <GithubIcon className="w-4 h-4" />
                         <span>⚡ Привязать через GitHub OAuth</span>
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
